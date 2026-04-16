@@ -1,7 +1,7 @@
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:21-jdk
+
+ENV TZ=Asia/Tashkent
 WORKDIR /app
-COPY /app/target/*.jar app.jar
-RUN mkdir -p /app/uploads
-ENV FILE_STORAGE_PATH=/app/uploads
-EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+COPY  target/*.jar app.jar
+EXPOSE 8085
+ENTRYPOINT ["java", "-jar", "app.jar"]
