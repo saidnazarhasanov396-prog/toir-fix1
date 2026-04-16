@@ -1,0 +1,18 @@
+package com.toir.maintenancetemplate.dto;
+
+import com.toir.maintenanceregulation.MaintenanceKind;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
+
+import java.util.UUID;
+
+public record MaintenanceTemplateRequest(
+        @NotBlank String code,
+        @NotBlank String name,
+        String description,
+        @NotNull UUID equipmentTypeId,
+        @NotNull MaintenanceKind maintenanceKind,
+        @PositiveOrZero double normativeLaborHours,
+        Boolean active
+) {}

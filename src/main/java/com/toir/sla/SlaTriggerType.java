@@ -1,0 +1,5 @@
+package com.toir.sla;
+
+public enum SlaTriggerType {
+    REQUEST_EMERGENCY, REQUEST_OVERDUE, PPR_OVERDUE, WORK_ORDER_OVERDUE, DEFECT_REPEAT
+}

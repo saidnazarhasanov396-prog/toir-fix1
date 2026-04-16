@@ -1,0 +1,3 @@
+com/toir/common/security/JwtServiceTest.class
+com/toir/stockmovement/StockMovementServiceTest.class
+com/toir/common/exception/RestExceptionTest.class

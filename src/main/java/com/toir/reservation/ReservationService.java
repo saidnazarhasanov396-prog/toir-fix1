@@ -1,0 +1,76 @@
+package com.toir.reservation;
+
+import com.toir.common.exception.RestException;
+import com.toir.reservation.dto.ReservationDto;
+import com.toir.reservation.dto.ReservationRequest;
+import com.toir.warehouse.WarehouseStock;
+import com.toir.warehouse.WarehouseStockRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
+
+@Service
+@Transactional
+public class ReservationService {
+
+    private final ReservationRepository repository;
+    private final WarehouseStockRepository stockRepository;
+
+    public ReservationService(ReservationRepository repository, WarehouseStockRepository stockRepository) {
+        this.repository = repository;
+        this.stockRepository = stockRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReservationDto> findByWorkOrder(UUID workOrderId) {
+        return repository.findAllByWorkOrderId(workOrderId).stream().map(ReservationDto::from).toList();
+    }
+
+    public ReservationDto reserve(ReservationRequest r) {
+        WarehouseStock stock = stockRepository.findById(r.warehouseStockId())
+                .orElseThrow(() -> RestException.notFound("Stock not found: " + r.warehouseStockId()));
+        if (stock.getAvailable() < r.quantity()) {
+            throw RestException.badRequest("Cannot reserve more than available: available="
+                    + stock.getAvailable() + ", requested=" + r.quantity());
+        }
+        stock.setReservedQty(stock.getReservedQty() + r.quantity());
+
+        Reservation reservation = new Reservation();
+        reservation.setWarehouseStockId(r.warehouseStockId());
+        reservation.setWorkOrderId(r.workOrderId());
+        reservation.setRepairRequestId(r.repairRequestId());
+        reservation.setReservedById(r.reservedById());
+        reservation.setQuantity(r.quantity());
+        return ReservationDto.from(repository.save(reservation));
+    }
+
+    public ReservationDto cancel(UUID id) {
+        Reservation reservation = getOrThrow(id);
+        if (reservation.getStatus() != ReservationStatus.ACTIVE) {
+            throw RestException.badRequest("Only active reservations can be cancelled");
+        }
+        WarehouseStock stock = stockRepository.findById(reservation.getWarehouseStockId()).orElseThrow();
+        stock.setReservedQty(Math.max(0, stock.getReservedQty() - reservation.getQuantity()));
+        reservation.setStatus(ReservationStatus.CANCELLED);
+        return ReservationDto.from(reservation);
+    }
+
+    public ReservationDto fulfill(UUID id) {
+        Reservation reservation = getOrThrow(id);
+        if (reservation.getStatus() != ReservationStatus.ACTIVE) {
+            throw RestException.badRequest("Only active reservations can be fulfilled");
+        }
+        WarehouseStock stock = stockRepository.findById(reservation.getWarehouseStockId()).orElseThrow();
+        stock.setQuantity(stock.getQuantity() - reservation.getQuantity());
+        stock.setReservedQty(Math.max(0, stock.getReservedQty() - reservation.getQuantity()));
+        reservation.setStatus(ReservationStatus.FULFILLED);
+        return ReservationDto.from(reservation);
+    }
+
+    private Reservation getOrThrow(UUID id) {
+        return repository.findById(id)
+                .orElseThrow(() -> RestException.notFound("Reservation not found: " + id));
+    }
+}

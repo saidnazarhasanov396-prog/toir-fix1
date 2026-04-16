@@ -1,0 +1,24 @@
+package com.toir.mobilesync;
+
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/mobile/sync")
+@Tag(name = "mobile-sync")
+public class MobileSyncController {
+
+    private final MobileSyncService service;
+
+    public MobileSyncController(MobileSyncService service) {
+        this.service = service;
+    }
+
+    @PostMapping
+    public MobileSyncResult sync(@RequestBody MobileSyncRequest request) {
+        return service.sync(request);
+    }
+}

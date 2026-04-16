@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: toir-postgres
+    environment:
+      POSTGRES_DB: toir
+      POSTGRES_USER: toir
+      POSTGRES_PASSWORD: toir
+    ports:
+      - "5432:5432"
+    volumes:
+      - toir_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toir -d toir"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    container_name: toir-backend-java
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/toir
+      DB_USERNAME: toir
+      DB_PASSWORD: toir
+      JWT_SECRET: ${JWT_SECRET:-change-me-please-use-a-long-random-secret-at-least-32-bytes-long}
+      JWT_EXPIRATION_MINUTES: 720
+      FILE_STORAGE_PATH: /app/uploads
+    ports:
+      - "8080:8080"
+    volumes:
+      - toir_uploads:/app/uploads
+
+volumes:
+  toir_pgdata:
+  toir_uploads:
