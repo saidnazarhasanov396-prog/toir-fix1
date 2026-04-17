@@ -2,8 +2,11 @@ package com.toir.notification;
 
 import com.toir.common.security.AuthenticatedUser;
 import com.toir.common.security.CurrentUser;
+import com.toir.common.web.PaginatedResponse;
 import com.toir.notification.dto.NotificationDto;
 import com.toir.notification.dto.NotificationSummaryDto;
+import com.toir.sla.SlaRuleService;
+import com.toir.sla.dto.SlaRuleDto;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -19,8 +22,12 @@ import java.util.UUID;
 public class NotificationController {
 
     private final NotificationService service;
+    private final SlaRuleService slaRuleService;
 
-    public NotificationController(NotificationService service) { this.service = service; }
+    public NotificationController(NotificationService service, SlaRuleService slaRuleService) {
+        this.service = service;
+        this.slaRuleService = slaRuleService;
+    }
 
     @GetMapping
     public List<NotificationDto> list(@RequestParam(required = false) UUID recipientId,
@@ -63,6 +70,20 @@ public class NotificationController {
                 "items", items,
                 "meta", java.util.Map.of("page", 0, "pageSize", items.size(), "total", items.size())
         );
+    }
+
+    @GetMapping("/sla-rules")
+    public PaginatedResponse<SlaRuleDto> slaRules(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize
+    ) {
+        int safePage = Math.max(page, 1);
+        int safePageSize = Math.max(pageSize, 1);
+        List<SlaRuleDto> all = slaRuleService.findAll();
+        int fromIndex = Math.min((safePage - 1) * safePageSize, all.size());
+        int toIndex = Math.min(fromIndex + safePageSize, all.size());
+        List<SlaRuleDto> items = all.subList(fromIndex, toIndex);
+        return new PaginatedResponse<>(items, new PaginatedResponse.Meta(safePage, safePageSize, all.size()));
     }
 
     @PostMapping("/evaluate")
