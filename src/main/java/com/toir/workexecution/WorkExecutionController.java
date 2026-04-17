@@ -1,5 +1,7 @@
 package com.toir.workexecution;
 
+import com.toir.common.web.PaginatedResponse;
+import com.toir.workexecution.dto.ExecutionLogDto;
 import com.toir.workexecution.dto.WorkExecutionDto;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -17,6 +19,14 @@ public class WorkExecutionController {
     private final WorkExecutionService service;
 
     public WorkExecutionController(WorkExecutionService service) { this.service = service; }
+
+    @GetMapping("/execution-logs")
+    public PaginatedResponse<ExecutionLogDto> executionLogs(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int pageSize
+    ) {
+        return service.findExecutionLogs(page, pageSize);
+    }
 
     @GetMapping("/work-orders/{workOrderId}/executions")
     public List<WorkExecutionDto> list(@PathVariable UUID workOrderId) {

@@ -1,7 +1,10 @@
 package com.toir.workexecution;
 
 import com.toir.common.exception.RestException;
+import com.toir.common.web.PaginatedResponse;
 import com.toir.workexecution.dto.WorkExecutionDto;
+import com.toir.workexecution.dto.ExecutionLogDto;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +26,18 @@ public class WorkExecutionService {
     public List<WorkExecutionDto> findByWorkOrder(UUID workOrderId) {
         return repository.findAllByWorkOrderIdOrderByStartedAtAsc(workOrderId).stream()
                 .map(WorkExecutionDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PaginatedResponse<ExecutionLogDto> findExecutionLogs(int page, int pageSize) {
+        int safePage = Math.max(page, 1);
+        int safePageSize = Math.clamp(pageSize, 1, 500);
+
+        var result = repository.findAllByOrderByStartedAtDesc(PageRequest.of(safePage - 1, safePageSize));
+        return new PaginatedResponse<>(
+                result.getContent().stream().map(ExecutionLogDto::from).toList(),
+                new PaginatedResponse.Meta(safePage, safePageSize, (int) result.getTotalElements())
+        );
     }
 
     public WorkExecutionDto start(UUID workOrderId, WorkExecutionDto r) {
