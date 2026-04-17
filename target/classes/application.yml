@@ -1,5 +1,5 @@
 spring:
-  profiles:
-    active: prod
   application:
     name: toir-backend
+  profiles:
+    default: dev
