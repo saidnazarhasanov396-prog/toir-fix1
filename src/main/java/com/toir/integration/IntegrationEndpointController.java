@@ -1,7 +1,9 @@
 package com.toir.integration;
 
 import com.toir.common.security.RequiresAdmin;
+import com.toir.common.web.PaginatedResponse;
 import com.toir.integration.dto.IntegrationEndpointDto;
+import com.toir.integration.dto.IntegrationSyncLogDto;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -28,6 +30,15 @@ public class IntegrationEndpointController {
         return service.findAll().stream()
                 .filter(e -> e.lastSyncAt() != null)
                 .toList();
+    }
+
+    @GetMapping("/sync-logs")
+    public PaginatedResponse<IntegrationSyncLogDto> syncLogs(
+            @RequestParam(required = false) UUID endpointId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize
+    ) {
+        return service.findSyncLogs(endpointId, page, pageSize);
     }
 
     @PostMapping("/run-due-syncs")
