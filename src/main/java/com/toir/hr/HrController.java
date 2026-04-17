@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/hr")
+@RequestMapping("/api/v1/hr")
 @Tag(name = "hr")
 public class HrController {
 

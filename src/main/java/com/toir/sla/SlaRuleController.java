@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/sla-rules")
+@RequestMapping("/api/v1/sla-rules")
 @Tag(name = "sla-rules")
 @RequiresAdmin
 public class SlaRuleController {

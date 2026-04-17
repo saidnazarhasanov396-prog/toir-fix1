@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/webhooks")
+@RequestMapping("/api/v1/webhooks")
 @Tag(name = "webhooks")
 public class WebhookController {
 

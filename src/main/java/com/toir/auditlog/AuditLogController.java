@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/audit-log")
+@RequestMapping("/api/v1/audit-log")
 @Tag(name = "audit-log")
 @RequiresAdmin
 public class AuditLogController {

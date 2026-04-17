@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/repair-requests")
+@RequestMapping("/api/v1/repair-requests")
 @Tag(name = "repair-requests")
 public class RepairRequestController {
 

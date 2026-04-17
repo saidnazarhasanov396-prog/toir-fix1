@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/repair-campaigns")
+@RequestMapping("/api/v1/repair-campaigns")
 @Tag(name = "repair-campaigns")
 public class RepairCampaignController {
 

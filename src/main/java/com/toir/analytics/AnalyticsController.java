@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/analytics")
+@RequestMapping("/api/v1/analytics")
 @Tag(name = "analytics")
 public class AnalyticsController {
 

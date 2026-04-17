@@ -23,10 +23,10 @@ import java.util.List;
 public class SecurityConfig {
 
     private static final String[] PUBLIC_PATHS = {
-            "/auth/login",
-            "/v3/api-docs/**",
-            "/swagger-ui/**",
-            "/swagger-ui.html",
+            "/api/v1/auth/login",
+            "/api/v1/v3/api-docs/**",
+            "/api/v1/swagger-ui/**",
+            "/api/v1/swagger-ui.html",
             "/actuator/health"
     };
 

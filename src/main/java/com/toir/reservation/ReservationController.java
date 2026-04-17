@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/reservations")
+@RequestMapping("/api/v1/reservations")
 @Tag(name = "reservations")
 public class ReservationController {
 

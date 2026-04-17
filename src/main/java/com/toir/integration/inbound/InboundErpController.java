@@ -16,12 +16,12 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * Inbound integrations: приёмка справочников из 1С / ERP.
- * По ТЗ §4.2.14 — upsert номенклатуры и подразделений по коду.
- * Идемпотентный: существующие записи обновляются, новые создаются.
+ * Inbound integrations: Ð¿Ñ€Ð¸Ñ‘Ð¼ÐºÐ° ÑÐ¿Ñ€Ð°Ð²Ð¾Ñ‡Ð½Ð¸ÐºÐ¾Ð² Ð¸Ð· 1Ð¡ / ERP.
+ * ÐŸÐ¾ Ð¢Ð— Â§4.2.14 â€” upsert Ð½Ð¾Ð¼ÐµÐ½ÐºÐ»Ð°Ñ‚ÑƒÑ€Ñ‹ Ð¸ Ð¿Ð¾Ð´Ñ€Ð°Ð·Ð´ÐµÐ»ÐµÐ½Ð¸Ð¹ Ð¿Ð¾ ÐºÐ¾Ð´Ñƒ.
+ * Ð˜Ð´ÐµÐ¼Ð¿Ð¾Ñ‚ÐµÐ½Ñ‚Ð½Ñ‹Ð¹: ÑÑƒÑ‰ÐµÑÑ‚Ð²ÑƒÑŽÑ‰Ð¸Ðµ Ð·Ð°Ð¿Ð¸ÑÐ¸ Ð¾Ð±Ð½Ð¾Ð²Ð»ÑÑŽÑ‚ÑÑ, Ð½Ð¾Ð²Ñ‹Ðµ ÑÐ¾Ð·Ð´Ð°ÑŽÑ‚ÑÑ.
  */
 @RestController
-@RequestMapping("/integrations/inbound")
+@RequestMapping("/api/v1/integrations/inbound")
 @Tag(name = "inbound-integrations")
 @Transactional
 public class InboundErpController {
@@ -50,7 +50,7 @@ public class InboundErpController {
                 sp.setName(item.name);
                 sp.setSku(item.sku);
                 sp.setKind(parseKind(item.kind));
-                sp.setUnit(item.unit != null ? item.unit : "шт");
+                sp.setUnit(item.unit != null ? item.unit : "ÑˆÑ‚");
                 sp.setSpecification(item.specification);
                 sp.setManufacturer(item.manufacturer);
                 sp.setMinStock(item.minStock != null ? item.minStock : 0);

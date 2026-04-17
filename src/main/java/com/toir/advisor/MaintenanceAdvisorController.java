@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/advisor")
+@RequestMapping("/api/v1/advisor")
 @Tag(name = "advisor")
 public class MaintenanceAdvisorController {
 

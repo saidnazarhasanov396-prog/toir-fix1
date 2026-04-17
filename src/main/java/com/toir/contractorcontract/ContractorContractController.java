@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/contractor-contracts")
+@RequestMapping("/api/v1/contractor-contracts")
 @Tag(name = "contractor-contracts")
 public class ContractorContractController {
 

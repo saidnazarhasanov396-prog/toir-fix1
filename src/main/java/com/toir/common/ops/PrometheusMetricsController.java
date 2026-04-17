@@ -28,11 +28,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Prometheus text-format exposition — публикует те же метрики что {@link OpsMetricsController},
- * но в формате, который парсит scrape-агент Prometheus / VictoriaMetrics.
+ * Prometheus text-format exposition â€” Ð¿ÑƒÐ±Ð»Ð¸ÐºÑƒÐµÑ‚ Ñ‚Ðµ Ð¶Ðµ Ð¼ÐµÑ‚Ñ€Ð¸ÐºÐ¸ Ñ‡Ñ‚Ð¾ {@link OpsMetricsController},
+ * Ð½Ð¾ Ð² Ñ„Ð¾Ñ€Ð¼Ð°Ñ‚Ðµ, ÐºÐ¾Ñ‚Ð¾Ñ€Ñ‹Ð¹ Ð¿Ð°Ñ€ÑÐ¸Ñ‚ scrape-Ð°Ð³ÐµÐ½Ñ‚ Prometheus / VictoriaMetrics.
  */
 @RestController
-@RequestMapping("/ops")
+@RequestMapping("/api/v1/ops")
 @Tag(name = "ops")
 public class PrometheusMetricsController {
 

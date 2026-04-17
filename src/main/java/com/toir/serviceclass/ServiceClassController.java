@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/service-classes")
+@RequestMapping("/api/v1/service-classes")
 @Tag(name = "service-classes")
 public class ServiceClassController {
 

@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/failure-reasons")
+@RequestMapping("/api/v1/failure-reasons")
 @Tag(name = "failure-reasons")
 public class FailureReasonController {
 

@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/roles")
+@RequestMapping("/api/v1/roles")
 @Tag(name = "roles")
 @RequiresAdmin
 public class RoleController {

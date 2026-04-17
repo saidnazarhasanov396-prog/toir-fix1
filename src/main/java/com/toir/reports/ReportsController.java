@@ -30,10 +30,10 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * CSV export of core operational datasets — ТЗ §4.2.16.
+ * CSV export of core operational datasets â€” Ð¢Ð— Â§4.2.16.
  */
 @RestController
-@RequestMapping("/reports")
+@RequestMapping("/api/v1/reports")
 @Tag(name = "reports")
 public class ReportsController {
 

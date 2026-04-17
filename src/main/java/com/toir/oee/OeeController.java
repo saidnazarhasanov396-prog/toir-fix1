@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/oee")
+@RequestMapping("/api/v1/oee")
 @Tag(name = "oee")
 public class OeeController {
 

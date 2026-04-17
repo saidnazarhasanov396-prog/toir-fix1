@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/warehouses")
+@RequestMapping("/api/v1/warehouses")
 @Tag(name = "warehouses")
 public class WarehouseController {
 

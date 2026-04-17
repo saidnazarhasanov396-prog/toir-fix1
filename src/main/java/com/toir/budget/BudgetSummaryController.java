@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
  * previous FrontendStubController stubs.
  */
 @RestController
-@RequestMapping("/budgets")
+@RequestMapping("/api/v1/budgets")
 @Tag(name = "budgets-summary")
 public class BudgetSummaryController {
 
@@ -65,7 +65,7 @@ public class BudgetSummaryController {
                     Map<String, Object> row = new java.util.HashMap<>();
                     row.put("category", cat != null
                             ? Map.of("id", cat.getId(), "code", cat.getCode(), "name", cat.getName())
-                            : Map.of("id", entry.getKey(), "code", "—", "name", "—"));
+                            : Map.of("id", entry.getKey(), "code", "â€”", "name", "â€”"));
                     row.put("plannedAmount", planned);
                     row.put("actualAmount", actual);
                     row.put("variance", planned - actual);
