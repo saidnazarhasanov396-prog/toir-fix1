@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/ppr-plans")
+@RequestMapping("/api/v1/ppr-plans")
 @Tag(name = "ppr-plans")
 public class PprPlanController {
 

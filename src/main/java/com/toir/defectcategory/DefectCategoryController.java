@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/defect-categories")
+@RequestMapping("/api/v1/defect-categories")
 @Tag(name = "defect-categories")
 public class DefectCategoryController {
 

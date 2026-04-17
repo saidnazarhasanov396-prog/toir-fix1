@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/budgets")
+@RequestMapping("/api/v1/budgets")
 @Tag(name = "budgets")
 public class MaintenanceBudgetController {
 

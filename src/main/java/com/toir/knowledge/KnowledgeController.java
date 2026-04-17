@@ -11,11 +11,11 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * CRUD + поиск статей базы знаний. Увеличивает счётчик просмотров при
- * чтении конкретной статьи.
+ * CRUD + Ð¿Ð¾Ð¸ÑÐº ÑÑ‚Ð°Ñ‚ÐµÐ¹ Ð±Ð°Ð·Ñ‹ Ð·Ð½Ð°Ð½Ð¸Ð¹. Ð£Ð²ÐµÐ»Ð¸Ñ‡Ð¸Ð²Ð°ÐµÑ‚ ÑÑ‡Ñ‘Ñ‚Ñ‡Ð¸Ðº Ð¿Ñ€Ð¾ÑÐ¼Ð¾Ñ‚Ñ€Ð¾Ð² Ð¿Ñ€Ð¸
+ * Ñ‡Ñ‚ÐµÐ½Ð¸Ð¸ ÐºÐ¾Ð½ÐºÑ€ÐµÑ‚Ð½Ð¾Ð¹ ÑÑ‚Ð°Ñ‚ÑŒÐ¸.
  */
 @RestController
-@RequestMapping("/knowledge")
+@RequestMapping("/api/v1/knowledge")
 @Tag(name = "knowledge")
 @Transactional
 public class KnowledgeController {

@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/overdue")
+@RequestMapping("/api/v1/overdue")
 @Tag(name = "overdue-detector")
 public class OverdueDetectorController {
 

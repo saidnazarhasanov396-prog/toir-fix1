@@ -1,7 +1,5 @@
 server:
   port: 8080
-  servlet:
-    context-path: /api
 
 spring:
   datasource:
@@ -27,9 +25,9 @@ spring:
 
 springdoc:
   api-docs:
-    path: /v3/api-docs
+    path: /api/v1/v3/api-docs
   swagger-ui:
-    path: /swagger-ui.html
+    path: /api/v1/swagger-ui.html
 
 app:
   security:

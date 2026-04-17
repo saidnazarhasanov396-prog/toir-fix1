@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/budgets/approval-rules")
+@RequestMapping("/api/v1/budgets/approval-rules")
 @Tag(name = "financial-approval-rules")
 @RequiresAdmin
 public class FinancialApprovalRuleController {
@@ -31,6 +31,11 @@ public class FinancialApprovalRuleController {
 
     @PutMapping("/{id}")
     public FinancialApprovalRuleDto update(@PathVariable UUID id, @Valid @RequestBody FinancialApprovalRuleDto r) {
+        return service.update(id, r);
+    }
+
+    @PatchMapping("/{id}")
+    public FinancialApprovalRuleDto patch(@PathVariable UUID id, @Valid @RequestBody FinancialApprovalRuleDto r) {
         return service.update(id, r);
     }
 

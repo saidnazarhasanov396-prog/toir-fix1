@@ -46,6 +46,11 @@ public class IntegrationEndpointService {
         return IntegrationEndpointDto.from(e);
     }
 
+    @Transactional(readOnly = true)
+    public IntegrationEndpointDto findById(UUID id) {
+        return IntegrationEndpointDto.from(getOrThrow(id));
+    }
+
     public void delete(UUID id) { repository.delete(getOrThrow(id)); }
 
     private IntegrationEndpoint getOrThrow(UUID id) {

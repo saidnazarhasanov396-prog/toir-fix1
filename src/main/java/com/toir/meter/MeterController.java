@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/meters")
+@RequestMapping("/api/v1/meters")
 @Tag(name = "meters")
 public class MeterController {
 

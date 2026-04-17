@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/dashboards")
+@RequestMapping("/api/v1/dashboards")
 @Tag(name = "dashboards")
 public class DashboardController {
 

@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/downtimes")
+@RequestMapping("/api/v1/downtimes")
 @Tag(name = "downtimes")
 public class DowntimeEventController {
 

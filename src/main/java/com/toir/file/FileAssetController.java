@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/files")
+@RequestMapping("/api/v1/files")
 @Tag(name = "files")
 public class FileAssetController {
 

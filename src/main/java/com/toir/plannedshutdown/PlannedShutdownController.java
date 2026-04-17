@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/planned-shutdowns")
+@RequestMapping("/api/v1/planned-shutdowns")
 @Tag(name = "planned-shutdowns")
 public class PlannedShutdownController {
 

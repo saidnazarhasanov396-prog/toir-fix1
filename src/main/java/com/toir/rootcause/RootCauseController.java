@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/root-causes")
+@RequestMapping("/api/v1/root-causes")
 @Tag(name = "root-causes")
 public class RootCauseController {
 

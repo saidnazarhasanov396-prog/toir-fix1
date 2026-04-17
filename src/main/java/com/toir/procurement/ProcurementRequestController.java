@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/procurement-requests")
+@RequestMapping("/api/v1/procurement-requests")
 @Tag(name = "procurement-requests")
 public class ProcurementRequestController {
 

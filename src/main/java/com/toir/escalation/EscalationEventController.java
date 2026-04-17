@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/escalations")
+@RequestMapping("/api/v1/escalations")
 @Tag(name = "escalations")
 public class EscalationEventController {
 
