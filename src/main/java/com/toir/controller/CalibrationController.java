@@ -37,6 +37,11 @@ public class CalibrationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
     }
 
+    @PutMapping("/calibration-records/{id}")
+    public CalibrationRecordDto update(@PathVariable UUID id, @Valid @RequestBody CalibrationRecordRequest r) {
+        return service.update(id, r);
+    }
+
     @DeleteMapping("/calibration-records/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);

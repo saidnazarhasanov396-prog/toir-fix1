@@ -10,6 +10,7 @@ import com.toir.util.RequestContext;
 import com.toir.exception.RestException;
 import com.toir.security.SecurityScope;
 import com.toir.dto.workorder.CloseWorkOrderRequest;
+import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import org.springframework.stereotype.Service;
@@ -93,6 +94,24 @@ public class WorkOrderService {
         entity.setStatus(WorkOrderStatus.IN_PROGRESS);
         entity.setStartedAt(Instant.now());
         audit(AuditAction.UPDATE, entity.getId(), "Начато выполнение наряда " + entity.getNumber());
+        return WorkOrderDto.from(entity);
+    }
+
+    public WorkOrderDto complete(UUID id, CompleteWorkOrderRequest request) {
+        WorkOrder entity = getOrThrow(id);
+        if (entity.getStatus() != WorkOrderStatus.IN_PROGRESS) {
+            throw RestException.badRequest("Only in-progress work orders can be completed");
+        }
+        if (request.result() == null || request.result().isBlank()) {
+            throw RestException.badRequest("Result is required to complete a work order");
+        }
+        entity.setResult(request.result());
+        if (request.summary() != null && !request.summary().isBlank()) {
+            entity.setSummary(request.summary());
+        }
+        entity.setStatus(WorkOrderStatus.COMPLETED);
+        entity.setCompletedAt(Instant.now());
+        audit(AuditAction.UPDATE, entity.getId(), "Завершён наряд " + entity.getNumber());
         return WorkOrderDto.from(entity);
     }
 

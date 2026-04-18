@@ -1,6 +1,5 @@
 package com.toir.service;
 import com.toir.entity.CalibrationRecord;
-import com.toir.entity.Equipment;
 import com.toir.repository.CalibrationRecordRepository;
 
 import com.toir.dto.calibration.CalibrationRecordDto;
@@ -61,6 +60,26 @@ public class CalibrationService {
         c.setDocumentFileId(r.documentFileId());
         c.setNotes(r.notes());
         return CalibrationRecordDto.from(repo.save(c));
+    }
+
+    public CalibrationRecordDto update(UUID id, CalibrationRecordRequest r) {
+        CalibrationRecord c = repo.findById(id)
+                .orElseThrow(() -> RestException.notFound("Calibration record not found: " + id));
+        if (!equipmentRepository.existsById(r.equipmentId())) {
+            throw RestException.notFound("Equipment not found: " + r.equipmentId());
+        }
+        c.setEquipmentId(r.equipmentId());
+        c.setCertificateNumber(r.certificateNumber());
+        c.setPerformedBy(r.performedBy());
+        c.setPerformedAt(r.performedAt());
+        c.setNextDueAt(r.nextDueAt());
+        if (r.result() != null) c.setResult(r.result());
+        c.setTolerance(r.tolerance());
+        c.setMeasuredError(r.measuredError());
+        c.setUnit(r.unit());
+        c.setDocumentFileId(r.documentFileId());
+        c.setNotes(r.notes());
+        return CalibrationRecordDto.from(c);
     }
 
     public void delete(UUID id) {

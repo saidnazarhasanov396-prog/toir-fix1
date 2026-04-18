@@ -4,6 +4,7 @@ import com.toir.entity.WorkOrderStatus;
 
 import com.toir.security.SecurityScope;
 import com.toir.dto.workorder.CloseWorkOrderRequest;
+import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -63,6 +64,11 @@ public class WorkOrderController {
 
     @PostMapping("/{id}/start")
     public WorkOrderDto start(@PathVariable UUID id) { return service.start(id); }
+
+    @PostMapping("/{id}/complete")
+    public WorkOrderDto complete(@PathVariable UUID id, @Valid @RequestBody CompleteWorkOrderRequest request) {
+        return service.complete(id, request);
+    }
 
     @PostMapping("/{id}/close")
     public WorkOrderDto close(@PathVariable UUID id, @Valid @RequestBody CloseWorkOrderRequest request) {
