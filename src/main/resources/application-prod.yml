@@ -36,6 +36,8 @@ app:
       secret: change-me-in-production-use-a-long-random-secret-at-least-32-bytes
       expiration-minutes: 720
       issuer: toir-backend
+  jackson:
+    instant-default-zone: Asia/Tashkent
   cors:
     allowed-origin-patterns:
       - http://localhost:3000
