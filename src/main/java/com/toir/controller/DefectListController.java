@@ -37,6 +37,11 @@ public class DefectListController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
     }
 
+    @PutMapping("/{id}")
+    public DefectListDto update(@PathVariable UUID id, @Valid @RequestBody DefectListRequest r) {
+        return service.update(id, r);
+    }
+
     @PostMapping("/{id}/approve")
     public DefectListDto approve(@PathVariable UUID id, @RequestParam UUID approverId) {
         return service.approve(id, approverId);

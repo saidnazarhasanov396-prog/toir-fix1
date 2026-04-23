@@ -58,6 +58,23 @@ public class DefectListService {
         return DefectListDto.from(repository.save(d));
     }
 
+    public DefectListDto update(UUID id, DefectListRequest request) {
+        DefectList d = getOrThrow(id);
+        if (d.getStatus() != DefectListStatus.DRAFT) {
+            throw RestException.badRequest("Only DRAFT defect lists can be updated");
+        }
+        if (!d.getCode().equals(request.code()) && repository.existsByCode(request.code())) {
+            throw RestException.conflict("Defect list code already exists: " + request.code());
+        }
+        d.setCode(request.code());
+        d.setTitle(request.title());
+        d.setEquipmentId(request.equipmentId());
+        d.setRepairRequestId(request.repairRequestId());
+        d.setWorkOrderId(request.workOrderId());
+        d.setNotes(request.notes());
+        return DefectListDto.from(d);
+    }
+
     public DefectListDto approve(UUID id, UUID approverId) {
         DefectList d = getOrThrow(id);
         if (d.getStatus() != DefectListStatus.DRAFT) {
