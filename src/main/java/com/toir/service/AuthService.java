@@ -4,12 +4,14 @@ import com.toir.entity.AuditAction;
 import com.toir.service.AuditLogService;
 import com.toir.dto.auth.LoginRequest;
 import com.toir.dto.auth.LoginResponse;
+import com.toir.dto.auth.RegisterRequest;
 import com.toir.util.RequestContext;
 import com.toir.exception.RestException;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.JwtService;
 import com.toir.entity.Role;
 import com.toir.entity.User;
+import com.toir.repository.RoleRepository;
 import com.toir.repository.UserRepository;
 import com.toir.entity.UserStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -28,18 +30,21 @@ import java.util.Set;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuditLogService auditLogService;
     private final RequestContext requestContext;
 
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService,
-                       AuditLogService auditLogService, RequestContext requestContext) {
+                       AuditLogService auditLogService, RequestContext requestContext,
+                       RoleRepository roleRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.auditLogService = auditLogService;
         this.requestContext = requestContext;
+        this.roleRepository = roleRepository;
     }
 
     public LoginResponse login(LoginRequest request) {
@@ -96,5 +101,40 @@ public class AuthService {
         );
 
         return new LoginResponse(token, jwtService.getExpirationSeconds(), principal);
+    }
+
+    public LoginResponse register(RegisterRequest request) {
+        if (userRepository.existsByUsername(request.username())) {
+            throw RestException.conflict("Username already taken");
+        }
+        if (userRepository.existsByEmail(request.email())) {
+            throw RestException.conflict("Email already taken");
+        }
+
+        Role role = roleRepository.findByCode(request.roleCode())
+                .orElseThrow(() -> RestException.badRequest("Role not found: " + request.roleCode()));
+
+        User user = new User();
+        user.setUsername(request.username());
+        user.setEmail(request.email());
+        user.setFullName(request.fullName());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setStatus(UserStatus.ACTIVE);
+        user.setPrimaryRole(role);
+        user.getRoles().add(role);
+        userRepository.save(user);
+
+        auditLogService.record(
+                user.getId(),
+                "auth",
+                "User",
+                user.getId().toString(),
+                AuditAction.CREATE,
+                "User " + user.getUsername() + " registered",
+                requestContext.getIpAddress(),
+                requestContext.getUserAgent()
+        );
+
+        return login(new LoginRequest(request.username(), request.password()));
     }
 }

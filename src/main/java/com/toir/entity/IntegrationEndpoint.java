@@ -3,6 +3,7 @@ import com.toir.entity.IntegrationSyncStatus;
 
 import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.time.Instant;
 
@@ -57,18 +58,23 @@ public class IntegrationEndpoint extends BaseEntity {
     private Integer syncIntervalMinutes;
 
     @Column(name = "sync_work_orders", nullable = false)
+    @ColumnDefault("false")
     private boolean syncWorkOrders;
 
     @Column(name = "sync_downtimes", nullable = false)
+    @ColumnDefault("false")
     private boolean syncDowntimes;
 
     @Column(name = "sync_defects", nullable = false)
+    @ColumnDefault("false")
     private boolean syncDefects;
 
     @Column(name = "sync_scada", nullable = false)
+    @ColumnDefault("false")
     private boolean syncScada;
 
     @Column(name = "sync_production", nullable = false)
+    @ColumnDefault("false")
     private boolean syncProduction;
 
     @Column(name = "last_error", columnDefinition = "text")
