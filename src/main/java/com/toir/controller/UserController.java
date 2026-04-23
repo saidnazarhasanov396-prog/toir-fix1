@@ -2,6 +2,7 @@ package com.toir.controller;
 import com.toir.service.UserService;
 
 import com.toir.security.RequiresAdmin;
+import com.toir.dto.user.CreateRoleUserRequest;
 import com.toir.dto.user.CreateUserRequest;
 import com.toir.dto.user.UpdateUserRequest;
 import com.toir.dto.user.UserDto;
@@ -39,6 +40,11 @@ public class UserController {
     @PostMapping
     public ResponseEntity<UserDto> create(@Valid @RequestBody CreateUserRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
+    }
+
+    @PostMapping("/by-role")
+    public ResponseEntity<UserDto> createForRole(@Valid @RequestBody CreateRoleUserRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createForRole(request));
     }
 
     @PutMapping("/{id}")

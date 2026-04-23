@@ -6,6 +6,7 @@ import com.toir.exception.RestException;
 import com.toir.entity.Role;
 import com.toir.repository.RoleRepository;
 import com.toir.dto.user.CreateUserRequest;
+import com.toir.dto.user.CreateRoleUserRequest;
 import com.toir.dto.user.UpdateUserRequest;
 import com.toir.dto.user.UserDto;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -65,6 +67,42 @@ public class UserService {
         user.setDepartmentId(request.departmentId());
         user.setPrimaryRole(resolveRole(request.primaryRoleId()));
         user.setRoles(resolveRoles(request.roleIds()));
+        return UserDto.from(userRepository.save(user));
+    }
+
+    public UserDto createForRole(CreateRoleUserRequest request) {
+        String roleCode = request.roleCode();
+        Role role = roleRepository.findByCode(roleCode)
+                .orElseThrow(() -> RestException.badRequest("Role not found: " + roleCode));
+
+        String username = roleCode;
+        if (userRepository.existsByUsername(username)) {
+            throw RestException.conflict("Username already taken: " + username);
+        }
+
+        String email = (request.email() != null && !request.email().isBlank())
+                ? request.email()
+                : roleCode.toLowerCase(Locale.ROOT) + "@toir.local";
+        if (userRepository.existsByEmail(email)) {
+            throw RestException.conflict("Email already taken: " + email);
+        }
+
+        String fullName = (request.fullName() != null && !request.fullName().isBlank())
+                ? request.fullName()
+                : (role.getNameEn() != null && !role.getNameEn().isBlank() ? role.getNameEn() : roleCode);
+
+        User user = new User();
+        user.setUsername(username);
+        user.setEmail(email);
+        user.setFullName(fullName);
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setPosition(request.position());
+        user.setPhone(request.phone());
+        user.setDepartmentId(request.departmentId());
+        user.setPrimaryRole(role);
+        Set<Role> roles = new HashSet<>();
+        roles.add(role);
+        user.setRoles(roles);
         return UserDto.from(userRepository.save(user));
     }
 

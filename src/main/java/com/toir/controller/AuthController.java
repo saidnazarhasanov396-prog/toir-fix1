@@ -3,6 +3,8 @@ import com.toir.service.AuthService;
 
 import com.toir.dto.auth.LoginRequest;
 import com.toir.dto.auth.LoginResponse;
+import com.toir.dto.auth.RegisterRequest;
+import com.toir.security.RequiresAdmin;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +25,12 @@ public class AuthController {
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/register")
+    @RequiresAdmin
+    public LoginResponse register(@Valid @RequestBody RegisterRequest request) {
+        return authService.register(request);
     }
 
     @GetMapping("/me")
