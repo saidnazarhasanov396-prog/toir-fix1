@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/budgets/actual-costs/review-route-overrides")
+@RequestMapping("/api/v1/budgets/actual-costs/review-route-overrides")
 @Tag(name = "actual-cost-route-overrides")
 public class ActualCostReviewRouteOverrideController {
 

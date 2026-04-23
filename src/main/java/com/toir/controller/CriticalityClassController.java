@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/criticality-classes")
+@RequestMapping("/api/v1/criticality-classes")
 @Tag(name = "criticality-classes")
 public class CriticalityClassController {
 

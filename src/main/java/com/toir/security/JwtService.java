@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class JwtService {
@@ -20,7 +21,9 @@ public class JwtService {
 
     public JwtService(JwtProperties properties) {
         this.properties = properties;
-        this.key = Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8));
+        String secret = Objects.requireNonNull(properties.getSecret(),
+                "JWT secret is not configured. Set app.security.jwt.secret for the active Spring profile.");
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
     public String generateToken(String userId, String username, List<String> authorities, Map<String, Object> extraClaims) {

@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/equipment/{equipmentId}/passport")
+@RequestMapping("/api/v1/equipment/{equipmentId}/passport")
 @Tag(name = "equipment-passport")
 public class EquipmentPassportController {
 

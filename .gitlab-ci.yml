@@ -1,0 +1,56 @@
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+variables:
+  CHART_VERSION: 10.2-full
+  CI_DEBUG_TRACE: "false"
+  SERVICE_NAME: toir-backend
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+
+cache:
+  key: "${CI_PROJECT_NAME}-maven"
+  paths:
+    - .m2/repository
+  policy: pull-push
+
+stages:
+  - compile
+  - build
+  - deploy
+
+compile:
+  image: maven:3.9.9-eclipse-temurin-21
+  stage: compile
+  script:
+    - echo "Using cached Maven repository..."
+    - mvn dependency:go-offline --no-transfer-progress
+    - mvn clean package -DskipTests --no-transfer-progress
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 1 days
+
+build:
+  stage: build
+  image: docker:24.0.9
+  services:
+    - docker:24.0.9-dind
+  script:
+    - docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
+    - docker build -t "${CI_REGISTRY_IMAGE}:latest" .
+    - docker push "${CI_REGISTRY_IMAGE}:latest"
+
+
+deploy:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - chmod og= $SSH_PRIVATE_KEY
+    - apk update && apk add openssh-client
+    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password ${CI_REGISTRY_PASSWORD}"
+    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker pull ${CI_REGISTRY_IMAGE}:latest"
+    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker stop ${SERVICE_NAME} || true"
+    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker rm ${SERVICE_NAME} || true"
+    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker run -d --name ${SERVICE_NAME} --restart unless-stopped -p 10260:8080 ${CI_REGISTRY_IMAGE}:latest"
+

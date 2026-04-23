@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/approvals")
+@RequestMapping("/api/v1/approvals")
 @Tag(name = "approvals")
 public class ApprovalController {
 

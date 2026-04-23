@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/units-of-measurement")
+@RequestMapping("/api/v1/units-of-measurement")
 @Tag(name = "units-of-measurement")
 public class UnitOfMeasurementController {
 

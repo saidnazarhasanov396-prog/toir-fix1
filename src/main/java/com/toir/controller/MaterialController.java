@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/materials")
+@RequestMapping("/api/v1/materials")
 @Tag(name = "materials")
 public class MaterialController {
 

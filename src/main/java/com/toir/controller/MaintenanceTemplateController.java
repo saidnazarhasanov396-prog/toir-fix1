@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/maintenance-templates")
+@RequestMapping("/api/v1/maintenance-templates")
 @Tag(name = "maintenance-templates")
 public class MaintenanceTemplateController {
 

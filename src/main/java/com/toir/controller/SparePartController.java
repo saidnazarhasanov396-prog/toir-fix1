@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/spare-parts")
+@RequestMapping("/api/v1/spare-parts")
 @Tag(name = "spare-parts")
 public class SparePartController {
 

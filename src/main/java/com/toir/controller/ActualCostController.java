@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/actual-costs")
+@RequestMapping("/api/v1/actual-costs")
 @Tag(name = "actual-costs")
 public class ActualCostController {
 

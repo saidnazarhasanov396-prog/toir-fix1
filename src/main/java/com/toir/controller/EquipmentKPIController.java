@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/equipment-kpis")
+@RequestMapping("/api/v1/equipment-kpis")
 @Tag(name = "equipment-kpis")
 public class EquipmentKPIController {
 

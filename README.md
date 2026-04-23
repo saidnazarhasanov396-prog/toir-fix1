@@ -14,8 +14,6 @@ Package-by-feature. Each feature package contains its own `controller`, `service
 ## Running locally
 
 ```bash
-cp .env.example .env
-# Edit .env with real values, then:
 ./mvnw spring-boot:run
 ```
 
@@ -29,14 +27,19 @@ API base URL: `http://localhost:8080/api`
 Swagger UI: `http://localhost:8080/api/swagger-ui.html`
 
 ## Default credentials
-On first run `DataBootstrap` seeds system roles and a default admin:
+When `create-default-admin: true`, `DataBootstrap` creates a default admin only if that user does not already exist:
 - username: `admin`
-- password: `admin`
+- password: `P@ssw0rd123`
 
 **Change the password immediately in production.**
 
 ## Configuration
-All runtime config lives in `src/main/resources/application-prod.yml` and is overridable via environment variables (see `.env.example`).
+Config is split by profile:
+- `application.yml`: shared defaults
+- `application-dev.yml`: development
+- `application-prod.yml`: production overrides
+
+Use `dev` or `prod` Spring profile. Default profile is `dev`. Demo seeders run only in `dev`.
 
 DB schema is auto-managed by Hibernate (`ddl-auto: update`). No Flyway/Liquibase.
 

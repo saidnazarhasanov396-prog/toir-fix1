@@ -7,6 +7,7 @@ import com.toir.entity.User;
 import com.toir.repository.UserRepository;
 import com.toir.entity.UserStatus;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -17,11 +18,10 @@ import java.util.Set;
 
 @Component
 @Order(10)
+@EnableConfigurationProperties(BootstrapProperties.class)
 public class DataBootstrap implements CommandLineRunner {
 
     private static final String ADMIN_ROLE_CODE = "SYSTEM_ADMIN";
-    private static final String ADMIN_USERNAME = "admin";
-    private static final String ADMIN_PASSWORD = "P@ssw0rd123";
 
     /** {ru, en, uz} translations for seeded role names. */
     private static final String[][] BASE_ROLES = {
@@ -44,11 +44,14 @@ public class DataBootstrap implements CommandLineRunner {
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final BootstrapProperties bootstrapProperties;
 
-    public DataBootstrap(RoleRepository roleRepository, UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public DataBootstrap(RoleRepository roleRepository, UserRepository userRepository,
+                         PasswordEncoder passwordEncoder, BootstrapProperties bootstrapProperties) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.bootstrapProperties = bootstrapProperties;
     }
 
     @Override
@@ -79,19 +82,22 @@ public class DataBootstrap implements CommandLineRunner {
             }
         }
 
-        User admin = userRepository.findByUsername(ADMIN_USERNAME).orElseGet(() -> {
+        if (!bootstrapProperties.isCreateDefaultAdmin()) {
+            return;
+        }
+
+        userRepository.findByUsername(bootstrapProperties.getAdminUsername()).orElseGet(() -> {
             User u = new User();
-            u.setUsername(ADMIN_USERNAME);
-            u.setEmail("admin@toir.local");
-            u.setFullName("System Administrator");
+            u.setUsername(bootstrapProperties.getAdminUsername());
+            u.setEmail(bootstrapProperties.getAdminEmail());
+            u.setFullName(bootstrapProperties.getAdminFullName());
             u.setStatus(UserStatus.ACTIVE);
-            return u;
+            u.setPasswordHash(passwordEncoder.encode(bootstrapProperties.getAdminPassword()));
+            u.setPrimaryRole(adminRole);
+            Set<Role> roles = new HashSet<>();
+            roles.add(adminRole);
+            u.setRoles(roles);
+            return userRepository.save(u);
         });
-        admin.setPasswordHash(passwordEncoder.encode(ADMIN_PASSWORD));
-        admin.setPrimaryRole(adminRole);
-        Set<Role> roles = new HashSet<>();
-        roles.add(adminRole);
-        admin.setRoles(roles);
-        userRepository.save(admin);
     }
 }

@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/reliability-metrics")
+@RequestMapping("/api/v1/reliability-metrics")
 @Tag(name = "reliability-metrics")
 public class ReliabilityMetricController {
 

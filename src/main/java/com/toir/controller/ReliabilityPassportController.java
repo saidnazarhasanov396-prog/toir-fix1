@@ -23,7 +23,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/equipment")
+@RequestMapping("/api/v1/equipment")
 @Tag(name = "equipment-reliability-passport")
 public class ReliabilityPassportController {
 

@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/rcm")
+@RequestMapping("/api/v1/rcm")
 @Tag(name = "rcm")
 public class RcmController {
 

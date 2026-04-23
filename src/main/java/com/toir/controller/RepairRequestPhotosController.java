@@ -22,7 +22,7 @@ import java.util.UUID;
  * Uses the generic FileAsset storage with entityType=RepairRequest.
  */
 @RestController
-@RequestMapping("/repair-requests/{requestId}/photos")
+@RequestMapping("/api/v1/repair-requests/{requestId}/photos")
 @Tag(name = "repair-request-photos")
 public class RepairRequestPhotosController {
 

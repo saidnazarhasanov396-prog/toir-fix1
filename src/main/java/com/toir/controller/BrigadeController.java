@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/brigades")
+@RequestMapping("/api/v1/brigades")
 @Tag(name = "brigades")
 public class BrigadeController {
 

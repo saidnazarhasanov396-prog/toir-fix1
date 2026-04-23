@@ -73,7 +73,9 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.entity.WorkOrderStatus;
 import com.toir.entity.WorkOrderType;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -87,6 +89,8 @@ import java.util.UUID;
 @Component
 @Order(20)
 @Transactional
+@Profile("dev")
+@ConditionalOnProperty(name = "app.bootstrap.seed-demo-data", havingValue = "true")
 public class SampleDataSeeder implements CommandLineRunner {
 
     private final DepartmentRepository departmentRepository;
