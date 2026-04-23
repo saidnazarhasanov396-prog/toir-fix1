@@ -1,0 +1,45 @@
+package com.toir.controller;
+import com.toir.service.ContractorWorkService;
+
+import com.toir.dto.contractorwork.ContractorWorkDto;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/v1/contractor-works")
+@Tag(name = "contractor-works")
+public class ContractorWorkController {
+
+    private final ContractorWorkService service;
+
+    public ContractorWorkController(ContractorWorkService service) { this.service = service; }
+
+    @GetMapping
+    public List<ContractorWorkDto> list(@RequestParam UUID contractorId) {
+        return service.findByContractor(contractorId);
+    }
+
+    @PostMapping
+    public ResponseEntity<ContractorWorkDto> create(@Valid @RequestBody ContractorWorkDto r) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
+    }
+
+    @PostMapping("/{id}/start")
+    public ContractorWorkDto start(@PathVariable UUID id) { return service.start(id); }
+
+    @PostMapping("/{id}/complete")
+    public ContractorWorkDto complete(@PathVariable UUID id, @RequestParam String result, @RequestParam(required = false) Double cost) {
+        return service.complete(id, result, cost);
+    }
+
+    @PostMapping("/{id}/accept")
+    public ContractorWorkDto accept(@PathVariable UUID id, @RequestParam UUID acceptedById, @RequestParam(required = false) String comment) {
+        return service.accept(id, acceptedById, comment);
+    }
+}
