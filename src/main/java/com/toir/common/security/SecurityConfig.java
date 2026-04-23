@@ -27,6 +27,10 @@ public class SecurityConfig {
             "/api/v1/v3/api-docs/**",
             "/api/v1/swagger-ui/**",
             "/api/v1/swagger-ui.html",
+            // springdoc defaults (swagger-ui resources stay under /swagger-ui/**)
+            "/v3/api-docs/**",
+            "/swagger-ui/**",
+            "/swagger-ui.html",
             "/actuator/health"
     };
 
