@@ -2,4 +2,4 @@ spring:
   application:
     name: toir-backend
   profiles:
-    default: local
+    default: prod
