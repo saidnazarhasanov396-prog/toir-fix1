@@ -56,6 +56,31 @@ public class PprPlanService {
         return PprPlanDto.from(planRepository.save(plan));
     }
 
+    public PprPlanDto update(UUID id, PprPlanRequest request) {
+        PprPlan plan = getPlan(id);
+        if (plan.getStatus() != PlanStatus.DRAFT) {
+            throw RestException.badRequest("Only DRAFT plans can be edited");
+        }
+        if (!plan.getCode().equals(request.code()) && planRepository.existsByCode(request.code())) {
+            throw RestException.conflict("Plan code already exists: " + request.code());
+        }
+        plan.setCode(request.code());
+        plan.setName(request.name());
+        plan.setYear(request.year());
+        plan.setMonth(request.month());
+        plan.setDepartmentId(request.departmentId());
+        plan.setNotes(request.notes());
+        return PprPlanDto.from(plan);
+    }
+
+    public void delete(UUID id) {
+        PprPlan plan = getPlan(id);
+        if (plan.getStatus() != PlanStatus.DRAFT) {
+            throw RestException.badRequest("Only DRAFT plans can be deleted");
+        }
+        planRepository.delete(plan);
+    }
+
     public PprPlanDto approve(UUID planId, UUID approverId) {
         PprPlan plan = getPlan(planId);
         if (plan.getStatus() != PlanStatus.DRAFT && plan.getStatus() != PlanStatus.GENERATED) {

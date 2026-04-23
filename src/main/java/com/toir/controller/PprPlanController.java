@@ -41,6 +41,17 @@ public class PprPlanController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
+    @PatchMapping("/{id}")
+    public PprPlanDto update(@PathVariable UUID id, @Valid @RequestBody PprPlanRequest request) {
+        return service.update(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{id}/approve")
     public PprPlanDto approve(@PathVariable UUID id, @RequestParam UUID approverId) {
         return service.approve(id, approverId);
