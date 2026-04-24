@@ -1,8 +1,7 @@
 .idea/
-target/
-target/classes
-target/generated-sources
-*.class
+target/classes/
+target/generated-sources/
+
 *.jar
 *.log
 .DS_Store
