@@ -1,7 +1,7 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -16,6 +16,11 @@ import java.util.UUID;
                 @Index(name = "ix_user_cert_user_type", columnList = "user_id,type_code"),
                 @Index(name = "ix_user_cert_expires", columnList = "expires_at")
         })
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class UserCertification extends BaseEntity {
 
     @Column(name = "user_id", nullable = false)
@@ -49,24 +54,4 @@ public class UserCertification extends BaseEntity {
     @Column(columnDefinition = "text")
     private String notes;
 
-    public UUID getUserId() { return userId; }
-    public void setUserId(UUID userId) { this.userId = userId; }
-    public String getTypeCode() { return typeCode; }
-    public void setTypeCode(String typeCode) { this.typeCode = typeCode; }
-    public String getCertificateNumber() { return certificateNumber; }
-    public void setCertificateNumber(String certificateNumber) { this.certificateNumber = certificateNumber; }
-    public String getIssuedBy() { return issuedBy; }
-    public void setIssuedBy(String issuedBy) { this.issuedBy = issuedBy; }
-    public LocalDate getIssuedAt() { return issuedAt; }
-    public void setIssuedAt(LocalDate issuedAt) { this.issuedAt = issuedAt; }
-    public LocalDate getExpiresAt() { return expiresAt; }
-    public void setExpiresAt(LocalDate expiresAt) { this.expiresAt = expiresAt; }
-    public String getGradeOrLevel() { return gradeOrLevel; }
-    public void setGradeOrLevel(String gradeOrLevel) { this.gradeOrLevel = gradeOrLevel; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public UUID getDocumentFileId() { return documentFileId; }
-    public void setDocumentFileId(UUID documentFileId) { this.documentFileId = documentFileId; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
 }

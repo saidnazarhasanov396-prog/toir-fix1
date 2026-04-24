@@ -1,6 +1,6 @@
 package com.toir.dto.approval;
 
-import com.toir.entity.ApprovalDecision;
+import com.toir.enums.ApprovalDecision;
 import com.toir.entity.ApprovalStep;
 
 import java.time.Instant;

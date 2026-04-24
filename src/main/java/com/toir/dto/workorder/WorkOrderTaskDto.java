@@ -1,6 +1,6 @@
 package com.toir.dto.workorder;
 
-import com.toir.entity.TaskExecutionStatus;
+import com.toir.enums.TaskExecutionStatus;
 import com.toir.entity.WorkOrderTask;
 
 import java.time.Instant;

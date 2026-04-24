@@ -1,6 +1,6 @@
 package com.toir.service;
 import com.toir.entity.BudgetLine;
-import com.toir.entity.BudgetStatus;
+import com.toir.enums.BudgetStatus;
 import com.toir.entity.MaintenanceBudget;
 import com.toir.repository.BudgetLineRepository;
 import com.toir.repository.MaintenanceBudgetRepository;

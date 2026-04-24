@@ -1,12 +1,17 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.util.UUID;
 
 @Entity
 @Table(name = "financial_approval_rules")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class FinancialApprovalRule extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -42,26 +47,4 @@ public class FinancialApprovalRule extends BaseEntity {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public UUID getDepartmentId() { return departmentId; }
-    public void setDepartmentId(UUID departmentId) { this.departmentId = departmentId; }
-    public Double getMinAmount() { return minAmount; }
-    public void setMinAmount(Double minAmount) { this.minAmount = minAmount; }
-    public Double getMaxAmount() { return maxAmount; }
-    public void setMaxAmount(Double maxAmount) { this.maxAmount = maxAmount; }
-    public String getRequiredRoleCode() { return requiredRoleCode; }
-    public void setRequiredRoleCode(String requiredRoleCode) { this.requiredRoleCode = requiredRoleCode; }
-    public String getEscalateToRoleCode() { return escalateToRoleCode; }
-    public void setEscalateToRoleCode(String escalateToRoleCode) { this.escalateToRoleCode = escalateToRoleCode; }
-    public Integer getThresholdHours() { return thresholdHours; }
-    public void setThresholdHours(Integer thresholdHours) { this.thresholdHours = thresholdHours; }
-    public int getPriority() { return priority; }
-    public void setPriority(int priority) { this.priority = priority; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
-    public boolean isActive() { return active; }
-    public void setActive(boolean active) { this.active = active; }
 }

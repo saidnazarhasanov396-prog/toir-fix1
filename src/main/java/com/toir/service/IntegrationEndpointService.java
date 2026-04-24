@@ -1,6 +1,6 @@
 package com.toir.service;
 import com.toir.entity.IntegrationEndpoint;
-import com.toir.entity.IntegrationSyncStatus;
+import com.toir.enums.IntegrationSyncStatus;
 import com.toir.repository.IntegrationEndpointRepository;
 
 import com.toir.exception.RestException;

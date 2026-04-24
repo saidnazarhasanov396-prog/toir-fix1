@@ -1,6 +1,6 @@
 package com.toir.repository;
 import com.toir.entity.RepairRequest;
-import com.toir.entity.RequestStatus;
+import com.toir.enums.RequestStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

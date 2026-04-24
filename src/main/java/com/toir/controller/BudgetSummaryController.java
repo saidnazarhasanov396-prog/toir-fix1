@@ -6,7 +6,7 @@ import com.toir.repository.MaintenanceBudgetRepository;
 
 import com.toir.entity.ActualCost;
 import com.toir.repository.ActualCostRepository;
-import com.toir.entity.ActualCostStatus;
+import com.toir.enums.ActualCostStatus;
 import com.toir.entity.CostCategory;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.dto.costcategory.CostCategoryDto;

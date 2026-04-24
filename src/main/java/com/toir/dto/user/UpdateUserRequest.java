@@ -1,6 +1,6 @@
 package com.toir.dto.user;
 
-import com.toir.entity.UserStatus;
+import com.toir.enums.UserStatus;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 

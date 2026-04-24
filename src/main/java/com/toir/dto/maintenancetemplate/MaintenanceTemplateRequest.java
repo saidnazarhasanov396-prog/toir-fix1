@@ -1,6 +1,6 @@
 package com.toir.dto.maintenancetemplate;
 
-import com.toir.entity.MaintenanceKind;
+import com.toir.enums.MaintenanceKind;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;

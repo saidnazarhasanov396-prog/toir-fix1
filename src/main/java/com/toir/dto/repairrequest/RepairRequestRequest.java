@@ -1,8 +1,8 @@
 package com.toir.dto.repairrequest;
 
-import com.toir.entity.CriticalityLevel;
-import com.toir.entity.PriorityLevel;
-import com.toir.entity.RequestSource;
+import com.toir.enums.CriticalityLevel;
+import com.toir.enums.PriorityLevel;
+import com.toir.enums.RequestSource;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

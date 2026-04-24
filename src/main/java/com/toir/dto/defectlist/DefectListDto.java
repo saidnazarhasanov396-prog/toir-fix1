@@ -1,7 +1,7 @@
 package com.toir.dto.defectlist;
 
 import com.toir.entity.DefectList;
-import com.toir.entity.DefectListStatus;
+import com.toir.enums.DefectListStatus;
 
 import java.util.List;
 import java.util.UUID;

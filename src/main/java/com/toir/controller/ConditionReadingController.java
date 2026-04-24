@@ -1,5 +1,5 @@
 package com.toir.controller;
-import com.toir.entity.ConditionParameter;
+import com.toir.enums.ConditionParameter;
 import com.toir.service.ConditionReadingService;
 
 import com.toir.security.AuthenticatedUser;

@@ -1,8 +1,6 @@
 package com.toir.entity;
-import com.toir.entity.InspectionRound;
-
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -11,6 +9,11 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "inspection_round_results")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class InspectionRoundResult extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -42,21 +45,4 @@ public class InspectionRoundResult extends BaseEntity {
     @Column(name = "photo_file_ids", columnDefinition = "jsonb")
     private List<UUID> photoFileIds;
 
-    public List<UUID> getPhotoFileIds() { return photoFileIds; }
-    public void setPhotoFileIds(List<UUID> photoFileIds) { this.photoFileIds = photoFileIds; }
-
-    public InspectionRound getRound() { return round; }
-    public void setRound(InspectionRound round) { this.round = round; }
-    public UUID getCheckpointId() { return checkpointId; }
-    public void setCheckpointId(UUID checkpointId) { this.checkpointId = checkpointId; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public Double getMeasuredValue() { return measuredValue; }
-    public void setMeasuredValue(Double measuredValue) { this.measuredValue = measuredValue; }
-    public String getMeasuredUnit() { return measuredUnit; }
-    public void setMeasuredUnit(String measuredUnit) { this.measuredUnit = measuredUnit; }
-    public String getComment() { return comment; }
-    public void setComment(String comment) { this.comment = comment; }
-    public UUID getDefectId() { return defectId; }
-    public void setDefectId(UUID defectId) { this.defectId = defectId; }
 }

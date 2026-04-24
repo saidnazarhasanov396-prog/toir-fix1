@@ -1,6 +1,6 @@
 package com.toir.repository;
 import com.toir.entity.ActualCost;
-import com.toir.entity.ActualCostStatus;
+import com.toir.enums.ActualCostStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

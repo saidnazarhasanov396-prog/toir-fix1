@@ -1,10 +1,15 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 @Entity
 @Table(name = "units_of_measurement")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class UnitOfMeasurement extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -19,12 +24,4 @@ public class UnitOfMeasurement extends BaseEntity {
     @Column(name = "name_uz")
     private String nameUz;
 
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getNameEn() { return nameEn; }
-    public void setNameEn(String nameEn) { this.nameEn = nameEn; }
-    public String getNameUz() { return nameUz; }
-    public void setNameUz(String nameUz) { this.nameUz = nameUz; }
 }

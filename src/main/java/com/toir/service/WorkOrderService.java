@@ -1,11 +1,9 @@
 package com.toir.service;
-import com.toir.entity.Equipment;
 import com.toir.entity.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
-import com.toir.entity.WorkOrderStatus;
+import com.toir.enums.WorkOrderStatus;
 
-import com.toir.entity.AuditAction;
-import com.toir.service.AuditLogService;
+import com.toir.enums.AuditAction;
 import com.toir.util.RequestContext;
 import com.toir.exception.RestException;
 import com.toir.security.SecurityScope;

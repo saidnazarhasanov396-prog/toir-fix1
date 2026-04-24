@@ -1,12 +1,19 @@
 package com.toir.entity;
 
+import com.toir.enums.AuditAction;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "audit_logs")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class AuditLog {
 
     @Id
@@ -42,24 +49,8 @@ public class AuditLog {
     private Instant createdAt;
 
     @PrePersist
-    void onCreate() { this.createdAt = Instant.now(); }
+    void onCreate() {
+        this.createdAt = Instant.now();
+    }
 
-    public UUID getId() { return id; }
-    public UUID getUserId() { return userId; }
-    public void setUserId(UUID userId) { this.userId = userId; }
-    public String getModule() { return module; }
-    public void setModule(String module) { this.module = module; }
-    public String getEntityType() { return entityType; }
-    public void setEntityType(String entityType) { this.entityType = entityType; }
-    public String getEntityId() { return entityId; }
-    public void setEntityId(String entityId) { this.entityId = entityId; }
-    public AuditAction getAction() { return action; }
-    public void setAction(AuditAction action) { this.action = action; }
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
-    public String getIpAddress() { return ipAddress; }
-    public void setIpAddress(String ipAddress) { this.ipAddress = ipAddress; }
-    public String getUserAgent() { return userAgent; }
-    public void setUserAgent(String userAgent) { this.userAgent = userAgent; }
-    public Instant getCreatedAt() { return createdAt; }
 }

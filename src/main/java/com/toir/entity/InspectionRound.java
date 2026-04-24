@@ -1,9 +1,6 @@
 package com.toir.entity;
-import com.toir.entity.InspectionRoundResult;
-import com.toir.entity.InspectionRoute;
-
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -15,6 +12,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "inspection_rounds")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class InspectionRound extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -45,23 +47,4 @@ public class InspectionRound extends BaseEntity {
 
     @OneToMany(mappedBy = "round", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<InspectionRoundResult> results = new ArrayList<>();
-
-    public InspectionRoute getRoute() { return route; }
-    public void setRoute(InspectionRoute route) { this.route = route; }
-    public UUID getPerformedBy() { return performedBy; }
-    public void setPerformedBy(UUID performedBy) { this.performedBy = performedBy; }
-    public Instant getStartedAt() { return startedAt; }
-    public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
-    public Instant getCompletedAt() { return completedAt; }
-    public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public int getFindingsCount() { return findingsCount; }
-    public void setFindingsCount(int findingsCount) { this.findingsCount = findingsCount; }
-    public int getAlarmCount() { return alarmCount; }
-    public void setAlarmCount(int alarmCount) { this.alarmCount = alarmCount; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
-    public List<InspectionRoundResult> getResults() { return results; }
-    public void setResults(List<InspectionRoundResult> results) { this.results = results; }
 }

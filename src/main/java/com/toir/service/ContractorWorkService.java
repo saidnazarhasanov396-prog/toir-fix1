@@ -1,7 +1,6 @@
 package com.toir.service;
-import com.toir.entity.Contractor;
 import com.toir.entity.ContractorWork;
-import com.toir.entity.ContractorWorkStatus;
+import com.toir.enums.ContractorWorkStatus;
 import com.toir.repository.ContractorWorkRepository;
 
 import com.toir.exception.RestException;

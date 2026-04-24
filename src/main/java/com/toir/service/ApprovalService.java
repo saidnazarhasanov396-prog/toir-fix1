@@ -1,7 +1,7 @@
 package com.toir.service;
-import com.toir.entity.ApprovalDecision;
+import com.toir.enums.ApprovalDecision;
 import com.toir.entity.ApprovalRequest;
-import com.toir.entity.ApprovalStatus;
+import com.toir.enums.ApprovalStatus;
 import com.toir.entity.ApprovalStep;
 import com.toir.repository.ApprovalRequestRepository;
 

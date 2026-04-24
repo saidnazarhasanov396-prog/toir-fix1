@@ -1,10 +1,9 @@
 package com.toir.dto.workorder;
-import com.toir.dto.workorder.WorkOrderTaskDto;
 
-import com.toir.entity.PriorityLevel;
+import com.toir.enums.PriorityLevel;
 import com.toir.entity.WorkOrder;
-import com.toir.entity.WorkOrderStatus;
-import com.toir.entity.WorkOrderType;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkOrderType;
 
 import java.time.Instant;
 import java.util.List;

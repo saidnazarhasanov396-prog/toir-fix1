@@ -1,5 +1,5 @@
 package com.toir.service;
-import com.toir.entity.ConditionParameter;
+import com.toir.enums.ConditionParameter;
 import com.toir.entity.ConditionReading;
 import com.toir.repository.ConditionReadingRepository;
 
@@ -8,7 +8,7 @@ import com.toir.dto.conditionreading.ConditionReadingDto;
 import com.toir.dto.conditionreading.ConditionReadingRequest;
 import com.toir.entity.Defect;
 import com.toir.repository.DefectRepository;
-import com.toir.entity.DefectStatus;
+import com.toir.enums.DefectStatus;
 import com.toir.entity.Equipment;
 import com.toir.repository.EquipmentRepository;
 import com.toir.service.WebhookService;

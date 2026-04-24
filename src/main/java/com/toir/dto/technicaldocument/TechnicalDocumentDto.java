@@ -1,6 +1,6 @@
 package com.toir.dto.technicaldocument;
 
-import com.toir.entity.DocumentType;
+import com.toir.enums.DocumentType;
 import com.toir.entity.TechnicalDocument;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

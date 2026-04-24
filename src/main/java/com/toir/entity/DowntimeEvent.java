@@ -1,13 +1,19 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
+import com.toir.enums.DowntimeType;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "downtime_events")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class DowntimeEvent extends BaseEntity {
 
     @Column(name = "equipment_id", nullable = false)
@@ -35,20 +41,4 @@ public class DowntimeEvent extends BaseEntity {
     @Column(columnDefinition = "text")
     private String description;
 
-    public UUID getEquipmentId() { return equipmentId; }
-    public void setEquipmentId(UUID equipmentId) { this.equipmentId = equipmentId; }
-    public UUID getDepartmentId() { return departmentId; }
-    public void setDepartmentId(UUID departmentId) { this.departmentId = departmentId; }
-    public UUID getWorkOrderId() { return workOrderId; }
-    public void setWorkOrderId(UUID workOrderId) { this.workOrderId = workOrderId; }
-    public Instant getStartAt() { return startAt; }
-    public void setStartAt(Instant startAt) { this.startAt = startAt; }
-    public Instant getEndAt() { return endAt; }
-    public void setEndAt(Instant endAt) { this.endAt = endAt; }
-    public Integer getDurationMinutes() { return durationMinutes; }
-    public void setDurationMinutes(Integer durationMinutes) { this.durationMinutes = durationMinutes; }
-    public DowntimeType getType() { return type; }
-    public void setType(DowntimeType type) { this.type = type; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
 }

@@ -1,7 +1,7 @@
 package com.toir.service;
 import com.toir.entity.ProcurementRequest;
 import com.toir.entity.ProcurementRequestLine;
-import com.toir.entity.ProcurementRequestStatus;
+import com.toir.enums.ProcurementRequestStatus;
 import com.toir.repository.ProcurementRequestRepository;
 
 import com.toir.exception.RestException;

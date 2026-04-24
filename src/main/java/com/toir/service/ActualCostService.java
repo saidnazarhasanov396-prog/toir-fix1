@@ -1,6 +1,6 @@
 package com.toir.service;
 import com.toir.entity.ActualCost;
-import com.toir.entity.ActualCostStatus;
+import com.toir.enums.ActualCostStatus;
 import com.toir.repository.ActualCostRepository;
 
 import com.toir.dto.actualcost.ActualCostDto;

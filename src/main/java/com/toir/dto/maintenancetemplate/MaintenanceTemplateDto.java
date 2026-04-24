@@ -1,7 +1,6 @@
 package com.toir.dto.maintenancetemplate;
-import com.toir.dto.maintenancetemplate.MaintenanceOperationDto;
 
-import com.toir.entity.MaintenanceKind;
+import com.toir.enums.MaintenanceKind;
 import com.toir.entity.MaintenanceTemplate;
 
 import java.util.List;

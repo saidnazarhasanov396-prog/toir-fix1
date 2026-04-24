@@ -1,7 +1,7 @@
 package com.toir.dto.equipment;
 
 import com.toir.entity.Equipment;
-import com.toir.entity.EquipmentStatus;
+import com.toir.enums.EquipmentStatus;
 
 import java.time.LocalDate;
 import java.util.UUID;

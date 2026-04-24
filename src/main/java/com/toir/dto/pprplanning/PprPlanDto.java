@@ -1,7 +1,6 @@
 package com.toir.dto.pprplanning;
-import com.toir.dto.pprplanning.PprTaskDto;
 
-import com.toir.entity.PlanStatus;
+import com.toir.enums.PlanStatus;
 import com.toir.entity.PprPlan;
 
 import java.util.List;

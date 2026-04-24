@@ -1,7 +1,7 @@
 package com.toir.dto.defect;
 
 import com.toir.entity.Defect;
-import com.toir.entity.DefectStatus;
+import com.toir.enums.DefectStatus;
 
 import java.time.Instant;
 import java.util.UUID;

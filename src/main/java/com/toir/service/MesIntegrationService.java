@@ -4,7 +4,7 @@ import com.toir.dto.integration.ConnectionTestResult;
 import com.toir.dto.integration.IntegrationSyncLogDto;
 import com.toir.entity.IntegrationEndpoint;
 import com.toir.entity.IntegrationSyncLog;
-import com.toir.entity.IntegrationSyncStatus;
+import com.toir.enums.IntegrationSyncStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.IntegrationEndpointRepository;
 import com.toir.repository.IntegrationSyncLogRepository;

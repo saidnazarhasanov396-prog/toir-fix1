@@ -1,7 +1,7 @@
 package com.toir.dto.equipmentnode;
 
 import com.toir.entity.EquipmentNode;
-import com.toir.entity.EquipmentNodeType;
+import com.toir.enums.EquipmentNodeType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

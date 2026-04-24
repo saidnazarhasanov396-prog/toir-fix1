@@ -1,5 +1,5 @@
 package com.toir.controller;
-import com.toir.entity.EquipmentStatus;
+import com.toir.enums.EquipmentStatus;
 import com.toir.service.EquipmentService;
 
 import com.toir.security.SecurityScope;

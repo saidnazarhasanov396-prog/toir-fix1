@@ -1,9 +1,9 @@
 package com.toir.dto.maintenanceregulation;
-import com.toir.entity.MeterType;
 
-import com.toir.entity.MaintenanceKind;
+import com.toir.enums.MaintenanceKind;
 import com.toir.entity.MaintenanceRegulation;
-import com.toir.entity.PeriodicityUnit;
+import com.toir.enums.MeterType;
+import com.toir.enums.PeriodicityUnit;
 
 import java.util.UUID;
 
@@ -20,7 +20,7 @@ public record MaintenanceRegulationDto(
         int periodicityValue,
         Integer toleranceDays,
         boolean requiresShutdown,
-        com.toir.entity.MeterType triggerMeterType,
+        MeterType triggerMeterType,
         Double triggerMeterInterval
 ) {
     public static MaintenanceRegulationDto from(MaintenanceRegulation r) {

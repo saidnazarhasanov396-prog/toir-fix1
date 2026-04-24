@@ -1,5 +1,5 @@
 package com.toir.service;
-import com.toir.entity.AuditAction;
+import com.toir.enums.AuditAction;
 import com.toir.entity.AuditLog;
 import com.toir.repository.AuditLogRepository;
 

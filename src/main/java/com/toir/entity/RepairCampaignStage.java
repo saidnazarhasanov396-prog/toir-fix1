@@ -1,9 +1,8 @@
 package com.toir.entity;
-import com.toir.entity.RepairCampaign;
-import com.toir.entity.RepairCampaignStatus;
+import com.toir.enums.RepairCampaignStatus;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 
@@ -12,6 +11,11 @@ import java.time.LocalDate;
  */
 @Entity
 @Table(name = "repair_campaign_stages")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class RepairCampaignStage extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -43,22 +47,4 @@ public class RepairCampaignStage extends BaseEntity {
     @Column(columnDefinition = "text")
     private String notes;
 
-    public RepairCampaign getCampaign() { return campaign; }
-    public void setCampaign(RepairCampaign campaign) { this.campaign = campaign; }
-    public int getSequence() { return sequence; }
-    public void setSequence(int sequence) { this.sequence = sequence; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public LocalDate getStartDate() { return startDate; }
-    public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
-    public LocalDate getEndDate() { return endDate; }
-    public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
-    public double getPlannedCost() { return plannedCost; }
-    public void setPlannedCost(double plannedCost) { this.plannedCost = plannedCost; }
-    public double getActualCost() { return actualCost; }
-    public void setActualCost(double actualCost) { this.actualCost = actualCost; }
-    public RepairCampaignStatus getStatus() { return status; }
-    public void setStatus(RepairCampaignStatus status) { this.status = status; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
 }

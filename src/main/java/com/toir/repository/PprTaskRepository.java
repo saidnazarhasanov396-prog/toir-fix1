@@ -1,6 +1,6 @@
 package com.toir.repository;
 import com.toir.entity.PprTask;
-import com.toir.entity.PprTaskStatus;
+import com.toir.enums.PprTaskStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

@@ -1,14 +1,19 @@
 package com.toir.entity;
-import com.toir.entity.DocumentType;
+import com.toir.enums.DocumentType;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
 @Table(name = "technical_documents")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class TechnicalDocument extends BaseEntity {
 
     @Column(name = "equipment_id", nullable = false)
@@ -32,18 +37,4 @@ public class TechnicalDocument extends BaseEntity {
     @Column(name = "uploaded_by_id")
     private UUID uploadedById;
 
-    public UUID getEquipmentId() { return equipmentId; }
-    public void setEquipmentId(UUID equipmentId) { this.equipmentId = equipmentId; }
-    public UUID getFileId() { return fileId; }
-    public void setFileId(UUID fileId) { this.fileId = fileId; }
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
-    public String getRevision() { return revision; }
-    public void setRevision(String revision) { this.revision = revision; }
-    public DocumentType getType() { return type; }
-    public void setType(DocumentType type) { this.type = type; }
-    public LocalDate getDocumentDate() { return documentDate; }
-    public void setDocumentDate(LocalDate documentDate) { this.documentDate = documentDate; }
-    public UUID getUploadedById() { return uploadedById; }
-    public void setUploadedById(UUID uploadedById) { this.uploadedById = uploadedById; }
 }

@@ -1,8 +1,7 @@
 package com.toir.service;
-import com.toir.entity.Defect;
 import com.toir.entity.DefectList;
 import com.toir.entity.DefectListLine;
-import com.toir.entity.DefectListStatus;
+import com.toir.enums.DefectListStatus;
 import com.toir.repository.DefectListLineRepository;
 import com.toir.repository.DefectListRepository;
 

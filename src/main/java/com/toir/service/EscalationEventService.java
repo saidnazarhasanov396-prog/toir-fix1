@@ -1,6 +1,6 @@
 package com.toir.service;
 import com.toir.entity.EscalationEvent;
-import com.toir.entity.EscalationStatus;
+import com.toir.enums.EscalationStatus;
 import com.toir.repository.EscalationEventRepository;
 
 import com.toir.exception.RestException;

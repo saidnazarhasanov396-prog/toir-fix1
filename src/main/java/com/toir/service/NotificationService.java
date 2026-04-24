@@ -1,6 +1,6 @@
 package com.toir.service;
 import com.toir.entity.Notification;
-import com.toir.entity.NotificationStatus;
+import com.toir.enums.NotificationStatus;
 import com.toir.repository.NotificationRepository;
 
 import com.toir.exception.RestException;

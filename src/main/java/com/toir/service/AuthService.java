@@ -1,7 +1,6 @@
 package com.toir.service;
 
-import com.toir.entity.AuditAction;
-import com.toir.service.AuditLogService;
+import com.toir.enums.AuditAction;
 import com.toir.dto.auth.LoginRequest;
 import com.toir.dto.auth.LoginResponse;
 import com.toir.dto.auth.RegisterRequest;
@@ -15,6 +14,7 @@ import com.toir.repository.RoleRepository;
 import com.toir.repository.UserRepository;
 import com.toir.entity.UserStatus;
 import lombok.RequiredArgsConstructor;
+import com.toir.enums.UserStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

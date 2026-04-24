@@ -1,7 +1,7 @@
 package com.toir.dto.workorder;
 
-import com.toir.entity.PriorityLevel;
-import com.toir.entity.WorkOrderType;
+import com.toir.enums.PriorityLevel;
+import com.toir.enums.WorkOrderType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

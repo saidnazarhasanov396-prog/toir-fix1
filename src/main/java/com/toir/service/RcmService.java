@@ -7,7 +7,7 @@ import com.toir.entity.CriticalityClass;
 import com.toir.repository.CriticalityClassRepository;
 import com.toir.entity.Defect;
 import com.toir.repository.DefectRepository;
-import com.toir.entity.DefectStatus;
+import com.toir.enums.DefectStatus;
 import com.toir.entity.Equipment;
 import com.toir.repository.EquipmentRepository;
 import com.toir.entity.ReliabilityMetric;

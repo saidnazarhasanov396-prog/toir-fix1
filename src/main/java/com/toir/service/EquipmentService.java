@@ -2,7 +2,7 @@ package com.toir.service;
 import com.toir.entity.Department;
 import com.toir.entity.Equipment;
 import com.toir.entity.EquipmentPassport;
-import com.toir.entity.EquipmentStatus;
+import com.toir.enums.EquipmentStatus;
 import com.toir.entity.EquipmentType;
 import com.toir.entity.Location;
 import com.toir.repository.DepartmentRepository;

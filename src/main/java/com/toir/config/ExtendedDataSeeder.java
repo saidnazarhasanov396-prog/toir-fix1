@@ -10,7 +10,7 @@ import com.toir.entity.CertificationType;
 import com.toir.repository.CertificationTypeRepository;
 import com.toir.entity.UserCertification;
 import com.toir.repository.UserCertificationRepository;
-import com.toir.entity.ConditionParameter;
+import com.toir.enums.ConditionParameter;
 import com.toir.entity.ConditionReading;
 import com.toir.repository.ConditionReadingRepository;
 import com.toir.repository.DepartmentRepository;

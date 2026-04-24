@@ -10,7 +10,7 @@ import com.toir.repository.InspectionRouteRepository;
 import com.toir.exception.RestException;
 import com.toir.entity.Defect;
 import com.toir.repository.DefectRepository;
-import com.toir.entity.DefectStatus;
+import com.toir.enums.DefectStatus;
 import com.toir.dto.inspection.InspectionRoundDto;
 import com.toir.dto.inspection.InspectionRoundResultDto;
 import com.toir.dto.inspection.InspectionRoundResultRequest;

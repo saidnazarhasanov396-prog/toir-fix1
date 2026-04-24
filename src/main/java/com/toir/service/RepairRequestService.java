@@ -1,10 +1,9 @@
 package com.toir.service;
 import com.toir.entity.RepairRequest;
-import com.toir.entity.RequestStatus;
+import com.toir.enums.RequestStatus;
 import com.toir.repository.RepairRequestRepository;
 
-import com.toir.entity.AuditAction;
-import com.toir.service.AuditLogService;
+import com.toir.enums.AuditAction;
 import com.toir.util.RequestContext;
 import com.toir.exception.RestException;
 import com.toir.security.SecurityScope;

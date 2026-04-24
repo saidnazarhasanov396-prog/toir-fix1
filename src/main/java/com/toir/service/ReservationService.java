@@ -1,7 +1,7 @@
 package com.toir.service;
 import com.toir.entity.Reservation;
 import com.toir.repository.ReservationRepository;
-import com.toir.entity.ReservationStatus;
+import com.toir.enums.ReservationStatus;
 
 import com.toir.exception.RestException;
 import com.toir.dto.reservation.ReservationDto;
