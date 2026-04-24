@@ -1,9 +1,8 @@
 package com.toir.entity;
-import com.toir.entity.MaintenanceKind;
-import com.toir.entity.PeriodicityUnit;
-import com.toir.entity.MeterType;
+import com.toir.enums.MaintenanceKind;
+import com.toir.enums.MeterType;
+import com.toir.enums.PeriodicityUnit;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
 
 import java.util.UUID;
@@ -48,13 +47,13 @@ public class MaintenanceRegulation extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "trigger_meter_type")
-    private com.toir.entity.MeterType triggerMeterType;
+    private MeterType triggerMeterType;
 
     @Column(name = "trigger_meter_interval")
     private Double triggerMeterInterval;
 
-    public com.toir.entity.MeterType getTriggerMeterType() { return triggerMeterType; }
-    public void setTriggerMeterType(com.toir.entity.MeterType triggerMeterType) { this.triggerMeterType = triggerMeterType; }
+    public MeterType getTriggerMeterType() { return triggerMeterType; }
+    public void setTriggerMeterType(MeterType triggerMeterType) { this.triggerMeterType = triggerMeterType; }
     public Double getTriggerMeterInterval() { return triggerMeterInterval; }
     public void setTriggerMeterInterval(Double triggerMeterInterval) { this.triggerMeterInterval = triggerMeterInterval; }
 

@@ -1,7 +1,7 @@
 package com.toir.dto.location;
 
 import com.toir.entity.Location;
-import com.toir.entity.LocationType;
+import com.toir.enums.LocationType;
 
 import java.util.UUID;
 

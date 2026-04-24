@@ -1,6 +1,6 @@
 package com.toir.repository;
 import com.toir.entity.Reservation;
-import com.toir.entity.ReservationStatus;
+import com.toir.enums.ReservationStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

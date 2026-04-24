@@ -1,7 +1,7 @@
 package com.toir.dto.hr;
 
 import com.toir.entity.TimesheetEntry;
-import com.toir.entity.TimesheetStatus;
+import com.toir.enums.TimesheetStatus;
 
 import java.time.LocalDate;
 import java.util.UUID;

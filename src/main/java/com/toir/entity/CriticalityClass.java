@@ -1,7 +1,6 @@
 package com.toir.entity;
 
-import com.toir.entity.CriticalityLevel;
-import com.toir.entity.BaseEntity;
+import com.toir.enums.CriticalityLevel;
 import jakarta.persistence.*;
 
 /**

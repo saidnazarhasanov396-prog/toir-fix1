@@ -1,8 +1,6 @@
 package com.toir.entity;
-import com.toir.entity.MaintenanceOperation;
 
-import com.toir.entity.BaseEntity;
-import com.toir.entity.MaintenanceKind;
+import com.toir.enums.MaintenanceKind;
 import jakarta.persistence.*;
 
 import java.util.ArrayList;

@@ -1,6 +1,6 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
+import com.toir.enums.ContractorStatus;
 import jakarta.persistence.*;
 
 @Entity

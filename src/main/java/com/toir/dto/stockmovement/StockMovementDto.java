@@ -1,7 +1,7 @@
 package com.toir.dto.stockmovement;
 
 import com.toir.entity.StockMovement;
-import com.toir.entity.StockMovementType;
+import com.toir.enums.StockMovementType;
 
 import java.time.Instant;
 import java.util.UUID;

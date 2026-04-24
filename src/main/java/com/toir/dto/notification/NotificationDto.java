@@ -1,9 +1,9 @@
 package com.toir.dto.notification;
 
 import com.toir.entity.Notification;
-import com.toir.entity.NotificationChannel;
-import com.toir.entity.NotificationSeverity;
-import com.toir.entity.NotificationStatus;
+import com.toir.enums.NotificationChannel;
+import com.toir.enums.NotificationSeverity;
+import com.toir.enums.NotificationStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

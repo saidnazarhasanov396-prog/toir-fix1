@@ -1,7 +1,7 @@
 package com.toir.dto.repaircampaign;
 
 import com.toir.entity.RepairCampaignStage;
-import com.toir.entity.RepairCampaignStatus;
+import com.toir.enums.RepairCampaignStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;

@@ -1,7 +1,7 @@
 package com.toir.dto.approval;
 
 import com.toir.entity.ApprovalRequest;
-import com.toir.entity.ApprovalStatus;
+import com.toir.enums.ApprovalStatus;
 
 import java.time.Instant;
 import java.util.List;

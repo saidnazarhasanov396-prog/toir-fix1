@@ -1,6 +1,6 @@
 package com.toir.dto.meter;
 
-import com.toir.entity.MeterSource;
+import com.toir.enums.MeterSource;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 

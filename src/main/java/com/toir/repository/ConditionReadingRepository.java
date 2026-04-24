@@ -1,5 +1,5 @@
 package com.toir.repository;
-import com.toir.entity.ConditionParameter;
+import com.toir.enums.ConditionParameter;
 import com.toir.entity.ConditionReading;
 
 import org.springframework.data.jpa.repository.JpaRepository;

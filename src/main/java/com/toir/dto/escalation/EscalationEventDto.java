@@ -1,8 +1,8 @@
 package com.toir.dto.escalation;
 
 import com.toir.entity.EscalationEvent;
-import com.toir.entity.EscalationStatus;
-import com.toir.entity.SlaTriggerType;
+import com.toir.enums.EscalationStatus;
+import com.toir.enums.SlaTriggerType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

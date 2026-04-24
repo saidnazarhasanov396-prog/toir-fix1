@@ -1,7 +1,6 @@
 package com.toir.entity;
-import com.toir.entity.EquipmentStatus;
+import com.toir.enums.EquipmentStatus;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;

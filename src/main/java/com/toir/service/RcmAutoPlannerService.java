@@ -1,7 +1,7 @@
 package com.toir.service;
 import com.toir.dto.rcm.EquipmentRiskScore;
 
-import com.toir.entity.PriorityLevel;
+import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.entity.Equipment;
 import com.toir.repository.EquipmentRepository;
@@ -11,7 +11,7 @@ import com.toir.entity.PprPlan;
 import com.toir.repository.PprPlanRepository;
 import com.toir.entity.PprTask;
 import com.toir.repository.PprTaskRepository;
-import com.toir.entity.PprTaskStatus;
+import com.toir.enums.PprTaskStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

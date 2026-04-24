@@ -1,13 +1,18 @@
 package com.toir.entity;
-import com.toir.entity.ReservationStatus;
+import com.toir.enums.ReservationStatus;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.util.UUID;
 
 @Entity
 @Table(name = "reservations")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class Reservation extends BaseEntity {
 
     @Column(name = "warehouse_stock_id", nullable = false)
@@ -29,16 +34,4 @@ public class Reservation extends BaseEntity {
     @Column(nullable = false)
     private ReservationStatus status = ReservationStatus.ACTIVE;
 
-    public UUID getWarehouseStockId() { return warehouseStockId; }
-    public void setWarehouseStockId(UUID warehouseStockId) { this.warehouseStockId = warehouseStockId; }
-    public UUID getWorkOrderId() { return workOrderId; }
-    public void setWorkOrderId(UUID workOrderId) { this.workOrderId = workOrderId; }
-    public UUID getRepairRequestId() { return repairRequestId; }
-    public void setRepairRequestId(UUID repairRequestId) { this.repairRequestId = repairRequestId; }
-    public UUID getReservedById() { return reservedById; }
-    public void setReservedById(UUID reservedById) { this.reservedById = reservedById; }
-    public double getQuantity() { return quantity; }
-    public void setQuantity(double quantity) { this.quantity = quantity; }
-    public ReservationStatus getStatus() { return status; }
-    public void setStatus(ReservationStatus status) { this.status = status; }
 }

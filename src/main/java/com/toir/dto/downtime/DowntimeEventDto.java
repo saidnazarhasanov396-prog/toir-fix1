@@ -1,7 +1,7 @@
 package com.toir.dto.downtime;
 
 import com.toir.entity.DowntimeEvent;
-import com.toir.entity.DowntimeType;
+import com.toir.enums.DowntimeType;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;

@@ -1,7 +1,6 @@
 package com.toir.entity;
-import com.toir.entity.LocationType;
+import com.toir.enums.LocationType;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
 
 import java.util.UUID;

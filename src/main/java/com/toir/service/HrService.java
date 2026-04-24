@@ -1,7 +1,7 @@
 package com.toir.service;
 import com.toir.entity.Employee;
 import com.toir.entity.TimesheetEntry;
-import com.toir.entity.TimesheetStatus;
+import com.toir.enums.TimesheetStatus;
 import com.toir.repository.EmployeeRepository;
 import com.toir.repository.TimesheetEntryRepository;
 

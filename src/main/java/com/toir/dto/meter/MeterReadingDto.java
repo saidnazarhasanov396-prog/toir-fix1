@@ -1,7 +1,7 @@
 package com.toir.dto.meter;
 
 import com.toir.entity.MeterReading;
-import com.toir.entity.MeterSource;
+import com.toir.enums.MeterSource;
 
 import java.time.Instant;
 import java.util.UUID;

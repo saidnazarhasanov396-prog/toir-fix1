@@ -1,7 +1,6 @@
 package com.toir.entity;
-import com.toir.entity.MeterType;
+import com.toir.enums.MeterType;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
 
 import java.time.Instant;

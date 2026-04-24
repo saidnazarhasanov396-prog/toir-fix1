@@ -1,7 +1,7 @@
 package com.toir.dto.plannedshutdown;
 
 import com.toir.entity.PlannedShutdown;
-import com.toir.entity.PlanStatus;
+import com.toir.enums.PlanStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

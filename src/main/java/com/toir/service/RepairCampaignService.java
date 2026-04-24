@@ -1,7 +1,7 @@
 package com.toir.service;
 import com.toir.entity.RepairCampaign;
 import com.toir.entity.RepairCampaignStage;
-import com.toir.entity.RepairCampaignStatus;
+import com.toir.enums.RepairCampaignStatus;
 import com.toir.repository.RepairCampaignRepository;
 import com.toir.repository.RepairCampaignStageRepository;
 

@@ -1,13 +1,18 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
 @Table(name = "reliability_metrics")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class ReliabilityMetric extends BaseEntity {
 
     @Column(name = "equipment_id", nullable = false)
@@ -26,17 +31,4 @@ public class ReliabilityMetric extends BaseEntity {
 
     @Column(name = "failure_rate")
     private Double failureRate;
-
-    public UUID getEquipmentId() { return equipmentId; }
-    public void setEquipmentId(UUID equipmentId) { this.equipmentId = equipmentId; }
-    public LocalDate getMetricDate() { return metricDate; }
-    public void setMetricDate(LocalDate metricDate) { this.metricDate = metricDate; }
-    public Double getMtbfHours() { return mtbfHours; }
-    public void setMtbfHours(Double mtbfHours) { this.mtbfHours = mtbfHours; }
-    public Double getMttrHours() { return mttrHours; }
-    public void setMttrHours(Double mttrHours) { this.mttrHours = mttrHours; }
-    public Double getAvailability() { return availability; }
-    public void setAvailability(Double availability) { this.availability = availability; }
-    public Double getFailureRate() { return failureRate; }
-    public void setFailureRate(Double failureRate) { this.failureRate = failureRate; }
 }

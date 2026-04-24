@@ -1,6 +1,6 @@
 package com.toir.dto.hr;
 
-import com.toir.entity.TimesheetStatus;
+import com.toir.enums.TimesheetStatus;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 

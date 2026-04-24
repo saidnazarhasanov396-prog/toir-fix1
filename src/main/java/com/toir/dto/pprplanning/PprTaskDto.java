@@ -1,8 +1,8 @@
 package com.toir.dto.pprplanning;
 
-import com.toir.entity.PriorityLevel;
+import com.toir.enums.PriorityLevel;
 import com.toir.entity.PprTask;
-import com.toir.entity.PprTaskStatus;
+import com.toir.enums.PprTaskStatus;
 
 import java.time.LocalDateTime;
 import java.util.UUID;

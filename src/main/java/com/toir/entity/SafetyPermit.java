@@ -1,14 +1,19 @@
 package com.toir.entity;
-import com.toir.entity.SafetyPermitStatus;
+import com.toir.enums.SafetyPermitStatus;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "safety_permits")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class SafetyPermit extends BaseEntity {
 
     @Column(name = "work_order_id", nullable = false, unique = true)
@@ -32,19 +37,4 @@ public class SafetyPermit extends BaseEntity {
 
     @Column(columnDefinition = "text")
     private String notes;
-
-    public UUID getWorkOrderId() { return workOrderId; }
-    public void setWorkOrderId(UUID workOrderId) { this.workOrderId = workOrderId; }
-    public String getPermitNumber() { return permitNumber; }
-    public void setPermitNumber(String permitNumber) { this.permitNumber = permitNumber; }
-    public UUID getIssuedById() { return issuedById; }
-    public void setIssuedById(UUID issuedById) { this.issuedById = issuedById; }
-    public Instant getIssuedAt() { return issuedAt; }
-    public void setIssuedAt(Instant issuedAt) { this.issuedAt = issuedAt; }
-    public Instant getValidUntil() { return validUntil; }
-    public void setValidUntil(Instant validUntil) { this.validUntil = validUntil; }
-    public SafetyPermitStatus getStatus() { return status; }
-    public void setStatus(SafetyPermitStatus status) { this.status = status; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
 }

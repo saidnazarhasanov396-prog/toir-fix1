@@ -1,6 +1,6 @@
 package com.toir.dto.pprplanning;
 
-import com.toir.entity.PriorityLevel;
+import com.toir.enums.PriorityLevel;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;

@@ -1,6 +1,6 @@
 package com.toir.service;
 import com.toir.entity.Defect;
-import com.toir.entity.DefectStatus;
+import com.toir.enums.DefectStatus;
 import com.toir.repository.DefectRepository;
 
 import com.toir.exception.RestException;

@@ -1,8 +1,7 @@
 package com.toir.entity;
-import com.toir.entity.EscalationStatus;
 
-import com.toir.entity.BaseEntity;
-import com.toir.entity.SlaTriggerType;
+import com.toir.enums.EscalationStatus;
+import com.toir.enums.SlaTriggerType;
 import jakarta.persistence.*;
 
 import java.time.Instant;

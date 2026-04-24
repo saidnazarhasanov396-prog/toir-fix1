@@ -1,6 +1,6 @@
 package com.toir.dto.equipment;
 
-import com.toir.entity.EquipmentStatus;
+import com.toir.enums.EquipmentStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

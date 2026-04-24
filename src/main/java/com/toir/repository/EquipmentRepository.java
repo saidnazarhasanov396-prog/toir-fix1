@@ -1,6 +1,6 @@
 package com.toir.repository;
 import com.toir.entity.Equipment;
-import com.toir.entity.EquipmentStatus;
+import com.toir.enums.EquipmentStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

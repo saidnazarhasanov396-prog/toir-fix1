@@ -1,6 +1,6 @@
 package com.toir.repository;
 import com.toir.entity.EscalationEvent;
-import com.toir.entity.EscalationStatus;
+import com.toir.enums.EscalationStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

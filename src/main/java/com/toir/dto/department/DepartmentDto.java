@@ -1,7 +1,7 @@
 package com.toir.dto.department;
 
 import com.toir.entity.Department;
-import com.toir.entity.DepartmentType;
+import com.toir.enums.DepartmentType;
 
 import java.util.UUID;
 

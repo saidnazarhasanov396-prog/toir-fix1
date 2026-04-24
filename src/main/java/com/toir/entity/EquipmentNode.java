@@ -1,7 +1,6 @@
 package com.toir.entity;
-import com.toir.entity.EquipmentNodeType;
+import com.toir.enums.EquipmentNodeType;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
 
 import java.util.UUID;

@@ -6,7 +6,7 @@ import com.toir.entity.DowntimeEvent;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.entity.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
-import com.toir.entity.WorkOrderStatus;
+import com.toir.enums.WorkOrderStatus;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -1,6 +1,6 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
+import com.toir.enums.DefectStatus;
 import jakarta.persistence.*;
 
 import java.time.Instant;

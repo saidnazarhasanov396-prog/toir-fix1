@@ -1,7 +1,7 @@
 package com.toir.dto.integration;
 
 import com.toir.entity.IntegrationEndpoint;
-import com.toir.entity.IntegrationSyncStatus;
+import com.toir.enums.IntegrationSyncStatus;
 import jakarta.validation.constraints.NotBlank;
 
 import java.time.Instant;

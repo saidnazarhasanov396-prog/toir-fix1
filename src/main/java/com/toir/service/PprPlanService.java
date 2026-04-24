@@ -1,8 +1,8 @@
 package com.toir.service;
-import com.toir.entity.PlanStatus;
+import com.toir.enums.PlanStatus;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
-import com.toir.entity.PprTaskStatus;
+import com.toir.enums.PprTaskStatus;
 import com.toir.dto.pprplanning.PostponeTaskRequest;
 import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.dto.pprplanning.PprPlanRequest;
@@ -12,7 +12,6 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 
 import com.toir.exception.RestException;
-import com.toir.dto.pprplanning.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

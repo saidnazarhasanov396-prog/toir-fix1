@@ -1,6 +1,6 @@
 package com.toir.repository;
 import com.toir.entity.WorkOrder;
-import com.toir.entity.WorkOrderStatus;
+import com.toir.enums.WorkOrderStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

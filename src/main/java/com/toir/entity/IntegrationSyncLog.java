@@ -1,5 +1,6 @@
 package com.toir.entity;
 
+import com.toir.enums.IntegrationSyncStatus;
 import jakarta.persistence.*;
 
 import java.time.Instant;

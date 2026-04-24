@@ -1,5 +1,5 @@
 package com.toir.controller;
-import com.toir.entity.RequestStatus;
+import com.toir.enums.RequestStatus;
 import com.toir.service.RepairRequestService;
 
 import com.toir.security.SecurityScope;

@@ -1,7 +1,7 @@
 package com.toir.dto.integration;
 
 import com.toir.entity.IntegrationSyncLog;
-import com.toir.entity.IntegrationSyncStatus;
+import com.toir.enums.IntegrationSyncStatus;
 
 import java.time.Instant;
 import java.util.UUID;

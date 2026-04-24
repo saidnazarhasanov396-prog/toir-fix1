@@ -1,7 +1,6 @@
 package com.toir.entity;
-import com.toir.entity.IntegrationSyncStatus;
+import com.toir.enums.IntegrationSyncStatus;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
 import org.hibernate.annotations.ColumnDefault;
 

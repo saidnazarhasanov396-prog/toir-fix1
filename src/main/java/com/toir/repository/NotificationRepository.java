@@ -1,6 +1,6 @@
 package com.toir.repository;
 import com.toir.entity.Notification;
-import com.toir.entity.NotificationStatus;
+import com.toir.enums.NotificationStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

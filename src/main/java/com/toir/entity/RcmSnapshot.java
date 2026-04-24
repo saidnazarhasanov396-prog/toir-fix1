@@ -1,7 +1,7 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -16,6 +16,11 @@ import java.util.UUID;
         indexes = {
                 @Index(name = "ix_rcm_snap_eq_ts", columnList = "equipment_id,captured_at")
         })
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class RcmSnapshot extends BaseEntity {
 
     @Column(name = "equipment_id", nullable = false)
@@ -53,29 +58,4 @@ public class RcmSnapshot extends BaseEntity {
 
     @Column(name = "captured_at", nullable = false)
     private Instant capturedAt = Instant.now();
-
-    public UUID getEquipmentId() { return equipmentId; }
-    public void setEquipmentId(UUID equipmentId) { this.equipmentId = equipmentId; }
-    public String getEquipmentCode() { return equipmentCode; }
-    public void setEquipmentCode(String equipmentCode) { this.equipmentCode = equipmentCode; }
-    public String getEquipmentName() { return equipmentName; }
-    public void setEquipmentName(String equipmentName) { this.equipmentName = equipmentName; }
-    public String getCriticalityClass() { return criticalityClass; }
-    public void setCriticalityClass(String criticalityClass) { this.criticalityClass = criticalityClass; }
-    public int getConsequence() { return consequence; }
-    public void setConsequence(int consequence) { this.consequence = consequence; }
-    public int getProbability() { return probability; }
-    public void setProbability(int probability) { this.probability = probability; }
-    public int getRiskScore() { return riskScore; }
-    public void setRiskScore(int riskScore) { this.riskScore = riskScore; }
-    public Integer getRepairPriority() { return repairPriority; }
-    public void setRepairPriority(Integer repairPriority) { this.repairPriority = repairPriority; }
-    public long getOpenDefects() { return openDefects; }
-    public void setOpenDefects(long openDefects) { this.openDefects = openDefects; }
-    public double getMtbfHours() { return mtbfHours; }
-    public void setMtbfHours(double mtbfHours) { this.mtbfHours = mtbfHours; }
-    public double getMttrHours() { return mttrHours; }
-    public void setMttrHours(double mttrHours) { this.mttrHours = mttrHours; }
-    public Instant getCapturedAt() { return capturedAt; }
-    public void setCapturedAt(Instant capturedAt) { this.capturedAt = capturedAt; }
 }

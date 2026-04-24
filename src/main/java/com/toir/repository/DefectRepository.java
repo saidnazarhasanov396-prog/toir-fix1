@@ -1,6 +1,6 @@
 package com.toir.repository;
 import com.toir.entity.Defect;
-import com.toir.entity.DefectStatus;
+import com.toir.enums.DefectStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

@@ -1,5 +1,5 @@
 package com.toir.repository;
-import com.toir.entity.ApprovalDecision;
+import com.toir.enums.ApprovalDecision;
 import com.toir.entity.ApprovalStep;
 
 import org.springframework.data.jpa.repository.JpaRepository;
