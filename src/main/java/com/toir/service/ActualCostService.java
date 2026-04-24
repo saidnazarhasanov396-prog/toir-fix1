@@ -5,6 +5,7 @@ import com.toir.repository.ActualCostRepository;
 
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.exception.RestException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,14 +14,10 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class ActualCostService {
 
     private final ActualCostRepository repository;
-
-    public ActualCostService(ActualCostRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
@@ -32,6 +29,7 @@ public class ActualCostService {
         return repository.findAllByWorkOrderId(workOrderId).stream().map(ActualCostDto::from).toList();
     }
 
+    @Transactional
     public ActualCostDto create(ActualCostDto r) {
         ActualCost c = new ActualCost();
         c.setWorkOrderId(r.workOrderId());
@@ -45,6 +43,7 @@ public class ActualCostService {
         return ActualCostDto.from(repository.save(c));
     }
 
+    @Transactional
     public ActualCostDto review(UUID id, boolean approve, UUID reviewerId, String comment) {
         ActualCost c = repository.findById(id)
                 .orElseThrow(() -> RestException.notFound("Actual cost not found: " + id));

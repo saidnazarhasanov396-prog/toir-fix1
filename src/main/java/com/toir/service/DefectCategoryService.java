@@ -5,6 +5,7 @@ import com.toir.repository.DefectCategoryRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.defectcategory.DefectCategoryDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,14 +13,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class DefectCategoryService {
 
     private final DefectCategoryRepository repository;
 
-    public DefectCategoryService(DefectCategoryRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<DefectCategoryDto> findAll() {

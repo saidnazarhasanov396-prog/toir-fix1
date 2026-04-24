@@ -12,6 +12,7 @@ import com.toir.entity.Equipment;
 import com.toir.repository.EquipmentRepository;
 import com.toir.entity.ReliabilityMetric;
 import com.toir.repository.ReliabilityMetricRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,7 +25,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional(readOnly = true)
+@RequiredArgsConstructor
 public class RcmService {
 
     private final EquipmentRepository equipmentRepository;
@@ -33,17 +34,7 @@ public class RcmService {
     private final ReliabilityMetricRepository reliabilityMetricRepository;
     private final RcmSnapshotRepository snapshotRepository;
 
-    public RcmService(EquipmentRepository equipmentRepository,
-                      CriticalityClassRepository criticalityClassRepository,
-                      DefectRepository defectRepository,
-                      ReliabilityMetricRepository reliabilityMetricRepository,
-                      RcmSnapshotRepository snapshotRepository) {
-        this.equipmentRepository = equipmentRepository;
-        this.criticalityClassRepository = criticalityClassRepository;
-        this.defectRepository = defectRepository;
-        this.reliabilityMetricRepository = reliabilityMetricRepository;
-        this.snapshotRepository = snapshotRepository;
-    }
+
 
     public List<EquipmentRiskScore> computeAll() {
         Map<UUID, CriticalityClass> critById = criticalityClassRepository.findAll().stream()

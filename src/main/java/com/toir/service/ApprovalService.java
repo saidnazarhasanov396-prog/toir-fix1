@@ -9,6 +9,7 @@ import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
 import com.toir.exception.RestException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,14 +18,10 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class ApprovalService {
 
     private final ApprovalRequestRepository requestRepository;
-
-    public ApprovalService(ApprovalRequestRepository requestRepository) {
-        this.requestRepository = requestRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> listByDocument(String documentType, UUID documentId) {
@@ -49,6 +46,7 @@ public class ApprovalService {
         return ApprovalRequestDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public ApprovalRequestDto create(CreateApprovalRequest r) {
         ApprovalRequest request = new ApprovalRequest();
         request.setDocumentType(r.documentType());
@@ -72,14 +70,17 @@ public class ApprovalService {
         return ApprovalRequestDto.from(requestRepository.save(request));
     }
 
+    @Transactional
     public ApprovalRequestDto approve(UUID requestId, DecisionRequest decision) {
         return applyDecision(requestId, decision, ApprovalDecision.APPROVED);
     }
 
+    @Transactional
     public ApprovalRequestDto reject(UUID requestId, DecisionRequest decision) {
         return applyDecision(requestId, decision, ApprovalDecision.REJECTED);
     }
 
+    @Transactional
     public ApprovalRequestDto cancel(UUID requestId) {
         ApprovalRequest request = getOrThrow(requestId);
         if (request.getStatus() != ApprovalStatus.PENDING) {

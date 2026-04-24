@@ -8,6 +8,7 @@ import com.toir.exception.RestException;
 import com.toir.dto.maintenancetemplate.MaintenanceOperationDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,17 +16,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class MaintenanceTemplateService {
 
     private final MaintenanceTemplateRepository repository;
     private final MaintenanceOperationRepository operationRepository;
 
-    public MaintenanceTemplateService(MaintenanceTemplateRepository repository,
-                                      MaintenanceOperationRepository operationRepository) {
-        this.repository = repository;
-        this.operationRepository = operationRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<MaintenanceTemplateDto> findAll() {

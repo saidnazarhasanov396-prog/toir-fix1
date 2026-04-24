@@ -5,6 +5,7 @@ import com.toir.repository.DepartmentRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.department.DepartmentDto;
 import com.toir.dto.department.DepartmentRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,14 +13,10 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class DepartmentService {
 
     private final DepartmentRepository repository;
-
-    public DepartmentService(DepartmentRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<DepartmentDto> findAll() {

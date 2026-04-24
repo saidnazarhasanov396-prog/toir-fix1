@@ -9,6 +9,7 @@ import com.toir.exception.RestException;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,17 +17,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class RepairCampaignService {
 
     private final RepairCampaignRepository repository;
     private final RepairCampaignStageRepository stageRepository;
 
-    public RepairCampaignService(RepairCampaignRepository repository,
-                                 RepairCampaignStageRepository stageRepository) {
-        this.repository = repository;
-        this.stageRepository = stageRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findAll() {

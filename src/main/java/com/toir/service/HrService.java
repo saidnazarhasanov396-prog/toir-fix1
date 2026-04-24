@@ -10,6 +10,7 @@ import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeRequest;
 import com.toir.dto.hr.TimesheetEntryDto;
 import com.toir.dto.hr.TimesheetEntryRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,17 +19,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class HrService {
 
     private final EmployeeRepository employeeRepository;
     private final TimesheetEntryRepository timesheetRepository;
-
-    public HrService(EmployeeRepository employeeRepository,
-                     TimesheetEntryRepository timesheetRepository) {
-        this.employeeRepository = employeeRepository;
-        this.timesheetRepository = timesheetRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<EmployeeDto> listEmployees(Boolean activeOnly) {

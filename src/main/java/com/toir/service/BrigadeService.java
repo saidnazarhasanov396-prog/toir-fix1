@@ -11,6 +11,7 @@ import com.toir.dto.brigade.BrigadeMemberRequest;
 import com.toir.dto.brigade.BrigadeRequest;
 import com.toir.service.CertificationGuard;
 import com.toir.exception.RestException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,20 +19,13 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class BrigadeService {
 
     private final BrigadeRepository brigadeRepo;
     private final BrigadeMemberRepository memberRepo;
     private final CertificationGuard certificationGuard;
 
-    public BrigadeService(BrigadeRepository brigadeRepo,
-                          BrigadeMemberRepository memberRepo,
-                          CertificationGuard certificationGuard) {
-        this.brigadeRepo = brigadeRepo;
-        this.memberRepo = memberRepo;
-        this.certificationGuard = certificationGuard;
-    }
 
     @Transactional(readOnly = true)
     public List<BrigadeDto> findAll(UUID departmentId, Boolean activeOnly) {

@@ -12,6 +12,7 @@ import com.toir.entity.SparePart;
 import com.toir.repository.SparePartRepository;
 import com.toir.entity.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,20 +26,14 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class ProcurementRequestService {
 
     private final ProcurementRequestRepository repo;
     private final SparePartRepository sparePartRepository;
     private final WarehouseStockRepository stockRepository;
 
-    public ProcurementRequestService(ProcurementRequestRepository repo,
-                                     SparePartRepository sparePartRepository,
-                                     WarehouseStockRepository stockRepository) {
-        this.repo = repo;
-        this.sparePartRepository = sparePartRepository;
-        this.stockRepository = stockRepository;
-    }
+
 
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId) {

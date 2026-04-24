@@ -4,6 +4,7 @@ import com.toir.repository.CompletionActRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.completionact.CompletionActDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,14 +12,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class CompletionActService {
 
     private final CompletionActRepository repository;
 
-    public CompletionActService(CompletionActRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public CompletionActDto findByWorkOrder(UUID workOrderId) {

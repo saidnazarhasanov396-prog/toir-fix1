@@ -11,6 +11,8 @@ import com.toir.repository.DefectRepository;
 import com.toir.enums.DefectStatus;
 import com.toir.entity.Equipment;
 import com.toir.repository.EquipmentRepository;
+import com.toir.service.WebhookService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,7 +21,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class ConditionReadingService {
 
     private final ConditionReadingRepository repo;
@@ -27,15 +29,7 @@ public class ConditionReadingService {
     private final DefectRepository defectRepository;
     private final WebhookService webhookService;
 
-    public ConditionReadingService(ConditionReadingRepository repo,
-                                   EquipmentRepository equipmentRepository,
-                                   DefectRepository defectRepository,
-                                   WebhookService webhookService) {
-        this.repo = repo;
-        this.equipmentRepository = equipmentRepository;
-        this.defectRepository = defectRepository;
-        this.webhookService = webhookService;
-    }
+
 
     @Transactional(readOnly = true)
     public List<ConditionReadingDto> findForEquipment(UUID equipmentId, ConditionParameter parameter) {

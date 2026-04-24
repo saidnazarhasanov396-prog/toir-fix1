@@ -4,6 +4,8 @@ import com.toir.repository.PlannedShutdownRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.plannedshutdown.PlannedShutdownDto;
+import com.toir.entity.PlanStatus;
+import lombok.RequiredArgsConstructor;
 import com.toir.enums.PlanStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,14 +14,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class PlannedShutdownService {
 
     private final PlannedShutdownRepository repository;
 
-    public PlannedShutdownService(PlannedShutdownRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<PlannedShutdownDto> findByDepartment(UUID departmentId) {

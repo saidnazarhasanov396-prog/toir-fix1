@@ -4,6 +4,7 @@ import com.toir.repository.UnitOfMeasurementRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.uom.UnitOfMeasurementDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,14 +12,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class UnitOfMeasurementService {
 
     private final UnitOfMeasurementRepository repository;
 
-    public UnitOfMeasurementService(UnitOfMeasurementRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<UnitOfMeasurementDto> findAll() {

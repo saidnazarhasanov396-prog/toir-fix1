@@ -5,6 +5,7 @@ import com.toir.repository.ContractorWorkRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.contractorwork.ContractorWorkDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,14 +14,10 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class ContractorWorkService {
 
     private final ContractorWorkRepository repository;
-
-    public ContractorWorkService(ContractorWorkRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<ContractorWorkDto> findByContractor(UUID contractorId) {

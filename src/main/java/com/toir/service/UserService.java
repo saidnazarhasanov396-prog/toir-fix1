@@ -9,6 +9,7 @@ import com.toir.dto.user.CreateUserRequest;
 import com.toir.dto.user.CreateRoleUserRequest;
 import com.toir.dto.user.UpdateUserRequest;
 import com.toir.dto.user.UserDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,18 +22,13 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class UserService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public UserService(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
-        this.userRepository = userRepository;
-        this.roleRepository = roleRepository;
-        this.passwordEncoder = passwordEncoder;
-    }
 
     @Transactional(readOnly = true)
     public List<UserDto> findAll() {

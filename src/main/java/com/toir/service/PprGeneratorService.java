@@ -14,6 +14,8 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.entity.MaintenanceRegulation;
 import com.toir.repository.MaintenanceRegulationRepository;
 import com.toir.enums.PeriodicityUnit;
+import com.toir.entity.PeriodicityUnit;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,7 +35,7 @@ import java.util.UUID;
  * Идемпотентен: если задача с таким же code уже существует — пропускает.
  */
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class PprGeneratorService {
 
     private final PprPlanRepository planRepository;
@@ -41,15 +43,6 @@ public class PprGeneratorService {
     private final MaintenanceRegulationRepository regulationRepository;
     private final EquipmentRepository equipmentRepository;
 
-    public PprGeneratorService(PprPlanRepository planRepository,
-                               PprTaskRepository taskRepository,
-                               MaintenanceRegulationRepository regulationRepository,
-                               EquipmentRepository equipmentRepository) {
-        this.planRepository = planRepository;
-        this.taskRepository = taskRepository;
-        this.regulationRepository = regulationRepository;
-        this.equipmentRepository = equipmentRepository;
-    }
 
     public GenerationResult generateForPlan(UUID planId) {
         PprPlan plan = planRepository.findById(planId)

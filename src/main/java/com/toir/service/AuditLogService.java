@@ -3,6 +3,7 @@ import com.toir.enums.AuditAction;
 import com.toir.entity.AuditLog;
 import com.toir.repository.AuditLogRepository;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -11,14 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class AuditLogService {
 
     private final AuditLogRepository repository;
-
-    public AuditLogService(AuditLogRepository repository) {
-        this.repository = repository;
-    }
 
     public void record(UUID userId, String module, String entityType, String entityId,
                        AuditAction action, String message, String ip, String userAgent) {

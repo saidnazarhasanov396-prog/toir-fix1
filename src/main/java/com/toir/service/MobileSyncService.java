@@ -7,6 +7,7 @@ import com.toir.security.SecurityScope;
 import com.toir.service.ConditionReadingService;
 import com.toir.service.InspectionService;
 import com.toir.dto.inspection.InspectionRoundResultRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,20 +16,14 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class MobileSyncService {
 
     private final ConditionReadingService conditionService;
     private final InspectionService inspectionService;
     private final SecurityScope securityScope;
 
-    public MobileSyncService(ConditionReadingService conditionService,
-                             InspectionService inspectionService,
-                             SecurityScope securityScope) {
-        this.conditionService = conditionService;
-        this.inspectionService = inspectionService;
-        this.securityScope = securityScope;
-    }
+
 
     public MobileSyncResult sync(MobileSyncRequest request) {
         List<String> errors = new ArrayList<>();

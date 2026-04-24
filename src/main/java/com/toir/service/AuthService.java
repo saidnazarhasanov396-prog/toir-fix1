@@ -12,6 +12,8 @@ import com.toir.entity.Role;
 import com.toir.entity.User;
 import com.toir.repository.RoleRepository;
 import com.toir.repository.UserRepository;
+import com.toir.entity.UserStatus;
+import lombok.RequiredArgsConstructor;
 import com.toir.enums.UserStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,7 +27,7 @@ import java.util.Map;
 import java.util.Set;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class AuthService {
 
     private final UserRepository userRepository;
@@ -35,16 +37,6 @@ public class AuthService {
     private final AuditLogService auditLogService;
     private final RequestContext requestContext;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService,
-                       AuditLogService auditLogService, RequestContext requestContext,
-                       RoleRepository roleRepository) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.jwtService = jwtService;
-        this.auditLogService = auditLogService;
-        this.requestContext = requestContext;
-        this.roleRepository = roleRepository;
-    }
 
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByUsername(request.username())

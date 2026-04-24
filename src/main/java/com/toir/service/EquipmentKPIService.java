@@ -5,6 +5,7 @@ import com.toir.repository.EquipmentKPIRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.equipmentkpi.EquipmentKPIDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,14 +13,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class EquipmentKPIService {
 
     private final EquipmentKPIRepository repository;
 
-    public EquipmentKPIService(EquipmentKPIRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<EquipmentKPIDto> findByEquipment(UUID equipmentId) {

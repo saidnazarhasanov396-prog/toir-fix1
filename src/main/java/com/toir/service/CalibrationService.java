@@ -6,6 +6,7 @@ import com.toir.dto.calibration.CalibrationRecordDto;
 import com.toir.dto.calibration.CalibrationRecordRequest;
 import com.toir.exception.RestException;
 import com.toir.repository.EquipmentRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,16 +15,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class CalibrationService {
 
     private final CalibrationRecordRepository repo;
     private final EquipmentRepository equipmentRepository;
-
-    public CalibrationService(CalibrationRecordRepository repo, EquipmentRepository equipmentRepository) {
-        this.repo = repo;
-        this.equipmentRepository = equipmentRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<CalibrationRecordDto> findForEquipment(UUID equipmentId) {

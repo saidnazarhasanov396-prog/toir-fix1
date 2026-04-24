@@ -4,6 +4,7 @@ import com.toir.repository.FailureReasonRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.failurereason.FailureReasonDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,14 +12,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class FailureReasonService {
 
     private final FailureReasonRepository repository;
 
-    public FailureReasonService(FailureReasonRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<FailureReasonDto> findAll() {

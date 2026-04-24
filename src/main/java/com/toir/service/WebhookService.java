@@ -7,6 +7,7 @@ import com.toir.repository.WebhookSubscriptionRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.exception.RestException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +32,7 @@ import java.util.UUID;
  * Таймаут 5 секунд — интеграции не должны блокировать основной flow.
  */
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class WebhookService {
 
     private final WebhookSubscriptionRepository subscriptionRepository;
@@ -41,13 +42,6 @@ public class WebhookService {
             .connectTimeout(Duration.ofSeconds(3))
             .build();
 
-    public WebhookService(WebhookSubscriptionRepository subscriptionRepository,
-                          WebhookEventLogRepository eventLogRepository,
-                          ObjectMapper objectMapper) {
-        this.subscriptionRepository = subscriptionRepository;
-        this.eventLogRepository = eventLogRepository;
-        this.objectMapper = objectMapper;
-    }
 
     public List<WebhookSubscription> findAll() {
         return subscriptionRepository.findAll();

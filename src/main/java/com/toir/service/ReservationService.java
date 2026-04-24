@@ -8,6 +8,7 @@ import com.toir.dto.reservation.ReservationDto;
 import com.toir.dto.reservation.ReservationRequest;
 import com.toir.entity.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,16 +16,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class ReservationService {
 
     private final ReservationRepository repository;
     private final WarehouseStockRepository stockRepository;
 
-    public ReservationService(ReservationRepository repository, WarehouseStockRepository stockRepository) {
-        this.repository = repository;
-        this.stockRepository = stockRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<ReservationDto> findByWorkOrder(UUID workOrderId) {

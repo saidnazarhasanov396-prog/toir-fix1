@@ -5,6 +5,7 @@ import com.toir.repository.EscalationEventRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.escalation.EscalationEventDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,14 +14,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class EscalationEventService {
 
     private final EscalationEventRepository repository;
 
-    public EscalationEventService(EscalationEventRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<EscalationEventDto> findOpen() {
@@ -33,6 +31,7 @@ public class EscalationEventService {
         return repository.findAll().stream().map(EscalationEventDto::from).toList();
     }
 
+    @Transactional
     public EscalationEventDto raise(EscalationEventDto r) {
         EscalationEvent e = new EscalationEvent();
         e.setSlaRuleId(r.slaRuleId());
@@ -43,6 +42,7 @@ public class EscalationEventService {
         return EscalationEventDto.from(repository.save(e));
     }
 
+    @Transactional
     public EscalationEventDto acknowledge(UUID id, UUID userId, String notes) {
         EscalationEvent e = getOrThrow(id);
         if (e.getStatus() != EscalationStatus.OPEN) {
@@ -55,6 +55,7 @@ public class EscalationEventService {
         return EscalationEventDto.from(e);
     }
 
+    @Transactional
     public EscalationEventDto resolve(UUID id, UUID userId, String notes) {
         EscalationEvent e = getOrThrow(id);
         if (e.getStatus() == EscalationStatus.RESOLVED || e.getStatus() == EscalationStatus.CANCELLED) {

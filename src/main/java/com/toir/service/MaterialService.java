@@ -4,6 +4,7 @@ import com.toir.repository.MaterialRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.material.MaterialDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,14 +12,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class MaterialService {
 
     private final MaterialRepository repository;
 
-    public MaterialService(MaterialRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<MaterialDto> findAll() {

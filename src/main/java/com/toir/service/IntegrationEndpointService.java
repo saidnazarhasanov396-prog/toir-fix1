@@ -5,6 +5,7 @@ import com.toir.repository.IntegrationEndpointRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.integration.IntegrationEndpointDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,14 +14,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class IntegrationEndpointService {
 
     private final IntegrationEndpointRepository repository;
 
-    public IntegrationEndpointService(IntegrationEndpointRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<IntegrationEndpointDto> findAll() {

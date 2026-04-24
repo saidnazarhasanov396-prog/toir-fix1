@@ -10,6 +10,7 @@ import com.toir.dto.meter.EquipmentMeterDto;
 import com.toir.dto.meter.EquipmentMeterRequest;
 import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.meter.MeterReadingRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,17 +20,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class MeterService {
 
     private final EquipmentMeterRepository meterRepository;
     private final MeterReadingRepository readingRepository;
-
-    public MeterService(EquipmentMeterRepository meterRepository,
-                        MeterReadingRepository readingRepository) {
-        this.meterRepository = meterRepository;
-        this.readingRepository = readingRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listByEquipment(UUID equipmentId) {

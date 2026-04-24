@@ -42,6 +42,9 @@ import com.toir.entity.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
+import com.toir.entity.WorkOrderStatus;
+import com.toir.entity.WorkOrderType;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,7 +59,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional(readOnly = true)
+@RequiredArgsConstructor
 public class DashboardService {
 
     private final RepairRequestRepository repairRequestRepository;
@@ -79,45 +82,7 @@ public class DashboardService {
     private final UserCertificationRepository userCertificationRepository;
     private final CalibrationRecordRepository calibrationRecordRepository;
 
-    public DashboardService(RepairRequestRepository repairRequestRepository,
-                            DefectRepository defectRepository,
-                            PprTaskRepository pprTaskRepository,
-                            WorkOrderRepository workOrderRepository,
-                            EquipmentRepository equipmentRepository,
-                            DepartmentRepository departmentRepository,
-                            WarehouseStockRepository warehouseStockRepository,
-                            WarehouseRepository warehouseRepository,
-                            SparePartRepository sparePartRepository,
-                            StockMovementRepository stockMovementRepository,
-                            DowntimeEventRepository downtimeEventRepository,
-                            ReliabilityMetricRepository reliabilityMetricRepository,
-                            ContractorRepository contractorRepository,
-                            ContractorWorkRepository contractorWorkRepository,
-                            ReservationRepository reservationRepository,
-                            ActualCostRepository actualCostRepository,
-                            ConditionReadingRepository conditionReadingRepository,
-                            UserCertificationRepository userCertificationRepository,
-                            CalibrationRecordRepository calibrationRecordRepository) {
-        this.repairRequestRepository = repairRequestRepository;
-        this.defectRepository = defectRepository;
-        this.pprTaskRepository = pprTaskRepository;
-        this.workOrderRepository = workOrderRepository;
-        this.equipmentRepository = equipmentRepository;
-        this.departmentRepository = departmentRepository;
-        this.warehouseStockRepository = warehouseStockRepository;
-        this.warehouseRepository = warehouseRepository;
-        this.sparePartRepository = sparePartRepository;
-        this.stockMovementRepository = stockMovementRepository;
-        this.downtimeEventRepository = downtimeEventRepository;
-        this.reliabilityMetricRepository = reliabilityMetricRepository;
-        this.contractorRepository = contractorRepository;
-        this.contractorWorkRepository = contractorWorkRepository;
-        this.reservationRepository = reservationRepository;
-        this.actualCostRepository = actualCostRepository;
-        this.conditionReadingRepository = conditionReadingRepository;
-        this.userCertificationRepository = userCertificationRepository;
-        this.calibrationRecordRepository = calibrationRecordRepository;
-    }
+
 
     public DashboardOverview overview() {
         Instant monthAgo = Instant.now().minus(30, ChronoUnit.DAYS);

@@ -12,6 +12,8 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 
 import com.toir.exception.RestException;
+import com.toir.dto.pprplanning.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,16 +21,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class PprPlanService {
 
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
 
-    public PprPlanService(PprPlanRepository planRepository, PprTaskRepository taskRepository) {
-        this.planRepository = planRepository;
-        this.taskRepository = taskRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<PprPlanDto> findAll() {
