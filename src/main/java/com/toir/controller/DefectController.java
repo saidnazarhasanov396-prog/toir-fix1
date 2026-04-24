@@ -36,8 +36,13 @@ public class DefectController {
     }
 
     @GetMapping
-    public List<DefectDto> list(@RequestParam(required = false) UUID equipmentId) {
-        return equipmentId != null ? service.findByEquipment(equipmentId) : service.findAll();
+    public List<DefectDto> list(
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search
+    ) {
+        return service.search(equipmentId, page, size, search);
     }
 
     @GetMapping("/{id}")

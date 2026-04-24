@@ -38,6 +38,12 @@ public class WorkOrderService {
     }
 
     @Transactional(readOnly = true)
+    public List<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
+        int offset = page * pageSize;
+        return repository.searchPaginated(status, departmentId, equipmentId, search, offset, pageSize).stream().map(WorkOrderDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
     public WorkOrderDto findById(UUID id) {
         return WorkOrderDto.from(getOrThrow(id));
     }

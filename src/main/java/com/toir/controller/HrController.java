@@ -7,6 +7,7 @@ import com.toir.dto.hr.TimesheetEntryDto;
 import com.toir.dto.hr.TimesheetEntryRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,8 +29,12 @@ public class HrController {
     }
 
     @GetMapping("/employees")
-    public List<EmployeeDto> listEmployees(@RequestParam(required = false) Boolean activeOnly) {
-        return service.listEmployees(activeOnly);
+    public Page<EmployeeDto> listEmployees(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Boolean activeOnly) {
+        return service.listEmployees(page, pageSize, search, activeOnly);
     }
 
     @GetMapping("/employees/{id}")

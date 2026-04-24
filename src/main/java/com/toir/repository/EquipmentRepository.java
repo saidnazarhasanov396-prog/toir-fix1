@@ -4,6 +4,8 @@ import org.springframework.stereotype.Repository;
 import com.toir.entity.Equipment;
 import com.toir.enums.EquipmentStatus;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -33,10 +35,22 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
     @Query(value = "SELECT * FROM equipment WHERE parent_id = :parentId AND is_deleted = false", nativeQuery = true)
     List<Equipment> findAllByParentId(@Param("parentId") UUID parentId);
 
-    @Query(value = "SELECT * FROM equipment WHERE (:departmentId IS NULL OR department_id = :departmentId) " +
-            "AND (:equipmentTypeId IS NULL OR equipment_type_id = :equipmentTypeId) " +
-            "AND (:status IS NULL OR status = :status) AND is_deleted = false", nativeQuery = true)
-    List<Equipment> search(@Param("departmentId") UUID departmentId,
+    @Query("select e from Equipment e where " +
+            "(:departmentId is null or e.departmentId = :departmentId) and " +
+            "(:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId) and " +
+            "(:status is null or e.status = :status) and " +
+            "(:search is null or " +
+            "lower(e.code) like lower(concat('%', :search, '%')) or " +
+            "lower(e.name) like lower(concat('%', :search, '%')) or " +
+            "lower(e.inventoryNumber) like lower(concat('%', :search, '%')) or " +
+            "lower(e.technicalNumber) like lower(concat('%', :search, '%')) or " +
+            "lower(e.serialNumber) like lower(concat('%', :search, '%')) or " +
+            "lower(e.model) like lower(concat('%', :search, '%')) or " +
+            "lower(e.manufacturer) like lower(concat('%', :search, '%')) or " +
+            "lower(e.description) like lower(concat('%', :search, '%')))")
+    Page<Equipment> search(@Param("departmentId") UUID departmentId,
                            @Param("equipmentTypeId") UUID equipmentTypeId,
-                           @Param("status") EquipmentStatus status);
+                           @Param("status") EquipmentStatus status,
+                           @Param("search") String search,
+                           Pageable pageable);
 }

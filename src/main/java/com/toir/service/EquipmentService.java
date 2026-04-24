@@ -15,6 +15,8 @@ import com.toir.exception.RestException;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,9 +42,32 @@ public class EquipmentService {
 
 
     @Transactional(readOnly = true)
-    public List<EquipmentDto> search(UUID departmentId, UUID equipmentTypeId, EquipmentStatus status) {
-        List<Equipment> items = repository.search(departmentId, equipmentTypeId, status);
-        return enrich(items);
+    public Page<EquipmentDto> search(UUID departmentId, UUID equipmentTypeId, EquipmentStatus status, String search, int page, int pageSize) {
+        Page<Equipment> items = repository.search(departmentId, equipmentTypeId, status, search, PageRequest.of(page, pageSize));
+        
+        if (items.isEmpty()) return items.map(e -> null); // should not hit the null because it's empty
+
+        Set<UUID> deptIds = collectIds(items.getContent(), Equipment::getDepartmentId);
+        Set<UUID> locIds = collectIds(items.getContent(), Equipment::getLocationId);
+        Set<UUID> typeIds = collectIds(items.getContent(), Equipment::getEquipmentTypeId);
+        Set<UUID> parentIds = collectIds(items.getContent(), Equipment::getParentId);
+        Set<UUID> equipmentIds = items.getContent().stream().map(Equipment::getId).collect(Collectors.toSet());
+
+        Map<UUID, Department> deptMap = byId(departmentRepository.findAllById(deptIds), Department::getId);
+        Map<UUID, Location> locMap = byId(locationRepository.findAllById(locIds), Location::getId);
+        Map<UUID, EquipmentType> typeMap = byId(equipmentTypeRepository.findAllById(typeIds), EquipmentType::getId);
+        Map<UUID, Equipment> parentMap = byId(repository.findAllById(parentIds), Equipment::getId);
+        Map<UUID, EquipmentPassport> passportMap = passportRepository
+                .findAllByEquipmentIdIn(equipmentIds).stream()
+                .collect(Collectors.toMap(EquipmentPassport::getEquipmentId, Function.identity(), (a, b) -> a));
+
+        return items.map(e -> EquipmentDto.from(
+                e,
+                deptRef(deptMap.get(e.getDepartmentId())),
+                locRef(locMap.get(e.getLocationId())),
+                typeRef(typeMap.get(e.getEquipmentTypeId())),
+                parentRef(parentMap.get(e.getParentId())),
+                passportRef(passportMap.get(e.getId()))));
     }
 
     @Transactional(readOnly = true)

@@ -14,6 +14,19 @@ import java.util.UUID;
 
 @Repository
 public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
+
+    @Query(nativeQuery = true, value = """
+            select * from defect_lists d where
+            (:equipmentId is null or d.equipment_id = cast(:equipmentId as uuid))
+            and (:search is null or lower(d.code) like lower(concat('%', :search, '%'))
+            or lower(d.title) like lower(concat('%', :search, '%'))
+            or lower(d.notes) like lower(concat('%', :search, '%')))
+            order by d.created_at desc limit :limit offset :offset
+            """)
+    List<DefectList> searchPaginated(@Param("equipmentId") UUID equipmentId,
+                                     @Param("search") String search,
+                                     @Param("offset") int offset,
+                                     @Param("limit") int limit);
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_lists WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCode(@Param("code") String code);
 
@@ -26,3 +39,5 @@ public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
     @Query(value = "SELECT * FROM defect_lists WHERE status = :status AND is_deleted = false ORDER BY created_at DESC", nativeQuery = true)
     List<DefectList> findAllByStatusOrderByCreatedAtDesc(@Param("status") DefectListStatus status);
 }
+
+
