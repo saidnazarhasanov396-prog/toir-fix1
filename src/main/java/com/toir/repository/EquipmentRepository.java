@@ -18,9 +18,12 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
     List<Equipment> findAllByDepartmentId(UUID departmentId);
     List<Equipment> findAllByParentId(UUID parentId);
 
-    @Query("select e from Equipment e where (:departmentId is null or e.departmentId = :departmentId) " +
-            "and (:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId) " +
-            "and (:status is null or e.status = :status)")
+    @Query(nativeQuery = true, value = """
+            select e.* from equipment e where
+            (:departmentId is null or e.department_id = cast(:departmentId as uuid)) 
+            and (:equipmentTypeId is null or e.equipment_type_id = cast(:equipmentTypeId as uuid)) 
+            and (:status is null or e.status = cast(:status as varchar))
+            """)
     List<Equipment> search(@Param("departmentId") UUID departmentId,
                            @Param("equipmentTypeId") UUID equipmentTypeId,
                            @Param("status") EquipmentStatus status);

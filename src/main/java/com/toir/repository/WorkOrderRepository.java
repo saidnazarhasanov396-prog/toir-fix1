@@ -19,4 +19,22 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     List<WorkOrder> search(@Param("status") WorkOrderStatus status,
                            @Param("departmentId") UUID departmentId,
                            @Param("equipmentId") UUID equipmentId);
+
+    @Query(nativeQuery = true, value = """
+            select * from work_orders w where
+            (:status is null or w.status = cast(:status as varchar)) 
+            and (:departmentId is null or w.department_id = cast(:departmentId as uuid)) 
+            and (:equipmentId is null or w.equipment_id = cast(:equipmentId as uuid)) 
+            and (:search is null or lower(w.number) like lower(concat('%', :search, '%')) 
+            or lower(w.title) like lower(concat('%', :search, '%')) 
+            or lower(w.summary) like lower(concat('%', :search, '%')) 
+            or lower(w.result) like lower(concat('%', :search, '%')) 
+            or lower(w.closure_notes) like lower(concat('%', :search, '%'))) 
+            order by w.created_at desc limit :limit offset :offset""")
+    List<WorkOrder> searchPaginated(@Param("status") WorkOrderStatus status,
+                                    @Param("departmentId") UUID departmentId,
+                                    @Param("equipmentId") UUID equipmentId,
+                                    @Param("search") String search,
+                                    @Param("offset") int offset,
+                                    @Param("limit") int limit);
 }

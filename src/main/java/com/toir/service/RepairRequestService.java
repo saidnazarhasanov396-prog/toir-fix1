@@ -32,8 +32,9 @@ public class RepairRequestService {
 
 
     @Transactional(readOnly = true)
-    public List<RepairRequestDto> search(RequestStatus status, UUID departmentId, UUID equipmentId) {
-        return repository.search(status, departmentId, equipmentId).stream()
+    public List<RepairRequestDto> search(RequestStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
+        int offset = page * pageSize;
+        return repository.searchPaginated(status, departmentId, equipmentId, search, offset, pageSize).stream()
                 .map(RepairRequestDto::from).toList();
     }
 

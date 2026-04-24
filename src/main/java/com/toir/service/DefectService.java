@@ -26,6 +26,12 @@ public class DefectService {
     }
 
     @Transactional(readOnly = true)
+    public List<DefectDto> search(UUID equipmentId, int page, int size, String search) {
+        int offset = page * size;
+        return repository.searchPaginated(equipmentId, search, offset, size).stream().map(DefectDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
     public DefectDto findById(UUID id) {
         return DefectDto.from(getOrThrow(id));
     }

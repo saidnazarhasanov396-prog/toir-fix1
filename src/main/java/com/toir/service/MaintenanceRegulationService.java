@@ -25,6 +25,12 @@ public class MaintenanceRegulationService {
     }
 
     @Transactional(readOnly = true)
+    public List<MaintenanceRegulationDto> search(int page, int pageSize, String search) {
+        int offset = page * pageSize;
+        return repository.searchPaginated(search, offset, pageSize).stream().map(MaintenanceRegulationDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
     public MaintenanceRegulationDto findById(UUID id) {
         return MaintenanceRegulationDto.from(getOrThrow(id));
     }

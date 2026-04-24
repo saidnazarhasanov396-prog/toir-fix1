@@ -24,7 +24,13 @@ public class MaintenanceRegulationController {
     }
 
     @GetMapping
-    public List<MaintenanceRegulationDto> list() { return service.findAll(); }
+    public List<MaintenanceRegulationDto> list(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) String search
+    ) {
+        return service.search(page, pageSize, search);
+    }
 
     @GetMapping("/{id}")
     public MaintenanceRegulationDto get(@PathVariable UUID id) { return service.findById(id); }

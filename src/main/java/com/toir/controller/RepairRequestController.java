@@ -32,9 +32,12 @@ public class RepairRequestController {
     public List<RepairRequestDto> list(
             @RequestParam(required = false) RequestStatus status,
             @RequestParam(required = false) UUID departmentId,
-            @RequestParam(required = false) UUID equipmentId
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) String search
     ) {
-        return service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId);
+        return service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId, page, pageSize, search);
     }
 
     @GetMapping("/{id}")
