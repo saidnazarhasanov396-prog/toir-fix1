@@ -12,7 +12,9 @@ import java.util.UUID;
 
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, UUID> {
-    List<Notification> findAllByRecipientIdOrderByCreatedAtDesc(UUID recipientId);
+    @Query(value = "SELECT * FROM notifications WHERE recipient_id = :recipientId AND is_deleted = false ORDER BY created_at DESC", nativeQuery = true)
+    List<Notification> findAllByRecipientIdOrderByCreatedAtDesc(@Param("recipientId") UUID recipientId);
 
-    long countByRecipientIdAndStatus(UUID recipientId, NotificationStatus status);
+    @Query(value = "SELECT COUNT(*) FROM notifications WHERE recipient_id = :recipientId AND status = cast(:status as varchar) AND is_deleted = false", nativeQuery = true)
+    long countByRecipientIdAndStatus(@Param("recipientId") UUID recipientId, @Param("status") NotificationStatus status);
 }
