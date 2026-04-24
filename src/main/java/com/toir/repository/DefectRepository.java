@@ -34,7 +34,11 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
     @Query(value = "SELECT COUNT(*) > 0 FROM defects WHERE code = :code AND is_deleted = false", nativeQuery = true)
     boolean existsByCode(@Param("code") String code);
 
-    List<Defect> findAllByEquipmentId(UUID equipmentId);
+    @Query(value = "SELECT * FROM defects WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
+    List<Defect> findAllByEquipmentId(@Param("equipmentId") UUID equipmentId);
 
-    long countByStatus(DefectStatus status);
+    @Query(value = "SELECT COUNT(*) FROM defects WHERE status = :status AND is_deleted = false", nativeQuery = true)
+    long countByStatus(@Param("status") DefectStatus status);
 }
+
+

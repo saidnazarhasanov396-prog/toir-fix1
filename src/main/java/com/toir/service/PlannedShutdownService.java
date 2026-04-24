@@ -6,7 +6,6 @@ import com.toir.exception.RestException;
 import com.toir.dto.plannedshutdown.PlannedShutdownDto;
 import lombok.RequiredArgsConstructor;
 import com.toir.enums.PlanStatus;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
