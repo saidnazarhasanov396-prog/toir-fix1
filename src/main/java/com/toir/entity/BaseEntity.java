@@ -1,11 +1,17 @@
 package com.toir.entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+import org.hibernate.annotations.SQLRestriction;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @MappedSuperclass
+@SQLRestriction("is_deleted = false")
+@Getter
+@Setter
 public abstract class BaseEntity {
 
     @Id
@@ -18,6 +24,9 @@ public abstract class BaseEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "is_deleted", nullable = false, columnDefinition = "boolean default false")
+    private boolean isDeleted = false;
+
     @PrePersist
     void onCreate() {
         Instant now = Instant.now();
@@ -29,9 +38,4 @@ public abstract class BaseEntity {
     void onUpdate() {
         this.updatedAt = Instant.now();
     }
-
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
-    public Instant getCreatedAt() { return createdAt; }
-    public Instant getUpdatedAt() { return updatedAt; }
 }

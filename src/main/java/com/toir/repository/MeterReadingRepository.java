@@ -1,4 +1,6 @@
 package com.toir.repository;
+
+import org.springframework.stereotype.Repository;
 import com.toir.entity.MeterReading;
 
 import org.springframework.data.domain.Page;
@@ -10,6 +12,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+
+@Repository
 public interface MeterReadingRepository extends JpaRepository<MeterReading, UUID> {
     Page<MeterReading> findAllByMeterIdOrderByReadAtDesc(UUID meterId, Pageable pageable);
     List<MeterReading> findAllByMeterIdAndReadAtBetweenOrderByReadAtAsc(UUID meterId, Instant from, Instant to);
