@@ -14,7 +14,6 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.entity.MaintenanceRegulation;
 import com.toir.repository.MaintenanceRegulationRepository;
 import com.toir.enums.PeriodicityUnit;
-import com.toir.entity.PeriodicityUnit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

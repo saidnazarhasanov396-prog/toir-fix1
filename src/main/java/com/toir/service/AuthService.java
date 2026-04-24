@@ -12,7 +12,6 @@ import com.toir.entity.Role;
 import com.toir.entity.User;
 import com.toir.repository.RoleRepository;
 import com.toir.repository.UserRepository;
-import com.toir.entity.UserStatus;
 import lombok.RequiredArgsConstructor;
 import com.toir.enums.UserStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
