@@ -23,6 +23,10 @@ public class SecurityScope {
     public boolean isAdmin() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) return false;
+        if (auth.getPrincipal() instanceof AuthenticatedUser user
+                && ADMIN_ROLE.equals(user.primaryRoleCode())) {
+            return true;
+        }
         for (GrantedAuthority a : auth.getAuthorities()) {
             if (ADMIN_ROLE.equals(a.getAuthority())) return true;
         }
