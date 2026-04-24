@@ -22,6 +22,7 @@ import com.toir.entity.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.entity.WorkOrderStatus;
 import com.toir.entity.WorkOrderType;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,7 +34,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional(readOnly = true)
+@RequiredArgsConstructor
 public class AnalyticsService {
 
     private final RepairRequestRepository repairRequestRepository;
@@ -45,23 +46,7 @@ public class AnalyticsService {
     private final EquipmentRepository equipmentRepository;
     private final DepartmentRepository departmentRepository;
 
-    public AnalyticsService(RepairRequestRepository repairRequestRepository,
-                            DefectRepository defectRepository,
-                            WorkOrderRepository workOrderRepository,
-                            PprTaskRepository pprTaskRepository,
-                            DowntimeEventRepository downtimeEventRepository,
-                            ReliabilityMetricRepository reliabilityMetricRepository,
-                            EquipmentRepository equipmentRepository,
-                            DepartmentRepository departmentRepository) {
-        this.repairRequestRepository = repairRequestRepository;
-        this.defectRepository = defectRepository;
-        this.workOrderRepository = workOrderRepository;
-        this.pprTaskRepository = pprTaskRepository;
-        this.downtimeEventRepository = downtimeEventRepository;
-        this.reliabilityMetricRepository = reliabilityMetricRepository;
-        this.equipmentRepository = equipmentRepository;
-        this.departmentRepository = departmentRepository;
-    }
+
 
     public AnalyticsOverview overview() {
         long openRequests = repairRequestRepository.countByStatus(RequestStatus.OPEN)

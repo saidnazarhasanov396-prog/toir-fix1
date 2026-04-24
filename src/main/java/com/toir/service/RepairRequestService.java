@@ -11,6 +11,7 @@ import com.toir.security.SecurityScope;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,7 +20,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class RepairRequestService {
 
     private static final String MODULE = "repair-request";
@@ -30,15 +31,6 @@ public class RepairRequestService {
     private final RequestContext requestContext;
     private final SecurityScope securityScope;
 
-    public RepairRequestService(RepairRequestRepository repository,
-                                AuditLogService auditLogService,
-                                RequestContext requestContext,
-                                SecurityScope securityScope) {
-        this.repository = repository;
-        this.auditLogService = auditLogService;
-        this.requestContext = requestContext;
-        this.securityScope = securityScope;
-    }
 
     @Transactional(readOnly = true)
     public List<RepairRequestDto> search(RequestStatus status, UUID departmentId, UUID equipmentId) {

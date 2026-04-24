@@ -4,20 +4,18 @@ import com.toir.repository.EquipmentPassportRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.equipmentpassport.EquipmentPassportDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class EquipmentPassportService {
 
     private final EquipmentPassportRepository repository;
 
-    public EquipmentPassportService(EquipmentPassportRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public EquipmentPassportDto findByEquipment(UUID equipmentId) {

@@ -4,6 +4,7 @@ import com.toir.repository.ServiceClassRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.serviceclass.ServiceClassDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,14 +12,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class ServiceClassService {
 
     private final ServiceClassRepository repository;
 
-    public ServiceClassService(ServiceClassRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<ServiceClassDto> findAll() {

@@ -6,6 +6,7 @@ import com.toir.repository.DefectRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.defect.DefectDto;
 import com.toir.dto.defect.DefectRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,14 +15,10 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class DefectService {
 
     private final DefectRepository repository;
-
-    public DefectService(DefectRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<DefectDto> findAll() {

@@ -3,6 +3,7 @@ import com.toir.entity.ReliabilityMetric;
 import com.toir.repository.ReliabilityMetricRepository;
 
 import com.toir.dto.reliability.ReliabilityMetricDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,14 +11,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class ReliabilityMetricService {
 
     private final ReliabilityMetricRepository repository;
 
-    public ReliabilityMetricService(ReliabilityMetricRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<ReliabilityMetricDto> findByEquipment(UUID equipmentId) {

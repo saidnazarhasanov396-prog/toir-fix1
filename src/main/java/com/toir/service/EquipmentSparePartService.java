@@ -9,6 +9,7 @@ import com.toir.dto.equipmentsparepart.EquipmentSparePartDto;
 import com.toir.dto.equipmentsparepart.EquipmentSparePartRequest;
 import com.toir.entity.SparePart;
 import com.toir.repository.SparePartRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,20 +17,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class EquipmentSparePartService {
 
     private final EquipmentSparePartRepository repo;
     private final EquipmentRepository equipmentRepository;
     private final SparePartRepository sparePartRepository;
-
-    public EquipmentSparePartService(EquipmentSparePartRepository repo,
-                                     EquipmentRepository equipmentRepository,
-                                     SparePartRepository sparePartRepository) {
-        this.repo = repo;
-        this.equipmentRepository = equipmentRepository;
-        this.sparePartRepository = sparePartRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<EquipmentSparePartDto> listForEquipment(UUID equipmentId) {

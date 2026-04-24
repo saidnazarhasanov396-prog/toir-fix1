@@ -14,6 +14,7 @@ import com.toir.repository.LocationRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +29,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class EquipmentService {
 
     private final EquipmentRepository repository;
@@ -37,17 +38,6 @@ public class EquipmentService {
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentPassportRepository passportRepository;
 
-    public EquipmentService(EquipmentRepository repository,
-                            DepartmentRepository departmentRepository,
-                            LocationRepository locationRepository,
-                            EquipmentTypeRepository equipmentTypeRepository,
-                            EquipmentPassportRepository passportRepository) {
-        this.repository = repository;
-        this.departmentRepository = departmentRepository;
-        this.locationRepository = locationRepository;
-        this.equipmentTypeRepository = equipmentTypeRepository;
-        this.passportRepository = passportRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<EquipmentDto> search(UUID departmentId, UUID equipmentTypeId, EquipmentStatus status) {

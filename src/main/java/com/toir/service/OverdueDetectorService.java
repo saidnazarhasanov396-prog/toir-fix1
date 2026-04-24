@@ -24,6 +24,7 @@ import com.toir.repository.UserRepository;
 import com.toir.entity.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.entity.WorkOrderStatus;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,7 +41,7 @@ import java.util.List;
  * Called via POST {@code /overdue/evaluate} or from an external cron.
  */
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class OverdueDetectorService {
 
     private final PprTaskRepository pprTaskRepository;
@@ -52,23 +53,7 @@ public class OverdueDetectorService {
     private final CalibrationRecordRepository calibrationRecordRepository;
     private final UserCertificationRepository userCertificationRepository;
 
-    public OverdueDetectorService(PprTaskRepository pprTaskRepository,
-                                  RepairRequestRepository repairRequestRepository,
-                                  WorkOrderRepository workOrderRepository,
-                                  NotificationRepository notificationRepository,
-                                  EscalationEventRepository escalationEventRepository,
-                                  UserRepository userRepository,
-                                  CalibrationRecordRepository calibrationRecordRepository,
-                                  UserCertificationRepository userCertificationRepository) {
-        this.pprTaskRepository = pprTaskRepository;
-        this.repairRequestRepository = repairRequestRepository;
-        this.workOrderRepository = workOrderRepository;
-        this.notificationRepository = notificationRepository;
-        this.escalationEventRepository = escalationEventRepository;
-        this.userRepository = userRepository;
-        this.calibrationRecordRepository = calibrationRecordRepository;
-        this.userCertificationRepository = userCertificationRepository;
-    }
+
 
     public EvaluationResult evaluate() {
         LocalDateTime nowLdt = LocalDateTime.now(ZoneOffset.UTC);

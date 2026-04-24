@@ -6,6 +6,7 @@ import com.toir.repository.EquipmentTypeRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.equipmenttype.EquipmentTypeDto;
 import com.toir.dto.equipmenttype.EquipmentTypeRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,14 +14,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class EquipmentTypeService {
 
     private final EquipmentTypeRepository repository;
 
-    public EquipmentTypeService(EquipmentTypeRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<EquipmentTypeDto> findAll() {

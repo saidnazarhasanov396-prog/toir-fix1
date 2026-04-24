@@ -9,6 +9,7 @@ import com.toir.dto.certification.CertificationTypeDto;
 import com.toir.dto.certification.UserCertificationDto;
 import com.toir.dto.certification.UserCertificationRequest;
 import com.toir.exception.RestException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,16 +18,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class CertificationService {
 
     private final CertificationTypeRepository typeRepo;
     private final UserCertificationRepository certRepo;
-
-    public CertificationService(CertificationTypeRepository typeRepo, UserCertificationRepository certRepo) {
-        this.typeRepo = typeRepo;
-        this.certRepo = certRepo;
-    }
 
     // types
     @Transactional(readOnly = true)

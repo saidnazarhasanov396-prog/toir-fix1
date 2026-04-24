@@ -12,6 +12,7 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.entity.PprTask;
 import com.toir.repository.PprTaskRepository;
 import com.toir.entity.PprTaskStatus;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +28,7 @@ import java.util.UUID;
  * не указан — используется первый план по текущему месяцу.
  */
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class RcmAutoPlannerService {
 
     private final RcmService rcmService;
@@ -36,17 +37,7 @@ public class RcmAutoPlannerService {
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
 
-    public RcmAutoPlannerService(RcmService rcmService,
-                                 EquipmentRepository equipmentRepository,
-                                 MaintenanceRegulationRepository regulationRepository,
-                                 PprPlanRepository planRepository,
-                                 PprTaskRepository taskRepository) {
-        this.rcmService = rcmService;
-        this.equipmentRepository = equipmentRepository;
-        this.regulationRepository = regulationRepository;
-        this.planRepository = planRepository;
-        this.taskRepository = taskRepository;
-    }
+
 
     public AutoPlanResult generate(int riskThreshold, UUID planId) {
         List<EquipmentRiskScore> scores = rcmService.computeAll().stream()

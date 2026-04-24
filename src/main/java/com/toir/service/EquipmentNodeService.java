@@ -5,6 +5,7 @@ import com.toir.repository.EquipmentNodeRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.equipmentnode.EquipmentNodeDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,14 +13,10 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class EquipmentNodeService {
 
     private final EquipmentNodeRepository repository;
-
-    public EquipmentNodeService(EquipmentNodeRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<EquipmentNodeDto> findByEquipment(UUID equipmentId) {

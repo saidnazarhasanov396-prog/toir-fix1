@@ -6,6 +6,7 @@ import com.toir.dto.meter.MeterTriggerMatch;
 
 import com.toir.entity.MaintenanceRegulation;
 import com.toir.repository.MaintenanceRegulationRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,17 +15,13 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional(readOnly = true)
+@RequiredArgsConstructor
 public class MeterTriggerService {
 
     private final EquipmentMeterRepository meterRepository;
     private final MaintenanceRegulationRepository regulationRepository;
 
-    public MeterTriggerService(EquipmentMeterRepository meterRepository,
-                               MaintenanceRegulationRepository regulationRepository) {
-        this.meterRepository = meterRepository;
-        this.regulationRepository = regulationRepository;
-    }
+
 
     public List<MeterTriggerMatch> dueTriggers(UUID equipmentId) {
         List<EquipmentMeter> meters = meterRepository.findAllByEquipmentIdAndActiveTrue(equipmentId);

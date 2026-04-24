@@ -8,6 +8,7 @@ import com.toir.repository.MaintenanceBudgetRepository;
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.exception.RestException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,16 +16,13 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class MaintenanceBudgetService {
 
     private final MaintenanceBudgetRepository repository;
     private final BudgetLineRepository lineRepository;
 
-    public MaintenanceBudgetService(MaintenanceBudgetRepository repository, BudgetLineRepository lineRepository) {
-        this.repository = repository;
-        this.lineRepository = lineRepository;
-    }
+
 
     @Transactional(readOnly = true)
     public List<MaintenanceBudgetDto> findByYear(int year) {

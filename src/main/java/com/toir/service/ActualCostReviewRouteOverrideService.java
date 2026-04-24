@@ -4,6 +4,7 @@ import com.toir.repository.ActualCostReviewRouteOverrideRepository;
 
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
 import com.toir.exception.RestException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,14 +13,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class ActualCostReviewRouteOverrideService {
 
     private final ActualCostReviewRouteOverrideRepository repository;
 
-    public ActualCostReviewRouteOverrideService(ActualCostReviewRouteOverrideRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewRouteOverrideDto> findActive() {
@@ -32,6 +30,7 @@ public class ActualCostReviewRouteOverrideService {
                 .map(ActualCostReviewRouteOverrideDto::from).toList();
     }
 
+    @Transactional
     public ActualCostReviewRouteOverrideDto apply(ActualCostReviewRouteOverrideDto r) {
         if (r.comment() == null || r.comment().isBlank()) {
             throw RestException.badRequest("Comment is required");
@@ -54,6 +53,7 @@ public class ActualCostReviewRouteOverrideService {
         return ActualCostReviewRouteOverrideDto.from(repository.save(o));
     }
 
+    @Transactional
     public ActualCostReviewRouteOverrideDto deactivate(UUID id, UUID userId, String comment) {
         ActualCostReviewRouteOverride o = repository.findById(id)
                 .orElseThrow(() -> RestException.notFound("Route override not found: " + id));

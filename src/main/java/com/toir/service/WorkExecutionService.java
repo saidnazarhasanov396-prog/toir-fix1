@@ -6,6 +6,7 @@ import com.toir.config.PaginatedResponse;
 import com.toir.exception.RestException;
 import com.toir.dto.workexecution.ExecutionLogDto;
 import com.toir.dto.workexecution.WorkExecutionDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,14 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class WorkExecutionService {
 
     private final WorkExecutionRepository repository;
 
-    public WorkExecutionService(WorkExecutionRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<WorkExecutionDto> findByWorkOrder(UUID workOrderId) {

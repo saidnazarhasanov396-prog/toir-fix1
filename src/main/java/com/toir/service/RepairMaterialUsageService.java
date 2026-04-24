@@ -6,6 +6,7 @@ import com.toir.exception.RestException;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,17 +14,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class RepairMaterialUsageService {
 
     private final RepairMaterialUsageRepository repository;
     private final WarehouseStockRepository stockRepository;
 
-    public RepairMaterialUsageService(RepairMaterialUsageRepository repository,
-                                      WarehouseStockRepository stockRepository) {
-        this.repository = repository;
-        this.stockRepository = stockRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<RepairMaterialUsageDto> findByWorkOrder(UUID workOrderId) {

@@ -7,6 +7,7 @@ import com.toir.exception.RestException;
 import com.toir.dto.warehouse.WarehouseDto;
 import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.dto.warehouse.WarehouseStockDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,16 +15,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class WarehouseService {
 
     private final WarehouseRepository repository;
     private final WarehouseStockRepository stockRepository;
 
-    public WarehouseService(WarehouseRepository repository, WarehouseStockRepository stockRepository) {
-        this.repository = repository;
-        this.stockRepository = stockRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<WarehouseDto> findAll() {

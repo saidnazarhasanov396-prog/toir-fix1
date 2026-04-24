@@ -5,6 +5,7 @@ import com.toir.repository.RoleRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.role.RoleDto;
 import com.toir.dto.role.RoleRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,14 +13,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class RoleService {
 
     private final RoleRepository repository;
 
-    public RoleService(RoleRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<RoleDto> findAll() {

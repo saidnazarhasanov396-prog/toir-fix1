@@ -7,6 +7,7 @@ import com.toir.dto.sparepart.SparePartDto;
 import com.toir.dto.sparepart.SparePartRequest;
 import com.toir.entity.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,16 +17,11 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class SparePartService {
 
     private final SparePartRepository repository;
     private final WarehouseStockRepository stockRepository;
-
-    public SparePartService(SparePartRepository repository, WarehouseStockRepository stockRepository) {
-        this.repository = repository;
-        this.stockRepository = stockRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<SparePartDto> findAll() {

@@ -5,6 +5,7 @@ import com.toir.repository.LocationRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.location.LocationDto;
 import com.toir.dto.location.LocationRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,14 +13,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class LocationService {
 
     private final LocationRepository repository;
 
-    public LocationService(LocationRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<LocationDto> findAll() {

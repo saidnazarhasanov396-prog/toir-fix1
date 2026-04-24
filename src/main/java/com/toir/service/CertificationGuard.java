@@ -3,6 +3,7 @@ import com.toir.repository.UserCertificationRepository;
 import com.toir.entity.User;
 
 import com.toir.exception.RestException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -16,6 +17,7 @@ import java.util.UUID;
  * сертификатов. При отсутствии активного допуска бросает 409.
  */
 @Component
+@RequiredArgsConstructor
 public class CertificationGuard {
 
     /** Обязательные сертификаты по роли в бригаде. */
@@ -27,10 +29,6 @@ public class CertificationGuard {
     );
 
     private final UserCertificationRepository repo;
-
-    public CertificationGuard(UserCertificationRepository repo) {
-        this.repo = repo;
-    }
 
     public void requireForRole(UUID userId, String roleCode) {
         List<String> required = REQUIRED_BY_ROLE.getOrDefault(roleCode, List.of());

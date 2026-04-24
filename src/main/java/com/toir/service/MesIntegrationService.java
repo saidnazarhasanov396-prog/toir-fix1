@@ -8,6 +8,7 @@ import com.toir.entity.IntegrationSyncStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.IntegrationEndpointRepository;
 import com.toir.repository.IntegrationSyncLogRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,17 +22,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class MesIntegrationService {
 
     private final IntegrationEndpointRepository endpointRepository;
     private final IntegrationSyncLogRepository syncLogRepository;
 
-    public MesIntegrationService(IntegrationEndpointRepository endpointRepository,
-                                 IntegrationSyncLogRepository syncLogRepository) {
-        this.endpointRepository = endpointRepository;
-        this.syncLogRepository = syncLogRepository;
-    }
 
     public ConnectionTestResult testConnection(UUID endpointId) {
         IntegrationEndpoint ep = endpointRepository.findById(endpointId)

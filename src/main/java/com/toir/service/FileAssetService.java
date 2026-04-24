@@ -4,6 +4,7 @@ import com.toir.repository.FileAssetRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.file.FileAssetDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +18,6 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 public class FileAssetService {
 
     private final FileAssetRepository repository;

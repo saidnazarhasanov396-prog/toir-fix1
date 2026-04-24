@@ -5,6 +5,7 @@ import com.toir.entity.SafetyPermitStatus;
 
 import com.toir.exception.RestException;
 import com.toir.dto.safetypermit.SafetyPermitDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,14 +13,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class SafetyPermitService {
 
     private final SafetyPermitRepository repository;
-
-    public SafetyPermitService(SafetyPermitRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public SafetyPermitDto findByWorkOrder(UUID workOrderId) {

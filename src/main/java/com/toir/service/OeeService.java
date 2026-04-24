@@ -7,6 +7,7 @@ import com.toir.dto.oee.OeeSummary;
 import com.toir.exception.RestException;
 import com.toir.dto.oee.OeeRecordDto;
 import com.toir.dto.oee.OeeRecordRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,14 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class OeeService {
 
     private final OeeRecordRepository repository;
 
-    public OeeService(OeeRecordRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<OeeRecordDto> listByEquipment(UUID equipmentId) {

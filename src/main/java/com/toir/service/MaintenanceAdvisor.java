@@ -11,6 +11,7 @@ import com.toir.entity.Equipment;
 import com.toir.repository.EquipmentRepository;
 import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.service.RcmService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +28,7 @@ import java.util.stream.Collectors;
  * на основании RCM-риска, открытых дефектов, condition-показаний и поверок.
  */
 @Service
-@Transactional(readOnly = true)
+@RequiredArgsConstructor
 public class MaintenanceAdvisor {
 
     private final RcmService rcmService;
@@ -36,17 +37,7 @@ public class MaintenanceAdvisor {
     private final ConditionReadingRepository conditionReadingRepository;
     private final CalibrationRecordRepository calibrationRecordRepository;
 
-    public MaintenanceAdvisor(RcmService rcmService,
-                              EquipmentRepository equipmentRepository,
-                              DefectRepository defectRepository,
-                              ConditionReadingRepository conditionReadingRepository,
-                              CalibrationRecordRepository calibrationRecordRepository) {
-        this.rcmService = rcmService;
-        this.equipmentRepository = equipmentRepository;
-        this.defectRepository = defectRepository;
-        this.conditionReadingRepository = conditionReadingRepository;
-        this.calibrationRecordRepository = calibrationRecordRepository;
-    }
+
 
     public List<EquipmentAdvice> adviceAll() {
         Map<UUID, EquipmentRiskScore> scoreByEq = rcmService.computeAll().stream()

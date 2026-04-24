@@ -5,6 +5,7 @@ import com.toir.repository.MaintenanceRegulationRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,14 +13,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class MaintenanceRegulationService {
 
     private final MaintenanceRegulationRepository repository;
 
-    public MaintenanceRegulationService(MaintenanceRegulationRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<MaintenanceRegulationDto> findAll() {

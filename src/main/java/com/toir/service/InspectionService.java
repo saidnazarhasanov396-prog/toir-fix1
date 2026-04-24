@@ -16,6 +16,7 @@ import com.toir.dto.inspection.InspectionRoundResultDto;
 import com.toir.dto.inspection.InspectionRoundResultRequest;
 import com.toir.dto.inspection.InspectionRouteDto;
 import com.toir.dto.inspection.InspectionRouteRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,7 +25,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class InspectionService {
 
     private final InspectionRouteRepository routeRepo;
@@ -32,15 +33,7 @@ public class InspectionService {
     private final InspectionRoundRepository roundRepo;
     private final DefectRepository defectRepo;
 
-    public InspectionService(InspectionRouteRepository routeRepo,
-                             InspectionCheckpointRepository checkpointRepo,
-                             InspectionRoundRepository roundRepo,
-                             DefectRepository defectRepo) {
-        this.routeRepo = routeRepo;
-        this.checkpointRepo = checkpointRepo;
-        this.roundRepo = roundRepo;
-        this.defectRepo = defectRepo;
-    }
+
 
     // --- routes ---
 

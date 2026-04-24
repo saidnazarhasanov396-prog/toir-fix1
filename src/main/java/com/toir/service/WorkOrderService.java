@@ -13,6 +13,7 @@ import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +22,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class WorkOrderService {
 
     private static final String MODULE = "work-order";
@@ -32,15 +33,6 @@ public class WorkOrderService {
     private final RequestContext requestContext;
     private final SecurityScope securityScope;
 
-    public WorkOrderService(WorkOrderRepository repository,
-                            AuditLogService auditLogService,
-                            RequestContext requestContext,
-                            SecurityScope securityScope) {
-        this.repository = repository;
-        this.auditLogService = auditLogService;
-        this.requestContext = requestContext;
-        this.securityScope = securityScope;
-    }
 
     @Transactional(readOnly = true)
     public List<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId) {

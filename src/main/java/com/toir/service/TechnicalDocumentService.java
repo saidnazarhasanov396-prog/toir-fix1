@@ -4,6 +4,7 @@ import com.toir.repository.TechnicalDocumentRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.technicaldocument.TechnicalDocumentDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,14 +12,10 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
+@RequiredArgsConstructor
 public class TechnicalDocumentService {
 
     private final TechnicalDocumentRepository repository;
-
-    public TechnicalDocumentService(TechnicalDocumentRepository repository) {
-        this.repository = repository;
-    }
 
     @Transactional(readOnly = true)
     public List<TechnicalDocumentDto> findByEquipment(UUID equipmentId) {
