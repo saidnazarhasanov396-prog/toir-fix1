@@ -59,7 +59,7 @@ public class AuthService {
         }
 
         Set<String> permissions = new LinkedHashSet<>();
-        List<String> authorities = user.getRoles().stream().map(Role::getCode).toList();
+        Set<String> authorityCodes = new LinkedHashSet<>(user.getRoles().stream().map(Role::getCode).toList());
         for (Role role : user.getRoles()) {
             if (role.getPermissions() != null) permissions.addAll(role.getPermissions());
         }
@@ -68,6 +68,7 @@ public class AuthService {
         }
 
         String primaryRoleCode = user.getPrimaryRole() != null ? user.getPrimaryRole().getCode() : null;
+        if (primaryRoleCode != null) authorityCodes.add(primaryRoleCode);
         AuthenticatedUser principal = new AuthenticatedUser(
                 user.getId().toString(),
                 user.getUsername(),
@@ -85,7 +86,7 @@ public class AuthService {
         extra.put("primaryRoleCode", primaryRoleCode);
         extra.put("permissions", principal.permissions());
 
-        String token = jwtService.generateToken(principal.id(), principal.username(), authorities, extra);
+        String token = jwtService.generateToken(principal.id(), principal.username(), List.copyOf(authorityCodes), extra);
 
         user.setLastLoginAt(Instant.now());
 
