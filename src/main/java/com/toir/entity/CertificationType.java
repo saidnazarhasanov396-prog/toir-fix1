@@ -1,10 +1,15 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 @Entity
 @Table(name = "certification_types")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class CertificationType extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -29,19 +34,4 @@ public class CertificationType extends BaseEntity {
 
     @Column(columnDefinition = "text")
     private String description;
-
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getNameEn() { return nameEn; }
-    public void setNameEn(String nameEn) { this.nameEn = nameEn; }
-    public String getNameUz() { return nameUz; }
-    public void setNameUz(String nameUz) { this.nameUz = nameUz; }
-    public Integer getValidityMonths() { return validityMonths; }
-    public void setValidityMonths(Integer validityMonths) { this.validityMonths = validityMonths; }
-    public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
 }

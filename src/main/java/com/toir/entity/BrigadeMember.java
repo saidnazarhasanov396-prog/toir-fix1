@@ -1,7 +1,7 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -14,6 +14,11 @@ import java.util.UUID;
 @Entity
 @Table(name = "brigade_members",
         uniqueConstraints = @UniqueConstraint(columnNames = {"brigade_id", "user_id"}))
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class BrigadeMember extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -38,17 +43,4 @@ public class BrigadeMember extends BaseEntity {
 
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
-
-    public Brigade getBrigade() { return brigade; }
-    public void setBrigade(Brigade brigade) { this.brigade = brigade; }
-    public UUID getUserId() { return userId; }
-    public void setUserId(UUID userId) { this.userId = userId; }
-    public String getRoleCode() { return roleCode; }
-    public void setRoleCode(String roleCode) { this.roleCode = roleCode; }
-    public Integer getGrade() { return grade; }
-    public void setGrade(Integer grade) { this.grade = grade; }
-    public List<String> getQualifications() { return qualifications; }
-    public void setQualifications(List<String> qualifications) { this.qualifications = qualifications; }
-    public boolean isActive() { return active; }
-    public void setActive(boolean active) { this.active = active; }
 }

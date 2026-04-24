@@ -2,12 +2,18 @@ package com.toir.entity;
 import com.toir.enums.EquipmentNodeType;
 
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.util.UUID;
 
 @Entity
 @Table(name = "equipment_nodes",
         uniqueConstraints = @UniqueConstraint(columnNames = {"equipment_id", "code"}))
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class EquipmentNode extends BaseEntity {
 
     @Column(name = "equipment_id", nullable = false)
@@ -31,18 +37,4 @@ public class EquipmentNode extends BaseEntity {
 
     private String description;
 
-    public UUID getEquipmentId() { return equipmentId; }
-    public void setEquipmentId(UUID equipmentId) { this.equipmentId = equipmentId; }
-    public UUID getParentId() { return parentId; }
-    public void setParentId(UUID parentId) { this.parentId = parentId; }
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public EquipmentNodeType getNodeType() { return nodeType; }
-    public void setNodeType(EquipmentNodeType nodeType) { this.nodeType = nodeType; }
-    public String getSerialNumber() { return serialNumber; }
-    public void setSerialNumber(String serialNumber) { this.serialNumber = serialNumber; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
 }

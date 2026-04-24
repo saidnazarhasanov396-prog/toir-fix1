@@ -2,6 +2,7 @@ package com.toir.entity;
 
 import com.toir.enums.ApprovalDecision;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -9,6 +10,11 @@ import java.util.UUID;
 @Entity
 @Table(name = "approval_steps",
         uniqueConstraints = @UniqueConstraint(columnNames = {"request_id", "step_number"}))
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class ApprovalStep extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -33,19 +39,4 @@ public class ApprovalStep extends BaseEntity {
 
     @Column(columnDefinition = "text")
     private String comment;
-
-    public ApprovalRequest getRequest() { return request; }
-    public void setRequest(ApprovalRequest request) { this.request = request; }
-    public int getStepNumber() { return stepNumber; }
-    public void setStepNumber(int stepNumber) { this.stepNumber = stepNumber; }
-    public UUID getApproverId() { return approverId; }
-    public void setApproverId(UUID approverId) { this.approverId = approverId; }
-    public String getApproverRole() { return approverRole; }
-    public void setApproverRole(String approverRole) { this.approverRole = approverRole; }
-    public ApprovalDecision getDecision() { return decision; }
-    public void setDecision(ApprovalDecision decision) { this.decision = decision; }
-    public Instant getDecidedAt() { return decidedAt; }
-    public void setDecidedAt(Instant decidedAt) { this.decidedAt = decidedAt; }
-    public String getComment() { return comment; }
-    public void setComment(String comment) { this.comment = comment; }
 }

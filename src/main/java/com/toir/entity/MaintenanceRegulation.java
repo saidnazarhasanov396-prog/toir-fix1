@@ -4,11 +4,17 @@ import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.util.UUID;
 
 @Entity
 @Table(name = "maintenance_regulations")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class MaintenanceRegulation extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -52,31 +58,4 @@ public class MaintenanceRegulation extends BaseEntity {
     @Column(name = "trigger_meter_interval")
     private Double triggerMeterInterval;
 
-    public MeterType getTriggerMeterType() { return triggerMeterType; }
-    public void setTriggerMeterType(MeterType triggerMeterType) { this.triggerMeterType = triggerMeterType; }
-    public Double getTriggerMeterInterval() { return triggerMeterInterval; }
-    public void setTriggerMeterInterval(Double triggerMeterInterval) { this.triggerMeterInterval = triggerMeterInterval; }
-
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public UUID getEquipmentTypeId() { return equipmentTypeId; }
-    public void setEquipmentTypeId(UUID equipmentTypeId) { this.equipmentTypeId = equipmentTypeId; }
-    public MaintenanceKind getMaintenanceKind() { return maintenanceKind; }
-    public void setMaintenanceKind(MaintenanceKind maintenanceKind) { this.maintenanceKind = maintenanceKind; }
-    public double getNormativeLaborHours() { return normativeLaborHours; }
-    public void setNormativeLaborHours(double normativeLaborHours) { this.normativeLaborHours = normativeLaborHours; }
-    public boolean isActive() { return active; }
-    public void setActive(boolean active) { this.active = active; }
-    public PeriodicityUnit getPeriodicityUnit() { return periodicityUnit; }
-    public void setPeriodicityUnit(PeriodicityUnit periodicityUnit) { this.periodicityUnit = periodicityUnit; }
-    public int getPeriodicityValue() { return periodicityValue; }
-    public void setPeriodicityValue(int periodicityValue) { this.periodicityValue = periodicityValue; }
-    public Integer getToleranceDays() { return toleranceDays; }
-    public void setToleranceDays(Integer toleranceDays) { this.toleranceDays = toleranceDays; }
-    public boolean isRequiresShutdown() { return requiresShutdown; }
-    public void setRequiresShutdown(boolean requiresShutdown) { this.requiresShutdown = requiresShutdown; }
 }

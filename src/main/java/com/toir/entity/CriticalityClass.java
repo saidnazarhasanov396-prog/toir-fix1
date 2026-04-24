@@ -2,6 +2,7 @@ package com.toir.entity;
 
 import com.toir.enums.CriticalityLevel;
 import jakarta.persistence.*;
+import lombok.*;
 
 /**
  * Класс критичности оборудования. По ТЗ §4.2.7 учитывает влияние на
@@ -10,6 +11,11 @@ import jakarta.persistence.*;
  */
 @Entity
 @Table(name = "criticality_classes")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class CriticalityClass extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -54,28 +60,4 @@ public class CriticalityClass extends BaseEntity {
     @Column(name = "repair_priority")
     private Integer repairPriority;
 
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getNameEn() { return nameEn; }
-    public void setNameEn(String nameEn) { this.nameEn = nameEn; }
-    public String getNameUz() { return nameUz; }
-    public void setNameUz(String nameUz) { this.nameUz = nameUz; }
-    public CriticalityLevel getLevel() { return level; }
-    public void setLevel(CriticalityLevel level) { this.level = level; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public Integer getSafetyImpact() { return safetyImpact; }
-    public void setSafetyImpact(Integer safetyImpact) { this.safetyImpact = safetyImpact; }
-    public Integer getProductionImpact() { return productionImpact; }
-    public void setProductionImpact(Integer productionImpact) { this.productionImpact = productionImpact; }
-    public Integer getEcologicalImpact() { return ecologicalImpact; }
-    public void setEcologicalImpact(Integer ecologicalImpact) { this.ecologicalImpact = ecologicalImpact; }
-    public Integer getEnergyImpact() { return energyImpact; }
-    public void setEnergyImpact(Integer energyImpact) { this.energyImpact = energyImpact; }
-    public String getFailureConsequence() { return failureConsequence; }
-    public void setFailureConsequence(String failureConsequence) { this.failureConsequence = failureConsequence; }
-    public Integer getRepairPriority() { return repairPriority; }
-    public void setRepairPriority(Integer repairPriority) { this.repairPriority = repairPriority; }
 }

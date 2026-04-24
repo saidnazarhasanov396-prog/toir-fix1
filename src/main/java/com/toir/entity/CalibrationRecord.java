@@ -1,8 +1,6 @@
 package com.toir.entity;
-import com.toir.entity.Equipment;
-
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -17,6 +15,11 @@ import java.util.UUID;
         indexes = {
                 @Index(name = "ix_calib_eq_next", columnList = "equipment_id,next_due_at")
         })
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class CalibrationRecord extends BaseEntity {
 
     /** Поверяемый прибор (Equipment типа INSTRUMENT). */
@@ -55,27 +58,4 @@ public class CalibrationRecord extends BaseEntity {
 
     @Column(columnDefinition = "text")
     private String notes;
-
-    public UUID getEquipmentId() { return equipmentId; }
-    public void setEquipmentId(UUID equipmentId) { this.equipmentId = equipmentId; }
-    public String getCertificateNumber() { return certificateNumber; }
-    public void setCertificateNumber(String certificateNumber) { this.certificateNumber = certificateNumber; }
-    public String getPerformedBy() { return performedBy; }
-    public void setPerformedBy(String performedBy) { this.performedBy = performedBy; }
-    public LocalDate getPerformedAt() { return performedAt; }
-    public void setPerformedAt(LocalDate performedAt) { this.performedAt = performedAt; }
-    public LocalDate getNextDueAt() { return nextDueAt; }
-    public void setNextDueAt(LocalDate nextDueAt) { this.nextDueAt = nextDueAt; }
-    public String getResult() { return result; }
-    public void setResult(String result) { this.result = result; }
-    public Double getTolerance() { return tolerance; }
-    public void setTolerance(Double tolerance) { this.tolerance = tolerance; }
-    public Double getMeasuredError() { return measuredError; }
-    public void setMeasuredError(Double measuredError) { this.measuredError = measuredError; }
-    public String getUnit() { return unit; }
-    public void setUnit(String unit) { this.unit = unit; }
-    public UUID getDocumentFileId() { return documentFileId; }
-    public void setDocumentFileId(UUID documentFileId) { this.documentFileId = documentFileId; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
 }

@@ -1,13 +1,17 @@
 package com.toir.entity;
-
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "actual_cost_review_route_overrides")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class ActualCostReviewRouteOverride extends BaseEntity {
 
     @Column(name = "actual_cost_id", nullable = false)
@@ -43,26 +47,4 @@ public class ActualCostReviewRouteOverride extends BaseEntity {
     @Column(name = "deactivated_at")
     private Instant deactivatedAt;
 
-    public UUID getActualCostId() { return actualCostId; }
-    public void setActualCostId(UUID actualCostId) { this.actualCostId = actualCostId; }
-    public UUID getDepartmentId() { return departmentId; }
-    public void setDepartmentId(UUID departmentId) { this.departmentId = departmentId; }
-    public String getApprovalRoleCode() { return approvalRoleCode; }
-    public void setApprovalRoleCode(String approvalRoleCode) { this.approvalRoleCode = approvalRoleCode; }
-    public String getEscalationRoleCode() { return escalationRoleCode; }
-    public void setEscalationRoleCode(String escalationRoleCode) { this.escalationRoleCode = escalationRoleCode; }
-    public int getThresholdHours() { return thresholdHours; }
-    public void setThresholdHours(int thresholdHours) { this.thresholdHours = thresholdHours; }
-    public String getComment() { return comment; }
-    public void setComment(String comment) { this.comment = comment; }
-    public boolean isActive() { return active; }
-    public void setActive(boolean active) { this.active = active; }
-    public UUID getCreatedById() { return createdById; }
-    public void setCreatedById(UUID createdById) { this.createdById = createdById; }
-    public UUID getDeactivatedById() { return deactivatedById; }
-    public void setDeactivatedById(UUID deactivatedById) { this.deactivatedById = deactivatedById; }
-    public String getDeactivationComment() { return deactivationComment; }
-    public void setDeactivationComment(String deactivationComment) { this.deactivationComment = deactivationComment; }
-    public Instant getDeactivatedAt() { return deactivatedAt; }
-    public void setDeactivatedAt(Instant deactivatedAt) { this.deactivatedAt = deactivatedAt; }
 }

@@ -1,13 +1,18 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
 @Table(name = "maintenance_kpis")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class MaintenanceKPI extends BaseEntity {
 
     @Column(name = "department_id", nullable = false)
@@ -37,22 +42,4 @@ public class MaintenanceKPI extends BaseEntity {
     @Column(name = "total_cost")
     private Double totalCost;
 
-    public UUID getDepartmentId() { return departmentId; }
-    public void setDepartmentId(UUID departmentId) { this.departmentId = departmentId; }
-    public LocalDate getPeriodStart() { return periodStart; }
-    public void setPeriodStart(LocalDate periodStart) { this.periodStart = periodStart; }
-    public LocalDate getPeriodEnd() { return periodEnd; }
-    public void setPeriodEnd(LocalDate periodEnd) { this.periodEnd = periodEnd; }
-    public Integer getPprPlannedCount() { return pprPlannedCount; }
-    public void setPprPlannedCount(Integer pprPlannedCount) { this.pprPlannedCount = pprPlannedCount; }
-    public Integer getPprCompletedCount() { return pprCompletedCount; }
-    public void setPprCompletedCount(Integer pprCompletedCount) { this.pprCompletedCount = pprCompletedCount; }
-    public Double getPprCompletionRate() { return pprCompletionRate; }
-    public void setPprCompletionRate(Double pprCompletionRate) { this.pprCompletionRate = pprCompletionRate; }
-    public Double getUnplannedRepairShare() { return unplannedRepairShare; }
-    public void setUnplannedRepairShare(Double unplannedRepairShare) { this.unplannedRepairShare = unplannedRepairShare; }
-    public Double getAverageRepairDurationHours() { return averageRepairDurationHours; }
-    public void setAverageRepairDurationHours(Double averageRepairDurationHours) { this.averageRepairDurationHours = averageRepairDurationHours; }
-    public Double getTotalCost() { return totalCost; }
-    public void setTotalCost(Double totalCost) { this.totalCost = totalCost; }
 }

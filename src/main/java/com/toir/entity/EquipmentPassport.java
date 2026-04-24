@@ -1,13 +1,18 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
 @Table(name = "equipment_passports")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class EquipmentPassport extends BaseEntity {
 
     @Column(name = "equipment_id", nullable = false, unique = true)
@@ -42,26 +47,4 @@ public class EquipmentPassport extends BaseEntity {
     @Column(columnDefinition = "text")
     private String notes;
 
-    public UUID getEquipmentId() { return equipmentId; }
-    public void setEquipmentId(UUID equipmentId) { this.equipmentId = equipmentId; }
-    public String getPassportNumber() { return passportNumber; }
-    public void setPassportNumber(String passportNumber) { this.passportNumber = passportNumber; }
-    public String getFactoryNumber() { return factoryNumber; }
-    public void setFactoryNumber(String factoryNumber) { this.factoryNumber = factoryNumber; }
-    public String getManufacturerSerial() { return manufacturerSerial; }
-    public void setManufacturerSerial(String manufacturerSerial) { this.manufacturerSerial = manufacturerSerial; }
-    public Double getPowerKw() { return powerKw; }
-    public void setPowerKw(Double powerKw) { this.powerKw = powerKw; }
-    public Double getVoltageV() { return voltageV; }
-    public void setVoltageV(Double voltageV) { this.voltageV = voltageV; }
-    public Double getPressureBar() { return pressureBar; }
-    public void setPressureBar(Double pressureBar) { this.pressureBar = pressureBar; }
-    public Double getThroughput() { return throughput; }
-    public void setThroughput(Double throughput) { this.throughput = throughput; }
-    public LocalDate getInstallDate() { return installDate; }
-    public void setInstallDate(LocalDate installDate) { this.installDate = installDate; }
-    public LocalDate getLastInspectionDate() { return lastInspectionDate; }
-    public void setLastInspectionDate(LocalDate lastInspectionDate) { this.lastInspectionDate = lastInspectionDate; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
 }

@@ -3,12 +3,18 @@ package com.toir.entity;
 import com.toir.enums.EscalationStatus;
 import com.toir.enums.SlaTriggerType;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "escalation_events")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class EscalationEvent extends BaseEntity {
 
     @Column(name = "sla_rule_id")
@@ -46,26 +52,4 @@ public class EscalationEvent extends BaseEntity {
     @Column(columnDefinition = "text")
     private String notes;
 
-    public UUID getSlaRuleId() { return slaRuleId; }
-    public void setSlaRuleId(UUID slaRuleId) { this.slaRuleId = slaRuleId; }
-    public String getEntityType() { return entityType; }
-    public void setEntityType(String entityType) { this.entityType = entityType; }
-    public String getEntityId() { return entityId; }
-    public void setEntityId(String entityId) { this.entityId = entityId; }
-    public SlaTriggerType getTriggerType() { return triggerType; }
-    public void setTriggerType(SlaTriggerType triggerType) { this.triggerType = triggerType; }
-    public EscalationStatus getStatus() { return status; }
-    public void setStatus(EscalationStatus status) { this.status = status; }
-    public Instant getRaisedAt() { return raisedAt; }
-    public void setRaisedAt(Instant raisedAt) { this.raisedAt = raisedAt; }
-    public Instant getAcknowledgedAt() { return acknowledgedAt; }
-    public void setAcknowledgedAt(Instant acknowledgedAt) { this.acknowledgedAt = acknowledgedAt; }
-    public Instant getResolvedAt() { return resolvedAt; }
-    public void setResolvedAt(Instant resolvedAt) { this.resolvedAt = resolvedAt; }
-    public UUID getAcknowledgedById() { return acknowledgedById; }
-    public void setAcknowledgedById(UUID acknowledgedById) { this.acknowledgedById = acknowledgedById; }
-    public UUID getResolvedById() { return resolvedById; }
-    public void setResolvedById(UUID resolvedById) { this.resolvedById = resolvedById; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
 }

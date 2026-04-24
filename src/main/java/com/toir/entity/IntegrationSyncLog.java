@@ -2,6 +2,7 @@ package com.toir.entity;
 
 import com.toir.enums.IntegrationSyncStatus;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -10,6 +11,11 @@ import java.util.UUID;
 @Table(name = "integration_sync_logs", indexes = {
         @Index(name = "idx_sync_log_endpoint", columnList = "endpoint_id,started_at")
 })
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class IntegrationSyncLog extends BaseEntity {
 
     @Column(name = "endpoint_id", nullable = false)
@@ -39,23 +45,4 @@ public class IntegrationSyncLog extends BaseEntity {
 
     @Column(name = "error_message", columnDefinition = "text")
     private String errorMessage;
-
-    public UUID getEndpointId() { return endpointId; }
-    public void setEndpointId(UUID endpointId) { this.endpointId = endpointId; }
-    public String getDirection() { return direction; }
-    public void setDirection(String direction) { this.direction = direction; }
-    public String getModule() { return module; }
-    public void setModule(String module) { this.module = module; }
-    public Instant getStartedAt() { return startedAt; }
-    public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
-    public Instant getFinishedAt() { return finishedAt; }
-    public void setFinishedAt(Instant finishedAt) { this.finishedAt = finishedAt; }
-    public IntegrationSyncStatus getStatus() { return status; }
-    public void setStatus(IntegrationSyncStatus status) { this.status = status; }
-    public Integer getRecordsSent() { return recordsSent; }
-    public void setRecordsSent(Integer recordsSent) { this.recordsSent = recordsSent; }
-    public Integer getRecordsReceived() { return recordsReceived; }
-    public void setRecordsReceived(Integer recordsReceived) { this.recordsReceived = recordsReceived; }
-    public String getErrorMessage() { return errorMessage; }
-    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
 }

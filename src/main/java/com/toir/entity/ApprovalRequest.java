@@ -2,6 +2,7 @@ package com.toir.entity;
 
 import com.toir.enums.ApprovalStatus;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -12,6 +13,11 @@ import java.util.UUID;
 @Table(name = "approval_requests", indexes = {
         @Index(name = "idx_approval_doc", columnList = "document_type,document_id")
 })
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class ApprovalRequest extends BaseEntity {
 
     @Column(name = "document_type", nullable = false)
@@ -43,21 +49,4 @@ public class ApprovalRequest extends BaseEntity {
     @OrderBy("stepNumber ASC")
     private List<ApprovalStep> steps = new ArrayList<>();
 
-    public String getDocumentType() { return documentType; }
-    public void setDocumentType(String documentType) { this.documentType = documentType; }
-    public UUID getDocumentId() { return documentId; }
-    public void setDocumentId(UUID documentId) { this.documentId = documentId; }
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
-    public UUID getRequesterId() { return requesterId; }
-    public void setRequesterId(UUID requesterId) { this.requesterId = requesterId; }
-    public ApprovalStatus getStatus() { return status; }
-    public void setStatus(ApprovalStatus status) { this.status = status; }
-    public int getCurrentStep() { return currentStep; }
-    public void setCurrentStep(int currentStep) { this.currentStep = currentStep; }
-    public Instant getCompletedAt() { return completedAt; }
-    public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public List<ApprovalStep> getSteps() { return steps; }
 }

@@ -2,6 +2,7 @@ package com.toir.entity;
 
 import com.toir.enums.DefectListStatus;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +14,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "defect_lists")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class DefectList extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -52,28 +58,4 @@ public class DefectList extends BaseEntity {
     @OneToMany(mappedBy = "defectList", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DefectListLine> lines = new ArrayList<>();
 
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
-    public UUID getEquipmentId() { return equipmentId; }
-    public void setEquipmentId(UUID equipmentId) { this.equipmentId = equipmentId; }
-    public UUID getRepairRequestId() { return repairRequestId; }
-    public void setRepairRequestId(UUID repairRequestId) { this.repairRequestId = repairRequestId; }
-    public UUID getWorkOrderId() { return workOrderId; }
-    public void setWorkOrderId(UUID workOrderId) { this.workOrderId = workOrderId; }
-    public UUID getCreatedById() { return createdById; }
-    public void setCreatedById(UUID createdById) { this.createdById = createdById; }
-    public UUID getApprovedById() { return approvedById; }
-    public void setApprovedById(UUID approvedById) { this.approvedById = approvedById; }
-    public DefectListStatus getStatus() { return status; }
-    public void setStatus(DefectListStatus status) { this.status = status; }
-    public double getTotalLaborHours() { return totalLaborHours; }
-    public void setTotalLaborHours(double totalLaborHours) { this.totalLaborHours = totalLaborHours; }
-    public double getTotalEstimatedCost() { return totalEstimatedCost; }
-    public void setTotalEstimatedCost(double totalEstimatedCost) { this.totalEstimatedCost = totalEstimatedCost; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
-    public List<DefectListLine> getLines() { return lines; }
-    public void setLines(List<DefectListLine> lines) { this.lines = lines; }
 }
