@@ -7,6 +7,7 @@ import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,12 +29,15 @@ public class EquipmentController {
     }
 
     @GetMapping
-    public List<EquipmentDto> list(
+    public Page<EquipmentDto> list(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentTypeId,
-            @RequestParam(required = false) EquipmentStatus status
+            @RequestParam(required = false) EquipmentStatus status,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize
     ) {
-        return service.search(securityScope.enforceDepartmentScope(departmentId), equipmentTypeId, status);
+        return service.search(securityScope.enforceDepartmentScope(departmentId), equipmentTypeId, status, search, page, pageSize);
     }
 
     @GetMapping("/{id}")

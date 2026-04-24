@@ -11,6 +11,8 @@ import com.toir.dto.hr.EmployeeRequest;
 import com.toir.dto.hr.TimesheetEntryDto;
 import com.toir.dto.hr.TimesheetEntryRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,11 +28,9 @@ public class HrService {
     private final TimesheetEntryRepository timesheetRepository;
 
     @Transactional(readOnly = true)
-    public List<EmployeeDto> listEmployees(Boolean activeOnly) {
-        List<Employee> all = Boolean.TRUE.equals(activeOnly)
-                ? employeeRepository.findAllByActiveTrue()
-                : employeeRepository.findAll();
-        return all.stream().map(EmployeeDto::from).toList();
+    public Page<EmployeeDto> listEmployees(int page, int pageSize, String search, Boolean activeOnly) {
+        return employeeRepository.searchEmployees(search, activeOnly, PageRequest.of(page, pageSize))
+                .map(EmployeeDto::from);
     }
 
     @Transactional(readOnly = true)

@@ -17,10 +17,10 @@ public interface RepairRequestRepository extends JpaRepository<RepairRequest, UU
     @Query(value = "SELECT COUNT(*) > 0 FROM repair_requests WHERE number = :number AND is_deleted = false", nativeQuery = true)
     boolean existsByNumber(@Param("number") String number);
 
-    @Query(value = "SELECT COUNT(*) FROM repair_requests WHERE status = :status AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT COUNT(*) FROM repair_requests WHERE status = cast(:status as varchar) AND is_deleted = false", nativeQuery = true)
     long countByStatus(@Param("status") RequestStatus status);
 
-    @Query(value = "SELECT * FROM repair_requests WHERE (:status IS NULL OR status = :status) " +
+    @Query(value = "SELECT * FROM repair_requests WHERE (:status IS NULL OR status = cast(:status as varchar)) " +
             "AND (:departmentId IS NULL OR department_id = :departmentId) " +
             "AND (:equipmentId IS NULL OR equipment_id = :equipmentId) AND is_deleted = false " +
             "ORDER BY detected_at DESC", nativeQuery = true)
