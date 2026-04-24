@@ -8,4 +8,3 @@ target/generated-sources
 .DS_Store
 .env
 uploads/
-.idea/
