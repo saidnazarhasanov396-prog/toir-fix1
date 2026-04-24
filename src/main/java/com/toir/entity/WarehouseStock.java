@@ -44,4 +44,8 @@ public class WarehouseStock extends BaseEntity {
 
     @Column(name = "bin_location")
     private String binLocation;
+
+    public double getAvailable() {
+        return quantity - reservedQty;
+    }
 }
