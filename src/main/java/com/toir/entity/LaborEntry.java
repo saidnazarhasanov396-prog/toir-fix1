@@ -1,13 +1,18 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
 @Table(name = "labor_entries")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class LaborEntry extends BaseEntity {
 
     @Column(name = "work_order_id", nullable = false)
@@ -30,18 +35,4 @@ public class LaborEntry extends BaseEntity {
     @Column(columnDefinition = "text")
     private String description;
 
-    public UUID getWorkOrderId() { return workOrderId; }
-    public void setWorkOrderId(UUID workOrderId) { this.workOrderId = workOrderId; }
-    public UUID getUserId() { return userId; }
-    public void setUserId(UUID userId) { this.userId = userId; }
-    public String getContractorName() { return contractorName; }
-    public void setContractorName(String contractorName) { this.contractorName = contractorName; }
-    public LocalDate getWorkDate() { return workDate; }
-    public void setWorkDate(LocalDate workDate) { this.workDate = workDate; }
-    public double getHours() { return hours; }
-    public void setHours(double hours) { this.hours = hours; }
-    public Double getRate() { return rate; }
-    public void setRate(Double rate) { this.rate = rate; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
 }

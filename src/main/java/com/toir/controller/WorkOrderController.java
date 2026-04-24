@@ -1,6 +1,6 @@
 package com.toir.controller;
 import com.toir.service.WorkOrderService;
-import com.toir.entity.WorkOrderStatus;
+import com.toir.enums.WorkOrderStatus;
 
 import com.toir.security.SecurityScope;
 import com.toir.dto.workorder.CloseWorkOrderRequest;

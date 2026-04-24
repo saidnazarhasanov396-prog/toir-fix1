@@ -1,7 +1,7 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +14,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "brigades")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class Brigade extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -37,18 +42,4 @@ public class Brigade extends BaseEntity {
     @OneToMany(mappedBy = "brigade", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<BrigadeMember> members = new ArrayList<>();
 
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public UUID getDepartmentId() { return departmentId; }
-    public void setDepartmentId(UUID departmentId) { this.departmentId = departmentId; }
-    public UUID getForemanId() { return foremanId; }
-    public void setForemanId(UUID foremanId) { this.foremanId = foremanId; }
-    public boolean isActive() { return active; }
-    public void setActive(boolean active) { this.active = active; }
-    public String getSpecialization() { return specialization; }
-    public void setSpecialization(String specialization) { this.specialization = specialization; }
-    public List<BrigadeMember> getMembers() { return members; }
-    public void setMembers(List<BrigadeMember> members) { this.members = members; }
 }

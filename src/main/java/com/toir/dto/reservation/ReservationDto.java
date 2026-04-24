@@ -1,7 +1,7 @@
 package com.toir.dto.reservation;
 
 import com.toir.entity.Reservation;
-import com.toir.entity.ReservationStatus;
+import com.toir.enums.ReservationStatus;
 
 import java.util.UUID;
 

@@ -1,6 +1,6 @@
 package com.toir.dto.department;
 
-import com.toir.entity.DepartmentType;
+import com.toir.enums.DepartmentType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

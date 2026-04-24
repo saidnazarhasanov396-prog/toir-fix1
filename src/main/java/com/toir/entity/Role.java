@@ -1,6 +1,7 @@
 package com.toir.entity;
 
 import jakarta.persistence.*;
+import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -10,6 +11,11 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "roles")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class Role {
 
     @Id
@@ -54,23 +60,4 @@ public class Role {
     void onUpdate() {
         this.updatedAt = Instant.now();
     }
-
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getNameEn() { return nameEn; }
-    public void setNameEn(String nameEn) { this.nameEn = nameEn; }
-    public String getNameUz() { return nameUz; }
-    public void setNameUz(String nameUz) { this.nameUz = nameUz; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public boolean isSystem() { return system; }
-    public void setSystem(boolean system) { this.system = system; }
-    public List<String> getPermissions() { return permissions; }
-    public void setPermissions(List<String> permissions) { this.permissions = permissions; }
-    public Instant getCreatedAt() { return createdAt; }
-    public Instant getUpdatedAt() { return updatedAt; }
 }

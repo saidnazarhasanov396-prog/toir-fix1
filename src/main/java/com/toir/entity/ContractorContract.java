@@ -1,13 +1,19 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
+import com.toir.enums.ContractStatus;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
 @Table(name = "contractor_contracts")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class ContractorContract extends BaseEntity {
 
     @Column(name = "contractor_id", nullable = false)
@@ -31,18 +37,4 @@ public class ContractorContract extends BaseEntity {
     @Column(nullable = false)
     private ContractStatus status = ContractStatus.DRAFT;
 
-    public UUID getContractorId() { return contractorId; }
-    public void setContractorId(UUID contractorId) { this.contractorId = contractorId; }
-    public String getNumber() { return number; }
-    public void setNumber(String number) { this.number = number; }
-    public String getSubject() { return subject; }
-    public void setSubject(String subject) { this.subject = subject; }
-    public LocalDate getStartDate() { return startDate; }
-    public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
-    public LocalDate getEndDate() { return endDate; }
-    public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
-    public Double getAmount() { return amount; }
-    public void setAmount(Double amount) { this.amount = amount; }
-    public ContractStatus getStatus() { return status; }
-    public void setStatus(ContractStatus status) { this.status = status; }
 }

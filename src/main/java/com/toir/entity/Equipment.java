@@ -1,14 +1,19 @@
 package com.toir.entity;
-import com.toir.entity.EquipmentStatus;
+import com.toir.enums.EquipmentStatus;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
 @Table(name = "equipment")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class Equipment extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -61,38 +66,4 @@ public class Equipment extends BaseEntity {
 
     private String description;
 
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getInventoryNumber() { return inventoryNumber; }
-    public void setInventoryNumber(String inventoryNumber) { this.inventoryNumber = inventoryNumber; }
-    public String getTechnicalNumber() { return technicalNumber; }
-    public void setTechnicalNumber(String technicalNumber) { this.technicalNumber = technicalNumber; }
-    public String getSerialNumber() { return serialNumber; }
-    public void setSerialNumber(String serialNumber) { this.serialNumber = serialNumber; }
-    public String getModel() { return model; }
-    public void setModel(String model) { this.model = model; }
-    public UUID getEquipmentTypeId() { return equipmentTypeId; }
-    public void setEquipmentTypeId(UUID equipmentTypeId) { this.equipmentTypeId = equipmentTypeId; }
-    public UUID getDepartmentId() { return departmentId; }
-    public void setDepartmentId(UUID departmentId) { this.departmentId = departmentId; }
-    public UUID getLocationId() { return locationId; }
-    public void setLocationId(UUID locationId) { this.locationId = locationId; }
-    public UUID getParentId() { return parentId; }
-    public void setParentId(UUID parentId) { this.parentId = parentId; }
-    public UUID getCriticalityClassId() { return criticalityClassId; }
-    public void setCriticalityClassId(UUID criticalityClassId) { this.criticalityClassId = criticalityClassId; }
-    public UUID getResponsibleId() { return responsibleId; }
-    public void setResponsibleId(UUID responsibleId) { this.responsibleId = responsibleId; }
-    public String getManufacturer() { return manufacturer; }
-    public void setManufacturer(String manufacturer) { this.manufacturer = manufacturer; }
-    public EquipmentStatus getStatus() { return status; }
-    public void setStatus(EquipmentStatus status) { this.status = status; }
-    public LocalDate getCommissionedAt() { return commissionedAt; }
-    public void setCommissionedAt(LocalDate commissionedAt) { this.commissionedAt = commissionedAt; }
-    public LocalDate getWarrantyUntil() { return warrantyUntil; }
-    public void setWarrantyUntil(LocalDate warrantyUntil) { this.warrantyUntil = warrantyUntil; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
 }

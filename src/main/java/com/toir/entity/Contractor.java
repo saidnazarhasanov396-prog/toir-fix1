@@ -1,10 +1,16 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
+import com.toir.enums.ContractorStatus;
 import jakarta.persistence.*;
+import lombok.*;
 
 @Entity
 @Table(name = "contractors")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class Contractor extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -27,20 +33,4 @@ public class Contractor extends BaseEntity {
     @Column(nullable = false)
     private ContractorStatus status = ContractorStatus.ACTIVE;
 
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getTaxNumber() { return taxNumber; }
-    public void setTaxNumber(String taxNumber) { this.taxNumber = taxNumber; }
-    public String getContactPerson() { return contactPerson; }
-    public void setContactPerson(String contactPerson) { this.contactPerson = contactPerson; }
-    public String getPhone() { return phone; }
-    public void setPhone(String phone) { this.phone = phone; }
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-    public String getSpecialization() { return specialization; }
-    public void setSpecialization(String specialization) { this.specialization = specialization; }
-    public ContractorStatus getStatus() { return status; }
-    public void setStatus(ContractorStatus status) { this.status = status; }
 }

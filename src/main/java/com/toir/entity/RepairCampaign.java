@@ -1,9 +1,8 @@
 package com.toir.entity;
-import com.toir.entity.RepairCampaignStage;
-import com.toir.entity.RepairCampaignStatus;
+import com.toir.enums.RepairCampaignStatus;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -16,6 +15,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "repair_campaigns")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class RepairCampaign extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -58,31 +62,4 @@ public class RepairCampaign extends BaseEntity {
     @OneToMany(mappedBy = "campaign", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sequence ASC")
     private List<RepairCampaignStage> stages = new ArrayList<>();
-
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public int getYear() { return year; }
-    public void setYear(int year) { this.year = year; }
-    public Integer getQuarter() { return quarter; }
-    public void setQuarter(Integer quarter) { this.quarter = quarter; }
-    public UUID getDepartmentId() { return departmentId; }
-    public void setDepartmentId(UUID departmentId) { this.departmentId = departmentId; }
-    public RepairCampaignStatus getStatus() { return status; }
-    public void setStatus(RepairCampaignStatus status) { this.status = status; }
-    public LocalDate getStartDate() { return startDate; }
-    public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
-    public LocalDate getEndDate() { return endDate; }
-    public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
-    public double getTotalBudget() { return totalBudget; }
-    public void setTotalBudget(double totalBudget) { this.totalBudget = totalBudget; }
-    public double getTotalActual() { return totalActual; }
-    public void setTotalActual(double totalActual) { this.totalActual = totalActual; }
-    public String getScope() { return scope; }
-    public void setScope(String scope) { this.scope = scope; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
-    public List<RepairCampaignStage> getStages() { return stages; }
-    public void setStages(List<RepairCampaignStage> stages) { this.stages = stages; }
 }

@@ -1,5 +1,5 @@
 package com.toir.repository;
-import com.toir.entity.SlaEntityType;
+import com.toir.enums.SlaEntityType;
 import com.toir.entity.SlaRule;
 
 import org.springframework.data.jpa.repository.JpaRepository;

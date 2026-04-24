@@ -1,6 +1,6 @@
 package com.toir.repository;
 import com.toir.entity.ProcurementRequest;
-import com.toir.entity.ProcurementRequestStatus;
+import com.toir.enums.ProcurementRequestStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

@@ -1,7 +1,7 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -14,6 +14,11 @@ import java.util.List;
  */
 @Entity
 @Table(name = "webhook_subscriptions")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class WebhookSubscription extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -46,22 +51,4 @@ public class WebhookSubscription extends BaseEntity {
     @Column(name = "failure_count", nullable = false)
     private int failureCount = 0;
 
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getTargetUrl() { return targetUrl; }
-    public void setTargetUrl(String targetUrl) { this.targetUrl = targetUrl; }
-    public String getSecret() { return secret; }
-    public void setSecret(String secret) { this.secret = secret; }
-    public List<String> getEvents() { return events; }
-    public void setEvents(List<String> events) { this.events = events; }
-    public boolean isActive() { return active; }
-    public void setActive(boolean active) { this.active = active; }
-    public String getLastDeliveryStatus() { return lastDeliveryStatus; }
-    public void setLastDeliveryStatus(String lastDeliveryStatus) { this.lastDeliveryStatus = lastDeliveryStatus; }
-    public java.time.Instant getLastDeliveryAt() { return lastDeliveryAt; }
-    public void setLastDeliveryAt(java.time.Instant lastDeliveryAt) { this.lastDeliveryAt = lastDeliveryAt; }
-    public int getFailureCount() { return failureCount; }
-    public void setFailureCount(int failureCount) { this.failureCount = failureCount; }
 }

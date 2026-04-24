@@ -1,8 +1,8 @@
 package com.toir.entity;
-import com.toir.entity.MeterSource;
+import com.toir.enums.MeterSource;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -12,6 +12,11 @@ import java.util.UUID;
         @Index(name = "idx_meter_readings_meter", columnList = "meter_id,read_at"),
         @Index(name = "idx_meter_readings_equipment", columnList = "equipment_id,read_at")
 })
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class MeterReading extends BaseEntity {
 
     @Column(name = "meter_id", nullable = false)
@@ -41,23 +46,4 @@ public class MeterReading extends BaseEntity {
 
     @Column(columnDefinition = "text")
     private String note;
-
-    public UUID getMeterId() { return meterId; }
-    public void setMeterId(UUID meterId) { this.meterId = meterId; }
-    public UUID getEquipmentId() { return equipmentId; }
-    public void setEquipmentId(UUID equipmentId) { this.equipmentId = equipmentId; }
-    public double getValue() { return value; }
-    public void setValue(double value) { this.value = value; }
-    public Double getDelta() { return delta; }
-    public void setDelta(Double delta) { this.delta = delta; }
-    public Instant getReadAt() { return readAt; }
-    public void setReadAt(Instant readAt) { this.readAt = readAt; }
-    public MeterSource getSource() { return source; }
-    public void setSource(MeterSource source) { this.source = source; }
-    public UUID getRecordedByUserId() { return recordedByUserId; }
-    public void setRecordedByUserId(UUID recordedByUserId) { this.recordedByUserId = recordedByUserId; }
-    public String getDeviceId() { return deviceId; }
-    public void setDeviceId(String deviceId) { this.deviceId = deviceId; }
-    public String getNote() { return note; }
-    public void setNote(String note) { this.note = note; }
 }

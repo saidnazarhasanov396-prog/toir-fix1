@@ -1,19 +1,19 @@
 package com.toir.service;
-import com.toir.entity.PlanStatus;
+import com.toir.enums.PlanStatus;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
-import com.toir.entity.PprTaskStatus;
+import com.toir.enums.PprTaskStatus;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 
-import com.toir.entity.PriorityLevel;
+import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.entity.Equipment;
 import com.toir.repository.EquipmentRepository;
-import com.toir.entity.EquipmentStatus;
+import com.toir.enums.EquipmentStatus;
 import com.toir.entity.MaintenanceRegulation;
 import com.toir.repository.MaintenanceRegulationRepository;
-import com.toir.entity.PeriodicityUnit;
+import com.toir.enums.PeriodicityUnit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

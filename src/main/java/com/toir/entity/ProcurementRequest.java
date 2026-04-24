@@ -1,9 +1,8 @@
 package com.toir.entity;
-import com.toir.entity.ProcurementRequestLine;
-import com.toir.entity.ProcurementRequestStatus;
+import com.toir.enums.ProcurementRequestStatus;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -18,6 +17,11 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "procurement_requests")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class ProcurementRequest extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -72,39 +76,4 @@ public class ProcurementRequest extends BaseEntity {
 
     @OneToMany(mappedBy = "request", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ProcurementRequestLine> lines = new ArrayList<>();
-
-    public String getNumber() { return number; }
-    public void setNumber(String number) { this.number = number; }
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public UUID getDepartmentId() { return departmentId; }
-    public void setDepartmentId(UUID departmentId) { this.departmentId = departmentId; }
-    public UUID getWarehouseId() { return warehouseId; }
-    public void setWarehouseId(UUID warehouseId) { this.warehouseId = warehouseId; }
-    public UUID getRequestedBy() { return requestedBy; }
-    public void setRequestedBy(UUID requestedBy) { this.requestedBy = requestedBy; }
-    public UUID getApprovedBy() { return approvedBy; }
-    public void setApprovedBy(UUID approvedBy) { this.approvedBy = approvedBy; }
-    public ProcurementRequestStatus getStatus() { return status; }
-    public void setStatus(ProcurementRequestStatus status) { this.status = status; }
-    public String getSource() { return source; }
-    public void setSource(String source) { this.source = source; }
-    public LocalDate getRequiredBy() { return requiredBy; }
-    public void setRequiredBy(LocalDate requiredBy) { this.requiredBy = requiredBy; }
-    public double getTotalEstimatedCost() { return totalEstimatedCost; }
-    public void setTotalEstimatedCost(double totalEstimatedCost) { this.totalEstimatedCost = totalEstimatedCost; }
-    public Instant getSubmittedAt() { return submittedAt; }
-    public void setSubmittedAt(Instant submittedAt) { this.submittedAt = submittedAt; }
-    public Instant getApprovedAt() { return approvedAt; }
-    public void setApprovedAt(Instant approvedAt) { this.approvedAt = approvedAt; }
-    public Instant getOrderedAt() { return orderedAt; }
-    public void setOrderedAt(Instant orderedAt) { this.orderedAt = orderedAt; }
-    public Instant getReceivedAt() { return receivedAt; }
-    public void setReceivedAt(Instant receivedAt) { this.receivedAt = receivedAt; }
-    public String getRejectionReason() { return rejectionReason; }
-    public void setRejectionReason(String rejectionReason) { this.rejectionReason = rejectionReason; }
-    public List<ProcurementRequestLine> getLines() { return lines; }
-    public void setLines(List<ProcurementRequestLine> lines) { this.lines = lines; }
 }

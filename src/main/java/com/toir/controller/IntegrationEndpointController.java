@@ -1,5 +1,5 @@
 package com.toir.controller;
-import com.toir.entity.IntegrationSyncStatus;
+import com.toir.enums.IntegrationSyncStatus;
 import com.toir.service.IntegrationEndpointService;
 
 import com.toir.security.RequiresAdmin;

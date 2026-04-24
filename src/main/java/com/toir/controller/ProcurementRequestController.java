@@ -1,5 +1,5 @@
 package com.toir.controller;
-import com.toir.entity.ProcurementRequestStatus;
+import com.toir.enums.ProcurementRequestStatus;
 import com.toir.service.ProcurementRequestService;
 
 import com.toir.dto.procurement.ProcurementLineRequest;

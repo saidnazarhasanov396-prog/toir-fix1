@@ -1,7 +1,7 @@
 package com.toir.service;
 import com.toir.entity.SafetyPermit;
 import com.toir.repository.SafetyPermitRepository;
-import com.toir.entity.SafetyPermitStatus;
+import com.toir.enums.SafetyPermitStatus;
 
 import com.toir.exception.RestException;
 import com.toir.dto.safetypermit.SafetyPermitDto;

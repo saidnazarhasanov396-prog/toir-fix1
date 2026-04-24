@@ -1,14 +1,19 @@
 package com.toir.entity;
-import com.toir.entity.StockMovementType;
+import com.toir.enums.StockMovementType;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "stock_movements")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class StockMovement extends BaseEntity {
 
     @Column(name = "warehouse_id", nullable = false)
@@ -41,25 +46,4 @@ public class StockMovement extends BaseEntity {
 
     @Column(columnDefinition = "text")
     private String notes;
-
-    public UUID getWarehouseId() { return warehouseId; }
-    public void setWarehouseId(UUID warehouseId) { this.warehouseId = warehouseId; }
-    public UUID getSparePartId() { return sparePartId; }
-    public void setSparePartId(UUID sparePartId) { this.sparePartId = sparePartId; }
-    public UUID getWorkOrderId() { return workOrderId; }
-    public void setWorkOrderId(UUID workOrderId) { this.workOrderId = workOrderId; }
-    public StockMovementType getType() { return type; }
-    public void setType(StockMovementType type) { this.type = type; }
-    public double getQuantity() { return quantity; }
-    public void setQuantity(double quantity) { this.quantity = quantity; }
-    public Double getUnitCost() { return unitCost; }
-    public void setUnitCost(Double unitCost) { this.unitCost = unitCost; }
-    public String getDocumentNumber() { return documentNumber; }
-    public void setDocumentNumber(String documentNumber) { this.documentNumber = documentNumber; }
-    public UUID getCreatedById() { return createdById; }
-    public void setCreatedById(UUID createdById) { this.createdById = createdById; }
-    public Instant getOccurredAt() { return occurredAt; }
-    public void setOccurredAt(Instant occurredAt) { this.occurredAt = occurredAt; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
 }

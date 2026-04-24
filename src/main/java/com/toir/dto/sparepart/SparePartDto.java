@@ -1,6 +1,6 @@
 package com.toir.dto.sparepart;
 
-import com.toir.entity.InventoryItemKind;
+import com.toir.enums.InventoryItemKind;
 import com.toir.entity.SparePart;
 
 import java.util.UUID;

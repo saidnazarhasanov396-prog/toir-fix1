@@ -1,13 +1,19 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
+import com.toir.enums.DefectStatus;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "defects")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class Defect extends BaseEntity {
 
     @Column(nullable = false, unique = true)
@@ -53,32 +59,4 @@ public class Defect extends BaseEntity {
     @Column(name = "recurrence_count", nullable = false)
     private int recurrenceCount = 0;
 
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public UUID getEquipmentId() { return equipmentId; }
-    public void setEquipmentId(UUID equipmentId) { this.equipmentId = equipmentId; }
-    public UUID getRequestId() { return requestId; }
-    public void setRequestId(UUID requestId) { this.requestId = requestId; }
-    public UUID getWorkOrderId() { return workOrderId; }
-    public void setWorkOrderId(UUID workOrderId) { this.workOrderId = workOrderId; }
-    public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category; }
-    public String getSeverity() { return severity; }
-    public void setSeverity(String severity) { this.severity = severity; }
-    public String getFailureReason() { return failureReason; }
-    public void setFailureReason(String failureReason) { this.failureReason = failureReason; }
-    public String getRootCause() { return rootCause; }
-    public void setRootCause(String rootCause) { this.rootCause = rootCause; }
-    public DefectStatus getStatus() { return status; }
-    public void setStatus(DefectStatus status) { this.status = status; }
-    public Instant getDetectedAt() { return detectedAt; }
-    public void setDetectedAt(Instant detectedAt) { this.detectedAt = detectedAt; }
-    public Instant getResolvedAt() { return resolvedAt; }
-    public void setResolvedAt(Instant resolvedAt) { this.resolvedAt = resolvedAt; }
-    public int getRecurrenceCount() { return recurrenceCount; }
-    public void setRecurrenceCount(int recurrenceCount) { this.recurrenceCount = recurrenceCount; }
 }

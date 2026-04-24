@@ -1,6 +1,6 @@
 package com.toir.dto.contractor;
 
-import com.toir.entity.ContractorStatus;
+import com.toir.enums.ContractorStatus;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 

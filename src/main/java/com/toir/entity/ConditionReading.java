@@ -1,7 +1,8 @@
 package com.toir.entity;
 
-import com.toir.entity.BaseEntity;
+import com.toir.enums.ConditionParameter;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -16,6 +17,11 @@ import java.util.UUID;
         indexes = {
                 @Index(name = "ix_cond_equipment_param_ts", columnList = "equipment_id,parameter,recorded_at")
         })
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class ConditionReading extends BaseEntity {
 
     @Column(name = "equipment_id", nullable = false)
@@ -58,28 +64,4 @@ public class ConditionReading extends BaseEntity {
     @Column(columnDefinition = "text")
     private String notes;
 
-    public UUID getEquipmentId() { return equipmentId; }
-    public void setEquipmentId(UUID equipmentId) { this.equipmentId = equipmentId; }
-    public ConditionParameter getParameter() { return parameter; }
-    public void setParameter(ConditionParameter parameter) { this.parameter = parameter; }
-    public double getValue() { return value; }
-    public void setValue(double value) { this.value = value; }
-    public String getUnit() { return unit; }
-    public void setUnit(String unit) { this.unit = unit; }
-    public Instant getRecordedAt() { return recordedAt; }
-    public void setRecordedAt(Instant recordedAt) { this.recordedAt = recordedAt; }
-    public UUID getRecordedBy() { return recordedBy; }
-    public void setRecordedBy(UUID recordedBy) { this.recordedBy = recordedBy; }
-    public Double getWarnHigh() { return warnHigh; }
-    public void setWarnHigh(Double warnHigh) { this.warnHigh = warnHigh; }
-    public Double getAlarmHigh() { return alarmHigh; }
-    public void setAlarmHigh(Double alarmHigh) { this.alarmHigh = alarmHigh; }
-    public Double getWarnLow() { return warnLow; }
-    public void setWarnLow(Double warnLow) { this.warnLow = warnLow; }
-    public Double getAlarmLow() { return alarmLow; }
-    public void setAlarmLow(Double alarmLow) { this.alarmLow = alarmLow; }
-    public String getSeverity() { return severity; }
-    public void setSeverity(String severity) { this.severity = severity; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
 }

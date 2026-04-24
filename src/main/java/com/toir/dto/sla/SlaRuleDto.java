@@ -1,8 +1,8 @@
 package com.toir.dto.sla;
 
-import com.toir.entity.SlaEntityType;
+import com.toir.enums.SlaEntityType;
 import com.toir.entity.SlaRule;
-import com.toir.entity.SlaTriggerType;
+import com.toir.enums.SlaTriggerType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;

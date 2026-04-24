@@ -1,6 +1,6 @@
 package com.toir.dto.meter;
 
-import com.toir.entity.MeterType;
+import com.toir.enums.MeterType;
 
 import java.util.UUID;
 

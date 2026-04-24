@@ -1,8 +1,8 @@
 package com.toir.entity;
-import com.toir.entity.TimesheetStatus;
+import com.toir.enums.TimesheetStatus;
 
-import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -11,6 +11,11 @@ import java.util.UUID;
 @Table(name = "hr_timesheet_entries", indexes = {
         @Index(name = "idx_timesheet_employee_date", columnList = "employee_id,work_date")
 })
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class TimesheetEntry extends BaseEntity {
 
     @Column(name = "employee_id", nullable = false)
@@ -43,25 +48,4 @@ public class TimesheetEntry extends BaseEntity {
 
     @Column(columnDefinition = "text")
     private String note;
-
-    public UUID getEmployeeId() { return employeeId; }
-    public void setEmployeeId(UUID employeeId) { this.employeeId = employeeId; }
-    public LocalDate getWorkDate() { return workDate; }
-    public void setWorkDate(LocalDate workDate) { this.workDate = workDate; }
-    public double getHoursRegular() { return hoursRegular; }
-    public void setHoursRegular(double hoursRegular) { this.hoursRegular = hoursRegular; }
-    public double getHoursOvertime() { return hoursOvertime; }
-    public void setHoursOvertime(double hoursOvertime) { this.hoursOvertime = hoursOvertime; }
-    public double getHoursNight() { return hoursNight; }
-    public void setHoursNight(double hoursNight) { this.hoursNight = hoursNight; }
-    public double getHoursHoliday() { return hoursHoliday; }
-    public void setHoursHoliday(double hoursHoliday) { this.hoursHoliday = hoursHoliday; }
-    public UUID getWorkOrderId() { return workOrderId; }
-    public void setWorkOrderId(UUID workOrderId) { this.workOrderId = workOrderId; }
-    public UUID getCostCategoryId() { return costCategoryId; }
-    public void setCostCategoryId(UUID costCategoryId) { this.costCategoryId = costCategoryId; }
-    public TimesheetStatus getStatus() { return status; }
-    public void setStatus(TimesheetStatus status) { this.status = status; }
-    public String getNote() { return note; }
-    public void setNote(String note) { this.note = note; }
 }

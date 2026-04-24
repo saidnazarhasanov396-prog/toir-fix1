@@ -1,7 +1,7 @@
 package com.toir.dto.safetypermit;
 
 import com.toir.entity.SafetyPermit;
-import com.toir.entity.SafetyPermitStatus;
+import com.toir.enums.SafetyPermitStatus;
 import jakarta.validation.constraints.NotBlank;
 
 import java.time.Instant;

@@ -1,8 +1,8 @@
 package com.toir.dto.maintenanceregulation;
-import com.toir.entity.MeterType;
 
-import com.toir.entity.MaintenanceKind;
-import com.toir.entity.PeriodicityUnit;
+import com.toir.enums.MaintenanceKind;
+import com.toir.enums.MeterType;
+import com.toir.enums.PeriodicityUnit;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -22,6 +22,6 @@ public record MaintenanceRegulationRequest(
         @Positive int periodicityValue,
         Integer toleranceDays,
         boolean requiresShutdown,
-        com.toir.entity.MeterType triggerMeterType,
+        MeterType triggerMeterType,
         Double triggerMeterInterval
 ) {}

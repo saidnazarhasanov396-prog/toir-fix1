@@ -1,6 +1,6 @@
 package com.toir.dto.location;
 
-import com.toir.entity.LocationType;
+import com.toir.enums.LocationType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

@@ -1,6 +1,6 @@
 package com.toir.dto.conditionreading;
 
-import com.toir.entity.ConditionParameter;
+import com.toir.enums.ConditionParameter;
 import com.toir.entity.ConditionReading;
 
 import java.time.Instant;
