@@ -42,8 +42,6 @@ import com.toir.entity.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
-import com.toir.entity.WorkOrderStatus;
-import com.toir.entity.WorkOrderType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

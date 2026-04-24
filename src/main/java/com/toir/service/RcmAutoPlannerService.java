@@ -12,7 +12,6 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.entity.PprTask;
 import com.toir.repository.PprTaskRepository;
 import com.toir.enums.PprTaskStatus;
-import com.toir.entity.PprTaskStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
