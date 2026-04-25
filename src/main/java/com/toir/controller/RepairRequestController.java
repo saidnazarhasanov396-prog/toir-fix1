@@ -1,4 +1,5 @@
 package com.toir.controller;
+import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.service.RepairRequestService;
 
@@ -33,11 +34,12 @@ public class RepairRequestController {
             @RequestParam(required = false) RequestStatus status,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false)PriorityLevel priority,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String search
     ) {
-        return service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId, page, pageSize, search);
+        return service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId,priority, page, pageSize, search);
     }
 
     @GetMapping("/{id}")

@@ -1,5 +1,6 @@
 package com.toir.repository;
 
+import com.toir.enums.PriorityLevel;
 import org.springframework.stereotype.Repository;
 import com.toir.entity.RepairRequest;
 import com.toir.enums.RequestStatus;
@@ -63,6 +64,7 @@ public interface RepairRequestRepository extends JpaRepository<RepairRequest, UU
             and (cast(:departmentId as uuid) is null or r.department_id = cast(:departmentId as uuid))
             and (cast(:equipmentId as uuid) is null or r.equipment_id = cast(:equipmentId as uuid))
             and (cast(:search as varchar) is null or lower(r.number) like lower(concat('%', cast(:search as varchar), '%'))
+            and (cast(:priority as text) is null or r.priority = cast(:priority as text))
             or lower(r.title) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(r.description) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(r.rejection_reason) like lower(concat('%', cast(:search as varchar), '%'))
@@ -85,5 +87,6 @@ public interface RepairRequestRepository extends JpaRepository<RepairRequest, UU
                                         @Param("departmentId") UUID departmentId,
                                         @Param("equipmentId") UUID equipmentId,
                                         @Param("search") String search,
+                                        @Param("priority") PriorityLevel priority,
                                         Pageable pageable);
 }
