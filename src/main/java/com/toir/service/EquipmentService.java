@@ -15,8 +15,11 @@ import com.toir.exception.RestException;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentRequest;
 import lombok.RequiredArgsConstructor;
+<<<<<<< HEAD
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+=======
+>>>>>>> f315bbd (service @Transactional deleted , added @RequiredArgConstructor)
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

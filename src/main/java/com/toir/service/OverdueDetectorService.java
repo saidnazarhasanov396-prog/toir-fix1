@@ -24,6 +24,10 @@ import com.toir.repository.UserRepository;
 import com.toir.entity.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
+<<<<<<< HEAD
+=======
+import com.toir.entity.WorkOrderStatus;
+>>>>>>> f315bbd (service @Transactional deleted , added @RequiredArgConstructor)
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
