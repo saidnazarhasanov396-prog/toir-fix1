@@ -1,0 +1,11 @@
+ALTER TABLE IF EXISTS users
+    ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT false NOT NULL;
+
+ALTER TABLE IF EXISTS roles
+    ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT false NOT NULL;
+
+ALTER TABLE IF EXISTS file_assets
+    ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT false NOT NULL;
+
+ALTER TABLE IF EXISTS audit_logs
+    ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT false NOT NULL;
