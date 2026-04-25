@@ -10,6 +10,7 @@ import com.toir.dto.user.CreateRoleUserRequest;
 import com.toir.dto.user.UpdateUserRequest;
 import com.toir.dto.user.UserDto;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.Hibernate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,12 +33,15 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public List<UserDto> findAll() {
-        return userRepository.findAll().stream().map(UserDto::from).toList();
+        return userRepository.findAllWithRoles().stream().map(UserDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public UserDto findById(UUID id) {
-        return UserDto.from(getOrThrow(id));
+        User user = getOrThrow(id);
+        Hibernate.initialize(user.getRoles());
+        Hibernate.initialize(user.getPrimaryRole());
+        return UserDto.from(user);
     }
 
     @Transactional(readOnly = true)
@@ -46,6 +50,7 @@ public class UserService {
                 .orElseThrow(() -> RestException.unauthorized("Invalid credentials"));
     }
 
+    @Transactional
     public UserDto create(CreateUserRequest request) {
         if (userRepository.existsByUsername(request.username())) {
             throw RestException.conflict("Username already taken");
@@ -66,6 +71,7 @@ public class UserService {
         return UserDto.from(userRepository.save(user));
     }
 
+    @Transactional
     public UserDto createForRole(CreateRoleUserRequest request) {
         String roleCode = request.roleCode();
         Role role = roleRepository.findByCode(roleCode)
@@ -102,6 +108,7 @@ public class UserService {
         return UserDto.from(userRepository.save(user));
     }
 
+    @Transactional
     public UserDto update(UUID id, UpdateUserRequest request) {
         User user = getOrThrow(id);
         if (!user.getEmail().equals(request.email()) && userRepository.existsByEmail(request.email())) {

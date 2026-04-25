@@ -12,9 +12,9 @@ import com.toir.entity.Role;
 import com.toir.entity.User;
 import com.toir.repository.RoleRepository;
 import com.toir.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
 import com.toir.enums.UserStatus;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.Hibernate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,9 +38,13 @@ public class AuthService {
     private final RequestContext requestContext;
 
 
+    @Transactional
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByUsername(request.username())
                 .orElseThrow(() -> RestException.unauthorized("Invalid credentials"));
+
+        Hibernate.initialize(user.getRoles());
+        Hibernate.initialize(user.getPrimaryRole());
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw RestException.unauthorized("Invalid credentials");
@@ -50,8 +54,9 @@ public class AuthService {
         }
 
         Set<String> permissions = new LinkedHashSet<>();
-        Set<String> authorityCodes = new LinkedHashSet<>(user.getRoles().stream().map(Role::getCode).toList());
-        for (Role role : user.getRoles()) {
+        Set<Role> roles = user.getRoles();
+        Set<String> authorityCodes = new LinkedHashSet<>(roles.stream().map(Role::getCode).toList());
+        for (Role role : roles) {
             if (role.getPermissions() != null) permissions.addAll(role.getPermissions());
         }
         if (user.getPrimaryRole() != null && user.getPrimaryRole().getPermissions() != null) {
@@ -95,6 +100,7 @@ public class AuthService {
         return new LoginResponse(token, jwtService.getExpirationSeconds(), principal);
     }
 
+    @Transactional
     public LoginResponse register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.username())) {
             throw RestException.conflict("Username already taken");
