@@ -1,5 +1,6 @@
 package com.toir.service;
 import com.toir.entity.RepairRequest;
+import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.repository.RepairRequestRepository;
 
@@ -34,13 +35,14 @@ public class RepairRequestService {
 
 
     @Transactional(readOnly = true)
-    public Page<RepairRequestDto> search(RequestStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
+    public Page<RepairRequestDto> search(RequestStatus status, UUID departmentId, UUID equipmentId, PriorityLevel priority, int page, int pageSize, String search) {
         var pageable = PaginationUtils.pageRequest(page, pageSize);
         return repository.searchPaginated(
                 status,
                 departmentId,
                 equipmentId,
                 search,
+                priority,
                 pageable
         ).map(RepairRequestDto::from);
     }
