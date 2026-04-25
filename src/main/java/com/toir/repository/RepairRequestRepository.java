@@ -14,14 +14,16 @@ import java.util.UUID;
 
 @Repository
 public interface RepairRequestRepository extends JpaRepository<RepairRequest, UUID> {
-    boolean existsByNumber(String number);
+    @Query(value = "SELECT COUNT(*) > 0 FROM repair_requests WHERE number = :number AND is_deleted = false", nativeQuery = true)
+    boolean existsByNumber(@Param("number") String number);
 
-    long countByStatus(RequestStatus status);
+    @Query(value = "SELECT COUNT(*) FROM repair_requests WHERE status = cast(:status as varchar) AND is_deleted = false", nativeQuery = true)
+    long countByStatus(@Param("status") RequestStatus status);
 
-    @Query("SELECT r FROM RepairRequest r WHERE (:status IS NULL OR r.status = :status) " +
-            "AND (:departmentId IS NULL OR r.departmentId = :departmentId) " +
-            "AND (:equipmentId IS NULL OR r.equipmentId = :equipmentId) " +
-            "ORDER BY r.detectedAt DESC")
+    @Query(value = "SELECT * FROM repair_requests WHERE (:status IS NULL OR status = cast(:status as varchar)) " +
+            "AND (:departmentId IS NULL OR department_id = :departmentId) " +
+            "AND (:equipmentId IS NULL OR equipment_id = :equipmentId) AND is_deleted = false " +
+            "ORDER BY detected_at DESC", nativeQuery = true)
     List<RepairRequest> search(@Param("status") RequestStatus status,
                                @Param("departmentId") UUID departmentId,
                                @Param("equipmentId") UUID equipmentId);

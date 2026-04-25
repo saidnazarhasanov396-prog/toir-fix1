@@ -1,4 +1,5 @@
 package com.toir.service;
+import com.toir.entity.RepairRequest;
 
 import com.toir.dto.analytics.AnalyticsOverview;
 import com.toir.dto.analytics.AnalyticsOverview.*;
