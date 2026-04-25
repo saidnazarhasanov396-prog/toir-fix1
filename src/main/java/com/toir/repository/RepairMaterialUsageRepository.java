@@ -13,6 +13,16 @@ import java.util.UUID;
 
 @Repository
 public interface RepairMaterialUsageRepository extends JpaRepository<RepairMaterialUsage, UUID> {
+    java.util.Optional<RepairMaterialUsage> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<RepairMaterialUsage> findAllByIsDeletedFalse();
+
+    java.util.List<RepairMaterialUsage> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM repair_material_usages WHERE work_order_id = :workOrderId AND is_deleted = false", nativeQuery = true)
-    List<RepairMaterialUsage> findAllByWorkOrderId(@Param("workOrderId") UUID workOrderId);
+    List<RepairMaterialUsage> findAllByWorkOrderIdAndIsDeletedFalse(@Param("workOrderId") UUID workOrderId);
 }

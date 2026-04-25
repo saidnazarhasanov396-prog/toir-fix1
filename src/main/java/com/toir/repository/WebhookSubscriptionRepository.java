@@ -13,9 +13,19 @@ import java.util.UUID;
 
 @Repository
 public interface WebhookSubscriptionRepository extends JpaRepository<WebhookSubscription, UUID> {
+    java.util.Optional<WebhookSubscription> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<WebhookSubscription> findAllByIsDeletedFalse();
+
+    java.util.List<WebhookSubscription> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM webhook_subscriptions WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query(value = "SELECT * FROM webhook_subscriptions WHERE is_active = true AND is_deleted = false", nativeQuery = true)
-    List<WebhookSubscription> findAllByActiveTrue();
+    List<WebhookSubscription> findAllByActiveTrueAndIsDeletedFalse();
 }

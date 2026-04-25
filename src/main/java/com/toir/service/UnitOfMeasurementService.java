@@ -20,11 +20,11 @@ public class UnitOfMeasurementService {
 
     @Transactional(readOnly = true)
     public List<UnitOfMeasurementDto> findAll() {
-        return repository.findAll().stream().map(UnitOfMeasurementDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(UnitOfMeasurementDto::from).toList();
     }
 
     public UnitOfMeasurementDto create(UnitOfMeasurementDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("UoM code already exists: " + r.code());
         }
         UnitOfMeasurement e = new UnitOfMeasurement();
@@ -38,10 +38,12 @@ public class UnitOfMeasurementService {
         return UnitOfMeasurementDto.from(e);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private UnitOfMeasurement getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("UoM not found: " + id));
     }
 }

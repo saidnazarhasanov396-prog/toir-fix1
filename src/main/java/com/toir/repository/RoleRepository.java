@@ -13,9 +13,19 @@ import java.util.UUID;
 
 @Repository
 public interface RoleRepository extends JpaRepository<Role, UUID> {
-    @Query(value = "SELECT * FROM roles WHERE code = :code LIMIT 1", nativeQuery = true)
-    Optional<Role> findByCode(@Param("code") String code);
+    java.util.Optional<Role> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    @Query(value = "SELECT EXISTS(SELECT 1 FROM roles WHERE code = :code)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    java.util.List<Role> findAllByIsDeletedFalse();
+
+    java.util.List<Role> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
+    @Query(value = "SELECT * FROM roles WHERE code = :code AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<Role> findByCodeAndIsDeletedFalse(@Param("code") String code);
+
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM roles WHERE code = :code AND is_deleted = false)", nativeQuery = true)
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 }

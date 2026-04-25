@@ -58,11 +58,11 @@ public class ReliabilityPassportController {
 
     @GetMapping("/{id}/reliability-passport")
     public ReliabilityPassport passport(@PathVariable UUID id) {
-        Equipment eq = equipmentRepository.findById(id)
+        Equipment eq = equipmentRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
 
-        List<Defect> defects = defectRepository.findAllByEquipmentId(id);
-        List<DowntimeEvent> downtimes = downtimeRepository.findAllByEquipmentIdOrderByStartAtDesc(id);
+        List<Defect> defects = defectRepository.findAllByEquipmentIdAndIsDeletedFalse(id);
+        List<DowntimeEvent> downtimes = downtimeRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(id);
 
         int openDefects = (int) defects.stream().filter(d -> d.getStatus() != DefectStatus.CLOSED).count();
 

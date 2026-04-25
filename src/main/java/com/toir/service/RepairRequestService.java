@@ -44,7 +44,7 @@ public class RepairRequestService {
     }
 
     public RepairRequestDto create(RepairRequestRequest request) {
-        if (repository.existsByNumber(request.number())) {
+        if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Request number already exists: " + request.number());
         }
         RepairRequest entity = new RepairRequest();
@@ -133,7 +133,7 @@ public class RepairRequestService {
     }
 
     private RepairRequest getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Repair request not found: " + id));
     }
 

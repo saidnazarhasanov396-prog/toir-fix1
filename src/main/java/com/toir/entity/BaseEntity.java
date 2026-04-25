@@ -3,13 +3,11 @@ package com.toir.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
-import org.hibernate.annotations.SQLRestriction;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @MappedSuperclass
-@SQLRestriction("is_deleted = false")
 @Getter
 @Setter
 public abstract class BaseEntity {

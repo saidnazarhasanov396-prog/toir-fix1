@@ -14,11 +14,21 @@ import java.util.UUID;
 
 @Repository
 public interface RepairRequestRepository extends JpaRepository<RepairRequest, UUID> {
+    java.util.Optional<RepairRequest> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<RepairRequest> findAllByIsDeletedFalse();
+
+    java.util.List<RepairRequest> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT COUNT(*) > 0 FROM repair_requests WHERE number = :number AND is_deleted = false", nativeQuery = true)
-    boolean existsByNumber(@Param("number") String number);
+    boolean existsByNumberAndIsDeletedFalse(@Param("number") String number);
 
     @Query(value = "SELECT COUNT(*) FROM repair_requests WHERE (cast(:status as varchar) IS NULL OR status = cast(:status as varchar)) AND is_deleted = false", nativeQuery = true)
-    long countByStatus(@Param("status") RequestStatus status);
+    long countByStatusAndIsDeletedFalse(@Param("status") RequestStatus status);
 
     @Query(value = "SELECT * FROM repair_requests WHERE (cast(:status as varchar) IS NULL OR status = cast(:status as varchar)) " +
             "AND (cast(:departmentId as uuid) IS NULL OR department_id = cast(:departmentId as uuid)) " +
@@ -28,7 +38,8 @@ public interface RepairRequestRepository extends JpaRepository<RepairRequest, UU
                                @Param("departmentId") UUID departmentId,
                                @Param("equipmentId") UUID equipmentId);
 
-    @Query("select r from RepairRequest r where (:status is null or r.status = :status) " +
+    @Query("select r from RepairRequest r where r.isDeleted = false " +
+            "and (:status is null or r.status = :status) " +
             "and (:departmentId is null or r.departmentId = :departmentId) " +
             "and (:equipmentId is null or r.equipmentId = :equipmentId) " +
             "and (:search is null or lower(r.number) like lower(concat('%', :search, '%')) " +
@@ -45,7 +56,8 @@ public interface RepairRequestRepository extends JpaRepository<RepairRequest, UU
     @Query(nativeQuery = true, value =
             """ 
             select * from repair_requests r where
-            (cast(:status as varchar) is null or r.status = cast(:status as varchar))
+            r.is_deleted = false
+            and (cast(:status as varchar) is null or r.status = cast(:status as varchar))
             and (cast(:departmentId as uuid) is null or r.department_id = cast(:departmentId as uuid))
             and (cast(:equipmentId as uuid) is null or r.equipment_id = cast(:equipmentId as uuid))
             and (cast(:search as varchar) is null or lower(r.number) like lower(concat('%', cast(:search as varchar), '%'))

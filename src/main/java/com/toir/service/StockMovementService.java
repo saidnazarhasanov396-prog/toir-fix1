@@ -24,12 +24,12 @@ public class StockMovementService {
 
     @Transactional(readOnly = true)
     public List<StockMovementDto> findAll() {
-        return repository.findAll().stream().map(StockMovementDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(StockMovementDto::from).toList();
     }
 
     public StockMovementDto create(StockMovementRequest request) {
         WarehouseStock stock = stockRepository
-                .findByWarehouseIdAndSparePartId(request.warehouseId(), request.sparePartId())
+                .findByWarehouseIdAndSparePartIdAndIsDeletedFalse(request.warehouseId(), request.sparePartId())
                 .orElseGet(() -> {
                     WarehouseStock s = new WarehouseStock();
                     s.setWarehouseId(request.warehouseId());

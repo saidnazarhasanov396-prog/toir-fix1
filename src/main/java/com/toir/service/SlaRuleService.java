@@ -20,11 +20,11 @@ public class SlaRuleService {
 
     @Transactional(readOnly = true)
     public List<SlaRuleDto> findAll() {
-        return repository.findAll().stream().map(SlaRuleDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(SlaRuleDto::from).toList();
     }
 
     public SlaRuleDto create(SlaRuleDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("SLA rule code already exists: " + r.code());
         }
         SlaRule rule = new SlaRule();
@@ -38,10 +38,12 @@ public class SlaRuleService {
         return SlaRuleDto.from(rule);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private SlaRule getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("SLA rule not found: " + id));
     }
 

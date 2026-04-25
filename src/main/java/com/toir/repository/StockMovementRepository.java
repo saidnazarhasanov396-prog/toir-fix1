@@ -13,12 +13,22 @@ import java.util.UUID;
 
 @Repository
 public interface StockMovementRepository extends JpaRepository<StockMovement, UUID> {
+    java.util.Optional<StockMovement> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<StockMovement> findAllByIsDeletedFalse();
+
+    java.util.List<StockMovement> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM stock_movements WHERE warehouse_id = :warehouseId AND is_deleted = false ORDER BY occurred_at DESC", nativeQuery = true)
-    List<StockMovement> findAllByWarehouseIdOrderByOccurredAtDesc(@Param("warehouseId") UUID warehouseId);
+    List<StockMovement> findAllByWarehouseIdAndIsDeletedFalseOrderByOccurredAtDesc(@Param("warehouseId") UUID warehouseId);
 
     @Query(value = "SELECT * FROM stock_movements WHERE spare_part_id = :sparePartId AND is_deleted = false ORDER BY occurred_at DESC", nativeQuery = true)
-    List<StockMovement> findAllBySparePartIdOrderByOccurredAtDesc(@Param("sparePartId") UUID sparePartId);
+    List<StockMovement> findAllBySparePartIdAndIsDeletedFalseOrderByOccurredAtDesc(@Param("sparePartId") UUID sparePartId);
 
     @Query(value = "SELECT * FROM stock_movements WHERE work_order_id = :workOrderId AND is_deleted = false ORDER BY occurred_at DESC", nativeQuery = true)
-    List<StockMovement> findAllByWorkOrderIdOrderByOccurredAtDesc(@Param("workOrderId") UUID workOrderId);
+    List<StockMovement> findAllByWorkOrderIdAndIsDeletedFalseOrderByOccurredAtDesc(@Param("workOrderId") UUID workOrderId);
 }

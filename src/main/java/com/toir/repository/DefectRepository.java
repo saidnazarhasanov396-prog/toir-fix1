@@ -14,10 +14,21 @@ import java.util.UUID;
 
 @Repository
 public interface DefectRepository extends JpaRepository<Defect, UUID> {
+    java.util.Optional<Defect> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<Defect> findAllByIsDeletedFalse();
+
+    java.util.List<Defect> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
 
     @Query(nativeQuery = true, value = """
             select * from defects d where
-            (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
+            d.is_deleted = false
+            and (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
             and (cast(:search as varchar) is null or lower(d.code) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.title) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.description) like lower(concat('%', cast(:search as varchar), '%'))
@@ -32,13 +43,12 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
                                  @Param("offset") int offset,
                                  @Param("limit") int limit);
     @Query(value = "SELECT COUNT(*) > 0 FROM defects WHERE code = :code AND is_deleted = false", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query(value = "SELECT * FROM defects WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
-    List<Defect> findAllByEquipmentId(@Param("equipmentId") UUID equipmentId);
+    List<Defect> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
     @Query(value = "SELECT COUNT(*) FROM defects WHERE status = cast(:status as varchar) AND is_deleted = false", nativeQuery = true)
-    long countByStatus(@Param("status") DefectStatus status);
+    long countByStatusAndIsDeletedFalse(@Param("status") DefectStatus status);
 }
-
 

@@ -51,12 +51,12 @@ public class FileAssetController {
         if (entityType != null && entityId != null) {
             return service.findByEntity(entityType, entityId);
         }
-        return repository.findAll().stream().map(FileAssetDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(FileAssetDto::from).toList();
     }
 
     @GetMapping("/documents")
     public List<TechnicalDocumentDto> legacyDocuments() {
-        return technicalDocumentRepository.findAll().stream().map(TechnicalDocumentDto::from).toList();
+        return technicalDocumentRepository.findAllByIsDeletedFalse().stream().map(TechnicalDocumentDto::from).toList();
     }
 
     @PostMapping("/upload")
@@ -86,7 +86,7 @@ public class FileAssetController {
 
     @GetMapping("/assets/{id}/download")
     public ResponseEntity<Resource> download(@PathVariable UUID id) {
-        FileAsset asset = repository.findById(id)
+        FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new RuntimeException("File not found"));
         try {
             Resource resource = new UrlResource(Path.of(asset.getStoragePath()).toUri());

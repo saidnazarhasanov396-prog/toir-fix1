@@ -33,6 +33,6 @@ public class AuditLogService {
 
     @Transactional(readOnly = true)
     public Page<AuditLog> find(int page, int size) {
-        return repository.findAllByOrderByCreatedAtDesc(PageRequest.of(page, size));
+        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(PageRequest.of(page, size));
     }
 }

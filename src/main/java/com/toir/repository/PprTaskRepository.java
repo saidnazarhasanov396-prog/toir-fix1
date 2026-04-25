@@ -12,7 +12,17 @@ import java.util.UUID;
 
 @Repository
 public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
-    List<PprTask> findAllByPlanId(UUID planId);
+    java.util.Optional<PprTask> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    long countByStatus(PprTaskStatus status);
+    java.util.List<PprTask> findAllByIsDeletedFalse();
+
+    java.util.List<PprTask> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
+    List<PprTask> findAllByPlanIdAndIsDeletedFalse(UUID planId);
+
+    long countByStatusAndIsDeletedFalse(PprTaskStatus status);
 }

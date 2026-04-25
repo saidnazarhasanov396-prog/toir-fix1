@@ -38,10 +38,10 @@ public class DefectDictionariesController {
     @GetMapping
     public Map<String, Object> dictionaries() {
         return Map.of(
-                "categories", categoryRepository.findAll().stream().map(DefectCategoryDto::from).toList(),
-                "severities", severityRepository.findAll().stream().map(DefectSeverityDto::from).toList(),
-                "failureReasons", failureReasonRepository.findAll().stream().map(FailureReasonDto::from).toList(),
-                "rootCauses", rootCauseRepository.findAll().stream().map(RootCauseDto::from).toList()
+                "categories", categoryRepository.findAllByIsDeletedFalse().stream().map(DefectCategoryDto::from).toList(),
+                "severities", severityRepository.findAllByIsDeletedFalse().stream().map(DefectSeverityDto::from).toList(),
+                "failureReasons", failureReasonRepository.findAllByIsDeletedFalse().stream().map(FailureReasonDto::from).toList(),
+                "rootCauses", rootCauseRepository.findAllByIsDeletedFalse().stream().map(RootCauseDto::from).toList()
         );
     }
 }

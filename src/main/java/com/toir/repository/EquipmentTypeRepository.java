@@ -12,6 +12,16 @@ import java.util.UUID;
 
 @Repository
 public interface EquipmentTypeRepository extends JpaRepository<EquipmentType, UUID> {
+    java.util.Optional<EquipmentType> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<EquipmentType> findAllByIsDeletedFalse();
+
+    java.util.List<EquipmentType> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM equipment_types WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 }

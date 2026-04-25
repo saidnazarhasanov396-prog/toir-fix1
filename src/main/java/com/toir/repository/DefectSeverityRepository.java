@@ -12,6 +12,16 @@ import java.util.UUID;
 
 @Repository
 public interface DefectSeverityRepository extends JpaRepository<DefectSeverity, UUID> {
+    java.util.Optional<DefectSeverity> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<DefectSeverity> findAllByIsDeletedFalse();
+
+    java.util.List<DefectSeverity> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_severities WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 }

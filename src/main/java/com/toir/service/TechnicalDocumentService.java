@@ -19,7 +19,7 @@ public class TechnicalDocumentService {
 
     @Transactional(readOnly = true)
     public List<TechnicalDocumentDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentId(equipmentId).stream().map(TechnicalDocumentDto::from).toList();
+        return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(TechnicalDocumentDto::from).toList();
     }
 
     public TechnicalDocumentDto create(UUID equipmentId, TechnicalDocumentDto r) {
@@ -35,8 +35,9 @@ public class TechnicalDocumentService {
     }
 
     public void delete(UUID id) {
-        TechnicalDocument d = repository.findById(id)
+        TechnicalDocument d = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Document not found: " + id));
-        repository.delete(d);
+        d.setDeleted(true);
+        repository.save(d);
     }
 }

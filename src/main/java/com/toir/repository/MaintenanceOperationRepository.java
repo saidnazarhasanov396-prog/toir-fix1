@@ -10,4 +10,14 @@ import java.util.UUID;
 
 @Repository
 public interface MaintenanceOperationRepository extends JpaRepository<MaintenanceOperation, UUID> {
+    java.util.Optional<MaintenanceOperation> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<MaintenanceOperation> findAllByIsDeletedFalse();
+
+    java.util.List<MaintenanceOperation> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
 }

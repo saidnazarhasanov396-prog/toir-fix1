@@ -85,49 +85,49 @@ public class DashboardService {
     public DashboardOverview overview() {
         Instant monthAgo = Instant.now().minus(30, ChronoUnit.DAYS);
 
-        long openRequests = repairRequestRepository.countByStatus(RequestStatus.OPEN)
-                + repairRequestRepository.countByStatus(RequestStatus.IN_PROGRESS);
+        long openRequests = repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN)
+                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS);
         long emergencyRequests = repairRequestRepository.search(null, null, null).stream()
                 .filter(r -> r.getStatus() != RequestStatus.CLOSED && r.getStatus() != RequestStatus.CANCELLED)
                 .filter(r -> "EMERGENCY".equals(r.getPriority().name()))
                 .count();
-        long overduePpr = pprTaskRepository.countByStatus(PprTaskStatus.OVERDUE);
+        long overduePpr = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE);
 
-        List<WorkOrder> allWorkOrders = workOrderRepository.findAll();
+        List<WorkOrder> allWorkOrders = workOrderRepository.findAllByIsDeletedFalse();
         long repairsThisMonth = allWorkOrders.stream()
                 .filter(w -> w.getStatus() == WorkOrderStatus.CLOSED)
                 .filter(w -> w.getCompletedAt() != null && w.getCompletedAt().isAfter(monthAgo))
                 .count();
 
-        long activeReservations = reservationRepository.findAllByStatus(ReservationStatus.ACTIVE).size();
+        long activeReservations = reservationRepository.findAllByStatusAndIsDeletedFalse(ReservationStatus.ACTIVE).size();
 
-        List<WarehouseStock> allStocks = warehouseStockRepository.findAll();
+        List<WarehouseStock> allStocks = warehouseStockRepository.findAllByIsDeletedFalse();
         List<WarehouseStock> lowStocks = allStocks.stream()
                 .filter(s -> s.getQuantity() < s.getMinQty())
                 .toList();
 
-        long materialIssuedThisMonth = stockMovementRepository.findAll().stream()
+        long materialIssuedThisMonth = stockMovementRepository.findAllByIsDeletedFalse().stream()
                 .filter(m -> m.getType() == StockMovementType.ISSUE)
                 .filter(m -> m.getOccurredAt().isAfter(monthAgo))
                 .mapToLong(m -> (long) m.getQuantity())
                 .sum();
 
-        long pendingActualCosts = actualCostRepository.findAllByStatus(ActualCostStatus.PENDING).size();
-        long contractorAwaitingReflection = contractorWorkRepository.findAll().stream()
+        long pendingActualCosts = actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING).size();
+        long contractorAwaitingReflection = contractorWorkRepository.findAllByIsDeletedFalse().stream()
                 .filter(w -> w.getStatus() == ContractorWorkStatus.COMPLETED || w.getStatus() == ContractorWorkStatus.ACCEPTED)
                 .filter(w -> w.getCost() != null && w.getCost() > 0)
-                .filter(w -> actualCostRepository.findAll().stream()
+                .filter(w -> actualCostRepository.findAllByIsDeletedFalse().stream()
                         .noneMatch(ac -> w.getId().equals(ac.getContractorWorkId())))
                 .count();
 
-        long conditionAlarms = conditionReadingRepository.findAllBySeverityOrderByRecordedAtDesc("ALARM").size()
-                + conditionReadingRepository.findAllBySeverityOrderByRecordedAtDesc("WARN").size();
+        long conditionAlarms = conditionReadingRepository.findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("ALARM").size()
+                + conditionReadingRepository.findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("WARN").size();
         LocalDate today = LocalDate.now();
         LocalDate in30 = today.plusDays(30);
-        long expiringCertifications = userCertificationRepository.findAllByExpiresAtBefore(in30).stream()
+        long expiringCertifications = userCertificationRepository.findAllByExpiresAtBeforeAndIsDeletedFalse(in30).stream()
                 .filter(c -> "ACTIVE".equals(c.getStatus()) || "EXPIRED".equals(c.getStatus()))
                 .count();
-        long dueCalibrations = calibrationRecordRepository.findAllByNextDueAtBefore(in30).size();
+        long dueCalibrations = calibrationRecordRepository.findAllByNextDueAtBeforeAndIsDeletedFalse(in30).size();
 
         Counters counters = new Counters(
                 openRequests,
@@ -146,15 +146,15 @@ public class DashboardService {
                 dueCalibrations
         );
 
-        long plannedTasks = pprTaskRepository.countByStatus(PprTaskStatus.PLANNED)
-                + pprTaskRepository.countByStatus(PprTaskStatus.APPROVED)
-                + pprTaskRepository.countByStatus(PprTaskStatus.IN_PROGRESS)
-                + pprTaskRepository.countByStatus(PprTaskStatus.COMPLETED);
-        long completedTasks = pprTaskRepository.countByStatus(PprTaskStatus.COMPLETED);
-        long completedRepairs = workOrderRepository.countByStatus(WorkOrderStatus.CLOSED);
+        long plannedTasks = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED)
+                + pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.APPROVED)
+                + pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.IN_PROGRESS)
+                + pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED);
+        long completedTasks = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED);
+        long completedRepairs = workOrderRepository.countByStatusAndIsDeletedFalse(WorkOrderStatus.CLOSED);
         PlanFact planFact = new PlanFact(plannedTasks, completedTasks, completedRepairs);
 
-        List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAll();
+        List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalse();
         double mtbfAvg = allMetrics.stream().map(ReliabilityMetric::getMtbfHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
         double mttrAvg = allMetrics.stream().map(ReliabilityMetric::getMttrHours)
@@ -164,41 +164,41 @@ public class DashboardService {
                 .filter(w -> w.getType() == WorkOrderType.EMERGENCY || w.getType() == WorkOrderType.DEFECT)
                 .count();
         double unplannedShare = totalWO > 0 ? (double) unplannedWO / totalWO * 100 : 0;
-        double downtimeTotalHours = downtimeEventRepository.findAll().stream()
+        double downtimeTotalHours = downtimeEventRepository.findAllByIsDeletedFalse().stream()
                 .map(DowntimeEvent::getDurationMinutes)
                 .filter(Objects::nonNull)
                 .mapToInt(Integer::intValue).sum() / 60.0;
 
         // Reaction/resolution times from closed repair requests
-        List<com.toir.entity.RepairRequest> closedRequests = repairRequestRepository.findAll().stream()
+        List<com.toir.entity.RepairRequest> closedRequests = repairRequestRepository.findAllByIsDeletedFalse().stream()
                 .filter(r -> r.getStatus() == RequestStatus.CLOSED && r.getActualCompletionAt() != null)
                 .toList();
         double avgResolutionHours = closedRequests.stream()
                 .mapToLong(r -> java.time.Duration.between(r.getDetectedAt(), r.getActualCompletionAt()).toMinutes())
                 .average().orElse(0) / 60.0;
-        double avgReactionHours = repairRequestRepository.findAll().stream()
+        double avgReactionHours = repairRequestRepository.findAllByIsDeletedFalse().stream()
                 .filter(r -> r.getStatus() != RequestStatus.OPEN && r.getStatus() != RequestStatus.DRAFT)
                 .mapToLong(r -> java.time.Duration.between(r.getCreatedAt(), r.getUpdatedAt()).toMinutes())
                 .average().orElse(0) / 60.0;
-        long pprTotal = pprTaskRepository.count();
-        long pprDone = pprTaskRepository.countByStatus(PprTaskStatus.COMPLETED);
-        long pprOver = pprTaskRepository.countByStatus(PprTaskStatus.OVERDUE);
+        long pprTotal = pprTaskRepository.countByIsDeletedFalse();
+        long pprDone = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED);
+        long pprOver = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE);
         double pprCompletionRate = pprTotal > 0 ? (double) pprDone / pprTotal * 100 : 0;
         double overdueWorkShare = pprTotal > 0 ? (double) pprOver / pprTotal * 100 : 0;
 
         Kpis kpis = new Kpis(mtbfAvg, mttrAvg, unplannedShare, downtimeTotalHours,
                 avgReactionHours, avgResolutionHours, pprCompletionRate, overdueWorkShare);
 
-        Map<UUID, Equipment> equipById = equipmentRepository.findAll().stream()
+        Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalse().stream()
                 .collect(Collectors.toMap(Equipment::getId, e -> e));
-        Map<UUID, Department> deptById = departmentRepository.findAll().stream()
+        Map<UUID, Department> deptById = departmentRepository.findAllByIsDeletedFalse().stream()
                 .collect(Collectors.toMap(Department::getId, d -> d));
-        Map<UUID, Warehouse> whById = warehouseRepository.findAll().stream()
+        Map<UUID, Warehouse> whById = warehouseRepository.findAllByIsDeletedFalse().stream()
                 .collect(Collectors.toMap(Warehouse::getId, w -> w));
-        Map<UUID, SparePart> partById = sparePartRepository.findAll().stream()
+        Map<UUID, SparePart> partById = sparePartRepository.findAllByIsDeletedFalse().stream()
                 .collect(Collectors.toMap(SparePart::getId, p -> p));
 
-        List<Defect> openDefectList = defectRepository.findAll().stream()
+        List<Defect> openDefectList = defectRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> d.getStatus() == DefectStatus.OPEN
                         || d.getStatus() == DefectStatus.IN_PROGRESS
                         || d.getStatus() == DefectStatus.IN_ANALYSIS)
@@ -220,7 +220,7 @@ public class DashboardService {
                 .filter(Objects::nonNull)
                 .toList();
 
-        List<DowntimeByEquipment> downtimeByEq = downtimeEventRepository.findAll().stream()
+        List<DowntimeByEquipment> downtimeByEq = downtimeEventRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> d.getDurationMinutes() != null)
                 .collect(Collectors.groupingBy(
                         DowntimeEvent::getEquipmentId,
@@ -237,7 +237,7 @@ public class DashboardService {
                 })
                 .toList();
 
-        List<LatestDowntime> latestDowntimes = downtimeEventRepository.findAll().stream()
+        List<LatestDowntime> latestDowntimes = downtimeEventRepository.findAllByIsDeletedFalse().stream()
                 .sorted(Comparator.comparing(DowntimeEvent::getStartAt).reversed())
                 .limit(5)
                 .map(d -> {
@@ -252,7 +252,7 @@ public class DashboardService {
                 })
                 .toList();
 
-        List<LatestStockMovement> latestMovements = stockMovementRepository.findAll().stream()
+        List<LatestStockMovement> latestMovements = stockMovementRepository.findAllByIsDeletedFalse().stream()
                 .sorted(Comparator.comparing(StockMovement::getOccurredAt).reversed())
                 .limit(5)
                 .map(m -> {
@@ -269,10 +269,10 @@ public class DashboardService {
                 })
                 .toList();
 
-        Map<UUID, Contractor> contractorById = contractorRepository.findAll().stream()
+        Map<UUID, Contractor> contractorById = contractorRepository.findAllByIsDeletedFalse().stream()
                 .collect(Collectors.toMap(Contractor::getId, c -> c));
 
-        List<ContractorLoad> contractorLoad = contractorWorkRepository.findAll().stream()
+        List<ContractorLoad> contractorLoad = contractorWorkRepository.findAllByIsDeletedFalse().stream()
                 .filter(w -> w.getStatus() == ContractorWorkStatus.IN_PROGRESS
                         || w.getStatus() == ContractorWorkStatus.DRAFT)
                 .collect(Collectors.groupingBy(ContractorWork::getContractorId, Collectors.counting()))
@@ -301,7 +301,7 @@ public class DashboardService {
                 })
                 .toList();
 
-        List<RepeatedDefectsEquipment> repeatedDefects = defectRepository.findAll().stream()
+        List<RepeatedDefectsEquipment> repeatedDefects = defectRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> d.getRecurrenceCount() > 0)
                 .collect(Collectors.groupingBy(Defect::getEquipmentId, Collectors.counting()))
                 .entrySet().stream()

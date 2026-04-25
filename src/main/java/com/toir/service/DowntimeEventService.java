@@ -22,7 +22,7 @@ public class DowntimeEventService {
 
     @Transactional(readOnly = true)
     public List<DowntimeEventDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentIdOrderByStartAtDesc(equipmentId).stream()
+        return repository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId).stream()
                 .map(DowntimeEventDto::from).toList();
     }
 
@@ -38,7 +38,7 @@ public class DowntimeEventService {
     }
 
     public DowntimeEventDto close(UUID id, Instant endAt) {
-        DowntimeEvent e = repository.findById(id)
+        DowntimeEvent e = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Downtime event not found: " + id));
         Instant finalEnd = endAt != null ? endAt : Instant.now();
         if (finalEnd.isBefore(e.getStartAt())) {

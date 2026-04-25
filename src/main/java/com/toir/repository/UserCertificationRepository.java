@@ -14,12 +14,22 @@ import java.util.UUID;
 
 @Repository
 public interface UserCertificationRepository extends JpaRepository<UserCertification, UUID> {
+    java.util.Optional<UserCertification> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<UserCertification> findAllByIsDeletedFalse();
+
+    java.util.List<UserCertification> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM user_certifications WHERE user_id = :userId AND is_deleted = false", nativeQuery = true)
-    List<UserCertification> findAllByUserId(@Param("userId") UUID userId);
+    List<UserCertification> findAllByUserIdAndIsDeletedFalse(@Param("userId") UUID userId);
 
     @Query(value = "SELECT * FROM user_certifications WHERE status = :status AND is_deleted = false", nativeQuery = true)
-    List<UserCertification> findAllByStatus(@Param("status") String status);
+    List<UserCertification> findAllByStatusAndIsDeletedFalse(@Param("status") String status);
 
     @Query(value = "SELECT * FROM user_certifications WHERE expires_at < :date AND is_deleted = false", nativeQuery = true)
-    List<UserCertification> findAllByExpiresAtBefore(@Param("date") LocalDate date);
+    List<UserCertification> findAllByExpiresAtBeforeAndIsDeletedFalse(@Param("date") LocalDate date);
 }

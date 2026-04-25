@@ -20,11 +20,11 @@ public class EquipmentNodeService {
 
     @Transactional(readOnly = true)
     public List<EquipmentNodeDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentId(equipmentId).stream().map(EquipmentNodeDto::from).toList();
+        return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(EquipmentNodeDto::from).toList();
     }
 
     public EquipmentNodeDto create(UUID equipmentId, EquipmentNodeDto r) {
-        if (repository.existsByEquipmentIdAndCode(equipmentId, r.code())) {
+        if (repository.existsByEquipmentIdAndCodeAndIsDeletedFalse(equipmentId, r.code())) {
             throw RestException.conflict("Node code already exists in this equipment: " + r.code());
         }
         EquipmentNode e = new EquipmentNode();
@@ -49,14 +49,16 @@ public class EquipmentNodeService {
     }
 
     public void delete(UUID id) {
-        if (!repository.findAllByParentId(id).isEmpty()) {
+        if (!repository.findAllByParentIdAndIsDeletedFalse(id).isEmpty()) {
             throw RestException.conflict("Node has children");
         }
-        repository.delete(getOrThrow(id));
+        var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     private EquipmentNode getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment node not found: " + id));
     }
 }

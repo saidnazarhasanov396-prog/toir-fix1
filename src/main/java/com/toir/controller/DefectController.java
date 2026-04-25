@@ -73,10 +73,10 @@ public class DefectController {
     @PostMapping("/{id}/create-lesson")
     @Transactional
     public ResponseEntity<KnowledgeArticle> createLesson(@PathVariable UUID id) {
-        Defect d = defectRepository.findById(id)
+        Defect d = defectRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Defect not found: " + id));
         String code = "LL-DEF-" + d.getCode();
-        if (knowledgeRepository.existsByCode(code)) {
+        if (knowledgeRepository.existsByCodeAndIsDeletedFalse(code)) {
             throw RestException.conflict("Lesson already exists for defect: " + code);
         }
         KnowledgeArticle a = new KnowledgeArticle();

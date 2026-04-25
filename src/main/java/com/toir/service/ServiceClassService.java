@@ -20,7 +20,7 @@ public class ServiceClassService {
 
     @Transactional(readOnly = true)
     public List<ServiceClassDto> findAll() {
-        return repository.findAll().stream().map(ServiceClassDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(ServiceClassDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -29,7 +29,7 @@ public class ServiceClassService {
     }
 
     public ServiceClassDto create(ServiceClassDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Service class code already exists: " + r.code());
         }
         ServiceClass e = new ServiceClass();
@@ -43,10 +43,12 @@ public class ServiceClassService {
         return ServiceClassDto.from(e);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private ServiceClass getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Service class not found: " + id));
     }
 }

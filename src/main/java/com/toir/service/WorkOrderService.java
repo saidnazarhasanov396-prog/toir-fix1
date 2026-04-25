@@ -52,7 +52,7 @@ public class WorkOrderService {
         if (request.equipmentId() == null) {
             throw RestException.badRequest("Equipment is required to create a work order");
         }
-        if (repository.existsByNumber(request.number())) {
+        if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Work order number already exists: " + request.number());
         }
         WorkOrder entity = new WorkOrder();
@@ -125,7 +125,7 @@ public class WorkOrderService {
     }
 
     private WorkOrder getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + id));
     }
 

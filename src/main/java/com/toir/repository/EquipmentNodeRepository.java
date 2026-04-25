@@ -13,12 +13,22 @@ import java.util.UUID;
 
 @Repository
 public interface EquipmentNodeRepository extends JpaRepository<EquipmentNode, UUID> {
+    java.util.Optional<EquipmentNode> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<EquipmentNode> findAllByIsDeletedFalse();
+
+    java.util.List<EquipmentNode> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM equipment_nodes WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
-    List<EquipmentNode> findAllByEquipmentId(@Param("equipmentId") UUID equipmentId);
+    List<EquipmentNode> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
     @Query(value = "SELECT * FROM equipment_nodes WHERE parent_id = :parentId AND is_deleted = false", nativeQuery = true)
-    List<EquipmentNode> findAllByParentId(@Param("parentId") UUID parentId);
+    List<EquipmentNode> findAllByParentIdAndIsDeletedFalse(@Param("parentId") UUID parentId);
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM equipment_nodes WHERE equipment_id = :equipmentId AND code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByEquipmentIdAndCode(@Param("equipmentId") UUID equipmentId, @Param("code") String code);
+    boolean existsByEquipmentIdAndCodeAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId, @Param("code") String code);
 }

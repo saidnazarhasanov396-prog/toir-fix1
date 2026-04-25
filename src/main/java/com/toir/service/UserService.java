@@ -33,7 +33,7 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public List<UserDto> findAll() {
-        return userRepository.findAllWithRoles().stream().map(UserDto::from).toList();
+        return userRepository.findAllWithRolesAndIsDeletedFalse().stream().map(UserDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -46,16 +46,16 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public User findByUsernameForAuth(String username) {
-        return userRepository.findByUsername(username)
+        return userRepository.findByUsernameAndIsDeletedFalse(username)
                 .orElseThrow(() -> RestException.unauthorized("Invalid credentials"));
     }
 
     @Transactional
     public UserDto create(CreateUserRequest request) {
-        if (userRepository.existsByUsername(request.username())) {
+        if (userRepository.existsByUsernameAndIsDeletedFalse(request.username())) {
             throw RestException.conflict("Username already taken");
         }
-        if (userRepository.existsByEmail(request.email())) {
+        if (userRepository.existsByEmailAndIsDeletedFalse(request.email())) {
             throw RestException.conflict("Email already taken");
         }
         User user = new User();
@@ -74,18 +74,18 @@ public class UserService {
     @Transactional
     public UserDto createForRole(CreateRoleUserRequest request) {
         String roleCode = request.roleCode();
-        Role role = roleRepository.findByCode(roleCode)
+        Role role = roleRepository.findByCodeAndIsDeletedFalse(roleCode)
                 .orElseThrow(() -> RestException.badRequest("Role not found: " + roleCode));
 
         String username = roleCode;
-        if (userRepository.existsByUsername(username)) {
+        if (userRepository.existsByUsernameAndIsDeletedFalse(username)) {
             throw RestException.conflict("Username already taken: " + username);
         }
 
         String email = (request.email() != null && !request.email().isBlank())
                 ? request.email()
                 : roleCode.toLowerCase(Locale.ROOT) + "@toir.local";
-        if (userRepository.existsByEmail(email)) {
+        if (userRepository.existsByEmailAndIsDeletedFalse(email)) {
             throw RestException.conflict("Email already taken: " + email);
         }
 
@@ -111,7 +111,7 @@ public class UserService {
     @Transactional
     public UserDto update(UUID id, UpdateUserRequest request) {
         User user = getOrThrow(id);
-        if (!user.getEmail().equals(request.email()) && userRepository.existsByEmail(request.email())) {
+        if (!user.getEmail().equals(request.email()) && userRepository.existsByEmailAndIsDeletedFalse(request.email())) {
             throw RestException.conflict("Email already taken");
         }
         user.setEmail(request.email());
@@ -129,7 +129,8 @@ public class UserService {
 
     public void delete(UUID id) {
         User user = getOrThrow(id);
-        userRepository.delete(user);
+        user.setDeleted(true);
+        userRepository.save(user);
     }
 
     public void touchLastLogin(UUID id) {
@@ -138,19 +139,19 @@ public class UserService {
     }
 
     private User getOrThrow(UUID id) {
-        return userRepository.findById(id)
+        return userRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("User not found: " + id));
     }
 
     private Role resolveRole(UUID roleId) {
         if (roleId == null) return null;
-        return roleRepository.findById(roleId)
+        return roleRepository.findByIdAndIsDeletedFalse(roleId)
                 .orElseThrow(() -> RestException.badRequest("Role not found: " + roleId));
     }
 
     private Set<Role> resolveRoles(List<UUID> roleIds) {
         if (roleIds == null || roleIds.isEmpty()) return new HashSet<>();
-        Set<Role> found = new HashSet<>(roleRepository.findAllById(roleIds));
+        Set<Role> found = new HashSet<>(roleRepository.findAllByIdInAndIsDeletedFalse(roleIds));
         if (found.size() != roleIds.size()) {
             throw RestException.badRequest("One or more roles not found");
         }

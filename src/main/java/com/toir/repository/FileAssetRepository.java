@@ -13,6 +13,16 @@ import java.util.UUID;
 
 @Repository
 public interface FileAssetRepository extends JpaRepository<FileAsset, UUID> {
-    @Query(value = "SELECT * FROM file_assets WHERE entity_type = :entityType AND entity_id = :entityId", nativeQuery = true)
-    List<FileAsset> findAllByEntityTypeAndEntityId(@Param("entityType") String entityType, @Param("entityId") String entityId);
+    java.util.Optional<FileAsset> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<FileAsset> findAllByIsDeletedFalse();
+
+    java.util.List<FileAsset> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
+    @Query(value = "SELECT * FROM file_assets WHERE entity_type = :entityType AND entity_id = :entityId AND is_deleted = false", nativeQuery = true)
+    List<FileAsset> findAllByEntityTypeAndEntityIdAndIsDeletedFalse(@Param("entityType") String entityType, @Param("entityId") String entityId);
 }

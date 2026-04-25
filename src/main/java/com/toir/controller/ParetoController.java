@@ -59,7 +59,7 @@ public class ParetoController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
-        List<DowntimeEvent> events = downtimeRepository.findAll().stream()
+        List<DowntimeEvent> events = downtimeRepository.findAllByIsDeletedFalse().stream()
                 .filter(e -> !e.getStartAt().isBefore(start) && !e.getStartAt().isAfter(end))
                 .toList();
         Map<String, Double> byType = new HashMap<>();
@@ -80,7 +80,7 @@ public class ParetoController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
-        List<Defect> defects = defectRepository.findAll().stream()
+        List<Defect> defects = defectRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> !d.getDetectedAt().isBefore(start) && !d.getDetectedAt().isAfter(end))
                 .toList();
         Map<String, Double> byCause = new HashMap<>();
@@ -102,13 +102,13 @@ public class ParetoController {
         Instant end = to != null ? to : Instant.now();
 
         Map<UUID, int[]> failuresByEq = new HashMap<>();
-        for (Defect d : defectRepository.findAll()) {
+        for (Defect d : defectRepository.findAllByIsDeletedFalse()) {
             if (d.getDetectedAt().isBefore(start) || d.getDetectedAt().isAfter(end)) continue;
             failuresByEq.computeIfAbsent(d.getEquipmentId(), k -> new int[]{0})[0]++;
         }
 
         Map<UUID, Long> downtimeByEq = new HashMap<>();
-        for (DowntimeEvent ev : downtimeRepository.findAll()) {
+        for (DowntimeEvent ev : downtimeRepository.findAllByIsDeletedFalse()) {
             if (ev.getStartAt().isBefore(start) || ev.getStartAt().isAfter(end)) continue;
             long minutes;
             if (ev.getDurationMinutes() != null) minutes = ev.getDurationMinutes();
@@ -118,7 +118,7 @@ public class ParetoController {
         }
 
         Map<UUID, Integer> openWorkOrdersByEq = new HashMap<>();
-        for (WorkOrder wo : workOrderRepository.findAll()) {
+        for (WorkOrder wo : workOrderRepository.findAllByIsDeletedFalse()) {
             if (wo.getStatus() == WorkOrderStatus.COMPLETED || wo.getStatus() == WorkOrderStatus.CANCELLED) continue;
             if (wo.getEquipmentId() == null) continue;
             openWorkOrdersByEq.merge(wo.getEquipmentId(), 1, Integer::sum);

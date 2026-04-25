@@ -94,7 +94,7 @@ public class ReportsController {
 
     @GetMapping(value = "/calibration-records.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<String> calibrationRecordsCsv() {
-        List<CalibrationRecord> items = calibrationRecordRepository.findAll();
+        List<CalibrationRecord> items = calibrationRecordRepository.findAllByIsDeletedFalse();
         String csv = CsvWriter.build(
                 List.of("id", "equipmentId", "certificateNumber", "performedBy",
                         "performedAt", "nextDueAt", "result", "tolerance",
@@ -118,7 +118,7 @@ public class ReportsController {
 
     @GetMapping(value = "/user-certifications.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<String> userCertificationsCsv() {
-        List<UserCertification> items = userCertificationRepository.findAll();
+        List<UserCertification> items = userCertificationRepository.findAllByIsDeletedFalse();
         String csv = CsvWriter.build(
                 List.of("id", "userId", "typeCode", "certificateNumber", "issuedBy",
                         "issuedAt", "expiresAt", "gradeOrLevel", "status", "notes"),
@@ -140,7 +140,7 @@ public class ReportsController {
 
     @GetMapping(value = "/equipment.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<String> equipmentCsv() {
-        List<Equipment> items = equipmentRepository.findAll();
+        List<Equipment> items = equipmentRepository.findAllByIsDeletedFalse();
         String csv = CsvWriter.build(
                 List.of("id", "code", "name", "inventoryNumber", "serialNumber", "model",
                         "equipmentTypeId", "departmentId", "locationId", "criticalityClassId",
@@ -167,7 +167,7 @@ public class ReportsController {
 
     @GetMapping(value = "/repair-requests.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<String> repairRequestsCsv() {
-        List<RepairRequest> items = repairRequestRepository.findAll();
+        List<RepairRequest> items = repairRequestRepository.findAllByIsDeletedFalse();
         List<Function<RepairRequest, Object>> ex = List.of(
                 RepairRequest::getId,
                 RepairRequest::getNumber,
@@ -196,7 +196,7 @@ public class ReportsController {
 
     @GetMapping(value = "/defects.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<String> defectsCsv() {
-        List<Defect> items = defectRepository.findAll();
+        List<Defect> items = defectRepository.findAllByIsDeletedFalse();
         String csv = CsvWriter.build(
                 List.of("id", "code", "title", "equipmentId", "category", "severity",
                         "failureReason", "rootCause", "status", "recurrenceCount",
@@ -221,7 +221,7 @@ public class ReportsController {
 
     @GetMapping(value = "/work-orders.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<String> workOrdersCsv() {
-        List<WorkOrder> items = workOrderRepository.findAll();
+        List<WorkOrder> items = workOrderRepository.findAllByIsDeletedFalse();
         String csv = CsvWriter.build(
                 List.of("id", "number", "title", "equipmentId", "departmentId",
                         "type", "priority", "status", "createdById", "approvedById",
@@ -253,7 +253,7 @@ public class ReportsController {
 
     @GetMapping(value = "/downtimes.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<String> downtimesCsv() {
-        List<DowntimeEvent> items = downtimeEventRepository.findAll();
+        List<DowntimeEvent> items = downtimeEventRepository.findAllByIsDeletedFalse();
         String csv = CsvWriter.build(
                 List.of("id", "equipmentId", "departmentId", "workOrderId",
                         "startAt", "endAt", "durationMinutes", "type", "description"),
@@ -274,7 +274,7 @@ public class ReportsController {
 
     @GetMapping(value = "/actual-costs.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<String> actualCostsCsv() {
-        List<ActualCost> items = actualCostRepository.findAll();
+        List<ActualCost> items = actualCostRepository.findAllByIsDeletedFalse();
         String csv = CsvWriter.build(
                 List.of("id", "workOrderId", "repairRequestId", "contractorWorkId",
                         "costCategoryId", "budgetLineId", "status", "amount",

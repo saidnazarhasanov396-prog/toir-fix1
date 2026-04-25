@@ -21,11 +21,11 @@ public class DefectCategoryService {
 
     @Transactional(readOnly = true)
     public List<DefectCategoryDto> findAll() {
-        return repository.findAll().stream().map(DefectCategoryDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(DefectCategoryDto::from).toList();
     }
 
     public DefectCategoryDto create(DefectCategoryDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Defect category code already exists: " + r.code());
         }
         DefectCategory e = new DefectCategory();
@@ -39,10 +39,12 @@ public class DefectCategoryService {
         return DefectCategoryDto.from(e);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private DefectCategory getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Defect category not found: " + id));
     }
 }

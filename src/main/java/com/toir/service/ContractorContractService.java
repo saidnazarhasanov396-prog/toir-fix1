@@ -19,11 +19,11 @@ public class ContractorContractService {
 
     @Transactional(readOnly = true)
     public List<ContractorContractDto> findByContractor(UUID contractorId) {
-        return repository.findAllByContractorId(contractorId).stream().map(ContractorContractDto::from).toList();
+        return repository.findAllByContractorIdAndIsDeletedFalse(contractorId).stream().map(ContractorContractDto::from).toList();
     }
 
     public ContractorContractDto create(ContractorContractDto r) {
-        if (repository.existsByNumber(r.number())) {
+        if (repository.existsByNumberAndIsDeletedFalse(r.number())) {
             throw RestException.conflict("Contract number already exists: " + r.number());
         }
         ContractorContract c = new ContractorContract();
@@ -37,10 +37,12 @@ public class ContractorContractService {
         return ContractorContractDto.from(c);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private ContractorContract getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Contract not found: " + id));
     }
 

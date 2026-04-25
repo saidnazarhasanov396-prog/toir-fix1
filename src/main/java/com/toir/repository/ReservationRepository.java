@@ -12,7 +12,17 @@ import java.util.UUID;
 
 @Repository
 public interface ReservationRepository extends JpaRepository<Reservation, UUID> {
-    List<Reservation> findAllByWorkOrderId(UUID workOrderId);
+    java.util.Optional<Reservation> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    List<Reservation> findAllByStatus(ReservationStatus status);
+    java.util.List<Reservation> findAllByIsDeletedFalse();
+
+    java.util.List<Reservation> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
+    List<Reservation> findAllByWorkOrderIdAndIsDeletedFalse(UUID workOrderId);
+
+    List<Reservation> findAllByStatusAndIsDeletedFalse(ReservationStatus status);
 }

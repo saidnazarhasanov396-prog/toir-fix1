@@ -12,6 +12,16 @@ import java.util.UUID;
 
 @Repository
 public interface DefectCategoryRepository extends JpaRepository<DefectCategory, UUID> {
+    java.util.Optional<DefectCategory> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<DefectCategory> findAllByIsDeletedFalse();
+
+    java.util.List<DefectCategory> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_categories WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 }

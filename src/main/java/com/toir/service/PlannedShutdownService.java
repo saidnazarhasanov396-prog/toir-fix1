@@ -21,7 +21,7 @@ public class PlannedShutdownService {
 
     @Transactional(readOnly = true)
     public List<PlannedShutdownDto> findByDepartment(UUID departmentId) {
-        return repository.findAllByDepartmentIdOrderByStartAtDesc(departmentId).stream()
+        return repository.findAllByDepartmentIdAndIsDeletedFalseOrderByStartAtDesc(departmentId).stream()
                 .map(PlannedShutdownDto::from).toList();
     }
 
@@ -39,7 +39,7 @@ public class PlannedShutdownService {
     }
 
     public PlannedShutdownDto approve(UUID id) {
-        PlannedShutdown s = repository.findById(id)
+        PlannedShutdown s = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Planned shutdown not found: " + id));
         s.setStatus(PlanStatus.APPROVED);
         return PlannedShutdownDto.from(s);

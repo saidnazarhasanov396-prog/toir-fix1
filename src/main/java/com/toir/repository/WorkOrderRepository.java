@@ -14,11 +14,22 @@ import java.util.UUID;
 
 @Repository
 public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
-    boolean existsByNumber(String number);
+    java.util.Optional<WorkOrder> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    long countByStatus(WorkOrderStatus status);
+    java.util.List<WorkOrder> findAllByIsDeletedFalse();
 
-    @Query("SELECT w FROM WorkOrder w WHERE (:status IS NULL OR w.status = :status) " +
+    java.util.List<WorkOrder> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
+    boolean existsByNumberAndIsDeletedFalse(String number);
+
+    long countByStatusAndIsDeletedFalse(WorkOrderStatus status);
+
+    @Query("SELECT w FROM WorkOrder w WHERE w.isDeleted = false " +
+            "AND (:status IS NULL OR w.status = :status) " +
             "AND (:departmentId IS NULL OR w.departmentId = :departmentId) " +
             "AND (:equipmentId IS NULL OR w.equipmentId = :equipmentId)")
     List<WorkOrder> search(@Param("status") WorkOrderStatus status,
@@ -27,7 +38,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
 
     @Query(nativeQuery = true, value = """
             select * from work_orders w where
-            (cast(:status as varchar) is null or w.status = cast(:status as varchar)) 
+            w.is_deleted = false
+            and (cast(:status as varchar) is null or w.status = cast(:status as varchar)) 
             and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid)) 
             and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid)) 
             and (cast(:search as varchar) is null or lower(w.number) like lower(concat('%', cast(:search as varchar), '%')) 

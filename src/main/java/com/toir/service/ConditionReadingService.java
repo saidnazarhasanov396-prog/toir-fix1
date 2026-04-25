@@ -34,21 +34,21 @@ public class ConditionReadingService {
     @Transactional(readOnly = true)
     public List<ConditionReadingDto> findForEquipment(UUID equipmentId, ConditionParameter parameter) {
         List<ConditionReading> list = parameter != null
-                ? repo.findAllByEquipmentIdAndParameterOrderByRecordedAtDesc(equipmentId, parameter)
-                : repo.findAllByEquipmentIdOrderByRecordedAtDesc(equipmentId);
+                ? repo.findAllByEquipmentIdAndParameterAndIsDeletedFalseOrderByRecordedAtDesc(equipmentId, parameter)
+                : repo.findAllByEquipmentIdAndIsDeletedFalseOrderByRecordedAtDesc(equipmentId);
         return list.stream().map(ConditionReadingDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ConditionReadingDto> findAlarms() {
-        List<ConditionReading> warn = repo.findAllBySeverityOrderByRecordedAtDesc("WARN");
-        List<ConditionReading> alarm = repo.findAllBySeverityOrderByRecordedAtDesc("ALARM");
+        List<ConditionReading> warn = repo.findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("WARN");
+        List<ConditionReading> alarm = repo.findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("ALARM");
         return java.util.stream.Stream.concat(alarm.stream(), warn.stream())
                 .map(ConditionReadingDto::from).toList();
     }
 
     public ConditionReadingDto record(UUID equipmentId, ConditionReadingRequest r, UUID userId) {
-        Equipment eq = equipmentRepository.findById(equipmentId)
+        Equipment eq = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
         ConditionReading cr = new ConditionReading();
         cr.setEquipmentId(eq.getId());
@@ -89,9 +89,10 @@ public class ConditionReadingService {
     }
 
     public void delete(UUID id) {
-        ConditionReading cr = repo.findById(id)
+        ConditionReading cr = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Condition reading not found: " + id));
-        repo.delete(cr);
+        cr.setDeleted(true);
+        repo.save(cr);
     }
 
     private String computeSeverity(double value, Double warnHigh, Double alarmHigh, Double warnLow, Double alarmLow) {

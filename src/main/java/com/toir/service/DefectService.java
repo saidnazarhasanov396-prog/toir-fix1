@@ -22,7 +22,7 @@ public class DefectService {
 
     @Transactional(readOnly = true)
     public List<DefectDto> findAll() {
-        return repository.findAll().stream().map(DefectDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(DefectDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -38,11 +38,11 @@ public class DefectService {
 
     @Transactional(readOnly = true)
     public List<DefectDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentId(equipmentId).stream().map(DefectDto::from).toList();
+        return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(DefectDto::from).toList();
     }
 
     public DefectDto create(DefectRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Defect code already exists: " + request.code());
         }
         Defect entity = new Defect();
@@ -64,11 +64,13 @@ public class DefectService {
     }
 
     public void delete(UUID id) {
-        repository.delete(getOrThrow(id));
+        var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     private Defect getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Defect not found: " + id));
     }
 

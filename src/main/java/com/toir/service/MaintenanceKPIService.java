@@ -20,7 +20,7 @@ public class MaintenanceKPIService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceKPIDto> findByDepartment(UUID departmentId) {
-        return repository.findAllByDepartmentIdOrderByPeriodStartDesc(departmentId).stream()
+        return repository.findAllByDepartmentIdAndIsDeletedFalseOrderByPeriodStartDesc(departmentId).stream()
                 .map(MaintenanceKPIDto::from).toList();
     }
 
@@ -43,8 +43,9 @@ public class MaintenanceKPIService {
     }
 
     public void delete(UUID id) {
-        MaintenanceKPI k = repository.findById(id)
+        MaintenanceKPI k = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Maintenance KPI not found: " + id));
-        repository.delete(k);
+        k.setDeleted(true);
+        repository.save(k);
     }
 }

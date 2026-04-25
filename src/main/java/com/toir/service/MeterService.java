@@ -28,13 +28,13 @@ public class MeterService {
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listByEquipment(UUID equipmentId) {
-        return meterRepository.findAllByEquipmentId(equipmentId).stream()
+        return meterRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream()
                 .map(EquipmentMeterDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listAll() {
-        return meterRepository.findAll().stream().map(EquipmentMeterDto::from).toList();
+        return meterRepository.findAllByIsDeletedFalse().stream().map(EquipmentMeterDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -66,7 +66,9 @@ public class MeterService {
     }
 
     public void deleteMeter(UUID id) {
-        meterRepository.delete(getMeterOrThrow(id));
+        var entity = getMeterOrThrow(id);
+        entity.setDeleted(true);
+        meterRepository.save(entity);
     }
 
     public MeterReadingDto addReading(MeterReadingRequest request) {
@@ -111,25 +113,26 @@ public class MeterService {
         getMeterOrThrow(meterId);
         int safeLimit = Math.min(Math.max(limit, 1), 1000);
         return readingRepository
-                .findAllByMeterIdOrderByReadAtDesc(meterId, PageRequest.of(0, safeLimit))
+                .findAllByMeterIdAndIsDeletedFalseOrderByReadAtDesc(meterId, PageRequest.of(0, safeLimit))
                 .getContent().stream().map(MeterReadingDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<MeterReadingDto> historyBetween(UUID meterId, Instant from, Instant to) {
         getMeterOrThrow(meterId);
-        return readingRepository.findAllByMeterIdAndReadAtBetweenOrderByReadAtAsc(meterId, from, to)
+        return readingRepository.findAllByMeterIdAndReadAtBetweenAndIsDeletedFalseOrderByReadAtAsc(meterId, from, to)
                 .stream().map(MeterReadingDto::from).toList();
     }
 
     public void deleteReading(UUID readingId) {
-        MeterReading reading = readingRepository.findById(readingId)
+        MeterReading reading = readingRepository.findByIdAndIsDeletedFalse(readingId)
                 .orElseThrow(() -> RestException.notFound("Meter reading not found: " + readingId));
-        readingRepository.delete(reading);
+        reading.setDeleted(true);
+        readingRepository.save(reading);
     }
 
     private EquipmentMeter getMeterOrThrow(UUID id) {
-        return meterRepository.findById(id)
+        return meterRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment meter not found: " + id));
     }
 }

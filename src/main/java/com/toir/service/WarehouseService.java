@@ -24,25 +24,25 @@ public class WarehouseService {
 
     @Transactional(readOnly = true)
     public List<WarehouseDto> findAll() {
-        return repository.findAll().stream()
-                .map(w -> WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseId(w.getId())))
+        return repository.findAllByIsDeletedFalse().stream()
+                .map(w -> WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(w.getId())))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public WarehouseDto findById(UUID id) {
         Warehouse w = getOrThrow(id);
-        return WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseId(id));
+        return WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(id));
     }
 
     @Transactional(readOnly = true)
     public List<WarehouseStockDto> findStocks(UUID warehouseId) {
         getOrThrow(warehouseId);
-        return stockRepository.findAllByWarehouseId(warehouseId).stream().map(WarehouseStockDto::from).toList();
+        return stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId).stream().map(WarehouseStockDto::from).toList();
     }
 
     public WarehouseDto create(WarehouseRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Warehouse code already exists: " + request.code());
         }
         Warehouse entity = new Warehouse();
@@ -57,11 +57,13 @@ public class WarehouseService {
     }
 
     public void delete(UUID id) {
-        repository.delete(getOrThrow(id));
+        var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     Warehouse getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Warehouse not found: " + id));
     }
 

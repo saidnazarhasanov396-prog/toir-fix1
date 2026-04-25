@@ -20,7 +20,7 @@ public class CriticalityClassService {
 
     @Transactional(readOnly = true)
     public List<CriticalityClassDto> findAll() {
-        return repository.findAll().stream().map(CriticalityClassDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(CriticalityClassDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -29,7 +29,7 @@ public class CriticalityClassService {
     }
 
     public CriticalityClassDto create(CriticalityClassDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Criticality class code already exists: " + r.code());
         }
         CriticalityClass e = new CriticalityClass();
@@ -43,10 +43,12 @@ public class CriticalityClassService {
         return CriticalityClassDto.from(e);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private CriticalityClass getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Criticality class not found: " + id));
     }
 

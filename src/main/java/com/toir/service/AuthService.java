@@ -40,7 +40,7 @@ public class AuthService {
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
-        User user = userRepository.findByUsername(request.username())
+        User user = userRepository.findByUsernameAndIsDeletedFalse(request.username())
                 .orElseThrow(() -> RestException.unauthorized("Invalid credentials"));
 
         Hibernate.initialize(user.getRoles());
@@ -102,14 +102,14 @@ public class AuthService {
 
     @Transactional
     public LoginResponse register(RegisterRequest request) {
-        if (userRepository.existsByUsername(request.username())) {
+        if (userRepository.existsByUsernameAndIsDeletedFalse(request.username())) {
             throw RestException.conflict("Username already taken");
         }
-        if (userRepository.existsByEmail(request.email())) {
+        if (userRepository.existsByEmailAndIsDeletedFalse(request.email())) {
             throw RestException.conflict("Email already taken");
         }
 
-        Role role = roleRepository.findByCode(request.roleCode())
+        Role role = roleRepository.findByCodeAndIsDeletedFalse(request.roleCode())
                 .orElseThrow(() -> RestException.badRequest("Role not found: " + request.roleCode()));
 
         User user = new User();

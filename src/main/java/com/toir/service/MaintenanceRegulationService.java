@@ -21,7 +21,7 @@ public class MaintenanceRegulationService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceRegulationDto> findAll() {
-        return repository.findAll().stream().map(MaintenanceRegulationDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(MaintenanceRegulationDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -41,11 +41,11 @@ public class MaintenanceRegulationService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceRegulation> findActiveByEquipmentType(UUID equipmentTypeId) {
-        return repository.findAllByEquipmentTypeIdAndActiveTrue(equipmentTypeId);
+        return repository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(equipmentTypeId);
     }
 
     public MaintenanceRegulationDto create(MaintenanceRegulationRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Regulation code already exists: " + request.code());
         }
         MaintenanceRegulation entity = new MaintenanceRegulation();
@@ -60,11 +60,13 @@ public class MaintenanceRegulationService {
     }
 
     public void delete(UUID id) {
-        repository.delete(getOrThrow(id));
+        var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     private MaintenanceRegulation getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Maintenance regulation not found: " + id));
     }
 

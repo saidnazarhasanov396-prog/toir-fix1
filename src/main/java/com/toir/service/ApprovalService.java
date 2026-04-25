@@ -25,19 +25,19 @@ public class ApprovalService {
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> listByDocument(String documentType, UUID documentId) {
-        return requestRepository.findAllByDocumentTypeAndDocumentId(documentType, documentId).stream()
+        return requestRepository.findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse(documentType, documentId).stream()
                 .map(ApprovalRequestDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> pending() {
-        return requestRepository.findAllByStatusOrderByCreatedAtDesc(ApprovalStatus.PENDING).stream()
+        return requestRepository.findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalStatus.PENDING).stream()
                 .map(ApprovalRequestDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> byRequester(UUID requesterId) {
-        return requestRepository.findAllByRequesterIdOrderByCreatedAtDesc(requesterId).stream()
+        return requestRepository.findAllByRequesterIdAndIsDeletedFalseOrderByCreatedAtDesc(requesterId).stream()
                 .map(ApprovalRequestDto::from).toList();
     }
 
@@ -124,7 +124,7 @@ public class ApprovalService {
     }
 
     private ApprovalRequest getOrThrow(UUID id) {
-        return requestRepository.findById(id)
+        return requestRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Approval request not found: " + id));
     }
 }

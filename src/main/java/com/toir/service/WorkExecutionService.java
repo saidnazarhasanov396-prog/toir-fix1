@@ -24,7 +24,7 @@ public class WorkExecutionService {
 
     @Transactional(readOnly = true)
     public List<WorkExecutionDto> findByWorkOrder(UUID workOrderId) {
-        return repository.findAllByWorkOrderIdOrderByStartedAtAsc(workOrderId).stream()
+        return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByStartedAtAsc(workOrderId).stream()
                 .map(WorkExecutionDto::from).toList();
     }
 
@@ -33,7 +33,7 @@ public class WorkExecutionService {
         int safePage = Math.max(page, 1);
         int safePageSize = clamp(pageSize, 1, 500);
 
-        var result = repository.findAllByOrderByStartedAtDesc(PageRequest.of(safePage - 1, safePageSize));
+        var result = repository.findAllByIsDeletedFalseOrderByStartedAtDesc(PageRequest.of(safePage - 1, safePageSize));
         return new PaginatedResponse<>(
                 result.getContent().stream().map(ExecutionLogDto::from).toList(),
                 new PaginatedResponse.Meta(safePage, safePageSize, (int) result.getTotalElements())
@@ -50,7 +50,7 @@ public class WorkExecutionService {
     }
 
     public WorkExecutionDto end(UUID id, WorkExecutionDto r) {
-        WorkExecution e = repository.findById(id)
+        WorkExecution e = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Execution not found: " + id));
         e.setEndedAt(r.endedAt() != null ? r.endedAt() : Instant.now());
         e.setResult(r.result());

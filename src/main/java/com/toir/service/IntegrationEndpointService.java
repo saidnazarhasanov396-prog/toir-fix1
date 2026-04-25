@@ -22,11 +22,11 @@ public class IntegrationEndpointService {
 
     @Transactional(readOnly = true)
     public List<IntegrationEndpointDto> findAll() {
-        return repository.findAll().stream().map(IntegrationEndpointDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(IntegrationEndpointDto::from).toList();
     }
 
     public IntegrationEndpointDto create(IntegrationEndpointDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Endpoint code already exists: " + r.code());
         }
         IntegrationEndpoint e = new IntegrationEndpoint();
@@ -52,10 +52,12 @@ public class IntegrationEndpointService {
         return IntegrationEndpointDto.from(getOrThrow(id));
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private IntegrationEndpoint getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Integration endpoint not found: " + id));
     }
 

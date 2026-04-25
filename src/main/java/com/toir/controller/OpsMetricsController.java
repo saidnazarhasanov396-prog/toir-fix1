@@ -92,29 +92,29 @@ public class OpsMetricsController {
         m.put("timestamp", Instant.now().toString());
 
         Map<String, Object> counts = new LinkedHashMap<>();
-        counts.put("equipment", equipmentRepository.count());
-        counts.put("defectsOpen", defectRepository.findAll().stream()
+        counts.put("equipment", equipmentRepository.countByIsDeletedFalse());
+        counts.put("defectsOpen", defectRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> d.getStatus() != DefectStatus.CLOSED).count());
-        counts.put("repairRequestsOpen", repairRequestRepository.countByStatus(RequestStatus.OPEN)
-                + repairRequestRepository.countByStatus(RequestStatus.IN_PROGRESS));
-        counts.put("workOrdersOpen", workOrderRepository.findAll().stream()
+        counts.put("repairRequestsOpen", repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN)
+                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS));
+        counts.put("workOrdersOpen", workOrderRepository.findAllByIsDeletedFalse().stream()
                 .filter(w -> w.getStatus() != WorkOrderStatus.CLOSED
                         && w.getStatus() != WorkOrderStatus.CANCELLED).count());
-        counts.put("pprTasksPlanned", pprTaskRepository.countByStatus(PprTaskStatus.PLANNED));
-        counts.put("pprTasksOverdue", pprTaskRepository.countByStatus(PprTaskStatus.OVERDUE));
-        counts.put("procurementDraft", procurementRequestRepository.countByStatus(ProcurementRequestStatus.DRAFT));
-        counts.put("brigades", brigadeRepository.count());
-        counts.put("conditionReadings", conditionReadingRepository.count());
+        counts.put("pprTasksPlanned", pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED));
+        counts.put("pprTasksOverdue", pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE));
+        counts.put("procurementDraft", procurementRequestRepository.countByStatusAndIsDeletedFalse(ProcurementRequestStatus.DRAFT));
+        counts.put("brigades", brigadeRepository.countByIsDeletedFalse());
+        counts.put("conditionReadings", conditionReadingRepository.countByIsDeletedFalse());
         counts.put("conditionAlarms", conditionReadingRepository
-                .findAllBySeverityOrderByRecordedAtDesc("ALARM").size());
-        counts.put("activeCertifications", userCertificationRepository.findAllByStatus("ACTIVE").size());
-        counts.put("expiredCertifications", userCertificationRepository.findAllByStatus("EXPIRED").size());
-        counts.put("calibrationRecords", calibrationRecordRepository.count());
-        counts.put("inspectionRoutes", inspectionRouteRepository.count());
-        counts.put("inspectionRounds", inspectionRoundRepository.count());
-        counts.put("rcmSnapshots", rcmSnapshotRepository.count());
-        counts.put("notifications", notificationRepository.count());
-        counts.put("webhookDeliveries", webhookEventLogRepository.count());
+                .findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("ALARM").size());
+        counts.put("activeCertifications", userCertificationRepository.findAllByStatusAndIsDeletedFalse("ACTIVE").size());
+        counts.put("expiredCertifications", userCertificationRepository.findAllByStatusAndIsDeletedFalse("EXPIRED").size());
+        counts.put("calibrationRecords", calibrationRecordRepository.countByIsDeletedFalse());
+        counts.put("inspectionRoutes", inspectionRouteRepository.countByIsDeletedFalse());
+        counts.put("inspectionRounds", inspectionRoundRepository.countByIsDeletedFalse());
+        counts.put("rcmSnapshots", rcmSnapshotRepository.countByIsDeletedFalse());
+        counts.put("notifications", notificationRepository.countByIsDeletedFalse());
+        counts.put("webhookDeliveries", webhookEventLogRepository.countByIsDeletedFalse());
         m.put("counts", counts);
 
         m.put("status", "UP");

@@ -21,7 +21,7 @@ public class RoleService {
 
     @Transactional(readOnly = true)
     public List<RoleDto> findAll() {
-        return repository.findAll().stream().map(RoleDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(RoleDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -30,7 +30,7 @@ public class RoleService {
     }
 
     public RoleDto create(RoleRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Role with code " + request.code() + " already exists");
         }
         Role role = new Role();
@@ -58,11 +58,12 @@ public class RoleService {
         if (role.isSystem()) {
             throw RestException.forbidden("System roles cannot be deleted");
         }
-        repository.delete(role);
+        role.setDeleted(true);
+        repository.save(role);
     }
 
     private Role getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Role not found: " + id));
     }
 }

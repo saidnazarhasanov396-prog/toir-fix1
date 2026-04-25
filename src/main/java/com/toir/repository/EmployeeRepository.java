@@ -16,20 +16,30 @@ import java.util.UUID;
 
 @Repository
 public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
+    java.util.Optional<Employee> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<Employee> findAllByIsDeletedFalse();
+
+    java.util.List<Employee> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM hr_employees WHERE personnel_number = :personnelNumber AND is_deleted = false LIMIT 1", nativeQuery = true)
-    Optional<Employee> findByPersonnelNumber(@Param("personnelNumber") String personnelNumber);
+    Optional<Employee> findByPersonnelNumberAndIsDeletedFalse(@Param("personnelNumber") String personnelNumber);
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM hr_employees WHERE personnel_number = :personnelNumber AND is_deleted = false)", nativeQuery = true)
-    boolean existsByPersonnelNumber(@Param("personnelNumber") String personnelNumber);
+    boolean existsByPersonnelNumberAndIsDeletedFalse(@Param("personnelNumber") String personnelNumber);
 
     @Query(value = "SELECT * FROM hr_employees WHERE is_active = true AND is_deleted = false", nativeQuery = true)
-    List<Employee> findAllByActiveTrue();
+    List<Employee> findAllByActiveTrueAndIsDeletedFalse();
 
     @Query(value = "SELECT * FROM hr_employees WHERE department_id = :departmentId AND is_deleted = false", nativeQuery = true)
-    List<Employee> findAllByDepartmentId(@Param("departmentId") UUID departmentId);
+    List<Employee> findAllByDepartmentIdAndIsDeletedFalse(@Param("departmentId") UUID departmentId);
 
     @Query(value = "SELECT * FROM hr_employees WHERE brigade_id = :brigadeId AND is_deleted = false", nativeQuery = true)
-    List<Employee> findAllByBrigadeId(@Param("brigadeId") UUID brigadeId);
+    List<Employee> findAllByBrigadeIdAndIsDeletedFalse(@Param("brigadeId") UUID brigadeId);
 
     @Query("select e from Employee e where " +
             "(cast(:activeOnly as string) is null or " +

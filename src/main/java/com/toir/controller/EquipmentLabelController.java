@@ -30,15 +30,15 @@ public class EquipmentLabelController {
 
     @GetMapping("/{id}/label")
     public Map<String, Object> label(@PathVariable UUID id) {
-        Equipment eq = repository.findById(id)
+        Equipment eq = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
         return buildPayload(eq);
     }
 
     @GetMapping("/by-code/{code}")
     public Map<String, Object> resolveByCode(@PathVariable String code) {
-        Equipment eq = repository.findByCode(code)
-                .or(() -> repository.findByInventoryNumber(code))
+        Equipment eq = repository.findByCodeAndIsDeletedFalse(code)
+                .or(() -> repository.findByInventoryNumberAndIsDeletedFalse(code))
                 .orElseThrow(() -> RestException.notFound("Equipment not found by code/inventory: " + code));
         return buildPayload(eq);
     }
@@ -56,7 +56,7 @@ public class EquipmentLabelController {
         }
         try {
             UUID id = UUID.fromString(value);
-            Equipment eq = repository.findById(id)
+            Equipment eq = repository.findByIdAndIsDeletedFalse(id)
                     .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
             return buildPayload(eq);
         } catch (IllegalArgumentException ignored) {
@@ -66,7 +66,7 @@ public class EquipmentLabelController {
 
     @GetMapping(value = "/{id}/label.svg", produces = "image/svg+xml")
     public ResponseEntity<byte[]> labelSvg(@PathVariable UUID id) {
-        Equipment eq = repository.findById(id)
+        Equipment eq = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
         String payload = String.format("toir://equipment/%s?code=%s&inv=%s",
                 eq.getId(), eq.getCode(), eq.getInventoryNumber());

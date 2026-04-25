@@ -14,19 +14,29 @@ import java.util.UUID;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
+    java.util.Optional<User> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole WHERE u.username = :username")
-    Optional<User> findByUsername(@Param("username") String username);
+    java.util.List<User> findAllByIsDeletedFalse();
 
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole")
-    List<User> findAllWithRoles();
+    java.util.List<User> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole WHERE u.email = :email")
-    Optional<User> findByEmail(@Param("email") String email);
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
 
-    @Query(value = "SELECT EXISTS(SELECT 1 FROM users WHERE username = :username)", nativeQuery = true)
-    boolean existsByUsername(@Param("username") String username);
+    long countByIsDeletedFalse();
 
-    @Query(value = "SELECT EXISTS(SELECT 1 FROM users WHERE email = :email)", nativeQuery = true)
-    boolean existsByEmail(@Param("email") String email);
+
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole WHERE u.username = :username AND u.isDeleted = false")
+    Optional<User> findByUsernameAndIsDeletedFalse(@Param("username") String username);
+
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole WHERE u.isDeleted = false")
+    List<User> findAllWithRolesAndIsDeletedFalse();
+
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole WHERE u.email = :email AND u.isDeleted = false")
+    Optional<User> findByEmailAndIsDeletedFalse(@Param("email") String email);
+
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM users WHERE username = :username AND is_deleted = false)", nativeQuery = true)
+    boolean existsByUsernameAndIsDeletedFalse(@Param("username") String username);
+
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM users WHERE email = :email AND is_deleted = false)", nativeQuery = true)
+    boolean existsByEmailAndIsDeletedFalse(@Param("email") String email);
 }

@@ -20,7 +20,7 @@ public class LaborEntryService {
 
     @Transactional(readOnly = true)
     public List<LaborEntryDto> findByWorkOrder(UUID workOrderId) {
-        return repository.findAllByWorkOrderIdOrderByWorkDateAsc(workOrderId).stream()
+        return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrderId).stream()
                 .map(LaborEntryDto::from).toList();
     }
 
@@ -32,14 +32,16 @@ public class LaborEntryService {
     }
 
     public LaborEntryDto update(UUID id, LaborEntryDto r) {
-        LaborEntry e = repository.findById(id)
+        LaborEntry e = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Labor entry not found: " + id));
         apply(e, r);
         return LaborEntryDto.from(e);
     }
 
     public void delete(UUID id) {
-        repository.deleteById(id);
+        var entity = repository.findByIdAndIsDeletedFalse(id).orElseThrow();
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     private void apply(LaborEntry e, LaborEntryDto r) {

@@ -12,6 +12,16 @@ import java.util.UUID;
 
 @Repository
 public interface RootCauseRepository extends JpaRepository<RootCause, UUID> {
+    java.util.Optional<RootCause> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<RootCause> findAllByIsDeletedFalse();
+
+    java.util.List<RootCause> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM root_causes WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 }

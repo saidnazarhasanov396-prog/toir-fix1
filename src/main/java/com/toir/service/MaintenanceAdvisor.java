@@ -42,12 +42,12 @@ public class MaintenanceAdvisor {
     public List<EquipmentAdvice> adviceAll() {
         Map<UUID, EquipmentRiskScore> scoreByEq = rcmService.computeAll().stream()
                 .collect(Collectors.toMap(EquipmentRiskScore::equipmentId, s -> s));
-        Map<UUID, Long> openDefectsByEq = defectRepository.findAll().stream()
+        Map<UUID, Long> openDefectsByEq = defectRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> d.getStatus() != DefectStatus.CLOSED)
                 .collect(Collectors.groupingBy(Defect::getEquipmentId, Collectors.counting()));
         LocalDate today = LocalDate.now();
         List<EquipmentAdvice> out = new ArrayList<>();
-        for (Equipment eq : equipmentRepository.findAll()) {
+        for (Equipment eq : equipmentRepository.findAllByIsDeletedFalse()) {
             EquipmentRiskScore score = scoreByEq.get(eq.getId());
             List<String> actions = new ArrayList<>();
             String urgency = "LOW";
@@ -67,7 +67,7 @@ public class MaintenanceAdvisor {
             }
 
             List<ConditionReading> alarms = conditionReadingRepository
-                    .findAllByEquipmentIdOrderByRecordedAtDesc(eq.getId()).stream()
+                    .findAllByEquipmentIdAndIsDeletedFalseOrderByRecordedAtDesc(eq.getId()).stream()
                     .limit(5)
                     .filter(r -> "ALARM".equals(r.getSeverity()) || "WARN".equals(r.getSeverity()))
                     .toList();
@@ -83,7 +83,7 @@ public class MaintenanceAdvisor {
             }
 
             List<CalibrationRecord> calibs = calibrationRecordRepository
-                    .findAllByEquipmentIdOrderByPerformedAtDesc(eq.getId());
+                    .findAllByEquipmentIdAndIsDeletedFalseOrderByPerformedAtDesc(eq.getId());
             if (!calibs.isEmpty()) {
                 CalibrationRecord latest = calibs.get(0);
                 if (latest.getNextDueAt() != null) {

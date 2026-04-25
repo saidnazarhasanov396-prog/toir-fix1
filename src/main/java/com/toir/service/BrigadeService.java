@@ -31,11 +31,11 @@ public class BrigadeService {
     public List<BrigadeDto> findAll(UUID departmentId, Boolean activeOnly) {
         List<Brigade> list;
         if (departmentId != null) {
-            list = brigadeRepo.findAllByDepartmentId(departmentId);
+            list = brigadeRepo.findAllByDepartmentIdAndIsDeletedFalse(departmentId);
         } else if (Boolean.TRUE.equals(activeOnly)) {
-            list = brigadeRepo.findAllByActiveTrue();
+            list = brigadeRepo.findAllByActiveTrueAndIsDeletedFalse();
         } else {
-            list = brigadeRepo.findAll();
+            list = brigadeRepo.findAllByIsDeletedFalse();
         }
         return list.stream().map(BrigadeDto::from).toList();
     }
@@ -46,7 +46,7 @@ public class BrigadeService {
     }
 
     public BrigadeDto create(BrigadeRequest r) {
-        if (brigadeRepo.existsByCode(r.code())) {
+        if (brigadeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Brigade code already exists: " + r.code());
         }
         Brigade b = new Brigade();
@@ -61,7 +61,7 @@ public class BrigadeService {
 
     public BrigadeDto update(UUID id, BrigadeRequest r) {
         Brigade b = load(id);
-        if (!b.getCode().equals(r.code()) && brigadeRepo.existsByCode(r.code())) {
+        if (!b.getCode().equals(r.code()) && brigadeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Brigade code already exists: " + r.code());
         }
         b.setCode(r.code());
@@ -75,12 +75,13 @@ public class BrigadeService {
 
     public void delete(UUID id) {
         Brigade b = load(id);
-        brigadeRepo.delete(b);
+        b.setDeleted(true);
+        brigadeRepo.save(b);
     }
 
     public BrigadeMemberDto addMember(UUID brigadeId, BrigadeMemberRequest r) {
         Brigade b = load(brigadeId);
-        memberRepo.findByBrigadeIdAndUserId(brigadeId, r.userId()).ifPresent(m -> {
+        memberRepo.findByBrigadeIdAndUserIdAndIsDeletedFalse(brigadeId, r.userId()).ifPresent(m -> {
             throw RestException.conflict("User is already a member of this brigade");
         });
         certificationGuard.requireForRole(r.userId(), r.roleCode());
@@ -95,22 +96,23 @@ public class BrigadeService {
     }
 
     public void removeMember(UUID brigadeId, UUID memberId) {
-        BrigadeMember m = memberRepo.findById(memberId)
+        BrigadeMember m = memberRepo.findByIdAndIsDeletedFalse(memberId)
                 .orElseThrow(() -> RestException.notFound("Brigade member not found: " + memberId));
         if (m.getBrigade() == null || !m.getBrigade().getId().equals(brigadeId)) {
             throw RestException.badRequest("Member does not belong to this brigade");
         }
-        memberRepo.delete(m);
+        m.setDeleted(true);
+        memberRepo.save(m);
     }
 
     @Transactional(readOnly = true)
     public List<BrigadeMemberDto> listMembers(UUID brigadeId) {
         load(brigadeId);
-        return memberRepo.findAllByBrigadeId(brigadeId).stream().map(BrigadeMemberDto::from).toList();
+        return memberRepo.findAllByBrigadeIdAndIsDeletedFalse(brigadeId).stream().map(BrigadeMemberDto::from).toList();
     }
 
     private Brigade load(UUID id) {
-        return brigadeRepo.findById(id)
+        return brigadeRepo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Brigade not found: " + id));
     }
 }

@@ -174,7 +174,7 @@ public class SampleDataSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        if (departmentRepository.count() > 0) return;
+        if (departmentRepository.countByIsDeletedFalse() > 0) return;
 
         seedDictionaries();
 
@@ -266,7 +266,7 @@ public class SampleDataSeeder implements CommandLineRunner {
         seedStock(ammWh.getId(), bearing.getId(), 12, 5);
         seedStock(ammWh.getId(), seal.getId(), 6, 3);
 
-        UUID admin = userRepository.findByUsername("admin").map(User::getId).orElse(null);
+        UUID admin = userRepository.findByUsernameAndIsDeletedFalse("admin").map(User::getId).orElse(null);
 
         seedRequest(all.get(4), "RR-2026-0001", "Течь по сальнику Н-103", PriorityLevel.HIGH, CriticalityLevel.HIGH, admin);
         seedRequest(all.get(0), "RR-2026-0002", "Вибрация компрессора К-1", PriorityLevel.CRITICAL, CriticalityLevel.CRITICAL, admin);
@@ -326,12 +326,12 @@ public class SampleDataSeeder implements CommandLineRunner {
     }
 
     private void linkEquipmentCriticalityAndResponsible(List<Equipment> all) {
-        List<CriticalityClass> crits = criticalityClassRepository.findAll();
+        List<CriticalityClass> crits = criticalityClassRepository.findAllByIsDeletedFalse();
         CriticalityClass critical = crits.stream().filter(c -> "CRIT-CRIT".equals(c.getCode())).findFirst().orElse(null);
         CriticalityClass high = crits.stream().filter(c -> "CRIT-HIGH".equals(c.getCode())).findFirst().orElse(null);
         CriticalityClass medium = crits.stream().filter(c -> "CRIT-MED".equals(c.getCode())).findFirst().orElse(null);
         CriticalityClass low = crits.stream().filter(c -> "CRIT-LOW".equals(c.getCode())).findFirst().orElse(null);
-        UUID admin = userRepository.findByUsername("admin").map(User::getId).orElse(null);
+        UUID admin = userRepository.findByUsernameAndIsDeletedFalse("admin").map(User::getId).orElse(null);
 
         for (Equipment eq : all) {
             CriticalityClass cls;
@@ -553,11 +553,11 @@ public class SampleDataSeeder implements CommandLineRunner {
     }
 
     private void seedBudgetsAndCosts(Department plant, Department ammonia, Department urea, Department nitric) {
-        CostCategory labor = costCategoryRepository.findAll().stream()
+        CostCategory labor = costCategoryRepository.findAllByIsDeletedFalse().stream()
                 .filter(c -> "LABOR".equals(c.getCode())).findFirst().orElseThrow();
-        CostCategory materials = costCategoryRepository.findAll().stream()
+        CostCategory materials = costCategoryRepository.findAllByIsDeletedFalse().stream()
                 .filter(c -> "MATERIALS".equals(c.getCode())).findFirst().orElseThrow();
-        CostCategory contractors = costCategoryRepository.findAll().stream()
+        CostCategory contractors = costCategoryRepository.findAllByIsDeletedFalse().stream()
                 .filter(c -> "CTR".equals(c.getCode())).findFirst().orElseThrow();
 
         MaintenanceBudget plantBudget = new MaintenanceBudget();

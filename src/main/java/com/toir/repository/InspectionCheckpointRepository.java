@@ -13,6 +13,16 @@ import java.util.UUID;
 
 @Repository
 public interface InspectionCheckpointRepository extends JpaRepository<InspectionCheckpoint, UUID> {
+    java.util.Optional<InspectionCheckpoint> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<InspectionCheckpoint> findAllByIsDeletedFalse();
+
+    java.util.List<InspectionCheckpoint> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM inspection_checkpoints WHERE route_id = :routeId AND is_deleted = false ORDER BY order_index ASC", nativeQuery = true)
-    List<InspectionCheckpoint> findAllByRouteIdOrderByOrderIndexAsc(@Param("routeId") UUID routeId);
+    List<InspectionCheckpoint> findAllByRouteIdAndIsDeletedFalseOrderByOrderIndexAsc(@Param("routeId") UUID routeId);
 }

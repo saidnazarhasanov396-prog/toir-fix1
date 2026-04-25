@@ -36,7 +36,7 @@ public class FileAssetService {
 
     @Transactional(readOnly = true)
     public List<FileAssetDto> findByEntity(String entityType, String entityId) {
-        return repository.findAllByEntityTypeAndEntityId(entityType, entityId).stream()
+        return repository.findAllByEntityTypeAndEntityIdAndIsDeletedFalse(entityType, entityId).stream()
                 .map(FileAssetDto::from).toList();
     }
 
@@ -64,12 +64,13 @@ public class FileAssetService {
     }
 
     public void delete(UUID id) {
-        FileAsset asset = repository.findById(id)
+        FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("File not found: " + id));
         try {
             Files.deleteIfExists(Paths.get(asset.getStoragePath()));
         } catch (IOException ignored) {
         }
-        repository.delete(asset);
+        asset.setDeleted(true);
+        repository.save(asset);
     }
 }

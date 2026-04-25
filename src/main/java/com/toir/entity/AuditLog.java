@@ -45,6 +45,10 @@ public class AuditLog {
     @Column(name = "user_agent")
     private String userAgent;
 
+    @Builder.Default
+    @Column(name = "is_deleted", nullable = false, columnDefinition = "boolean default false")
+    private boolean isDeleted = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

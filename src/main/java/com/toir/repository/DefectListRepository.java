@@ -14,10 +14,21 @@ import java.util.UUID;
 
 @Repository
 public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
+    java.util.Optional<DefectList> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<DefectList> findAllByIsDeletedFalse();
+
+    java.util.List<DefectList> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
 
     @Query(nativeQuery = true, value = """
             select * from defect_lists d where
-            (:equipmentId is null or d.equipment_id = cast(:equipmentId as uuid))
+            d.is_deleted = false
+            and (:equipmentId is null or d.equipment_id = cast(:equipmentId as uuid))
             and (:search is null or lower(d.code) like lower(concat('%', :search, '%'))
             or lower(d.title) like lower(concat('%', :search, '%'))
             or lower(d.notes) like lower(concat('%', :search, '%')))
@@ -28,16 +39,15 @@ public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
                                      @Param("offset") int offset,
                                      @Param("limit") int limit);
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_lists WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query(value = "SELECT * FROM defect_lists WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
-    List<DefectList> findAllByEquipmentId(@Param("equipmentId") UUID equipmentId);
+    List<DefectList> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
     @Query(value = "SELECT * FROM defect_lists WHERE repair_request_id = :repairRequestId AND is_deleted = false", nativeQuery = true)
-    List<DefectList> findAllByRepairRequestId(@Param("repairRequestId") UUID repairRequestId);
+    List<DefectList> findAllByRepairRequestIdAndIsDeletedFalse(@Param("repairRequestId") UUID repairRequestId);
 
     @Query(value = "SELECT * FROM defect_lists WHERE status = :status AND is_deleted = false ORDER BY created_at DESC", nativeQuery = true)
-    List<DefectList> findAllByStatusOrderByCreatedAtDesc(@Param("status") DefectListStatus status);
+    List<DefectList> findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(@Param("status") DefectListStatus status);
 }
-
 

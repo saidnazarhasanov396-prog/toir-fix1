@@ -25,11 +25,11 @@ public class SparePartService {
 
     @Transactional(readOnly = true)
     public List<SparePartDto> findAll() {
-        Map<UUID, List<WarehouseStock>> stocksByPart = stockRepository.findAll().stream()
+        Map<UUID, List<WarehouseStock>> stocksByPart = stockRepository.findAllByIsDeletedFalse().stream()
                 .filter(s -> s.getSparePartId() != null)
                 .collect(Collectors.groupingBy(WarehouseStock::getSparePartId));
 
-        return repository.findAll().stream()
+        return repository.findAllByIsDeletedFalse().stream()
                 .map(part -> {
                     List<WarehouseStock> stocks = stocksByPart.getOrDefault(part.getId(), List.of());
                     double currentStock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
@@ -42,14 +42,14 @@ public class SparePartService {
     @Transactional(readOnly = true)
     public SparePartDto findById(UUID id) {
         SparePart part = getOrThrow(id);
-        List<WarehouseStock> stocks = stockRepository.findAllBySparePartId(id);
+        List<WarehouseStock> stocks = stockRepository.findAllBySparePartIdAndIsDeletedFalse(id);
         double currentStock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
         double reservedStock = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
         return SparePartDto.from(part, currentStock, reservedStock, stocks.size());
     }
 
     public SparePartDto create(SparePartRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Spare part code already exists: " + request.code());
         }
         SparePart entity = new SparePart();
@@ -64,11 +64,13 @@ public class SparePartService {
     }
 
     public void delete(UUID id) {
-        repository.delete(getOrThrow(id));
+        var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     SparePart getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Spare part not found: " + id));
     }
 

@@ -12,6 +12,16 @@ import java.util.UUID;
 
 @Repository
 public interface IntegrationEndpointRepository extends JpaRepository<IntegrationEndpoint, UUID> {
+    java.util.Optional<IntegrationEndpoint> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<IntegrationEndpoint> findAllByIsDeletedFalse();
+
+    java.util.List<IntegrationEndpoint> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM integration_endpoints WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 }

@@ -21,7 +21,7 @@ public class ContractorWorkService {
 
     @Transactional(readOnly = true)
     public List<ContractorWorkDto> findByContractor(UUID contractorId) {
-        return repository.findAllByContractorId(contractorId).stream().map(ContractorWorkDto::from).toList();
+        return repository.findAllByContractorIdAndIsDeletedFalse(contractorId).stream().map(ContractorWorkDto::from).toList();
     }
 
     public ContractorWorkDto create(ContractorWorkDto r) {
@@ -65,7 +65,7 @@ public class ContractorWorkService {
     }
 
     private ContractorWork getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Contractor work not found: " + id));
     }
 }

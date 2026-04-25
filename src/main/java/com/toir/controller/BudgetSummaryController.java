@@ -50,16 +50,16 @@ public class BudgetSummaryController {
 
     @GetMapping("/summary")
     public Map<String, Object> summary() {
-        List<MaintenanceBudget> budgets = budgetRepository.findAll();
+        List<MaintenanceBudget> budgets = budgetRepository.findAllByIsDeletedFalse();
         double totalPlanned = budgets.stream().mapToDouble(MaintenanceBudget::getTotalPlanned).sum();
         double totalActual = budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum();
         double variance = totalPlanned - totalActual;
         double executionPercent = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
 
-        Map<UUID, CostCategory> catById = costCategoryRepository.findAll().stream()
+        Map<UUID, CostCategory> catById = costCategoryRepository.findAllByIsDeletedFalse().stream()
                 .collect(Collectors.toMap(CostCategory::getId, c -> c));
 
-        List<Map<String, Object>> byCategory = lineRepository.findAll().stream()
+        List<Map<String, Object>> byCategory = lineRepository.findAllByIsDeletedFalse().stream()
                 .collect(Collectors.groupingBy(BudgetLine::getCostCategoryId))
                 .entrySet().stream()
                 .map(entry -> {
@@ -96,14 +96,14 @@ public class BudgetSummaryController {
 
     @GetMapping("/cost-categories")
     public CostCategoryDto[] costCategories() {
-        return costCategoryRepository.findAll().stream()
+        return costCategoryRepository.findAllByIsDeletedFalse().stream()
                 .map(CostCategoryDto::from)
                 .toArray(CostCategoryDto[]::new);
     }
 
     @GetMapping("/actual-costs/register")
     public Map<String, Object> actualCostRegister() {
-        List<ActualCost> items = actualCostRepository.findAll();
+        List<ActualCost> items = actualCostRepository.findAllByIsDeletedFalse();
         double totalAmount = items.stream().mapToDouble(ActualCost::getAmount).sum();
         double approvedAmount = items.stream().filter(c -> c.getStatus() == ActualCostStatus.APPROVED)
                 .mapToDouble(ActualCost::getAmount).sum();
@@ -135,7 +135,7 @@ public class BudgetSummaryController {
 
     @GetMapping("/actual-costs/review-queue")
     public Map<String, Object> reviewQueue() {
-        List<ActualCost> pending = actualCostRepository.findAllByStatus(ActualCostStatus.PENDING);
+        List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING);
         return Map.of(
                 "items", pending.stream().map(this::actualCostRow).toList(),
                 "meta", Map.of("page", 0, "pageSize", pending.size(), "total", pending.size())
@@ -144,7 +144,7 @@ public class BudgetSummaryController {
 
     @GetMapping("/actual-costs/{id}/review-history")
     public Map<String, Object> reviewHistory(@PathVariable UUID id) {
-        return actualCostRepository.findById(id)
+        return actualCostRepository.findByIdAndIsDeletedFalse(id)
                 .map(c -> Map.<String, Object>of(
                         "actualCostId", id.toString(),
                         "events", c.getReviewedAt() != null
@@ -161,7 +161,7 @@ public class BudgetSummaryController {
     @GetMapping("/actual-costs/review-activity")
     public Map<String, Object> reviewActivity() {
         Instant weekAgo = Instant.now().minus(7, ChronoUnit.DAYS);
-        List<ActualCost> recent = actualCostRepository.findAll().stream()
+        List<ActualCost> recent = actualCostRepository.findAllByIsDeletedFalse().stream()
                 .filter(c -> c.getReviewedAt() != null && c.getReviewedAt().isAfter(weekAgo))
                 .toList();
 
@@ -201,7 +201,7 @@ public class BudgetSummaryController {
 
     @GetMapping("/actual-costs/approval-pack")
     public Map<String, Object> approvalPack() {
-        List<ActualCost> pending = actualCostRepository.findAllByStatus(ActualCostStatus.PENDING);
+        List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING);
         return Map.of(
                 "items", pending.stream().map(this::actualCostRow).toList(),
                 "meta", Map.of("page", 0, "pageSize", pending.size(), "total", pending.size())
@@ -210,7 +210,7 @@ public class BudgetSummaryController {
 
     @GetMapping("/actual-costs/review-history-pack")
     public Map<String, Object> reviewHistoryPack() {
-        List<ActualCost> reviewed = actualCostRepository.findAll().stream()
+        List<ActualCost> reviewed = actualCostRepository.findAllByIsDeletedFalse().stream()
                 .filter(c -> c.getReviewedAt() != null)
                 .toList();
         return Map.of(

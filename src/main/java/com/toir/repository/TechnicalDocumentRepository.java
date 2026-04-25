@@ -13,6 +13,16 @@ import java.util.UUID;
 
 @Repository
 public interface TechnicalDocumentRepository extends JpaRepository<TechnicalDocument, UUID> {
+    java.util.Optional<TechnicalDocument> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<TechnicalDocument> findAllByIsDeletedFalse();
+
+    java.util.List<TechnicalDocument> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM technical_documents WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
-    List<TechnicalDocument> findAllByEquipmentId(@Param("equipmentId") UUID equipmentId);
+    List<TechnicalDocument> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 }
