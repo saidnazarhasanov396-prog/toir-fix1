@@ -70,6 +70,7 @@ import com.toir.entity.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
+import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
@@ -89,6 +90,7 @@ import java.util.UUID;
 @Transactional
 @Profile("dev")
 @ConditionalOnProperty(name = "app.bootstrap.seed-demo-data", havingValue = "true")
+@RequiredArgsConstructor
 public class SampleDataSeeder implements CommandLineRunner {
 
     private final DepartmentRepository departmentRepository;
@@ -117,60 +119,6 @@ public class SampleDataSeeder implements CommandLineRunner {
     private final StockMovementRepository stockMovementRepository;
     private final DefectListRepository defectListRepository;
     private final DefectListLineRepository defectListLineRepository;
-
-    public SampleDataSeeder(DepartmentRepository departmentRepository,
-                            EquipmentTypeRepository equipmentTypeRepository,
-                            EquipmentRepository equipmentRepository,
-                            MaintenanceRegulationRepository regulationRepository,
-                            SparePartRepository sparePartRepository,
-                            WarehouseRepository warehouseRepository,
-                            WarehouseStockRepository stockRepository,
-                            RepairRequestRepository repairRequestRepository,
-                            DefectRepository defectRepository,
-                            UserRepository userRepository,
-                            WorkOrderRepository workOrderRepository,
-                            DefectCategoryRepository defectCategoryRepository,
-                            DefectSeverityRepository defectSeverityRepository,
-                            FailureReasonRepository failureReasonRepository,
-                            RootCauseRepository rootCauseRepository,
-                            CriticalityClassRepository criticalityClassRepository,
-                            DowntimeEventRepository downtimeEventRepository,
-                            ReliabilityMetricRepository reliabilityMetricRepository,
-                            CostCategoryRepository costCategoryRepository,
-                            MaintenanceBudgetRepository budgetRepository,
-                            BudgetLineRepository budgetLineRepository,
-                            ActualCostRepository actualCostRepository,
-                            NotificationRepository notificationRepository,
-                            StockMovementRepository stockMovementRepository,
-                            DefectListRepository defectListRepository,
-                            DefectListLineRepository defectListLineRepository) {
-        this.departmentRepository = departmentRepository;
-        this.equipmentTypeRepository = equipmentTypeRepository;
-        this.equipmentRepository = equipmentRepository;
-        this.regulationRepository = regulationRepository;
-        this.sparePartRepository = sparePartRepository;
-        this.warehouseRepository = warehouseRepository;
-        this.stockRepository = stockRepository;
-        this.repairRequestRepository = repairRequestRepository;
-        this.defectRepository = defectRepository;
-        this.userRepository = userRepository;
-        this.workOrderRepository = workOrderRepository;
-        this.defectCategoryRepository = defectCategoryRepository;
-        this.defectSeverityRepository = defectSeverityRepository;
-        this.failureReasonRepository = failureReasonRepository;
-        this.rootCauseRepository = rootCauseRepository;
-        this.criticalityClassRepository = criticalityClassRepository;
-        this.downtimeEventRepository = downtimeEventRepository;
-        this.reliabilityMetricRepository = reliabilityMetricRepository;
-        this.costCategoryRepository = costCategoryRepository;
-        this.budgetRepository = budgetRepository;
-        this.budgetLineRepository = budgetLineRepository;
-        this.actualCostRepository = actualCostRepository;
-        this.notificationRepository = notificationRepository;
-        this.stockMovementRepository = stockMovementRepository;
-        this.defectListRepository = defectListRepository;
-        this.defectListLineRepository = defectListLineRepository;
-    }
 
     @Override
     public void run(String... args) {
