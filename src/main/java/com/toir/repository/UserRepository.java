@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -14,10 +15,13 @@ import java.util.UUID;
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
 
-    @Query(value = "SELECT * FROM users WHERE username = :username LIMIT 1", nativeQuery = true)
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole WHERE u.username = :username")
     Optional<User> findByUsername(@Param("username") String username);
 
-    @Query(value = "SELECT * FROM users WHERE email = :email LIMIT 1", nativeQuery = true)
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole")
+    List<User> findAllWithRoles();
+
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole WHERE u.email = :email")
     Optional<User> findByEmail(@Param("email") String email);
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM users WHERE username = :username)", nativeQuery = true)
