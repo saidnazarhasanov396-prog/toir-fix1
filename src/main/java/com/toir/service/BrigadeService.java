@@ -3,13 +3,11 @@ import com.toir.entity.Brigade;
 import com.toir.entity.BrigadeMember;
 import com.toir.repository.BrigadeMemberRepository;
 import com.toir.repository.BrigadeRepository;
-import com.toir.entity.User;
 
 import com.toir.dto.brigade.BrigadeDto;
 import com.toir.dto.brigade.BrigadeMemberDto;
 import com.toir.dto.brigade.BrigadeMemberRequest;
 import com.toir.dto.brigade.BrigadeRequest;
-import com.toir.service.CertificationGuard;
 import com.toir.exception.RestException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
