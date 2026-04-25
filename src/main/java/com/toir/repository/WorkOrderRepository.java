@@ -27,14 +27,14 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
 
     @Query(nativeQuery = true, value = """
             select * from work_orders w where
-            (:status is null or w.status = cast(:status as varchar)) 
-            and (:departmentId is null or w.department_id = cast(:departmentId as uuid)) 
-            and (:equipmentId is null or w.equipment_id = cast(:equipmentId as uuid)) 
-            and (:search is null or lower(w.number) like lower(concat('%', :search, '%')) 
-            or lower(w.title) like lower(concat('%', :search, '%')) 
-            or lower(w.summary) like lower(concat('%', :search, '%')) 
-            or lower(w.result) like lower(concat('%', :search, '%')) 
-            or lower(w.closure_notes) like lower(concat('%', :search, '%'))) 
+            (cast(:status as varchar) is null or w.status = cast(:status as varchar)) 
+            and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid)) 
+            and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid)) 
+            and (cast(:search as varchar) is null or lower(w.number) like lower(concat('%', cast(:search as varchar), '%')) 
+            or lower(w.title) like lower(concat('%', cast(:search as varchar), '%')) 
+            or lower(w.summary) like lower(concat('%', cast(:search as varchar), '%')) 
+            or lower(w.result) like lower(concat('%', cast(:search as varchar), '%')) 
+            or lower(w.closure_notes) like lower(concat('%', cast(:search as varchar), '%'))) 
             order by w.created_at desc limit :limit offset :offset""")
     List<WorkOrder> searchPaginated(@Param("status") WorkOrderStatus status,
                                     @Param("departmentId") UUID departmentId,
