@@ -6,10 +6,12 @@ import com.toir.repository.DefectListLineRepository;
 import com.toir.repository.DefectListRepository;
 
 import com.toir.exception.RestException;
+import com.toir.util.PaginationUtils;
 import com.toir.dto.defectlist.DefectListDto;
 import com.toir.dto.defectlist.DefectListLineDto;
 import com.toir.dto.defectlist.DefectListRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,9 +33,13 @@ public class DefectListService {
     }
 
     @Transactional(readOnly = true)
-    public List<DefectListDto> search(UUID equipmentId, int page, int pageSize, String search) {
-        int offset = page * pageSize;
-        return repository.searchPaginated(equipmentId, search, offset, pageSize).stream().map(DefectListDto::from).toList();
+    public Page<DefectListDto> search(UUID equipmentId, int page, int pageSize, String search) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        return repository.searchPaginated(
+                equipmentId,
+                search,
+                pageable
+        ).map(DefectListDto::from);
     }
 
     @Transactional(readOnly = true)

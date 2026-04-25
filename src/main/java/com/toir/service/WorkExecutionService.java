@@ -2,12 +2,12 @@ package com.toir.service;
 import com.toir.entity.WorkExecution;
 import com.toir.repository.WorkExecutionRepository;
 
-import com.toir.config.PaginatedResponse;
 import com.toir.exception.RestException;
+import com.toir.util.PaginationUtils;
 import com.toir.dto.workexecution.ExecutionLogDto;
 import com.toir.dto.workexecution.WorkExecutionDto;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,15 +29,9 @@ public class WorkExecutionService {
     }
 
     @Transactional(readOnly = true)
-    public PaginatedResponse<ExecutionLogDto> findExecutionLogs(int page, int pageSize) {
-        int safePage = Math.max(page, 1);
-        int safePageSize = clamp(pageSize, 1, 500);
-
-        var result = repository.findAllByIsDeletedFalseOrderByStartedAtDesc(PageRequest.of(safePage - 1, safePageSize));
-        return new PaginatedResponse<>(
-                result.getContent().stream().map(ExecutionLogDto::from).toList(),
-                new PaginatedResponse.Meta(safePage, safePageSize, (int) result.getTotalElements())
-        );
+    public Page<ExecutionLogDto> findExecutionLogs(int page, int pageSize) {
+        var result = repository.findAllByIsDeletedFalseOrderByStartedAtDesc(PaginationUtils.pageRequest(page, pageSize));
+        return result.map(ExecutionLogDto::from);
     }
 
     public WorkExecutionDto start(UUID workOrderId, WorkExecutionDto r) {
@@ -58,7 +52,4 @@ public class WorkExecutionService {
         return WorkExecutionDto.from(e);
     }
 
-    private static int clamp(int value, int min, int max) {
-        return Math.max(min, Math.min(max, value));
-    }
 }

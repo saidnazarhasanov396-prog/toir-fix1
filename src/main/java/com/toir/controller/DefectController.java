@@ -10,6 +10,7 @@ import com.toir.entity.KnowledgeArticle;
 import com.toir.repository.KnowledgeArticleRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,7 +37,7 @@ public class DefectController {
     }
 
     @GetMapping
-    public List<DefectDto> list(
+    public Page<DefectDto> list(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,

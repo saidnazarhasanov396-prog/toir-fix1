@@ -3,6 +3,8 @@ package com.toir.repository;
 import org.springframework.stereotype.Repository;
 import com.toir.entity.MaintenanceRegulation;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -29,11 +31,15 @@ public interface MaintenanceRegulationRepository extends JpaRepository<Maintenan
             and (:search is null or lower(m.code) like lower(concat('%', :search, '%'))
             or lower(m.name) like lower(concat('%', :search, '%'))
             or lower(m.description) like lower(concat('%', :search, '%')))
-            order by m.created_at desc limit :limit offset :offset
+            order by m.created_at desc
+            """, countQuery = """
+            select count(*) from maintenance_regulations m where
+            m.is_deleted = false
+            and (:search is null or lower(m.code) like lower(concat('%', :search, '%'))
+            or lower(m.name) like lower(concat('%', :search, '%'))
+            or lower(m.description) like lower(concat('%', :search, '%')))
             """)
-    List<MaintenanceRegulation> searchPaginated(@Param("search") String search,
-                                                @Param("offset") int offset,
-                                                @Param("limit") int limit);
+    Page<MaintenanceRegulation> searchPaginated(@Param("search") String search, Pageable pageable);
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM maintenance_regulations WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
@@ -41,4 +47,3 @@ public interface MaintenanceRegulationRepository extends JpaRepository<Maintenan
     @Query(value = "SELECT * FROM maintenance_regulations WHERE equipment_type_id = :equipmentTypeId AND is_active = true AND is_deleted = false", nativeQuery = true)
     List<MaintenanceRegulation> findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(@Param("equipmentTypeId") UUID equipmentTypeId);
 }
-

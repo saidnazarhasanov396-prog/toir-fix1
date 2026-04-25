@@ -4,6 +4,7 @@ import com.toir.enums.RequestStatus;
 import com.toir.repository.RepairRequestRepository;
 
 import com.toir.enums.AuditAction;
+import com.toir.util.PaginationUtils;
 import com.toir.util.RequestContext;
 import com.toir.exception.RestException;
 import com.toir.security.SecurityScope;
@@ -11,6 +12,7 @@ import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,10 +34,15 @@ public class RepairRequestService {
 
 
     @Transactional(readOnly = true)
-    public List<RepairRequestDto> search(RequestStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
-        int offset = page * pageSize;
-        return repository.searchPaginated(status, departmentId, equipmentId, search, offset, pageSize).stream()
-                .map(RepairRequestDto::from).toList();
+    public Page<RepairRequestDto> search(RequestStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        return repository.searchPaginated(
+                status,
+                departmentId,
+                equipmentId,
+                search,
+                pageable
+        ).map(RepairRequestDto::from);
     }
 
     @Transactional(readOnly = true)

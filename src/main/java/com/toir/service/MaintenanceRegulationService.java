@@ -3,9 +3,11 @@ import com.toir.entity.MaintenanceRegulation;
 import com.toir.repository.MaintenanceRegulationRepository;
 
 import com.toir.exception.RestException;
+import com.toir.util.PaginationUtils;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,9 +27,12 @@ public class MaintenanceRegulationService {
     }
 
     @Transactional(readOnly = true)
-    public List<MaintenanceRegulationDto> search(int page, int pageSize, String search) {
-        int offset = page * pageSize;
-        return repository.searchPaginated(search, offset, pageSize).stream().map(MaintenanceRegulationDto::from).toList();
+    public Page<MaintenanceRegulationDto> search(int page, int pageSize, String search) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        return repository.searchPaginated(
+                search,
+                pageable
+        ).map(MaintenanceRegulationDto::from);
     }
 
     @Transactional(readOnly = true)

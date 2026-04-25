@@ -4,6 +4,8 @@ import org.springframework.stereotype.Repository;
 import com.toir.entity.DefectList;
 import com.toir.enums.DefectListStatus;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -32,12 +34,19 @@ public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
             and (:search is null or lower(d.code) like lower(concat('%', :search, '%'))
             or lower(d.title) like lower(concat('%', :search, '%'))
             or lower(d.notes) like lower(concat('%', :search, '%')))
-            order by d.created_at desc limit :limit offset :offset
+            order by d.created_at desc
+            """, countQuery = """
+            select count(*) from defect_lists d where
+            d.is_deleted = false
+            and (:equipmentId is null or d.equipment_id = cast(:equipmentId as uuid))
+            and (:search is null or lower(d.code) like lower(concat('%', :search, '%'))
+            or lower(d.title) like lower(concat('%', :search, '%'))
+            or lower(d.notes) like lower(concat('%', :search, '%')))
             """)
-    List<DefectList> searchPaginated(@Param("equipmentId") UUID equipmentId,
+    Page<DefectList> searchPaginated(@Param("equipmentId") UUID equipmentId,
                                      @Param("search") String search,
-                                     @Param("offset") int offset,
-                                     @Param("limit") int limit);
+                                     Pageable pageable);
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_lists WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
@@ -50,4 +59,3 @@ public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
     @Query(value = "SELECT * FROM defect_lists WHERE status = :status AND is_deleted = false ORDER BY created_at DESC", nativeQuery = true)
     List<DefectList> findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(@Param("status") DefectListStatus status);
 }
-
