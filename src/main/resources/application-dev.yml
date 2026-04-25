@@ -45,6 +45,9 @@ app:
       - http://127.0.0.1:5173
   files:
     storage-path: ./uploads
+  openapi:
+    dev-url: http://localhost:8080
+    prod-url: https://api-toir.tenzorsoft.uz
   bootstrap:
     create-default-admin: true
     admin-username: admin
