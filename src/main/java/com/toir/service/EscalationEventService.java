@@ -22,13 +22,13 @@ public class EscalationEventService {
 
     @Transactional(readOnly = true)
     public List<EscalationEventDto> findOpen() {
-        return repository.findAllByStatusOrderByRaisedAtDesc(EscalationStatus.OPEN).stream()
+        return repository.findAllByStatusAndIsDeletedFalseOrderByRaisedAtDesc(EscalationStatus.OPEN).stream()
                 .map(EscalationEventDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<EscalationEventDto> findAll() {
-        return repository.findAll().stream().map(EscalationEventDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(EscalationEventDto::from).toList();
     }
 
     @Transactional
@@ -69,7 +69,7 @@ public class EscalationEventService {
     }
 
     private EscalationEvent getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Escalation event not found: " + id));
     }
 }

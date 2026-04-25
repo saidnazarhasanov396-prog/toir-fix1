@@ -21,12 +21,12 @@ public class ActualCostReviewRouteOverrideService {
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewRouteOverrideDto> findActive() {
-        return repository.findAllByActiveTrue().stream().map(ActualCostReviewRouteOverrideDto::from).toList();
+        return repository.findAllByActiveTrueAndIsDeletedFalse().stream().map(ActualCostReviewRouteOverrideDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewRouteOverrideDto> findByActualCost(UUID actualCostId) {
-        return repository.findAllByActualCostIdOrderByCreatedAtDesc(actualCostId).stream()
+        return repository.findAllByActualCostIdAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId).stream()
                 .map(ActualCostReviewRouteOverrideDto::from).toList();
     }
 
@@ -35,7 +35,7 @@ public class ActualCostReviewRouteOverrideService {
         if (r.comment() == null || r.comment().isBlank()) {
             throw RestException.badRequest("Comment is required");
         }
-        repository.findFirstByActualCostIdAndActiveTrueOrderByCreatedAtDesc(r.actualCostId())
+        repository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(r.actualCostId())
                 .ifPresent(existing -> {
                     existing.setActive(false);
                     existing.setDeactivatedAt(Instant.now());
@@ -55,7 +55,7 @@ public class ActualCostReviewRouteOverrideService {
 
     @Transactional
     public ActualCostReviewRouteOverrideDto deactivate(UUID id, UUID userId, String comment) {
-        ActualCostReviewRouteOverride o = repository.findById(id)
+        ActualCostReviewRouteOverride o = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Route override not found: " + id));
         if (!o.isActive()) {
             throw RestException.badRequest("Override already inactive");

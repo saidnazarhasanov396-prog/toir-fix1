@@ -5,11 +5,11 @@ import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -24,7 +24,7 @@ public class MaintenanceRegulationController {
     }
 
     @GetMapping
-    public List<MaintenanceRegulationDto> list(
+    public Page<MaintenanceRegulationDto> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String search

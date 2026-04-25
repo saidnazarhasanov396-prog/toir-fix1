@@ -12,6 +12,16 @@ import java.util.UUID;
 
 @Repository
 public interface FailureReasonRepository extends JpaRepository<FailureReason, UUID> {
+    java.util.Optional<FailureReason> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<FailureReason> findAllByIsDeletedFalse();
+
+    java.util.List<FailureReason> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM failure_reasons WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 }

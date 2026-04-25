@@ -55,7 +55,7 @@ public class DataBootstrap implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        Role adminRole = roleRepository.findByCode(ADMIN_ROLE_CODE).orElseGet(() -> {
+        Role adminRole = roleRepository.findByCodeAndIsDeletedFalse(ADMIN_ROLE_CODE).orElseGet(() -> {
             Role r = new Role();
             r.setCode(ADMIN_ROLE_CODE);
             r.setName("Системный администратор");
@@ -69,7 +69,7 @@ public class DataBootstrap implements CommandLineRunner {
 
         for (String[] row : BASE_ROLES) {
             String code = row[0];
-            if (!roleRepository.existsByCode(code)) {
+            if (!roleRepository.existsByCodeAndIsDeletedFalse(code)) {
                 Role r = new Role();
                 r.setCode(code);
                 r.setName(row[1]);
@@ -85,7 +85,7 @@ public class DataBootstrap implements CommandLineRunner {
             return;
         }
 
-        userRepository.findByUsername(bootstrapProperties.getAdminUsername()).orElseGet(() -> {
+        userRepository.findByUsernameAndIsDeletedFalse(bootstrapProperties.getAdminUsername()).orElseGet(() -> {
             User u = new User();
             u.setUsername(bootstrapProperties.getAdminUsername());
             u.setEmail(bootstrapProperties.getAdminEmail());

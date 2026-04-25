@@ -20,11 +20,11 @@ public class RootCauseService {
 
     @Transactional(readOnly = true)
     public List<RootCauseDto> findAll() {
-        return repository.findAll().stream().map(RootCauseDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(RootCauseDto::from).toList();
     }
 
     public RootCauseDto create(RootCauseDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Root cause code already exists: " + r.code());
         }
         RootCause e = new RootCause();
@@ -38,10 +38,12 @@ public class RootCauseService {
         return RootCauseDto.from(e);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private RootCause getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Root cause not found: " + id));
     }
 }

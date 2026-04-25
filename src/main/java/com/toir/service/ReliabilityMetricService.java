@@ -19,7 +19,7 @@ public class ReliabilityMetricService {
 
     @Transactional(readOnly = true)
     public List<ReliabilityMetricDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentIdOrderByMetricDateDesc(equipmentId).stream()
+        return repository.findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(equipmentId).stream()
                 .map(ReliabilityMetricDto::from).toList();
     }
 

@@ -20,15 +20,15 @@ public class SafetyPermitService {
 
     @Transactional(readOnly = true)
     public SafetyPermitDto findByWorkOrder(UUID workOrderId) {
-        return SafetyPermitDto.from(repository.findByWorkOrderId(workOrderId)
+        return SafetyPermitDto.from(repository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)
                 .orElseThrow(() -> RestException.notFound("Safety permit not found for WO: " + workOrderId)));
     }
 
     public SafetyPermitDto create(UUID workOrderId, SafetyPermitDto r) {
-        if (repository.findByWorkOrderId(workOrderId).isPresent()) {
+        if (repository.findByWorkOrderIdAndIsDeletedFalse(workOrderId).isPresent()) {
             throw RestException.conflict("Safety permit already exists for this work order");
         }
-        if (repository.existsByPermitNumber(r.permitNumber())) {
+        if (repository.existsByPermitNumberAndIsDeletedFalse(r.permitNumber())) {
             throw RestException.conflict("Permit number already exists: " + r.permitNumber());
         }
         SafetyPermit p = new SafetyPermit();
@@ -54,7 +54,7 @@ public class SafetyPermitService {
     }
 
     private SafetyPermit getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Safety permit not found: " + id));
     }
 }

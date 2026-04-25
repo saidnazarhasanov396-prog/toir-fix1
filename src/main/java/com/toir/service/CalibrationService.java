@@ -23,24 +23,24 @@ public class CalibrationService {
 
     @Transactional(readOnly = true)
     public List<CalibrationRecordDto> findForEquipment(UUID equipmentId) {
-        return repo.findAllByEquipmentIdOrderByPerformedAtDesc(equipmentId).stream()
+        return repo.findAllByEquipmentIdAndIsDeletedFalseOrderByPerformedAtDesc(equipmentId).stream()
                 .map(CalibrationRecordDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<CalibrationRecordDto> findAll() {
-        return repo.findAll().stream().map(CalibrationRecordDto::from).toList();
+        return repo.findAllByIsDeletedFalse().stream().map(CalibrationRecordDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<CalibrationRecordDto> findDueWithin(int days) {
         LocalDate cutoff = LocalDate.now().plusDays(days);
-        return repo.findAllByNextDueAtBefore(cutoff).stream()
+        return repo.findAllByNextDueAtBeforeAndIsDeletedFalse(cutoff).stream()
                 .map(CalibrationRecordDto::from).toList();
     }
 
     public CalibrationRecordDto create(CalibrationRecordRequest r) {
-        if (!equipmentRepository.existsById(r.equipmentId())) {
+        if (!equipmentRepository.existsByIdAndIsDeletedFalse(r.equipmentId())) {
             throw RestException.notFound("Equipment not found: " + r.equipmentId());
         }
         CalibrationRecord c = new CalibrationRecord();
@@ -59,9 +59,9 @@ public class CalibrationService {
     }
 
     public CalibrationRecordDto update(UUID id, CalibrationRecordRequest r) {
-        CalibrationRecord c = repo.findById(id)
+        CalibrationRecord c = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Calibration record not found: " + id));
-        if (!equipmentRepository.existsById(r.equipmentId())) {
+        if (!equipmentRepository.existsByIdAndIsDeletedFalse(r.equipmentId())) {
             throw RestException.notFound("Equipment not found: " + r.equipmentId());
         }
         c.setEquipmentId(r.equipmentId());
@@ -79,8 +79,9 @@ public class CalibrationService {
     }
 
     public void delete(UUID id) {
-        CalibrationRecord c = repo.findById(id)
+        CalibrationRecord c = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Calibration record not found: " + id));
-        repo.delete(c);
+        c.setDeleted(true);
+        repo.save(c);
     }
 }

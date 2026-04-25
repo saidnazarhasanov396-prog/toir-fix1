@@ -34,15 +34,15 @@ public class KnowledgeController {
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) String kind
     ) {
-        if (equipmentId != null) return repo.findAllByEquipmentId(equipmentId);
-        if (equipmentTypeId != null) return repo.findAllByEquipmentTypeId(equipmentTypeId);
-        if (kind != null) return repo.findAllByKind(kind);
-        return repo.findAll();
+        if (equipmentId != null) return repo.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
+        if (equipmentTypeId != null) return repo.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId);
+        if (kind != null) return repo.findAllByKindAndIsDeletedFalse(kind);
+        return repo.findAllByIsDeletedFalse();
     }
 
     @GetMapping("/{id}")
     public KnowledgeArticle get(@PathVariable UUID id) {
-        KnowledgeArticle a = repo.findById(id)
+        KnowledgeArticle a = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Article not found: " + id));
         a.setViewCount(a.getViewCount() + 1);
         return a;
@@ -53,7 +53,7 @@ public class KnowledgeController {
         if (article.getCode() == null || article.getCode().isBlank()) {
             throw RestException.badRequest("Code is required");
         }
-        if (repo.existsByCode(article.getCode())) {
+        if (repo.existsByCodeAndIsDeletedFalse(article.getCode())) {
             throw RestException.conflict("Article code already exists: " + article.getCode());
         }
         if (article.getKind() == null) article.setKind("LESSON_LEARNED");
@@ -62,7 +62,7 @@ public class KnowledgeController {
 
     @PutMapping("/{id}")
     public KnowledgeArticle update(@PathVariable UUID id, @RequestBody KnowledgeArticle patch) {
-        KnowledgeArticle existing = repo.findById(id)
+        KnowledgeArticle existing = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Article not found: " + id));
         existing.setTitle(patch.getTitle());
         existing.setKind(patch.getKind() != null ? patch.getKind() : existing.getKind());
@@ -80,7 +80,9 @@ public class KnowledgeController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
-        repo.deleteById(id);
+        var entity = repo.findByIdAndIsDeletedFalse(id).orElseThrow();
+        entity.setDeleted(true);
+        repo.save(entity);
         return ResponseEntity.noContent().build();
     }
 }

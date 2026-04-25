@@ -100,7 +100,7 @@ public class ExtendedDataSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        if (brigadeRepo.count() > 0) return;
+        if (brigadeRepo.countByIsDeletedFalse() > 0) return;
 
         seedCertificationTypes();
         seedBrigadesAndMembers();
@@ -114,7 +114,7 @@ public class ExtendedDataSeeder implements CommandLineRunner {
     }
 
     private void seedKnowledgeArticles() {
-        List<Equipment> eqs = equipmentRepository.findAll();
+        List<Equipment> eqs = equipmentRepository.findAllByIsDeletedFalse();
         Equipment compressor = eqs.stream()
                 .filter(e -> e.getCode() != null && e.getCode().contains("CMP"))
                 .findFirst()
@@ -203,11 +203,11 @@ public class ExtendedDataSeeder implements CommandLineRunner {
     }
 
     private void seedBrigadesAndMembers() {
-        List<User> users = userRepository.findAll();
+        List<User> users = userRepository.findAllByIsDeletedFalse();
         if (users.isEmpty()) return;
-        var amm = departmentRepository.findAll().stream()
+        var amm = departmentRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> "NAV-AMM".equals(d.getCode())).findFirst().orElse(null);
-        var urea = departmentRepository.findAll().stream()
+        var urea = departmentRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> "NAV-UREA".equals(d.getCode())).findFirst().orElse(null);
 
         Brigade b1 = new Brigade();
@@ -236,7 +236,7 @@ public class ExtendedDataSeeder implements CommandLineRunner {
     }
 
     private void seedUserCertifications() {
-        List<User> users = userRepository.findAll();
+        List<User> users = userRepository.findAllByIsDeletedFalse();
         if (users.isEmpty()) return;
         LocalDate today = LocalDate.now();
 
@@ -264,7 +264,7 @@ public class ExtendedDataSeeder implements CommandLineRunner {
     }
 
     private void seedCalibrationRecords() {
-        List<Equipment> eqs = equipmentRepository.findAll();
+        List<Equipment> eqs = equipmentRepository.findAllByIsDeletedFalse();
         if (eqs.isEmpty()) return;
 
         // для первых трёх единиц оборудования — одна свежая поверка каждая
@@ -285,7 +285,7 @@ public class ExtendedDataSeeder implements CommandLineRunner {
     }
 
     private void seedConditionReadings() {
-        List<Equipment> eqs = equipmentRepository.findAll();
+        List<Equipment> eqs = equipmentRepository.findAllByIsDeletedFalse();
         if (eqs.isEmpty()) return;
         Instant now = Instant.now();
 
@@ -323,9 +323,9 @@ public class ExtendedDataSeeder implements CommandLineRunner {
     }
 
     private void seedInspectionRoutes() {
-        List<Equipment> eqs = equipmentRepository.findAll();
+        List<Equipment> eqs = equipmentRepository.findAllByIsDeletedFalse();
         if (eqs.isEmpty()) return;
-        var amm = departmentRepository.findAll().stream()
+        var amm = departmentRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> "NAV-AMM".equals(d.getCode())).findFirst().orElse(null);
 
         InspectionRoute route = new InspectionRoute();
@@ -363,8 +363,8 @@ public class ExtendedDataSeeder implements CommandLineRunner {
     }
 
     private void seedEquipmentSparePartsCatalog() {
-        List<Equipment> eqs = equipmentRepository.findAll();
-        List<SparePart> parts = sparePartRepository.findAll();
+        List<Equipment> eqs = equipmentRepository.findAllByIsDeletedFalse();
+        List<SparePart> parts = sparePartRepository.findAllByIsDeletedFalse();
         if (eqs.isEmpty() || parts.isEmpty()) return;
 
         // для первого оборудования — две применимые запчасти

@@ -39,7 +39,7 @@ public class HrService {
     }
 
     public EmployeeDto createEmployee(EmployeeRequest r) {
-        if (employeeRepository.existsByPersonnelNumber(r.personnelNumber())) {
+        if (employeeRepository.existsByPersonnelNumberAndIsDeletedFalse(r.personnelNumber())) {
             throw RestException.conflict("Personnel number already exists: " + r.personnelNumber());
         }
         Employee e = new Employee();
@@ -54,19 +54,21 @@ public class HrService {
     }
 
     public void deleteEmployee(UUID id) {
-        employeeRepository.delete(getEmployeeOrThrow(id));
+        var entity = getEmployeeOrThrow(id);
+        entity.setDeleted(true);
+        employeeRepository.save(entity);
     }
 
     @Transactional(readOnly = true)
     public List<TimesheetEntryDto> timesheetFor(UUID employeeId, LocalDate from, LocalDate to) {
         return timesheetRepository
-                .findAllByEmployeeIdAndWorkDateBetweenOrderByWorkDateAsc(employeeId, from, to)
+                .findAllByEmployeeIdAndWorkDateBetweenAndIsDeletedFalseOrderByWorkDateAsc(employeeId, from, to)
                 .stream().map(TimesheetEntryDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<TimesheetEntryDto> timesheetRange(LocalDate from, LocalDate to) {
-        return timesheetRepository.findAllByWorkDateBetween(from, to)
+        return timesheetRepository.findAllByWorkDateBetweenAndIsDeletedFalse(from, to)
                 .stream().map(TimesheetEntryDto::from).toList();
     }
 
@@ -78,27 +80,28 @@ public class HrService {
     }
 
     public TimesheetEntryDto updateTimesheet(UUID id, TimesheetEntryRequest r) {
-        TimesheetEntry e = timesheetRepository.findById(id)
+        TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
         applyTimesheet(e, r);
         return TimesheetEntryDto.from(e);
     }
 
     public void deleteTimesheet(UUID id) {
-        TimesheetEntry e = timesheetRepository.findById(id)
+        TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
-        timesheetRepository.delete(e);
+        e.setDeleted(true);
+        timesheetRepository.save(e);
     }
 
     public TimesheetEntryDto approveTimesheet(UUID id) {
-        TimesheetEntry e = timesheetRepository.findById(id)
+        TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
         e.setStatus(TimesheetStatus.APPROVED);
         return TimesheetEntryDto.from(e);
     }
 
     private Employee getEmployeeOrThrow(UUID id) {
-        return employeeRepository.findById(id)
+        return employeeRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Employee not found: " + id));
     }
 

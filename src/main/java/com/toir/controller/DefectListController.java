@@ -6,6 +6,7 @@ import com.toir.dto.defectlist.DefectListLineDto;
 import com.toir.dto.defectlist.DefectListRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,7 +26,7 @@ public class DefectListController {
     }
 
     @GetMapping
-    public List<DefectListDto> list(
+    public Page<DefectListDto> list(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize,

@@ -20,15 +20,15 @@ public class CompletionActService {
 
     @Transactional(readOnly = true)
     public CompletionActDto findByWorkOrder(UUID workOrderId) {
-        return CompletionActDto.from(repository.findByWorkOrderId(workOrderId)
+        return CompletionActDto.from(repository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)
                 .orElseThrow(() -> RestException.notFound("Completion act not found for WO: " + workOrderId)));
     }
 
     public CompletionActDto create(UUID workOrderId, CompletionActDto r) {
-        if (repository.findByWorkOrderId(workOrderId).isPresent()) {
+        if (repository.findByWorkOrderIdAndIsDeletedFalse(workOrderId).isPresent()) {
             throw RestException.conflict("Completion act already exists for this work order");
         }
-        if (repository.existsByActNumber(r.actNumber())) {
+        if (repository.existsByActNumberAndIsDeletedFalse(r.actNumber())) {
             throw RestException.conflict("Act number already exists: " + r.actNumber());
         }
         CompletionAct a = new CompletionAct();
@@ -39,7 +39,7 @@ public class CompletionActService {
     }
 
     public CompletionActDto sign(UUID id, UUID signerId) {
-        CompletionAct a = repository.findById(id)
+        CompletionAct a = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Completion act not found: " + id));
         a.setSignedById(signerId);
         a.setSignedAt(Instant.now());

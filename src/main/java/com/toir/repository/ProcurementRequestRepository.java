@@ -12,11 +12,21 @@ import java.util.UUID;
 
 @Repository
 public interface ProcurementRequestRepository extends JpaRepository<ProcurementRequest, UUID> {
-    List<ProcurementRequest> findAllByStatus(ProcurementRequestStatus status);
+    java.util.Optional<ProcurementRequest> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    List<ProcurementRequest> findAllByDepartmentId(UUID departmentId);
+    java.util.List<ProcurementRequest> findAllByIsDeletedFalse();
 
-    boolean existsByNumber(String number);
+    java.util.List<ProcurementRequest> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
-    long countByStatus(ProcurementRequestStatus status);
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
+    List<ProcurementRequest> findAllByStatusAndIsDeletedFalse(ProcurementRequestStatus status);
+
+    List<ProcurementRequest> findAllByDepartmentIdAndIsDeletedFalse(UUID departmentId);
+
+    boolean existsByNumberAndIsDeletedFalse(String number);
+
+    long countByStatusAndIsDeletedFalse(ProcurementRequestStatus status);
 }

@@ -23,11 +23,11 @@ public class RepairMaterialUsageService {
 
     @Transactional(readOnly = true)
     public List<RepairMaterialUsageDto> findByWorkOrder(UUID workOrderId) {
-        return repository.findAllByWorkOrderId(workOrderId).stream().map(RepairMaterialUsageDto::from).toList();
+        return repository.findAllByWorkOrderIdAndIsDeletedFalse(workOrderId).stream().map(RepairMaterialUsageDto::from).toList();
     }
 
     public RepairMaterialUsageDto register(UUID workOrderId, RepairMaterialUsageDto r) {
-        WarehouseStock stock = stockRepository.findByWarehouseIdAndSparePartId(r.warehouseId(), r.sparePartId())
+        WarehouseStock stock = stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(r.warehouseId(), r.sparePartId())
                 .orElseThrow(() -> RestException.notFound("No stock found for spare part in this warehouse"));
         if (stock.getQuantity() < r.quantity()) {
             throw RestException.badRequest("Cannot write off more than available: available="

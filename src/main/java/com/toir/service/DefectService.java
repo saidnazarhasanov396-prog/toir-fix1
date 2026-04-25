@@ -4,9 +4,11 @@ import com.toir.enums.DefectStatus;
 import com.toir.repository.DefectRepository;
 
 import com.toir.exception.RestException;
+import com.toir.util.PaginationUtils;
 import com.toir.dto.defect.DefectDto;
 import com.toir.dto.defect.DefectRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,13 +24,17 @@ public class DefectService {
 
     @Transactional(readOnly = true)
     public List<DefectDto> findAll() {
-        return repository.findAll().stream().map(DefectDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(DefectDto::from).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<DefectDto> search(UUID equipmentId, int page, int size, String search) {
-        int offset = page * size;
-        return repository.searchPaginated(equipmentId, search, offset, size).stream().map(DefectDto::from).toList();
+    public Page<DefectDto> search(UUID equipmentId, int page, int size, String search) {
+        var pageable = PaginationUtils.pageRequest(page, size);
+        return repository.searchPaginated(
+                equipmentId,
+                search,
+                pageable
+        ).map(DefectDto::from);
     }
 
     @Transactional(readOnly = true)
@@ -38,11 +44,11 @@ public class DefectService {
 
     @Transactional(readOnly = true)
     public List<DefectDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentId(equipmentId).stream().map(DefectDto::from).toList();
+        return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(DefectDto::from).toList();
     }
 
     public DefectDto create(DefectRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Defect code already exists: " + request.code());
         }
         Defect entity = new Defect();
@@ -64,11 +70,13 @@ public class DefectService {
     }
 
     public void delete(UUID id) {
-        repository.delete(getOrThrow(id));
+        var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     private Defect getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Defect not found: " + id));
     }
 

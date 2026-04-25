@@ -67,10 +67,10 @@ public class OverdueDetectorService {
         int notificationsCreated = 0;
         int escalationsCreated = 0;
 
-        java.util.UUID adminId = userRepository.findByUsername("admin").map(User::getId).orElse(null);
+        java.util.UUID adminId = userRepository.findByUsernameAndIsDeletedFalse("admin").map(User::getId).orElse(null);
 
         // 1) PPR tasks overdue
-        for (PprTask task : pprTaskRepository.findAll()) {
+        for (PprTask task : pprTaskRepository.findAllByIsDeletedFalse()) {
             if (task.getDueDate() == null) continue;
             if (task.getStatus() == PprTaskStatus.COMPLETED
                     || task.getStatus() == PprTaskStatus.CANCELLED
@@ -92,7 +92,7 @@ public class OverdueDetectorService {
         }
 
         // 2) Repair requests past targetCompletionAt
-        for (RepairRequest r : repairRequestRepository.findAll()) {
+        for (RepairRequest r : repairRequestRepository.findAllByIsDeletedFalse()) {
             if (r.getStatus() == RequestStatus.CLOSED || r.getStatus() == RequestStatus.CANCELLED) continue;
             if (r.getTargetCompletionAt() == null) continue;
             if (r.getTargetCompletionAt().isBefore(now)) {
@@ -114,7 +114,7 @@ public class OverdueDetectorService {
         }
 
         // 3) Work orders past endPlannedAt
-        for (WorkOrder w : workOrderRepository.findAll()) {
+        for (WorkOrder w : workOrderRepository.findAllByIsDeletedFalse()) {
             if (w.getStatus() == WorkOrderStatus.CLOSED || w.getStatus() == WorkOrderStatus.CANCELLED) continue;
             if (w.getEndPlannedAt() == null) continue;
             if (w.getEndPlannedAt().isBefore(now)) {
@@ -134,12 +134,12 @@ public class OverdueDetectorService {
         }
 
         // 4) Calibration records past nextDueAt
-        for (CalibrationRecord c : calibrationRecordRepository.findAll()) {
+        for (CalibrationRecord c : calibrationRecordRepository.findAllByIsDeletedFalse()) {
             if (c.getNextDueAt() == null) continue;
             if (!c.getNextDueAt().isBefore(today)) continue;
             // Only alert once per record: use last calibration per equipment as reference
             List<CalibrationRecord> history = calibrationRecordRepository
-                    .findAllByEquipmentIdOrderByPerformedAtDesc(c.getEquipmentId());
+                    .findAllByEquipmentIdAndIsDeletedFalseOrderByPerformedAtDesc(c.getEquipmentId());
             if (!history.isEmpty() && !history.get(0).getId().equals(c.getId())) continue;
             calibrationBreaches++;
             if (adminId != null) {
@@ -154,7 +154,7 @@ public class OverdueDetectorService {
         }
 
         // 5) User certifications past expiresAt → auto-EXPIRED
-        for (UserCertification uc : userCertificationRepository.findAll()) {
+        for (UserCertification uc : userCertificationRepository.findAllByIsDeletedFalse()) {
             if (uc.getExpiresAt() == null) continue;
             if (!"ACTIVE".equals(uc.getStatus())) continue;
             if (!uc.getExpiresAt().isBefore(today)) continue;
@@ -179,7 +179,7 @@ public class OverdueDetectorService {
     private int createNotification(java.util.UUID recipientId, String title, String message,
                                    NotificationSeverity severity, String entityType, String entityId) {
         // idempotent: skip if we already have an open notification for the same entity
-        boolean exists = notificationRepository.findAll().stream()
+        boolean exists = notificationRepository.findAllByIsDeletedFalse().stream()
                 .anyMatch(n -> entityType.equals(n.getEntityType())
                         && entityId.equals(n.getEntityId())
                         && (n.getStatus() == NotificationStatus.PENDING || n.getStatus() == NotificationStatus.SENT));
@@ -200,7 +200,7 @@ public class OverdueDetectorService {
     private int raiseEscalation(String entityType, String entityId, SlaTriggerType trigger) {
         // idempotent: skip if already raised and still open
         List<EscalationEvent> existing = escalationEventRepository
-                .findAllByEntityTypeAndEntityId(entityType, entityId);
+                .findAllByEntityTypeAndEntityIdAndIsDeletedFalse(entityType, entityId);
         boolean alreadyOpen = existing.stream()
                 .anyMatch(e -> e.getStatus() == EscalationStatus.OPEN
                         || e.getStatus() == EscalationStatus.ACKNOWLEDGED);

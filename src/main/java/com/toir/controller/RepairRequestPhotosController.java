@@ -56,7 +56,7 @@ public class RepairRequestPhotosController {
     }
 
     private void ensureExists(UUID requestId) {
-        if (!repairRequestRepository.existsById(requestId)) {
+        if (!repairRequestRepository.existsByIdAndIsDeletedFalse(requestId)) {
             throw RestException.notFound("Repair request not found: " + requestId);
         }
     }

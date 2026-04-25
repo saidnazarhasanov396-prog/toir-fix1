@@ -13,9 +13,19 @@ import java.util.UUID;
 
 @Repository
 public interface MaintenanceBudgetRepository extends JpaRepository<MaintenanceBudget, UUID> {
+    java.util.Optional<MaintenanceBudget> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<MaintenanceBudget> findAllByIsDeletedFalse();
+
+    java.util.List<MaintenanceBudget> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM maintenance_budgets WHERE year = :year AND is_deleted = false", nativeQuery = true)
-    List<MaintenanceBudget> findAllByYear(@Param("year") int year);
+    List<MaintenanceBudget> findAllByYearAndIsDeletedFalse(@Param("year") int year);
 
     @Query(value = "SELECT * FROM maintenance_budgets WHERE department_id = :departmentId AND year = :year AND is_deleted = false", nativeQuery = true)
-    List<MaintenanceBudget> findAllByDepartmentIdAndYear(@Param("departmentId") UUID departmentId, @Param("year") int year);
+    List<MaintenanceBudget> findAllByDepartmentIdAndYearAndIsDeletedFalse(@Param("departmentId") UUID departmentId, @Param("year") int year);
 }

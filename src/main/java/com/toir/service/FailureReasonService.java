@@ -20,11 +20,11 @@ public class FailureReasonService {
 
     @Transactional(readOnly = true)
     public List<FailureReasonDto> findAll() {
-        return repository.findAll().stream().map(FailureReasonDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(FailureReasonDto::from).toList();
     }
 
     public FailureReasonDto create(FailureReasonDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Failure reason code already exists: " + r.code());
         }
         FailureReason e = new FailureReason();
@@ -38,10 +38,12 @@ public class FailureReasonService {
         return FailureReasonDto.from(e);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private FailureReason getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Failure reason not found: " + id));
     }
 }

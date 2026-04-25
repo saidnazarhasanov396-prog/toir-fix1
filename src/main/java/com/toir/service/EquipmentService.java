@@ -53,12 +53,12 @@ public class EquipmentService {
         Set<UUID> parentIds = collectIds(items.getContent(), Equipment::getParentId);
         Set<UUID> equipmentIds = items.getContent().stream().map(Equipment::getId).collect(Collectors.toSet());
 
-        Map<UUID, Department> deptMap = byId(departmentRepository.findAllById(deptIds), Department::getId);
-        Map<UUID, Location> locMap = byId(locationRepository.findAllById(locIds), Location::getId);
-        Map<UUID, EquipmentType> typeMap = byId(equipmentTypeRepository.findAllById(typeIds), EquipmentType::getId);
-        Map<UUID, Equipment> parentMap = byId(repository.findAllById(parentIds), Equipment::getId);
+        Map<UUID, Department> deptMap = byId(departmentRepository.findAllByIdInAndIsDeletedFalse(deptIds), Department::getId);
+        Map<UUID, Location> locMap = byId(locationRepository.findAllByIdInAndIsDeletedFalse(locIds), Location::getId);
+        Map<UUID, EquipmentType> typeMap = byId(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(typeIds), EquipmentType::getId);
+        Map<UUID, Equipment> parentMap = byId(repository.findAllByIdInAndIsDeletedFalse(parentIds), Equipment::getId);
         Map<UUID, EquipmentPassport> passportMap = passportRepository
-                .findAllByEquipmentIdIn(equipmentIds).stream()
+                .findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
                 .collect(Collectors.toMap(EquipmentPassport::getEquipmentId, Function.identity(), (a, b) -> a));
 
         return items.map(e -> EquipmentDto.from(
@@ -76,10 +76,10 @@ public class EquipmentService {
     }
 
     public EquipmentDto create(EquipmentRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Equipment code already exists: " + request.code());
         }
-        if (repository.existsByInventoryNumber(request.inventoryNumber())) {
+        if (repository.existsByInventoryNumberAndIsDeletedFalse(request.inventoryNumber())) {
             throw RestException.conflict("Inventory number already exists: " + request.inventoryNumber());
         }
         Equipment entity = new Equipment();
@@ -96,14 +96,15 @@ public class EquipmentService {
 
     public void delete(UUID id) {
         Equipment entity = getOrThrow(id);
-        if (!repository.findAllByParentId(id).isEmpty()) {
+        if (!repository.findAllByParentIdAndIsDeletedFalse(id).isEmpty()) {
             throw RestException.conflict("Equipment has child nodes");
         }
-        repository.delete(entity);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     Equipment getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
     }
 
@@ -116,12 +117,12 @@ public class EquipmentService {
         Set<UUID> parentIds = collectIds(items, Equipment::getParentId);
         Set<UUID> equipmentIds = items.stream().map(Equipment::getId).collect(Collectors.toSet());
 
-        Map<UUID, Department> deptMap = byId(departmentRepository.findAllById(deptIds), Department::getId);
-        Map<UUID, Location> locMap = byId(locationRepository.findAllById(locIds), Location::getId);
-        Map<UUID, EquipmentType> typeMap = byId(equipmentTypeRepository.findAllById(typeIds), EquipmentType::getId);
-        Map<UUID, Equipment> parentMap = byId(repository.findAllById(parentIds), Equipment::getId);
+        Map<UUID, Department> deptMap = byId(departmentRepository.findAllByIdInAndIsDeletedFalse(deptIds), Department::getId);
+        Map<UUID, Location> locMap = byId(locationRepository.findAllByIdInAndIsDeletedFalse(locIds), Location::getId);
+        Map<UUID, EquipmentType> typeMap = byId(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(typeIds), EquipmentType::getId);
+        Map<UUID, Equipment> parentMap = byId(repository.findAllByIdInAndIsDeletedFalse(parentIds), Equipment::getId);
         Map<UUID, EquipmentPassport> passportMap = passportRepository
-                .findAllByEquipmentIdIn(equipmentIds).stream()
+                .findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
                 .collect(Collectors.toMap(EquipmentPassport::getEquipmentId, Function.identity(), (a, b) -> a));
 
         return items.stream()

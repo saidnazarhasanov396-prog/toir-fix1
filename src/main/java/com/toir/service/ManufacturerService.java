@@ -19,7 +19,7 @@ public class ManufacturerService {
 
     @Transactional(readOnly = true)
     public List<ManufacturerDto> findAll() {
-        return repository.findAll().stream().map(ManufacturerDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(ManufacturerDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -28,7 +28,7 @@ public class ManufacturerService {
     }
 
     public ManufacturerDto create(ManufacturerDto request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Manufacturer code already exists: " + request.code());
         }
         Manufacturer entity = new Manufacturer();
@@ -43,11 +43,13 @@ public class ManufacturerService {
     }
 
     public void delete(UUID id) {
-        repository.delete(getOrThrow(id));
+        var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     private Manufacturer getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Manufacturer not found: " + id));
     }
 

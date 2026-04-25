@@ -49,33 +49,33 @@ public class AnalyticsService {
 
 
     public AnalyticsOverview overview() {
-        long openRequests = repairRequestRepository.countByStatus(RequestStatus.OPEN)
-                + repairRequestRepository.countByStatus(RequestStatus.IN_PROGRESS);
+        long openRequests = repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN)
+                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS);
         long emergencyRequests = repairRequestRepository.search(null, null, null).stream()
                 .filter(r -> r.getStatus() != RequestStatus.CLOSED && r.getStatus() != RequestStatus.CANCELLED)
                 .filter(r -> "EMERGENCY".equals(r.getPriority().name()))
                 .count();
-        long closedWorkOrders = workOrderRepository.countByStatus(WorkOrderStatus.CLOSED);
-        long activeDefects = defectRepository.countByStatus(DefectStatus.OPEN)
-                + defectRepository.countByStatus(DefectStatus.IN_ANALYSIS)
-                + defectRepository.countByStatus(DefectStatus.IN_PROGRESS);
+        long closedWorkOrders = workOrderRepository.countByStatusAndIsDeletedFalse(WorkOrderStatus.CLOSED);
+        long activeDefects = defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.OPEN)
+                + defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.IN_ANALYSIS)
+                + defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.IN_PROGRESS);
 
         Totals totals = new Totals(openRequests, emergencyRequests, closedWorkOrders, activeDefects);
 
-        List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAll();
+        List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalse();
         double mtbfAvg = allMetrics.stream().map(ReliabilityMetric::getMtbfHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
         double mttrAvg = allMetrics.stream().map(ReliabilityMetric::getMttrHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
 
-        List<WorkOrder> allWorkOrders = workOrderRepository.findAll();
+        List<WorkOrder> allWorkOrders = workOrderRepository.findAllByIsDeletedFalse();
         long totalWO = allWorkOrders.size();
         long unplannedWO = allWorkOrders.stream()
                 .filter(w -> w.getType() == WorkOrderType.EMERGENCY || w.getType() == WorkOrderType.DEFECT)
                 .count();
         double unplannedShare = totalWO > 0 ? (double) unplannedWO / totalWO * 100 : 0;
 
-        List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAll();
+        List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAllByIsDeletedFalse();
         double downtimeHoursTotal = allDowntimes.stream()
                 .map(DowntimeEvent::getDurationMinutes)
                 .filter(Objects::nonNull)
@@ -84,29 +84,29 @@ public class AnalyticsService {
 
         // Reaction = detectedAt → first status transition to IN_PROGRESS (approx: createdAt→now for IN_PROGRESS)
         // Resolution = detectedAt → actualCompletionAt
-        List<com.toir.entity.RepairRequest> closedRequests = repairRequestRepository.findAll().stream()
+        List<com.toir.entity.RepairRequest> closedRequests = repairRequestRepository.findAllByIsDeletedFalse().stream()
                 .filter(r -> r.getStatus() == RequestStatus.CLOSED && r.getActualCompletionAt() != null)
                 .toList();
         double avgResolutionHours = closedRequests.stream()
                 .mapToLong(r -> java.time.Duration.between(r.getDetectedAt(), r.getActualCompletionAt()).toMinutes())
                 .average().orElse(0) / 60.0;
         // reaction — use createdAt→updatedAt as proxy for non-CLOSED (analyst view approximates)
-        double avgReactionHours = repairRequestRepository.findAll().stream()
+        double avgReactionHours = repairRequestRepository.findAllByIsDeletedFalse().stream()
                 .filter(r -> r.getStatus() != RequestStatus.OPEN && r.getStatus() != RequestStatus.DRAFT)
                 .mapToLong(r -> java.time.Duration.between(r.getCreatedAt(), r.getUpdatedAt()).toMinutes())
                 .average().orElse(0) / 60.0;
 
-        long pprTotalForKpi = pprTaskRepository.count();
-        long pprDoneForKpi = pprTaskRepository.countByStatus(PprTaskStatus.COMPLETED);
+        long pprTotalForKpi = pprTaskRepository.countByIsDeletedFalse();
+        long pprDoneForKpi = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED);
         double pprCompletionRate = pprTotalForKpi > 0 ? (double) pprDoneForKpi / pprTotalForKpi * 100 : 0;
 
-        long pprOverdueCount = pprTaskRepository.countByStatus(PprTaskStatus.OVERDUE);
+        long pprOverdueCount = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE);
         double overdueWorkShare = pprTotalForKpi > 0 ? (double) pprOverdueCount / pprTotalForKpi * 100 : 0;
 
         Kpis kpis = new Kpis(mtbfAvg, mttrAvg, unplannedShare, downtimeHoursTotal,
                 avgReactionHours, avgResolutionHours, pprCompletionRate, overdueWorkShare);
 
-        List<Defect> allDefects = defectRepository.findAll();
+        List<Defect> allDefects = defectRepository.findAllByIsDeletedFalse();
         List<FailureReasonRow> topFailureReasons = allDefects.stream()
                 .filter(d -> d.getFailureReason() != null && !d.getFailureReason().isBlank())
                 .collect(Collectors.groupingBy(Defect::getFailureReason, Collectors.counting()))
@@ -116,7 +116,7 @@ public class AnalyticsService {
                 .map(e -> new FailureReasonRow(e.getKey(), e.getValue()))
                 .toList();
 
-        Map<UUID, Department> deptById = departmentRepository.findAll().stream()
+        Map<UUID, Department> deptById = departmentRepository.findAllByIsDeletedFalse().stream()
                 .collect(Collectors.toMap(Department::getId, d -> d));
 
         List<DowntimeByDepartmentRow> downtimeByDept = allDowntimes.stream()
@@ -136,7 +136,7 @@ public class AnalyticsService {
                 })
                 .toList();
 
-        Map<UUID, Equipment> equipById = equipmentRepository.findAll().stream()
+        Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalse().stream()
                 .collect(Collectors.toMap(Equipment::getId, e -> e));
 
         List<ReliabilitySnapshotRow> reliabilitySnapshot = allMetrics.stream()
@@ -172,8 +172,8 @@ public class AnalyticsService {
                 })
                 .toList();
 
-        long pprTotal = pprTaskRepository.count();
-        long pprDone = pprTaskRepository.countByStatus(PprTaskStatus.COMPLETED);
+        long pprTotal = pprTaskRepository.countByIsDeletedFalse();
+        long pprDone = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED);
         double pprCompletion = pprTotal > 0 ? (double) pprDone / pprTotal * 100 : 0;
 
         List<MaintenanceKpiRow> maintenanceKpis = allWorkOrders.stream()
@@ -205,7 +205,7 @@ public class AnalyticsService {
     }
 
     public Map<String, Object> failurePareto() {
-        List<FailureReasonRow> items = defectRepository.findAll().stream()
+        List<FailureReasonRow> items = defectRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> d.getFailureReason() != null && !d.getFailureReason().isBlank())
                 .collect(Collectors.groupingBy(Defect::getFailureReason, Collectors.counting()))
                 .entrySet().stream()
@@ -216,7 +216,7 @@ public class AnalyticsService {
     }
 
     public Map<String, Object> rcaOverview() {
-        List<Defect> all = defectRepository.findAll();
+        List<Defect> all = defectRepository.findAllByIsDeletedFalse();
         List<Map<String, Object>> topRoot = all.stream()
                 .filter(d -> d.getRootCause() != null && !d.getRootCause().isBlank())
                 .collect(Collectors.groupingBy(Defect::getRootCause, Collectors.counting()))
@@ -244,7 +244,7 @@ public class AnalyticsService {
     }
 
     public Map<String, Object> rcaEquipment(UUID equipmentId) {
-        List<Defect> defects = defectRepository.findAllByEquipmentId(equipmentId);
+        List<Defect> defects = defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
         Map<String, Long> topCauses = defects.stream()
                 .filter(d -> d.getRootCause() != null)
                 .collect(Collectors.groupingBy(Defect::getRootCause, Collectors.counting()));
@@ -267,9 +267,9 @@ public class AnalyticsService {
 
     public Map<String, Object> equipmentAnalytics(UUID equipmentId) {
         List<ReliabilityMetric> metrics = reliabilityMetricRepository
-                .findAllByEquipmentIdOrderByMetricDateDesc(equipmentId);
+                .findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(equipmentId);
         List<DowntimeEvent> downtimes = downtimeEventRepository
-                .findAllByEquipmentIdOrderByStartAtDesc(equipmentId);
+                .findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId);
 
         ReliabilityMetric latest = metrics.isEmpty() ? null : metrics.get(0);
         long downtimeMinutes = downtimes.stream()
@@ -294,6 +294,6 @@ public class AnalyticsService {
     }
 
     public List<ReliabilityMetric> reliabilityList() {
-        return reliabilityMetricRepository.findAll();
+        return reliabilityMetricRepository.findAllByIsDeletedFalse();
     }
 }

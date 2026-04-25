@@ -13,8 +13,18 @@ import java.util.UUID;
 
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
-    @Query(value = "SELECT * FROM audit_logs ORDER BY created_at DESC",
-            countQuery = "SELECT COUNT(*) FROM audit_logs",
+    java.util.Optional<AuditLog> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<AuditLog> findAllByIsDeletedFalse();
+
+    java.util.List<AuditLog> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
+    @Query(value = "SELECT * FROM audit_logs WHERE is_deleted = false ORDER BY created_at DESC",
+            countQuery = "SELECT COUNT(*) FROM audit_logs WHERE is_deleted = false",
             nativeQuery = true)
-    Page<AuditLog> findAllByOrderByCreatedAtDesc(Pageable pageable);
+    Page<AuditLog> findAllByIsDeletedFalseOrderByCreatedAtDesc(Pageable pageable);
 }

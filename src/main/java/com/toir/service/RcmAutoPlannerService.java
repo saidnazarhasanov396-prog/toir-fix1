@@ -53,13 +53,13 @@ public class RcmAutoPlannerService {
         int skipped = 0;
 
         for (EquipmentRiskScore s : scores) {
-            Equipment eq = equipmentRepository.findById(s.equipmentId()).orElse(null);
+            Equipment eq = equipmentRepository.findByIdAndIsDeletedFalse(s.equipmentId()).orElse(null);
             if (eq == null || eq.getEquipmentTypeId() == null) {
                 skipped++;
                 continue;
             }
             List<MaintenanceRegulation> regs = regulationRepository
-                    .findAllByEquipmentTypeIdAndActiveTrue(eq.getEquipmentTypeId());
+                    .findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(eq.getEquipmentTypeId());
             if (regs.isEmpty()) {
                 skipped++;
                 continue;
@@ -94,13 +94,13 @@ public class RcmAutoPlannerService {
 
     private PprPlan resolvePlan(UUID planId) {
         if (planId != null) {
-            return planRepository.findById(planId)
+            return planRepository.findByIdAndIsDeletedFalse(planId)
                     .orElseThrow(() -> RestException.notFound("PprPlan not found: " + planId));
         }
         LocalDateTime now = LocalDateTime.now();
-        List<PprPlan> plans = planRepository.findAllByYearAndMonth(now.getYear(), now.getMonthValue());
+        List<PprPlan> plans = planRepository.findAllByYearAndMonthAndIsDeletedFalse(now.getYear(), now.getMonthValue());
         if (plans.isEmpty()) {
-            List<PprPlan> any = planRepository.findAll();
+            List<PprPlan> any = planRepository.findAllByIsDeletedFalse();
             if (any.isEmpty()) throw RestException.badRequest("No PprPlan exists — create one first");
             return any.get(0);
         }

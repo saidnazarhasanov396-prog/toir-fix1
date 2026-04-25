@@ -21,7 +21,7 @@ public class EquipmentKPIService {
 
     @Transactional(readOnly = true)
     public List<EquipmentKPIDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentIdOrderByPeriodStartDesc(equipmentId).stream()
+        return repository.findAllByEquipmentIdAndIsDeletedFalseOrderByPeriodStartDesc(equipmentId).stream()
                 .map(EquipmentKPIDto::from).toList();
     }
 
@@ -55,8 +55,9 @@ public class EquipmentKPIService {
     }
 
     public void delete(UUID id) {
-        EquipmentKPI k = repository.findById(id)
+        EquipmentKPI k = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment KPI not found: " + id));
-        repository.delete(k);
+        k.setDeleted(true);
+        repository.save(k);
     }
 }

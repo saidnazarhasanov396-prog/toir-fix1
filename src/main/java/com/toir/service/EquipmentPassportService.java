@@ -19,15 +19,15 @@ public class EquipmentPassportService {
 
     @Transactional(readOnly = true)
     public EquipmentPassportDto findByEquipment(UUID equipmentId) {
-        return EquipmentPassportDto.from(repository.findByEquipmentId(equipmentId)
+        return EquipmentPassportDto.from(repository.findByEquipmentIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Passport not found for equipment: " + equipmentId)));
     }
 
     public EquipmentPassportDto upsert(UUID equipmentId, EquipmentPassportDto r) {
-        EquipmentPassport p = repository.findByEquipmentId(equipmentId).orElseGet(EquipmentPassport::new);
+        EquipmentPassport p = repository.findByEquipmentIdAndIsDeletedFalse(equipmentId).orElseGet(EquipmentPassport::new);
         p.setEquipmentId(equipmentId);
         if (r.passportNumber() != null && !r.passportNumber().equals(p.getPassportNumber())
-                && repository.existsByPassportNumber(r.passportNumber())) {
+                && repository.existsByPassportNumberAndIsDeletedFalse(r.passportNumber())) {
             throw RestException.conflict("Passport number already exists: " + r.passportNumber());
         }
         p.setPassportNumber(r.passportNumber());

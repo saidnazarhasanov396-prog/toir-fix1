@@ -12,6 +12,16 @@ import java.util.UUID;
 
 @Repository
 public interface MaintenanceTemplateRepository extends JpaRepository<MaintenanceTemplate, UUID> {
+    java.util.Optional<MaintenanceTemplate> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<MaintenanceTemplate> findAllByIsDeletedFalse();
+
+    java.util.List<MaintenanceTemplate> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM maintenance_templates WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 }

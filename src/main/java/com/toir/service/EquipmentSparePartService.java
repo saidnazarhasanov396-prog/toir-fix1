@@ -26,25 +26,25 @@ public class EquipmentSparePartService {
 
     @Transactional(readOnly = true)
     public List<EquipmentSparePartDto> listForEquipment(UUID equipmentId) {
-        if (!equipmentRepository.existsById(equipmentId)) {
+        if (!equipmentRepository.existsByIdAndIsDeletedFalse(equipmentId)) {
             throw RestException.notFound("Equipment not found: " + equipmentId);
         }
-        return repo.findAllByEquipmentId(equipmentId).stream().map(this::enrich).toList();
+        return repo.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(this::enrich).toList();
     }
 
     @Transactional(readOnly = true)
     public List<EquipmentSparePartDto> listForSparePart(UUID sparePartId) {
-        if (!sparePartRepository.existsById(sparePartId)) {
+        if (!sparePartRepository.existsByIdAndIsDeletedFalse(sparePartId)) {
             throw RestException.notFound("Spare part not found: " + sparePartId);
         }
-        return repo.findAllBySparePartId(sparePartId).stream().map(this::enrich).toList();
+        return repo.findAllBySparePartIdAndIsDeletedFalse(sparePartId).stream().map(this::enrich).toList();
     }
 
     public EquipmentSparePartDto add(UUID equipmentId, EquipmentSparePartRequest r) {
-        if (!equipmentRepository.existsById(equipmentId)) {
+        if (!equipmentRepository.existsByIdAndIsDeletedFalse(equipmentId)) {
             throw RestException.notFound("Equipment not found: " + equipmentId);
         }
-        SparePart sp = sparePartRepository.findById(r.sparePartId())
+        SparePart sp = sparePartRepository.findByIdAndIsDeletedFalse(r.sparePartId())
                 .orElseThrow(() -> RestException.notFound("Spare part not found: " + r.sparePartId()));
         EquipmentSparePart esp = new EquipmentSparePart();
         esp.setEquipmentId(equipmentId);
@@ -58,10 +58,10 @@ public class EquipmentSparePartService {
     }
 
     public EquipmentSparePartDto update(UUID id, EquipmentSparePartRequest r) {
-        EquipmentSparePart esp = repo.findById(id)
+        EquipmentSparePart esp = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment spare part link not found: " + id));
         if (!esp.getSparePartId().equals(r.sparePartId())) {
-            sparePartRepository.findById(r.sparePartId())
+            sparePartRepository.findByIdAndIsDeletedFalse(r.sparePartId())
                     .orElseThrow(() -> RestException.notFound("Spare part not found: " + r.sparePartId()));
             esp.setSparePartId(r.sparePartId());
         }
@@ -74,13 +74,14 @@ public class EquipmentSparePartService {
     }
 
     public void remove(UUID id) {
-        EquipmentSparePart esp = repo.findById(id)
+        EquipmentSparePart esp = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment spare part link not found: " + id));
-        repo.delete(esp);
+        esp.setDeleted(true);
+        repo.save(esp);
     }
 
     private EquipmentSparePartDto enrich(EquipmentSparePart esp) {
-        return sparePartRepository.findById(esp.getSparePartId())
+        return sparePartRepository.findByIdAndIsDeletedFalse(esp.getSparePartId())
                 .map(sp -> EquipmentSparePartDto.from(esp, sp.getCode(), sp.getName(), sp.getUnit()))
                 .orElseGet(() -> EquipmentSparePartDto.from(esp));
     }

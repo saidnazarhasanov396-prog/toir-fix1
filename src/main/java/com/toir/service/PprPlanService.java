@@ -30,7 +30,7 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public List<PprPlanDto> findAll() {
-        return planRepository.findAll().stream().map(PprPlanDto::from).toList();
+        return planRepository.findAllByIsDeletedFalse().stream().map(PprPlanDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -39,7 +39,7 @@ public class PprPlanService {
     }
 
     public PprPlanDto create(PprPlanRequest request) {
-        if (planRepository.existsByCode(request.code())) {
+        if (planRepository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Plan code already exists: " + request.code());
         }
         PprPlan plan = new PprPlan();
@@ -58,7 +58,7 @@ public class PprPlanService {
         if (plan.getStatus() != PlanStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT plans can be edited");
         }
-        if (!plan.getCode().equals(request.code()) && planRepository.existsByCode(request.code())) {
+        if (!plan.getCode().equals(request.code()) && planRepository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Plan code already exists: " + request.code());
         }
         plan.setCode(request.code());
@@ -75,7 +75,8 @@ public class PprPlanService {
         if (plan.getStatus() != PlanStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT plans can be deleted");
         }
-        planRepository.delete(plan);
+        plan.setDeleted(true);
+        planRepository.save(plan);
     }
 
     public PprPlanDto approve(UUID planId, UUID approverId) {
@@ -106,7 +107,7 @@ public class PprPlanService {
     }
 
     public PprTaskDto postponeTask(UUID taskId, PostponeTaskRequest request) {
-        PprTask task = taskRepository.findById(taskId)
+        PprTask task = taskRepository.findByIdAndIsDeletedFalse(taskId)
                 .orElseThrow(() -> RestException.notFound("PPR task not found: " + taskId));
         if (request.reason() == null || request.reason().isBlank()) {
             throw RestException.badRequest("Postpone reason is required");
@@ -119,11 +120,11 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public List<PprTaskDto> findTasksByPlan(UUID planId) {
-        return taskRepository.findAllByPlanId(planId).stream().map(PprTaskDto::from).toList();
+        return taskRepository.findAllByPlanIdAndIsDeletedFalse(planId).stream().map(PprTaskDto::from).toList();
     }
 
     private PprPlan getPlan(UUID id) {
-        return planRepository.findById(id)
+        return planRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("PPR plan not found: " + id));
     }
 }

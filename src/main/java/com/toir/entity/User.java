@@ -58,6 +58,10 @@ public class User {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    @Builder.Default
+    @Column(name = "is_deleted", nullable = false, columnDefinition = "boolean default false")
+    private boolean isDeleted = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

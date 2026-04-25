@@ -13,15 +13,25 @@ import java.util.UUID;
 
 @Repository
 public interface KnowledgeArticleRepository extends JpaRepository<KnowledgeArticle, UUID> {
+    java.util.Optional<KnowledgeArticle> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<KnowledgeArticle> findAllByIsDeletedFalse();
+
+    java.util.List<KnowledgeArticle> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM knowledge_articles WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query(value = "SELECT * FROM knowledge_articles WHERE equipment_type_id = :equipmentTypeId AND is_deleted = false", nativeQuery = true)
-    List<KnowledgeArticle> findAllByEquipmentTypeId(@Param("equipmentTypeId") UUID equipmentTypeId);
+    List<KnowledgeArticle> findAllByEquipmentTypeIdAndIsDeletedFalse(@Param("equipmentTypeId") UUID equipmentTypeId);
 
     @Query(value = "SELECT * FROM knowledge_articles WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
-    List<KnowledgeArticle> findAllByEquipmentId(@Param("equipmentId") UUID equipmentId);
+    List<KnowledgeArticle> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
     @Query(value = "SELECT * FROM knowledge_articles WHERE kind = :kind AND is_deleted = false", nativeQuery = true)
-    List<KnowledgeArticle> findAllByKind(@Param("kind") String kind);
+    List<KnowledgeArticle> findAllByKindAndIsDeletedFalse(@Param("kind") String kind);
 }

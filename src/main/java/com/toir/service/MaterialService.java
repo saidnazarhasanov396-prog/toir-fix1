@@ -20,11 +20,11 @@ public class MaterialService {
 
     @Transactional(readOnly = true)
     public List<MaterialDto> findAll() {
-        return repository.findAll().stream().map(MaterialDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(MaterialDto::from).toList();
     }
 
     public MaterialDto create(MaterialDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Material code already exists: " + r.code());
         }
         Material m = new Material();
@@ -38,10 +38,12 @@ public class MaterialService {
         return MaterialDto.from(m);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private Material getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Material not found: " + id));
     }
 

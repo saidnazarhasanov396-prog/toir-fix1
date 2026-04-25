@@ -21,7 +21,7 @@ public class LocationService {
 
     @Transactional(readOnly = true)
     public List<LocationDto> findAll() {
-        return repository.findAll().stream().map(LocationDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(LocationDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -30,7 +30,7 @@ public class LocationService {
     }
 
     public LocationDto create(LocationRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Location code already exists: " + request.code());
         }
         Location entity = new Location();
@@ -46,14 +46,15 @@ public class LocationService {
 
     public void delete(UUID id) {
         Location entity = getOrThrow(id);
-        if (!repository.findAllByParentId(id).isEmpty()) {
+        if (!repository.findAllByParentIdAndIsDeletedFalse(id).isEmpty()) {
             throw RestException.conflict("Location has children");
         }
-        repository.delete(entity);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     private Location getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Location not found: " + id));
     }
 

@@ -38,9 +38,9 @@ public class ProcurementRequestService {
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId) {
         List<ProcurementRequest> list;
-        if (status != null) list = repo.findAllByStatus(status);
-        else if (departmentId != null) list = repo.findAllByDepartmentId(departmentId);
-        else list = repo.findAll();
+        if (status != null) list = repo.findAllByStatusAndIsDeletedFalse(status);
+        else if (departmentId != null) list = repo.findAllByDepartmentIdAndIsDeletedFalse(departmentId);
+        else list = repo.findAllByIsDeletedFalse();
         return list.stream().map(ProcurementRequestDto::from).toList();
     }
 
@@ -143,7 +143,7 @@ public class ProcurementRequestService {
 
     /** Сгенерировать заявку(и) на закупку из low-stock позиций (по складу). */
     public List<ProcurementRequestDto> generateFromLowStock(UUID warehouseId) {
-        List<WarehouseStock> stocks = stockRepository.findAll().stream()
+        List<WarehouseStock> stocks = stockRepository.findAllByIsDeletedFalse().stream()
                 .filter(s -> warehouseId == null || s.getWarehouseId().equals(warehouseId))
                 .filter(s -> s.getAvailable() < s.getMinQty())
                 .toList();
@@ -162,7 +162,7 @@ public class ProcurementRequestService {
                 pr.setRequiredBy(LocalDate.now(ZoneOffset.UTC).plusDays(14));
                 return pr;
             });
-            SparePart sp = sparePartRepository.findById(s.getSparePartId()).orElse(null);
+            SparePart sp = sparePartRepository.findByIdAndIsDeletedFalse(s.getSparePartId()).orElse(null);
             if (sp == null) continue;
             double target = s.getMaxQty() != null ? s.getMaxQty() : s.getMinQty() * 2;
             double needed = Math.max(0, target - s.getAvailable());
@@ -187,7 +187,7 @@ public class ProcurementRequestService {
     }
 
     private ProcurementRequestLine buildLine(ProcurementRequest p, ProcurementLineRequest r) {
-        SparePart sp = sparePartRepository.findById(r.sparePartId())
+        SparePart sp = sparePartRepository.findByIdAndIsDeletedFalse(r.sparePartId())
                 .orElseThrow(() -> RestException.notFound("Spare part not found: " + r.sparePartId()));
         ProcurementRequestLine line = new ProcurementRequestLine();
         line.setRequest(p);
@@ -206,18 +206,18 @@ public class ProcurementRequestService {
     }
 
     private ProcurementRequest load(UUID id) {
-        return repo.findById(id)
+        return repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Procurement request not found: " + id));
     }
 
     private String nextNumber() {
         String base = "PR-" + LocalDate.now(ZoneOffset.UTC).getYear() + "-";
-        long count = repo.count() + 1;
+        long count = repo.countByIsDeletedFalse() + 1;
         String number;
         do {
             number = base + String.format("%05d", count);
             count++;
-        } while (repo.existsByNumber(number));
+        } while (repo.existsByNumberAndIsDeletedFalse(number));
         return number;
     }
 }

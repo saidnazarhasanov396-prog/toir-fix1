@@ -20,11 +20,11 @@ public class FinancialApprovalRuleService {
 
     @Transactional(readOnly = true)
     public List<FinancialApprovalRuleDto> findAll() {
-        return repository.findAll().stream().map(FinancialApprovalRuleDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(FinancialApprovalRuleDto::from).toList();
     }
 
     public FinancialApprovalRuleDto create(FinancialApprovalRuleDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Approval rule code already exists: " + r.code());
         }
         FinancialApprovalRule rule = new FinancialApprovalRule();
@@ -38,10 +38,12 @@ public class FinancialApprovalRuleService {
         return FinancialApprovalRuleDto.from(rule);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private FinancialApprovalRule getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Approval rule not found: " + id));
     }
 

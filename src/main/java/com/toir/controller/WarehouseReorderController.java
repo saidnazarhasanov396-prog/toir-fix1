@@ -39,8 +39,8 @@ public class WarehouseReorderController {
     @GetMapping("/suggestions")
     public List<ReorderSuggestion> suggestions(@RequestParam(required = false) UUID warehouseId) {
         List<WarehouseStock> stocks = warehouseId != null
-                ? stockRepository.findAllByWarehouseId(warehouseId)
-                : stockRepository.findAll();
+                ? stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId)
+                : stockRepository.findAllByIsDeletedFalse();
 
         List<ReorderSuggestion> result = new ArrayList<>();
         for (WarehouseStock s : stocks) {

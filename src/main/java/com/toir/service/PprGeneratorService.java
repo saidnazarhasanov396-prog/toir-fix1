@@ -44,7 +44,7 @@ public class PprGeneratorService {
 
 
     public GenerationResult generateForPlan(UUID planId) {
-        PprPlan plan = planRepository.findById(planId)
+        PprPlan plan = planRepository.findByIdAndIsDeletedFalse(planId)
                 .orElseThrow(() -> RestException.notFound("PPR plan not found: " + planId));
         if (plan.getStatus() == PlanStatus.CLOSED || plan.getStatus() == PlanStatus.CANCELLED) {
             throw RestException.badRequest("Cannot generate tasks for closed/cancelled plan");
@@ -54,15 +54,15 @@ public class PprGeneratorService {
         LocalDate monthStart = planMonth.atDay(1);
         LocalDate monthEnd = planMonth.atEndOfMonth();
 
-        List<MaintenanceRegulation> regulations = regulationRepository.findAll().stream()
+        List<MaintenanceRegulation> regulations = regulationRepository.findAllByIsDeletedFalse().stream()
                 .filter(MaintenanceRegulation::isActive)
                 .toList();
 
-        List<Equipment> allEquipment = equipmentRepository.findAll().stream()
+        List<Equipment> allEquipment = equipmentRepository.findAllByIsDeletedFalse().stream()
                 .filter(e -> e.getStatus() != EquipmentStatus.DECOMMISSIONED)
                 .toList();
 
-        java.util.Set<String> existingCodes = taskRepository.findAll().stream()
+        java.util.Set<String> existingCodes = taskRepository.findAllByIsDeletedFalse().stream()
                 .map(PprTask::getCode)
                 .collect(java.util.stream.Collectors.toSet());
 

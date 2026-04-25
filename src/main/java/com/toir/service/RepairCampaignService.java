@@ -26,12 +26,12 @@ public class RepairCampaignService {
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findAll() {
-        return repository.findAll().stream().map(RepairCampaignDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(RepairCampaignDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findByYear(int year) {
-        return repository.findAllByYearOrderByStartDateAsc(year).stream()
+        return repository.findAllByYearAndIsDeletedFalseOrderByStartDateAsc(year).stream()
                 .map(RepairCampaignDto::from).toList();
     }
 
@@ -41,7 +41,7 @@ public class RepairCampaignService {
     }
 
     public RepairCampaignDto create(RepairCampaignRequest r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Campaign code already exists: " + r.code());
         }
         if (!r.endDate().isAfter(r.startDate())) {
@@ -110,7 +110,7 @@ public class RepairCampaignService {
     }
 
     public RepairCampaignStageDto completeStage(UUID stageId, double actualCost) {
-        RepairCampaignStage s = stageRepository.findById(stageId)
+        RepairCampaignStage s = stageRepository.findByIdAndIsDeletedFalse(stageId)
                 .orElseThrow(() -> RestException.notFound("Stage not found: " + stageId));
         s.setActualCost(actualCost);
         s.setStatus(RepairCampaignStatus.COMPLETED);
@@ -128,7 +128,7 @@ public class RepairCampaignService {
     }
 
     private RepairCampaign getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Repair campaign not found: " + id));
     }
 }

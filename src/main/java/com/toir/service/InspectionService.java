@@ -40,9 +40,9 @@ public class InspectionService {
     @Transactional(readOnly = true)
     public List<InspectionRouteDto> findRoutes(UUID departmentId, Boolean activeOnly) {
         List<InspectionRoute> list;
-        if (departmentId != null) list = routeRepo.findAllByDepartmentId(departmentId);
-        else if (Boolean.TRUE.equals(activeOnly)) list = routeRepo.findAllByActiveTrue();
-        else list = routeRepo.findAll();
+        if (departmentId != null) list = routeRepo.findAllByDepartmentIdAndIsDeletedFalse(departmentId);
+        else if (Boolean.TRUE.equals(activeOnly)) list = routeRepo.findAllByActiveTrueAndIsDeletedFalse();
+        else list = routeRepo.findAllByIsDeletedFalse();
         return list.stream().map(InspectionRouteDto::from).toList();
     }
 
@@ -52,7 +52,7 @@ public class InspectionService {
     }
 
     public InspectionRouteDto createRoute(InspectionRouteRequest r) {
-        if (routeRepo.existsByCode(r.code())) {
+        if (routeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Route code already exists: " + r.code());
         }
         InspectionRoute route = new InspectionRoute();
@@ -67,7 +67,7 @@ public class InspectionService {
 
     public InspectionRouteDto updateRoute(UUID id, InspectionRouteRequest r) {
         InspectionRoute route = loadRoute(id);
-        if (!route.getCode().equals(r.code()) && routeRepo.existsByCode(r.code())) {
+        if (!route.getCode().equals(r.code()) && routeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Route code already exists: " + r.code());
         }
         applyRoute(route, r);
@@ -75,7 +75,9 @@ public class InspectionService {
     }
 
     public void deleteRoute(UUID id) {
-        routeRepo.delete(loadRoute(id));
+        var entity = loadRoute(id);
+        entity.setDeleted(true);
+        routeRepo.save(entity);
     }
 
     public InspectionRouteDto addCheckpoint(UUID routeId, InspectionRouteRequest.CheckpointRequest cp) {
@@ -89,9 +91,9 @@ public class InspectionService {
     @Transactional(readOnly = true)
     public List<InspectionRoundDto> listRounds(UUID routeId, UUID performedBy) {
         List<InspectionRound> list;
-        if (routeId != null) list = roundRepo.findAllByRouteIdOrderByStartedAtDesc(routeId);
-        else if (performedBy != null) list = roundRepo.findAllByPerformedByOrderByStartedAtDesc(performedBy);
-        else list = roundRepo.findAll();
+        if (routeId != null) list = roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(routeId);
+        else if (performedBy != null) list = roundRepo.findAllByPerformedByAndIsDeletedFalseOrderByStartedAtDesc(performedBy);
+        else list = roundRepo.findAllByIsDeletedFalse();
         return list.stream().map(InspectionRoundDto::from).toList();
     }
 
@@ -127,7 +129,7 @@ public class InspectionService {
         if ("FAIL".equals(r.status())) {
             round.setAlarmCount(round.getAlarmCount() + 1);
             round.setFindingsCount(round.getFindingsCount() + 1);
-            InspectionCheckpoint cp = checkpointRepo.findById(r.checkpointId()).orElse(null);
+            InspectionCheckpoint cp = checkpointRepo.findByIdAndIsDeletedFalse(r.checkpointId()).orElse(null);
             if (cp != null && cp.getEquipmentId() != null) {
                 Defect d = autoCreateDefect(cp, r.comment(), round.getId());
                 if (d != null) result.setDefectId(d.getId());
@@ -171,12 +173,12 @@ public class InspectionService {
     }
 
     private InspectionRoute loadRoute(UUID id) {
-        return routeRepo.findById(id)
+        return routeRepo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Inspection route not found: " + id));
     }
 
     private InspectionRound loadRound(UUID id) {
-        return roundRepo.findById(id)
+        return roundRepo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Inspection round not found: " + id));
     }
 

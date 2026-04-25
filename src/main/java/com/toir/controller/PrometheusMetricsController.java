@@ -88,47 +88,47 @@ public class PrometheusMetricsController {
     public ResponseEntity<String> prometheus() {
         StringBuilder sb = new StringBuilder();
 
-        long defectsOpen = defectRepository.findAll().stream()
+        long defectsOpen = defectRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> d.getStatus() != DefectStatus.CLOSED).count();
-        long workOrdersOpen = workOrderRepository.findAll().stream()
+        long workOrdersOpen = workOrderRepository.findAllByIsDeletedFalse().stream()
                 .filter(w -> w.getStatus() != WorkOrderStatus.CLOSED
                         && w.getStatus() != WorkOrderStatus.CANCELLED).count();
 
-        gauge(sb, "toir_equipment_total", "Total equipment records", equipmentRepository.count());
+        gauge(sb, "toir_equipment_total", "Total equipment records", equipmentRepository.countByIsDeletedFalse());
         gauge(sb, "toir_defects_open", "Defects not yet closed", defectsOpen);
         gauge(sb, "toir_repair_requests_open", "Open/in-progress repair requests",
-                repairRequestRepository.countByStatus(RequestStatus.OPEN)
-                        + repairRequestRepository.countByStatus(RequestStatus.IN_PROGRESS));
+                repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN)
+                        + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS));
         gauge(sb, "toir_work_orders_open", "Open work orders", workOrdersOpen);
         gauge(sb, "toir_ppr_tasks_planned", "PPR tasks planned",
-                pprTaskRepository.countByStatus(PprTaskStatus.PLANNED));
+                pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED));
         gauge(sb, "toir_ppr_tasks_overdue", "PPR tasks overdue",
-                pprTaskRepository.countByStatus(PprTaskStatus.OVERDUE));
+                pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE));
         gauge(sb, "toir_procurement_draft", "Draft procurement requests",
-                procurementRequestRepository.countByStatus(ProcurementRequestStatus.DRAFT));
-        gauge(sb, "toir_brigades", "Brigades registered", brigadeRepository.count());
+                procurementRequestRepository.countByStatusAndIsDeletedFalse(ProcurementRequestStatus.DRAFT));
+        gauge(sb, "toir_brigades", "Brigades registered", brigadeRepository.countByIsDeletedFalse());
         gauge(sb, "toir_condition_readings_total", "Condition readings recorded",
-                conditionReadingRepository.count());
+                conditionReadingRepository.countByIsDeletedFalse());
         gauge(sb, "toir_condition_alarms", "Active ALARM condition readings",
-                conditionReadingRepository.findAllBySeverityOrderByRecordedAtDesc("ALARM").size());
+                conditionReadingRepository.findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("ALARM").size());
         gauge(sb, "toir_condition_warnings", "Active WARN condition readings",
-                conditionReadingRepository.findAllBySeverityOrderByRecordedAtDesc("WARN").size());
+                conditionReadingRepository.findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("WARN").size());
         gauge(sb, "toir_certifications_active", "Active user certifications",
-                userCertificationRepository.findAllByStatus("ACTIVE").size());
+                userCertificationRepository.findAllByStatusAndIsDeletedFalse("ACTIVE").size());
         gauge(sb, "toir_certifications_expired", "Expired user certifications",
-                userCertificationRepository.findAllByStatus("EXPIRED").size());
+                userCertificationRepository.findAllByStatusAndIsDeletedFalse("EXPIRED").size());
         gauge(sb, "toir_calibration_records", "Calibration records total",
-                calibrationRecordRepository.count());
+                calibrationRecordRepository.countByIsDeletedFalse());
         gauge(sb, "toir_inspection_routes", "Inspection routes configured",
-                inspectionRouteRepository.count());
+                inspectionRouteRepository.countByIsDeletedFalse());
         gauge(sb, "toir_inspection_rounds", "Inspection rounds executed",
-                inspectionRoundRepository.count());
+                inspectionRoundRepository.countByIsDeletedFalse());
         gauge(sb, "toir_rcm_snapshots", "RCM snapshots captured",
-                rcmSnapshotRepository.count());
+                rcmSnapshotRepository.countByIsDeletedFalse());
         gauge(sb, "toir_notifications_total", "Notifications in the system",
-                notificationRepository.count());
+                notificationRepository.countByIsDeletedFalse());
         gauge(sb, "toir_webhook_deliveries", "Webhook delivery log entries",
-                webhookEventLogRepository.count());
+                webhookEventLogRepository.countByIsDeletedFalse());
 
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_PLAIN)

@@ -12,6 +12,16 @@ import java.util.UUID;
 
 @Repository
 public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
+    java.util.Optional<SparePart> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<SparePart> findAllByIsDeletedFalse();
+
+    java.util.List<SparePart> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT COUNT(*) > 0 FROM spare_parts WHERE code = :code AND is_deleted = false", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 }

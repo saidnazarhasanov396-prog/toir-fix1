@@ -6,10 +6,12 @@ import com.toir.repository.DefectListLineRepository;
 import com.toir.repository.DefectListRepository;
 
 import com.toir.exception.RestException;
+import com.toir.util.PaginationUtils;
 import com.toir.dto.defectlist.DefectListDto;
 import com.toir.dto.defectlist.DefectListLineDto;
 import com.toir.dto.defectlist.DefectListRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,13 +29,17 @@ public class DefectListService {
 
     @Transactional(readOnly = true)
     public List<DefectListDto> findAll() {
-        return repository.findAll().stream().map(DefectListDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(DefectListDto::from).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<DefectListDto> search(UUID equipmentId, int page, int pageSize, String search) {
-        int offset = page * pageSize;
-        return repository.searchPaginated(equipmentId, search, offset, pageSize).stream().map(DefectListDto::from).toList();
+    public Page<DefectListDto> search(UUID equipmentId, int page, int pageSize, String search) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        return repository.searchPaginated(
+                equipmentId,
+                search,
+                pageable
+        ).map(DefectListDto::from);
     }
 
     @Transactional(readOnly = true)
@@ -43,11 +49,11 @@ public class DefectListService {
 
     @Transactional(readOnly = true)
     public List<DefectListDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentId(equipmentId).stream().map(DefectListDto::from).toList();
+        return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(DefectListDto::from).toList();
     }
 
     public DefectListDto create(DefectListRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Defect list code already exists: " + request.code());
         }
         DefectList d = new DefectList();
@@ -66,7 +72,7 @@ public class DefectListService {
         if (d.getStatus() != DefectListStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT defect lists can be updated");
         }
-        if (!d.getCode().equals(request.code()) && repository.existsByCode(request.code())) {
+        if (!d.getCode().equals(request.code()) && repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Defect list code already exists: " + request.code());
         }
         d.setCode(request.code());
@@ -124,14 +130,15 @@ public class DefectListService {
     }
 
     public void removeLine(UUID lineId) {
-        DefectListLine line = lineRepository.findById(lineId)
+        DefectListLine line = lineRepository.findByIdAndIsDeletedFalse(lineId)
                 .orElseThrow(() -> RestException.notFound("Line not found: " + lineId));
         DefectList parent = line.getDefectList();
         if (parent.getStatus() == DefectListStatus.CLOSED || parent.getStatus() == DefectListStatus.CANCELLED) {
             throw RestException.badRequest("Cannot modify closed/cancelled defect list");
         }
         parent.getLines().remove(line);
-        lineRepository.delete(line);
+        line.setDeleted(true);
+        lineRepository.save(line);
         recalcTotals(parent);
     }
 
@@ -143,7 +150,7 @@ public class DefectListService {
     }
 
     private DefectList getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Defect list not found: " + id));
     }
 }

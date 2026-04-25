@@ -12,7 +12,17 @@ import java.util.UUID;
 
 @Repository
 public interface ActualCostRepository extends JpaRepository<ActualCost, UUID> {
-    List<ActualCost> findAllByWorkOrderId(UUID workOrderId);
+    java.util.Optional<ActualCost> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    List<ActualCost> findAllByStatus(ActualCostStatus status);
+    java.util.List<ActualCost> findAllByIsDeletedFalse();
+
+    java.util.List<ActualCost> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
+    List<ActualCost> findAllByWorkOrderIdAndIsDeletedFalse(UUID workOrderId);
+
+    List<ActualCost> findAllByStatusAndIsDeletedFalse(ActualCostStatus status);
 }

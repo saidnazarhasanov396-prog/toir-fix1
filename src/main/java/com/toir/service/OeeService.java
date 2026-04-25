@@ -24,15 +24,15 @@ public class OeeService {
 
     @Transactional(readOnly = true)
     public List<OeeRecordDto> listByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentIdOrderByShiftStartDesc(equipmentId).stream()
+        return repository.findAllByEquipmentIdAndIsDeletedFalseOrderByShiftStartDesc(equipmentId).stream()
                 .map(OeeRecordDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<OeeRecordDto> listBetween(UUID equipmentId, Instant from, Instant to) {
         List<OeeRecord> records = equipmentId != null
-                ? repository.findAllByEquipmentIdAndShiftStartBetweenOrderByShiftStartAsc(equipmentId, from, to)
-                : repository.findAllByShiftStartBetween(from, to);
+                ? repository.findAllByEquipmentIdAndShiftStartBetweenAndIsDeletedFalseOrderByShiftStartAsc(equipmentId, from, to)
+                : repository.findAllByShiftStartBetweenAndIsDeletedFalse(from, to);
         return records.stream().map(OeeRecordDto::from).toList();
     }
 
@@ -54,13 +54,15 @@ public class OeeService {
     }
 
     public void delete(UUID id) {
-        repository.delete(getOrThrow(id));
+        var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     public OeeSummary summary(UUID equipmentId, Instant from, Instant to) {
         List<OeeRecord> records = equipmentId != null
-                ? repository.findAllByEquipmentIdAndShiftStartBetweenOrderByShiftStartAsc(equipmentId, from, to)
-                : repository.findAllByShiftStartBetween(from, to);
+                ? repository.findAllByEquipmentIdAndShiftStartBetweenAndIsDeletedFalseOrderByShiftStartAsc(equipmentId, from, to)
+                : repository.findAllByShiftStartBetweenAndIsDeletedFalse(from, to);
 
         if (records.isEmpty()) {
             return new OeeSummary(equipmentId, from, to, 0, 0, 0, 0, 0);
@@ -85,7 +87,7 @@ public class OeeService {
 
 
     private OeeRecord getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("OEE record not found: " + id));
     }
 

@@ -25,7 +25,7 @@ public class MaintenanceTemplateService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceTemplateDto> findAll() {
-        return repository.findAll().stream().map(MaintenanceTemplateDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(MaintenanceTemplateDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -34,7 +34,7 @@ public class MaintenanceTemplateService {
     }
 
     public MaintenanceTemplateDto create(MaintenanceTemplateRequest r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Template code already exists: " + r.code());
         }
         MaintenanceTemplate t = new MaintenanceTemplate();
@@ -48,7 +48,9 @@ public class MaintenanceTemplateService {
         return MaintenanceTemplateDto.from(t);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     public MaintenanceOperationDto addOperation(UUID templateId, MaintenanceOperationDto r) {
         MaintenanceTemplate t = getOrThrow(templateId);
@@ -73,11 +75,14 @@ public class MaintenanceTemplateService {
     }
 
     public void removeOperation(UUID operationId) {
-        operationRepository.findById(operationId).ifPresent(operationRepository::delete);
+        operationRepository.findByIdAndIsDeletedFalse(operationId).ifPresent(entity -> {
+            entity.setDeleted(true);
+            operationRepository.save(entity);
+        });
     }
 
     private MaintenanceTemplate getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Template not found: " + id));
     }
 

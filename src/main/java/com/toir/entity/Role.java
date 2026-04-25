@@ -39,6 +39,10 @@ public class Role {
     @Column(name = "is_system", nullable = false)
     private boolean system;
 
+    @Builder.Default
+    @Column(name = "is_deleted", nullable = false, columnDefinition = "boolean default false")
+    private boolean isDeleted = false;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private List<String> permissions;

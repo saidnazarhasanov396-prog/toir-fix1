@@ -22,7 +22,7 @@ public class EquipmentTypeService {
 
     @Transactional(readOnly = true)
     public List<EquipmentTypeDto> findAll() {
-        return repository.findAll().stream().map(EquipmentTypeDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(EquipmentTypeDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -35,7 +35,7 @@ public class EquipmentTypeService {
     }
 
     public EquipmentTypeDto create(EquipmentTypeRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Equipment type code already exists: " + request.code());
         }
         EquipmentType entity = new EquipmentType();
@@ -50,11 +50,13 @@ public class EquipmentTypeService {
     }
 
     public void delete(UUID id) {
-        repository.delete(getOrThrow(id));
+        var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     private EquipmentType getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment type not found: " + id));
     }
 

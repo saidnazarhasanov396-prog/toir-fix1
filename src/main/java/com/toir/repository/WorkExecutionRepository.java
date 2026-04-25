@@ -15,11 +15,21 @@ import java.util.UUID;
 
 @Repository
 public interface WorkExecutionRepository extends JpaRepository<WorkExecution, UUID> {
+    java.util.Optional<WorkExecution> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<WorkExecution> findAllByIsDeletedFalse();
+
+    java.util.List<WorkExecution> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM work_executions WHERE work_order_id = :workOrderId AND is_deleted = false ORDER BY started_at ASC", nativeQuery = true)
-    List<WorkExecution> findAllByWorkOrderIdOrderByStartedAtAsc(@Param("workOrderId") UUID workOrderId);
+    List<WorkExecution> findAllByWorkOrderIdAndIsDeletedFalseOrderByStartedAtAsc(@Param("workOrderId") UUID workOrderId);
 
     @Query(value = "SELECT * FROM work_executions WHERE is_deleted = false ORDER BY started_at DESC",
             countQuery = "SELECT COUNT(*) FROM work_executions WHERE is_deleted = false",
             nativeQuery = true)
-    Page<WorkExecution> findAllByOrderByStartedAtDesc(Pageable pageable);
+    Page<WorkExecution> findAllByIsDeletedFalseOrderByStartedAtDesc(Pageable pageable);
 }

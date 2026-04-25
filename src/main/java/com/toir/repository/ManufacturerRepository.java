@@ -12,6 +12,16 @@ import java.util.UUID;
 
 @Repository
 public interface ManufacturerRepository extends JpaRepository<Manufacturer, UUID> {
+    java.util.Optional<Manufacturer> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<Manufacturer> findAllByIsDeletedFalse();
+
+    java.util.List<Manufacturer> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM manufacturers WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 }

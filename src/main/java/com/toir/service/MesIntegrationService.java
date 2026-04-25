@@ -30,7 +30,7 @@ public class MesIntegrationService {
 
 
     public ConnectionTestResult testConnection(UUID endpointId) {
-        IntegrationEndpoint ep = endpointRepository.findById(endpointId)
+        IntegrationEndpoint ep = endpointRepository.findByIdAndIsDeletedFalse(endpointId)
                 .orElseThrow(() -> RestException.notFound("Endpoint not found: " + endpointId));
         String fullUrl = ep.getFullUrl();
         int timeout = ep.getTimeoutSeconds() != null ? ep.getTimeoutSeconds() : 10;
@@ -67,7 +67,7 @@ public class MesIntegrationService {
     }
 
     public IntegrationSyncLogDto syncModule(UUID endpointId, String module) {
-        IntegrationEndpoint ep = endpointRepository.findById(endpointId)
+        IntegrationEndpoint ep = endpointRepository.findByIdAndIsDeletedFalse(endpointId)
                 .orElseThrow(() -> RestException.notFound("Endpoint not found: " + endpointId));
 
         IntegrationSyncLog log = new IntegrationSyncLog();
@@ -134,10 +134,10 @@ public class MesIntegrationService {
     @Transactional(readOnly = true)
     public List<IntegrationSyncLogDto> getLogs(UUID endpointId) {
         if (endpointId != null) {
-            return syncLogRepository.findTop50ByEndpointIdOrderByStartedAtDesc(endpointId).stream()
+            return syncLogRepository.findTop50ByEndpointIdAndIsDeletedFalseOrderByStartedAtDesc(endpointId).stream()
                     .map(IntegrationSyncLogDto::from).toList();
         }
-        return syncLogRepository.findTop100ByOrderByStartedAtDesc().stream()
+        return syncLogRepository.findTop100ByIsDeletedFalseOrderByStartedAtDesc().stream()
                 .map(IntegrationSyncLogDto::from).toList();
     }
 

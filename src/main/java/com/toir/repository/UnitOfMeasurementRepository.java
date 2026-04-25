@@ -12,6 +12,16 @@ import java.util.UUID;
 
 @Repository
 public interface UnitOfMeasurementRepository extends JpaRepository<UnitOfMeasurement, UUID> {
+    java.util.Optional<UnitOfMeasurement> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<UnitOfMeasurement> findAllByIsDeletedFalse();
+
+    java.util.List<UnitOfMeasurement> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM units_of_measurement WHERE code = :code AND is_deleted = false)", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 }

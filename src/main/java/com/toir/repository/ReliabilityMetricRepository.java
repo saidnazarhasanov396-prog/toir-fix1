@@ -13,6 +13,16 @@ import java.util.UUID;
 
 @Repository
 public interface ReliabilityMetricRepository extends JpaRepository<ReliabilityMetric, UUID> {
+    java.util.Optional<ReliabilityMetric> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<ReliabilityMetric> findAllByIsDeletedFalse();
+
+    java.util.List<ReliabilityMetric> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM reliability_metrics WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY metric_date DESC", nativeQuery = true)
-    List<ReliabilityMetric> findAllByEquipmentIdOrderByMetricDateDesc(@Param("equipmentId") UUID equipmentId);
+    List<ReliabilityMetric> findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(@Param("equipmentId") UUID equipmentId);
 }

@@ -14,12 +14,22 @@ import java.util.UUID;
 
 @Repository
 public interface CalibrationRecordRepository extends JpaRepository<CalibrationRecord, UUID> {
+    java.util.Optional<CalibrationRecord> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<CalibrationRecord> findAllByIsDeletedFalse();
+
+    java.util.List<CalibrationRecord> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM calibration_records WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY performed_at DESC", nativeQuery = true)
-    List<CalibrationRecord> findAllByEquipmentIdOrderByPerformedAtDesc(@Param("equipmentId") UUID equipmentId);
+    List<CalibrationRecord> findAllByEquipmentIdAndIsDeletedFalseOrderByPerformedAtDesc(@Param("equipmentId") UUID equipmentId);
 
     @Query(value = "SELECT * FROM calibration_records WHERE next_due_at < :date AND is_deleted = false", nativeQuery = true)
-    List<CalibrationRecord> findAllByNextDueAtBefore(@Param("date") LocalDate date);
+    List<CalibrationRecord> findAllByNextDueAtBeforeAndIsDeletedFalse(@Param("date") LocalDate date);
 
     @Query(value = "SELECT * FROM calibration_records WHERE result = :result AND is_deleted = false", nativeQuery = true)
-    List<CalibrationRecord> findAllByResult(@Param("result") String result);
+    List<CalibrationRecord> findAllByResultAndIsDeletedFalse(@Param("result") String result);
 }

@@ -13,6 +13,16 @@ import java.util.UUID;
 
 @Repository
 public interface PlannedShutdownRepository extends JpaRepository<PlannedShutdown, UUID> {
+    java.util.Optional<PlannedShutdown> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<PlannedShutdown> findAllByIsDeletedFalse();
+
+    java.util.List<PlannedShutdown> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM planned_shutdowns WHERE department_id = :departmentId AND is_deleted = false ORDER BY start_at DESC", nativeQuery = true)
-    List<PlannedShutdown> findAllByDepartmentIdOrderByStartAtDesc(@Param("departmentId") UUID departmentId);
+    List<PlannedShutdown> findAllByDepartmentIdAndIsDeletedFalseOrderByStartAtDesc(@Param("departmentId") UUID departmentId);
 }

@@ -20,11 +20,11 @@ public class CostCategoryService {
 
     @Transactional(readOnly = true)
     public List<CostCategoryDto> findAll() {
-        return repository.findAll().stream().map(CostCategoryDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(CostCategoryDto::from).toList();
     }
 
     public CostCategoryDto create(CostCategoryDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Cost category code already exists: " + r.code());
         }
         CostCategory e = new CostCategory();
@@ -38,10 +38,12 @@ public class CostCategoryService {
         return CostCategoryDto.from(e);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     CostCategory getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Cost category not found: " + id));
     }
 }

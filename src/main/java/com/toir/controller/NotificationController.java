@@ -1,15 +1,16 @@
 package com.toir.controller;
 import com.toir.service.NotificationService;
 
-import com.toir.config.PaginatedResponse;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.dto.notification.NotificationDto;
 import com.toir.dto.notification.NotificationSummaryDto;
 import com.toir.dto.sla.SlaRuleDto;
 import com.toir.service.SlaRuleService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -74,17 +75,16 @@ public class NotificationController {
     }
 
     @GetMapping("/sla-rules")
-    public PaginatedResponse<SlaRuleDto> slaRules(
-            @RequestParam(defaultValue = "1") int page,
+    public Page<SlaRuleDto> slaRules(
+            @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize
     ) {
-        int safePage = Math.max(page, 1);
-        int safePageSize = Math.max(pageSize, 1);
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
         List<SlaRuleDto> all = slaRuleService.findAll();
-        int fromIndex = Math.min((safePage - 1) * safePageSize, all.size());
-        int toIndex = Math.min(fromIndex + safePageSize, all.size());
+        int fromIndex = Math.min(PaginationUtils.offset(pageable), all.size());
+        int toIndex = Math.min(fromIndex + pageable.getPageSize(), all.size());
         List<SlaRuleDto> items = all.subList(fromIndex, toIndex);
-        return new PaginatedResponse<>(items, new PaginatedResponse.Meta(safePage, safePageSize, all.size()));
+        return PaginationUtils.page(items, pageable.getPageNumber(), pageable.getPageSize(), all.size());
     }
 
     @PostMapping("/evaluate")

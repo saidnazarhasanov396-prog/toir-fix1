@@ -20,7 +20,7 @@ public class DepartmentService {
 
     @Transactional(readOnly = true)
     public List<DepartmentDto> findAll() {
-        return repository.findAll().stream().map(DepartmentDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(DepartmentDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -29,7 +29,7 @@ public class DepartmentService {
     }
 
     public DepartmentDto create(DepartmentRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Department code already exists: " + request.code());
         }
         Department entity = new Department();
@@ -45,14 +45,15 @@ public class DepartmentService {
 
     public void delete(UUID id) {
         Department entity = getOrThrow(id);
-        if (!repository.findAllByParentId(id).isEmpty()) {
+        if (!repository.findAllByParentIdAndIsDeletedFalse(id).isEmpty()) {
             throw RestException.conflict("Department has children");
         }
-        repository.delete(entity);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     private Department getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Department not found: " + id));
     }
 

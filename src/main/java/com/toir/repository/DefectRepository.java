@@ -2,6 +2,8 @@ package com.toir.repository;
 
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 import com.toir.entity.Defect;
 import com.toir.enums.DefectStatus;
@@ -14,10 +16,21 @@ import java.util.UUID;
 
 @Repository
 public interface DefectRepository extends JpaRepository<Defect, UUID> {
+    java.util.Optional<Defect> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<Defect> findAllByIsDeletedFalse();
+
+    java.util.List<Defect> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
 
     @Query(nativeQuery = true, value = """
             select * from defects d where
-            (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
+            d.is_deleted = false
+            and (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
             and (cast(:search as varchar) is null or lower(d.code) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.title) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.description) like lower(concat('%', cast(:search as varchar), '%'))
@@ -25,20 +38,29 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
             or lower(d.severity) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.failure_reason) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.root_cause) like lower(concat('%', cast(:search as varchar), '%')))
-            order by d.detected_at desc limit :limit offset :offset
+            order by d.detected_at desc
+            """, countQuery = """
+            select count(*) from defects d where
+            d.is_deleted = false
+            and (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
+            and (cast(:search as varchar) is null or lower(d.code) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.title) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.description) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.category) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.severity) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.failure_reason) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.root_cause) like lower(concat('%', cast(:search as varchar), '%')))
             """)
-    List<Defect> searchPaginated(@Param("equipmentId") UUID equipmentId,
+    Page<Defect> searchPaginated(@Param("equipmentId") UUID equipmentId,
                                  @Param("search") String search,
-                                 @Param("offset") int offset,
-                                 @Param("limit") int limit);
+                                 Pageable pageable);
+
     @Query(value = "SELECT COUNT(*) > 0 FROM defects WHERE code = :code AND is_deleted = false", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query(value = "SELECT * FROM defects WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
-    List<Defect> findAllByEquipmentId(@Param("equipmentId") UUID equipmentId);
+    List<Defect> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
     @Query(value = "SELECT COUNT(*) FROM defects WHERE status = cast(:status as varchar) AND is_deleted = false", nativeQuery = true)
-    long countByStatus(@Param("status") DefectStatus status);
+    long countByStatusAndIsDeletedFalse(@Param("status") DefectStatus status);
 }
-
-

@@ -14,13 +14,23 @@ import java.util.UUID;
 
 @Repository
 public interface TimesheetEntryRepository extends JpaRepository<TimesheetEntry, UUID> {
+    java.util.Optional<TimesheetEntry> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<TimesheetEntry> findAllByIsDeletedFalse();
+
+    java.util.List<TimesheetEntry> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM hr_timesheet_entries WHERE employee_id = :employeeId AND work_date BETWEEN :from AND :to AND is_deleted = false ORDER BY work_date ASC", nativeQuery = true)
-    List<TimesheetEntry> findAllByEmployeeIdAndWorkDateBetweenOrderByWorkDateAsc(
+    List<TimesheetEntry> findAllByEmployeeIdAndWorkDateBetweenAndIsDeletedFalseOrderByWorkDateAsc(
             @Param("employeeId") UUID employeeId, @Param("from") LocalDate from, @Param("to") LocalDate to);
 
     @Query(value = "SELECT * FROM hr_timesheet_entries WHERE work_date BETWEEN :from AND :to AND is_deleted = false", nativeQuery = true)
-    List<TimesheetEntry> findAllByWorkDateBetween(@Param("from") LocalDate from, @Param("to") LocalDate to);
+    List<TimesheetEntry> findAllByWorkDateBetweenAndIsDeletedFalse(@Param("from") LocalDate from, @Param("to") LocalDate to);
 
     @Query(value = "SELECT * FROM hr_timesheet_entries WHERE work_order_id = :workOrderId AND is_deleted = false", nativeQuery = true)
-    List<TimesheetEntry> findAllByWorkOrderId(@Param("workOrderId") UUID workOrderId);
+    List<TimesheetEntry> findAllByWorkOrderIdAndIsDeletedFalse(@Param("workOrderId") UUID workOrderId);
 }

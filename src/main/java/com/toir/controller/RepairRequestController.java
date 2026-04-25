@@ -8,11 +8,11 @@ import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -29,7 +29,7 @@ public class RepairRequestController {
     }
 
     @GetMapping
-    public List<RepairRequestDto> list(
+    public Page<RepairRequestDto> list(
             @RequestParam(required = false) RequestStatus status,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,

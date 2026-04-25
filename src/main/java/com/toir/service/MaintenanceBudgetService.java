@@ -26,7 +26,7 @@ public class MaintenanceBudgetService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceBudgetDto> findByYear(int year) {
-        return repository.findAllByYear(year).stream().map(MaintenanceBudgetDto::from).toList();
+        return repository.findAllByYearAndIsDeletedFalse(year).stream().map(MaintenanceBudgetDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -67,7 +67,7 @@ public class MaintenanceBudgetService {
     }
 
     private MaintenanceBudget getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Budget not found: " + id));
     }
 }

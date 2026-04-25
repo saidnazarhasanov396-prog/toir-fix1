@@ -1,11 +1,11 @@
 package com.toir.controller;
 import com.toir.service.WorkExecutionService;
 
-import com.toir.config.PaginatedResponse;
 import com.toir.dto.workexecution.ExecutionLogDto;
 import com.toir.dto.workexecution.WorkExecutionDto;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,8 +23,8 @@ public class WorkExecutionController {
     public WorkExecutionController(WorkExecutionService service) { this.service = service; }
 
     @GetMapping("/execution-logs")
-    public PaginatedResponse<ExecutionLogDto> executionLogs(
-            @RequestParam(defaultValue = "1") int page,
+    public Page<ExecutionLogDto> executionLogs(
+            @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int pageSize
     ) {
         return service.findExecutionLogs(page, pageSize);

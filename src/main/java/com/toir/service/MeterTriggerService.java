@@ -24,8 +24,8 @@ public class MeterTriggerService {
 
 
     public List<MeterTriggerMatch> dueTriggers(UUID equipmentId) {
-        List<EquipmentMeter> meters = meterRepository.findAllByEquipmentIdAndActiveTrue(equipmentId);
-        List<MaintenanceRegulation> regs = regulationRepository.findAll().stream()
+        List<EquipmentMeter> meters = meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId);
+        List<MaintenanceRegulation> regs = regulationRepository.findAllByIsDeletedFalse().stream()
                 .filter(r -> r.isActive() && r.getTriggerMeterType() != null
                         && r.getTriggerMeterInterval() != null && r.getTriggerMeterInterval() > 0)
                 .toList();

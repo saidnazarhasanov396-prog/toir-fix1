@@ -14,9 +14,19 @@ import java.util.UUID;
 
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, UUID> {
+    java.util.Optional<Notification> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<Notification> findAllByIsDeletedFalse();
+
+    java.util.List<Notification> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT * FROM notifications WHERE recipient_id = :recipientId AND is_deleted = false ORDER BY created_at DESC", nativeQuery = true)
-    List<Notification> findAllByRecipientIdOrderByCreatedAtDesc(@Param("recipientId") UUID recipientId);
+    List<Notification> findAllByRecipientIdAndIsDeletedFalseOrderByCreatedAtDesc(@Param("recipientId") UUID recipientId);
 
    @Query(value = "SELECT COUNT(*) FROM notifications WHERE recipient_id = :recipientId AND status = cast(:status as varchar) AND is_deleted = false", nativeQuery = true)
-    long countByRecipientIdAndStatus(@Param("recipientId") UUID recipientId, @Param("status") NotificationStatus status);
+    long countByRecipientIdAndStatusAndIsDeletedFalse(@Param("recipientId") UUID recipientId, @Param("status") NotificationStatus status);
 }

@@ -20,11 +20,11 @@ public class DefectSeverityService {
 
     @Transactional(readOnly = true)
     public List<DefectSeverityDto> findAll() {
-        return repository.findAll().stream().map(DefectSeverityDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(DefectSeverityDto::from).toList();
     }
 
     public DefectSeverityDto create(DefectSeverityDto r) {
-        if (repository.existsByCode(r.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Severity code already exists: " + r.code());
         }
         DefectSeverity e = new DefectSeverity();
@@ -38,10 +38,12 @@ public class DefectSeverityService {
         return DefectSeverityDto.from(e);
     }
 
-    public void delete(UUID id) { repository.delete(getOrThrow(id)); }
+    public void delete(UUID id) { var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity); }
 
     private DefectSeverity getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Severity not found: " + id));
     }
 }

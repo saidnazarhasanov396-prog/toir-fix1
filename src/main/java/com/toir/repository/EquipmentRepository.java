@@ -17,25 +17,36 @@ import java.util.UUID;
 
 @Repository
 public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
+    java.util.Optional<Equipment> findByIdAndIsDeletedFalse(java.util.UUID id);
+
+    java.util.List<Equipment> findAllByIsDeletedFalse();
+
+    java.util.List<Equipment> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+
+    long countByIsDeletedFalse();
+
     @Query(value = "SELECT COUNT(*) > 0 FROM equipment WHERE code = :code AND is_deleted = false", nativeQuery = true)
-    boolean existsByCode(@Param("code") String code);
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query(value = "SELECT COUNT(*) > 0 FROM equipment WHERE inventory_number = :inventoryNumber AND is_deleted = false", nativeQuery = true)
-    boolean existsByInventoryNumber(@Param("inventoryNumber") String inventoryNumber);
+    boolean existsByInventoryNumberAndIsDeletedFalse(@Param("inventoryNumber") String inventoryNumber);
 
     @Query(value = "SELECT * FROM equipment WHERE code = :code AND is_deleted = false", nativeQuery = true)
-    Optional<Equipment> findByCode(@Param("code") String code);
+    Optional<Equipment> findByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query(value = "SELECT * FROM equipment WHERE inventory_number = :inventoryNumber AND is_deleted = false", nativeQuery = true)
-    Optional<Equipment> findByInventoryNumber(@Param("inventoryNumber") String inventoryNumber);
+    Optional<Equipment> findByInventoryNumberAndIsDeletedFalse(@Param("inventoryNumber") String inventoryNumber);
 
     @Query(value = "SELECT * FROM equipment WHERE department_id = :departmentId AND is_deleted = false", nativeQuery = true)
-    List<Equipment> findAllByDepartmentId(@Param("departmentId") UUID departmentId);
+    List<Equipment> findAllByDepartmentIdAndIsDeletedFalse(@Param("departmentId") UUID departmentId);
 
     @Query(value = "SELECT * FROM equipment WHERE parent_id = :parentId AND is_deleted = false", nativeQuery = true)
-    List<Equipment> findAllByParentId(@Param("parentId") UUID parentId);
+    List<Equipment> findAllByParentIdAndIsDeletedFalse(@Param("parentId") UUID parentId);
 
     @Query("select e from Equipment e where " +
+            "e.isDeleted = false and " +
             "(:departmentId is null or e.departmentId = :departmentId) and " +
             "(:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId) and " +
             "(:status is null or e.status = :status) and " +

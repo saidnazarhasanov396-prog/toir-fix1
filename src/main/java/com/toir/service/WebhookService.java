@@ -44,18 +44,18 @@ public class WebhookService {
 
 
     public List<WebhookSubscription> findAll() {
-        return subscriptionRepository.findAll();
+        return subscriptionRepository.findAllByIsDeletedFalse();
     }
 
     public WebhookSubscription create(WebhookSubscription sub) {
-        if (subscriptionRepository.existsByCode(sub.getCode())) {
+        if (subscriptionRepository.existsByCodeAndIsDeletedFalse(sub.getCode())) {
             throw RestException.conflict("Webhook code already exists: " + sub.getCode());
         }
         return subscriptionRepository.save(sub);
     }
 
     public WebhookSubscription update(UUID id, WebhookSubscription patch) {
-        WebhookSubscription existing = subscriptionRepository.findById(id)
+        WebhookSubscription existing = subscriptionRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Webhook subscription not found: " + id));
         existing.setName(patch.getName());
         existing.setTargetUrl(patch.getTargetUrl());
@@ -66,12 +66,14 @@ public class WebhookService {
     }
 
     public void delete(UUID id) {
-        subscriptionRepository.deleteById(id);
+        var entity = subscriptionRepository.findByIdAndIsDeletedFalse(id).orElseThrow();
+        entity.setDeleted(true);
+        subscriptionRepository.save(entity);
     }
 
     /** Публикует событие всем активным подписчикам. Исключения в сети не бросаем — пишем в лог. */
     public int publish(String eventCode, Object payload) {
-        List<WebhookSubscription> subs = subscriptionRepository.findAllByActiveTrue();
+        List<WebhookSubscription> subs = subscriptionRepository.findAllByActiveTrueAndIsDeletedFalse();
         if (subs.isEmpty()) return 0;
 
         String body;
@@ -123,7 +125,7 @@ public class WebhookService {
     }
 
     public List<WebhookEventLog> recentForSubscription(UUID subscriptionId) {
-        return eventLogRepository.findTop50BySubscriptionIdOrderByFiredAtDesc(subscriptionId);
+        return eventLogRepository.findTop50BySubscriptionIdAndIsDeletedFalseOrderByFiredAtDesc(subscriptionId);
     }
 
     private String sign(String body, String secret) {

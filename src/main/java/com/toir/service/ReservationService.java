@@ -25,11 +25,11 @@ public class ReservationService {
 
     @Transactional(readOnly = true)
     public List<ReservationDto> findByWorkOrder(UUID workOrderId) {
-        return repository.findAllByWorkOrderId(workOrderId).stream().map(ReservationDto::from).toList();
+        return repository.findAllByWorkOrderIdAndIsDeletedFalse(workOrderId).stream().map(ReservationDto::from).toList();
     }
 
     public ReservationDto reserve(ReservationRequest r) {
-        WarehouseStock stock = stockRepository.findById(r.warehouseStockId())
+        WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(r.warehouseStockId())
                 .orElseThrow(() -> RestException.notFound("Stock not found: " + r.warehouseStockId()));
         if (stock.getAvailable() < r.quantity()) {
             throw RestException.badRequest("Cannot reserve more than available: available="
@@ -51,7 +51,7 @@ public class ReservationService {
         if (reservation.getStatus() != ReservationStatus.ACTIVE) {
             throw RestException.badRequest("Only active reservations can be cancelled");
         }
-        WarehouseStock stock = stockRepository.findById(reservation.getWarehouseStockId()).orElseThrow();
+        WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseStockId()).orElseThrow();
         stock.setReservedQty(Math.max(0, stock.getReservedQty() - reservation.getQuantity()));
         reservation.setStatus(ReservationStatus.CANCELLED);
         return ReservationDto.from(reservation);
@@ -62,7 +62,7 @@ public class ReservationService {
         if (reservation.getStatus() != ReservationStatus.ACTIVE) {
             throw RestException.badRequest("Only active reservations can be fulfilled");
         }
-        WarehouseStock stock = stockRepository.findById(reservation.getWarehouseStockId()).orElseThrow();
+        WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseStockId()).orElseThrow();
         stock.setQuantity(stock.getQuantity() - reservation.getQuantity());
         stock.setReservedQty(Math.max(0, stock.getReservedQty() - reservation.getQuantity()));
         reservation.setStatus(ReservationStatus.FULFILLED);
@@ -70,7 +70,7 @@ public class ReservationService {
     }
 
     private Reservation getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Reservation not found: " + id));
     }
 }

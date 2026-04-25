@@ -21,12 +21,12 @@ public class ActualCostService {
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
-        return repository.findAllByStatus(ActualCostStatus.PENDING).stream().map(ActualCostDto::from).toList();
+        return repository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING).stream().map(ActualCostDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findByWorkOrder(UUID workOrderId) {
-        return repository.findAllByWorkOrderId(workOrderId).stream().map(ActualCostDto::from).toList();
+        return repository.findAllByWorkOrderIdAndIsDeletedFalse(workOrderId).stream().map(ActualCostDto::from).toList();
     }
 
     @Transactional
@@ -45,7 +45,7 @@ public class ActualCostService {
 
     @Transactional
     public ActualCostDto review(UUID id, boolean approve, UUID reviewerId, String comment) {
-        ActualCost c = repository.findById(id)
+        ActualCost c = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Actual cost not found: " + id));
         c.setStatus(approve ? ActualCostStatus.APPROVED : ActualCostStatus.REJECTED);
         c.setReviewedById(reviewerId);

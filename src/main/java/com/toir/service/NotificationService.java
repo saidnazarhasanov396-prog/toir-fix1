@@ -22,13 +22,13 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationDto> findForUser(UUID recipientId) {
-        return repository.findAllByRecipientIdOrderByCreatedAtDesc(recipientId).stream()
+        return repository.findAllByRecipientIdAndIsDeletedFalseOrderByCreatedAtDesc(recipientId).stream()
                 .map(NotificationDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public long countUnread(UUID recipientId) {
-        return repository.countByRecipientIdAndStatus(recipientId, NotificationStatus.SENT);
+        return repository.countByRecipientIdAndStatusAndIsDeletedFalse(recipientId, NotificationStatus.SENT);
     }
 
     public NotificationDto send(NotificationDto r) {
@@ -45,7 +45,7 @@ public class NotificationService {
     }
 
     public NotificationDto markRead(UUID id) {
-        Notification n = repository.findById(id)
+        Notification n = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Notification not found: " + id));
         n.setStatus(NotificationStatus.READ);
         n.setReadAt(Instant.now());

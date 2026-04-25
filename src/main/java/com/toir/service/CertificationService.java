@@ -27,11 +27,11 @@ public class CertificationService {
     // types
     @Transactional(readOnly = true)
     public List<CertificationTypeDto> findTypes() {
-        return typeRepo.findAll().stream().map(CertificationTypeDto::from).toList();
+        return typeRepo.findAllByIsDeletedFalse().stream().map(CertificationTypeDto::from).toList();
     }
 
     public CertificationTypeDto createType(CertificationTypeDto r) {
-        if (typeRepo.existsByCode(r.code())) {
+        if (typeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Certification type code already exists: " + r.code());
         }
         CertificationType t = new CertificationType();
@@ -40,26 +40,28 @@ public class CertificationService {
     }
 
     public CertificationTypeDto updateType(UUID id, CertificationTypeDto r) {
-        CertificationType t = typeRepo.findById(id)
+        CertificationType t = typeRepo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Certification type not found: " + id));
         applyType(t, r);
         return CertificationTypeDto.from(t);
     }
 
     public void deleteType(UUID id) {
-        typeRepo.deleteById(id);
+        var entity = typeRepo.findByIdAndIsDeletedFalse(id).orElseThrow();
+        entity.setDeleted(true);
+        typeRepo.save(entity);
     }
 
     // user certifications
     @Transactional(readOnly = true)
     public List<UserCertificationDto> findForUser(UUID userId) {
-        return certRepo.findAllByUserId(userId).stream().map(UserCertificationDto::from).toList();
+        return certRepo.findAllByUserIdAndIsDeletedFalse(userId).stream().map(UserCertificationDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<UserCertificationDto> findExpiring(int withinDays) {
         LocalDate cutoff = LocalDate.now().plusDays(withinDays);
-        return certRepo.findAllByExpiresAtBefore(cutoff).stream()
+        return certRepo.findAllByExpiresAtBeforeAndIsDeletedFalse(cutoff).stream()
                 .filter(c -> "ACTIVE".equals(c.getStatus()) || "EXPIRED".equals(c.getStatus()))
                 .map(UserCertificationDto::from)
                 .toList();
@@ -67,11 +69,11 @@ public class CertificationService {
 
     @Transactional(readOnly = true)
     public List<UserCertificationDto> findAll() {
-        return certRepo.findAll().stream().map(UserCertificationDto::from).toList();
+        return certRepo.findAllByIsDeletedFalse().stream().map(UserCertificationDto::from).toList();
     }
 
     public UserCertificationDto issue(UserCertificationRequest r) {
-        CertificationType type = typeRepo.findByCode(r.typeCode());
+        CertificationType type = typeRepo.findByCodeAndIsDeletedFalse(r.typeCode());
         if (type == null) {
             throw RestException.notFound("Certification type not found: " + r.typeCode());
         }
@@ -111,7 +113,7 @@ public class CertificationService {
     public int markExpired() {
         LocalDate today = LocalDate.now();
         int count = 0;
-        for (UserCertification c : certRepo.findAllByStatus("ACTIVE")) {
+        for (UserCertification c : certRepo.findAllByStatusAndIsDeletedFalse("ACTIVE")) {
             if (c.getExpiresAt() != null && c.getExpiresAt().isBefore(today)) {
                 c.setStatus("EXPIRED");
                 count++;
@@ -121,7 +123,7 @@ public class CertificationService {
     }
 
     private UserCertification load(UUID id) {
-        return certRepo.findById(id)
+        return certRepo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("User certification not found: " + id));
     }
 

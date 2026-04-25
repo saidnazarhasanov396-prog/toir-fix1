@@ -4,6 +4,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
 
 import com.toir.enums.AuditAction;
+import com.toir.util.PaginationUtils;
 import com.toir.util.RequestContext;
 import com.toir.exception.RestException;
 import com.toir.security.SecurityScope;
@@ -12,6 +13,7 @@ import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,9 +40,15 @@ public class WorkOrderService {
     }
 
     @Transactional(readOnly = true)
-    public List<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
-        int offset = page * pageSize;
-        return repository.searchPaginated(status, departmentId, equipmentId, search, offset, pageSize).stream().map(WorkOrderDto::from).toList();
+    public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        return repository.searchPaginated(
+                status,
+                departmentId,
+                equipmentId,
+                search,
+                pageable
+        ).map(WorkOrderDto::from);
     }
 
     @Transactional(readOnly = true)
@@ -52,7 +60,7 @@ public class WorkOrderService {
         if (request.equipmentId() == null) {
             throw RestException.badRequest("Equipment is required to create a work order");
         }
-        if (repository.existsByNumber(request.number())) {
+        if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Work order number already exists: " + request.number());
         }
         WorkOrder entity = new WorkOrder();
@@ -125,7 +133,7 @@ public class WorkOrderService {
     }
 
     private WorkOrder getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + id));
     }
 

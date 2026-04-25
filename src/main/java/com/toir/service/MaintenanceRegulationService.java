@@ -3,9 +3,11 @@ import com.toir.entity.MaintenanceRegulation;
 import com.toir.repository.MaintenanceRegulationRepository;
 
 import com.toir.exception.RestException;
+import com.toir.util.PaginationUtils;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,13 +23,16 @@ public class MaintenanceRegulationService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceRegulationDto> findAll() {
-        return repository.findAll().stream().map(MaintenanceRegulationDto::from).toList();
+        return repository.findAllByIsDeletedFalse().stream().map(MaintenanceRegulationDto::from).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<MaintenanceRegulationDto> search(int page, int pageSize, String search) {
-        int offset = page * pageSize;
-        return repository.searchPaginated(search, offset, pageSize).stream().map(MaintenanceRegulationDto::from).toList();
+    public Page<MaintenanceRegulationDto> search(int page, int pageSize, String search) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        return repository.searchPaginated(
+                search,
+                pageable
+        ).map(MaintenanceRegulationDto::from);
     }
 
     @Transactional(readOnly = true)
@@ -41,11 +46,11 @@ public class MaintenanceRegulationService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceRegulation> findActiveByEquipmentType(UUID equipmentTypeId) {
-        return repository.findAllByEquipmentTypeIdAndActiveTrue(equipmentTypeId);
+        return repository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(equipmentTypeId);
     }
 
     public MaintenanceRegulationDto create(MaintenanceRegulationRequest request) {
-        if (repository.existsByCode(request.code())) {
+        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Regulation code already exists: " + request.code());
         }
         MaintenanceRegulation entity = new MaintenanceRegulation();
@@ -60,11 +65,13 @@ public class MaintenanceRegulationService {
     }
 
     public void delete(UUID id) {
-        repository.delete(getOrThrow(id));
+        var entity = getOrThrow(id);
+        entity.setDeleted(true);
+        repository.save(entity);
     }
 
     private MaintenanceRegulation getOrThrow(UUID id) {
-        return repository.findById(id)
+        return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Maintenance regulation not found: " + id));
     }
 
