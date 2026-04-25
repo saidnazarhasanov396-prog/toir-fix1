@@ -17,14 +17,14 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
 
     @Query(nativeQuery = true, value = """
             select * from defects d where
-            (:equipmentId is null or d.equipment_id = cast(:equipmentId as uuid))
-            and (:search is null or lower(d.code) like lower(concat('%', :search, '%'))
-            or lower(d.title) like lower(concat('%', :search, '%'))
-            or lower(d.description) like lower(concat('%', :search, '%'))
-            or lower(d.category) like lower(concat('%', :search, '%'))
-            or lower(d.severity) like lower(concat('%', :search, '%'))
-            or lower(d.failure_reason) like lower(concat('%', :search, '%'))
-            or lower(d.root_cause) like lower(concat('%', :search, '%')))
+            (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
+            and (cast(:search as varchar) is null or lower(d.code) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.title) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.description) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.category) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.severity) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.failure_reason) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(d.root_cause) like lower(concat('%', cast(:search as varchar), '%')))
             order by d.detected_at desc limit :limit offset :offset
             """)
     List<Defect> searchPaginated(@Param("equipmentId") UUID equipmentId,
@@ -37,7 +37,7 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
     @Query(value = "SELECT * FROM defects WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
     List<Defect> findAllByEquipmentId(@Param("equipmentId") UUID equipmentId);
 
-    @Query(value = "SELECT COUNT(*) FROM defects WHERE status = :status AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT COUNT(*) FROM defects WHERE status = cast(:status as varchar) AND is_deleted = false", nativeQuery = true)
     long countByStatus(@Param("status") DefectStatus status);
 }
 

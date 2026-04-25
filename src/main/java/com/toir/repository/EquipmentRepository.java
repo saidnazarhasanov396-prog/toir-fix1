@@ -39,15 +39,15 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
             "(:departmentId is null or e.departmentId = :departmentId) and " +
             "(:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId) and " +
             "(:status is null or e.status = :status) and " +
-            "(:search is null or " +
-            "lower(e.code) like lower(concat('%', :search, '%')) or " +
-            "lower(e.name) like lower(concat('%', :search, '%')) or " +
-            "lower(e.inventoryNumber) like lower(concat('%', :search, '%')) or " +
-            "lower(e.technicalNumber) like lower(concat('%', :search, '%')) or " +
-            "lower(e.serialNumber) like lower(concat('%', :search, '%')) or " +
-            "lower(e.model) like lower(concat('%', :search, '%')) or " +
-            "lower(e.manufacturer) like lower(concat('%', :search, '%')) or " +
-            "lower(e.description) like lower(concat('%', :search, '%')))")
+            "(cast(:search as string) is null or " +
+            "lower(e.code) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.name) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.inventoryNumber) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.technicalNumber) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.serialNumber) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.model) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.manufacturer) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.description) like lower(concat('%', cast(:search as string), '%')))")
     Page<Equipment> search(@Param("departmentId") UUID departmentId,
                            @Param("equipmentTypeId") UUID equipmentTypeId,
                            @Param("status") EquipmentStatus status,

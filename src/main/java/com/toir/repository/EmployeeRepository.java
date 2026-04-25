@@ -32,17 +32,17 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
     List<Employee> findAllByBrigadeId(@Param("brigadeId") UUID brigadeId);
 
     @Query("select e from Employee e where " +
-            "(:activeOnly is null or " +
+            "(cast(:activeOnly as string) is null or " +
             "(:activeOnly = true and e.isDeleted = false) or " +
             "(:activeOnly = false and e.isDeleted = true)) " +
-            "and (:search is null or " +
-            "lower(e.personnelNumber) like lower(concat('%', :search, '%')) or " +
-            "lower(e.firstName) like lower(concat('%', :search, '%')) or " +
-            "lower(e.lastName) like lower(concat('%', :search, '%')) or " +
-            "lower(e.middleName) like lower(concat('%', :search, '%')) or " +
-            "lower(e.position) like lower(concat('%', :search, '%')) or " +
-            "lower(e.grade) like lower(concat('%', :search, '%')) or " +
-            "lower(e.phone) like lower(concat('%', :search, '%')) or " +
-            "lower(e.email) like lower(concat('%', :search, '%')))")
+            "and (cast(:search as string) is null or " +
+            "lower(e.personnelNumber) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.firstName) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.lastName) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.middleName) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.position) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.grade) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.phone) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.email) like lower(concat('%', cast(:search as string), '%')))")
     Page<Employee> searchEmployees(@Param("search") String search, @Param("activeOnly") Boolean activeOnly, Pageable pageable);
 }
