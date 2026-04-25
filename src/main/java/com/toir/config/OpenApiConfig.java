@@ -62,7 +62,7 @@ public class OpenApiConfig {
     }
 
     private String getAdminToken() {
-        Optional<User> admin = userRepository.findByUsername("admin");
+        Optional<User> admin = userRepository.findByUsernameAndIsDeletedFalse("admin");
         if (admin.isPresent()) {
             User user = admin.get();
             Hibernate.initialize(user.getRoles());
