@@ -24,6 +24,8 @@ spring:
       max-request-size: 50MB
 
 springdoc:
+  cache:
+    disabled: true
   api-docs:
     path: /api/v1/v3/api-docs
   swagger-ui:
