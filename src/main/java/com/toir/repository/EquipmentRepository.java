@@ -2,6 +2,7 @@ package com.toir.repository;
 
 import org.springframework.stereotype.Repository;
 import com.toir.entity.Equipment;
+import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 
 import org.springframework.data.domain.Page;
@@ -50,6 +51,7 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
             "(:departmentId is null or e.departmentId = :departmentId) and " +
             "(:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId) and " +
             "(:status is null or e.status = :status) and " +
+            "(:category is null or e.category = :category) and " +
             "(cast(:search as string) is null or " +
             "lower(e.code) like lower(concat('%', cast(:search as string), '%')) or " +
             "lower(e.name) like lower(concat('%', cast(:search as string), '%')) or " +
@@ -62,6 +64,7 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
     Page<Equipment> search(@Param("departmentId") UUID departmentId,
                            @Param("equipmentTypeId") UUID equipmentTypeId,
                            @Param("status") EquipmentStatus status,
+                           @Param("category") EquipmentCategory category,
                            @Param("search") String search,
                            Pageable pageable);
 }
