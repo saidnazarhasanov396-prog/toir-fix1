@@ -17,13 +17,13 @@ import java.util.UUID;
 @Builder
 public class Equipment extends BaseEntity {
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String code;
 
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "inventory_number", nullable = false, unique = true)
+    @Column(name = "inventory_number", nullable = false)
     private String inventoryNumber;
 
     @Column(name = "technical_number", unique = true)
