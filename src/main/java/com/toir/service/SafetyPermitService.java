@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class SafetyPermitService {
 

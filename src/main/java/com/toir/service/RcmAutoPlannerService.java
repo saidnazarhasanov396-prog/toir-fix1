@@ -28,6 +28,7 @@ import java.util.UUID;
  * не указан — используется первый план по текущему месяцу.
  */
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class RcmAutoPlannerService {
 

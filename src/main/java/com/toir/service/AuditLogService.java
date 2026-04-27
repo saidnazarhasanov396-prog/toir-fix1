@@ -3,15 +3,16 @@ import com.toir.enums.AuditAction;
 import com.toir.entity.AuditLog;
 import com.toir.repository.AuditLogRepository;
 
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class AuditLogService {
 
@@ -33,6 +34,6 @@ public class AuditLogService {
 
     @Transactional(readOnly = true)
     public Page<AuditLog> find(int page, int size) {
-        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(PageRequest.of(page, size));
+        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(PaginationUtils.pageRequest(page, size));
     }
 }

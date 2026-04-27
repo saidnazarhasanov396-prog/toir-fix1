@@ -32,4 +32,6 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
 
     @Query(value = "SELECT * FROM warehouse_stocks WHERE spare_part_id = :sparePartId AND is_deleted = false", nativeQuery = true)
     List<WarehouseStock> findAllBySparePartIdAndIsDeletedFalse(@Param("sparePartId") UUID sparePartId);
+
+    List<WarehouseStock> findAllBySparePartIdInAndIsDeletedFalse(java.util.Collection<UUID> sparePartIds);
 }

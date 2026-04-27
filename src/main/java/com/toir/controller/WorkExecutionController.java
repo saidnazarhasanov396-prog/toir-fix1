@@ -24,10 +24,11 @@ public class WorkExecutionController {
 
     @GetMapping("/execution-logs")
     public Page<ExecutionLogDto> executionLogs(
+            @RequestParam(required = false) UUID workOrderId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int pageSize
     ) {
-        return service.findExecutionLogs(page, pageSize);
+        return service.findExecutionLogs(workOrderId, page, pageSize);
     }
 
     @GetMapping("/work-orders/{workOrderId}/executions")

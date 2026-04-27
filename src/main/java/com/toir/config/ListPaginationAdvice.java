@@ -42,7 +42,10 @@ public class ListPaginationAdvice implements ResponseBodyAdvice<Object> {
             int page = parseInt(params.getFirst("page"), 0);
             int requestedSize = parseInt(params.getFirst("pageSize"), parseInt(params.getFirst("size"), 0));
             int pageSize = PaginationUtils.pageSizeFromList(requestedSize, list.size());
-            return PaginationUtils.page(list, page, pageSize, list.size());
+            long offset = (long) Math.max(page, 0) * pageSize;
+            int fromIndex = offset >= list.size() ? list.size() : (int) offset;
+            int toIndex = Math.min(fromIndex + pageSize, list.size());
+            return PaginationUtils.page(list.subList(fromIndex, toIndex), page, pageSize, list.size());
         }
         return body;
     }
