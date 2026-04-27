@@ -2,7 +2,6 @@ package com.toir.dto.repairrequest;
 
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.PriorityLevel;
-import com.toir.entity.RepairRequest;
 import com.toir.enums.RequestSource;
 import com.toir.enums.RequestStatus;
 
@@ -14,10 +13,10 @@ public record RepairRequestDto(
         String number,
         String title,
         String description,
-        UUID equipmentId,
-        UUID departmentId,
-        UUID locationId,
-        UUID reporterId,
+        String equipmentName,
+        String departmentName,
+        String locationName,
+        String reporterName,
         UUID assignedToId,
         PriorityLevel priority,
         CriticalityLevel criticality,
@@ -29,14 +28,4 @@ public record RepairRequestDto(
         Instant reactedAt,
         String rejectionReason,
         String closeResult
-) {
-    public static RepairRequestDto from(RepairRequest r) {
-        return new RepairRequestDto(
-                r.getId(), r.getNumber(), r.getTitle(), r.getDescription(),
-                r.getEquipmentId(), r.getDepartmentId(), r.getLocationId(), r.getReporterId(), r.getAssignedToId(),
-                r.getPriority(), r.getCriticality(), r.getStatus(), r.getSource(),
-                r.getDetectedAt(), r.getTargetCompletionAt(), r.getActualCompletionAt(),
-                r.getReactedAt(), r.getRejectionReason(), r.getCloseResult()
-        );
-    }
-}
+) {}

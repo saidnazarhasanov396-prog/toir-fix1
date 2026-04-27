@@ -1,8 +1,12 @@
 package com.toir.service;
-import com.toir.entity.RepairRequest;
+import com.toir.entity.*;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
+import com.toir.repository.DepartmentRepository;
+import com.toir.repository.EquipmentRepository;
+import com.toir.repository.LocationRepository;
 import com.toir.repository.RepairRequestRepository;
+import com.toir.repository.UserRepository;
 
 import com.toir.enums.AuditAction;
 import com.toir.util.PaginationUtils;
@@ -29,6 +33,10 @@ public class RepairRequestService {
     private static final String ENTITY = "RepairRequest";
 
     private final RepairRequestRepository repository;
+    private final EquipmentRepository equipmentRepository;
+    private final DepartmentRepository departmentRepository;
+    private final LocationRepository locationRepository;
+    private final UserRepository userRepository;
     private final AuditLogService auditLogService;
     private final RequestContext requestContext;
     private final SecurityScope securityScope;
@@ -47,12 +55,12 @@ public class RepairRequestService {
                 search,
                 priorityStr,
                 pageable
-        ).map(RepairRequestDto::from);
+        ).map(this::toDto);
     }
 
     @Transactional(readOnly = true)
     public RepairRequestDto findById(UUID id) {
-        return RepairRequestDto.from(getOrThrow(id));
+        return toDto(getOrThrow(id));
     }
 
     public RepairRequestDto create(RepairRequestRequest request) {
@@ -73,7 +81,7 @@ public class RepairRequestService {
         entity.setTargetCompletionAt(request.targetCompletionAt());
         RepairRequest saved = repository.save(entity);
         audit(AuditAction.CREATE, saved.getId(), "Создана заявка " + saved.getNumber());
-        return RepairRequestDto.from(saved);
+        return toDto(saved);
     }
 
     public RepairRequestDto changeStatus(UUID id, RequestStatus newStatus) {
@@ -81,7 +89,7 @@ public class RepairRequestService {
         captureReaction(entity, newStatus);
         entity.setStatus(newStatus);
         audit(AuditAction.UPDATE, entity.getId(), "Заявка " + entity.getNumber() + " переведена в " + newStatus);
-        return RepairRequestDto.from(entity);
+        return toDto(entity);
     }
 
     public RepairRequestDto assign(UUID id, UUID assigneeId) {
@@ -93,7 +101,7 @@ public class RepairRequestService {
         entity.setAssignedToId(assigneeId);
         entity.setStatus(RequestStatus.ASSIGNED);
         audit(AuditAction.UPDATE, entity.getId(), "Заявка " + entity.getNumber() + " назначена исполнителю");
-        return RepairRequestDto.from(entity);
+        return toDto(entity);
     }
 
     public RepairRequestDto reject(UUID id, String reason) {
@@ -108,7 +116,7 @@ public class RepairRequestService {
         entity.setStatus(RequestStatus.REJECTED);
         entity.setRejectionReason(reason);
         audit(AuditAction.CANCEL, entity.getId(), "Заявка " + entity.getNumber() + " отклонена: " + reason);
-        return RepairRequestDto.from(entity);
+        return toDto(entity);
     }
 
     public RepairRequestDto requestClarification(UUID id, String comment) {
@@ -120,7 +128,7 @@ public class RepairRequestService {
         entity.setStatus(RequestStatus.NEEDS_CLARIFICATION);
         entity.setRejectionReason(comment);
         audit(AuditAction.UPDATE, entity.getId(), "Заявка " + entity.getNumber() + " требует уточнения: " + comment);
-        return RepairRequestDto.from(entity);
+        return toDto(entity);
     }
 
     private void captureReaction(RepairRequest entity, RequestStatus nextStatus) {
@@ -141,7 +149,45 @@ public class RepairRequestService {
         entity.setActualCompletionAt(Instant.now());
         entity.setStatus(RequestStatus.CLOSED);
         audit(AuditAction.CLOSE, entity.getId(), "Закрыта заявка " + entity.getNumber());
-        return RepairRequestDto.from(entity);
+        return toDto(entity);
+    }
+
+    private RepairRequestDto toDto(RepairRequest r) {
+        String equipmentName = equipmentRepository.findByIdAndIsDeletedFalse(r.getEquipmentId())
+                .map(Equipment::getName)
+                .orElse(null);
+        String departmentName = departmentRepository.findByIdAndIsDeletedFalse(r.getDepartmentId())
+                .map(Department::getName)
+                .orElse(null);
+        String locationName = r.getLocationId() == null ? null
+                : locationRepository.findByIdAndIsDeletedFalse(r.getLocationId())
+                .map(Location::getName)
+                .orElse(null);
+        String reporterName = userRepository.findByIdAndIsDeletedFalse(r.getReporterId())
+                .map(User::getFullName)
+                .orElse(null);
+
+        return new RepairRequestDto(
+                r.getId(),
+                r.getNumber(),
+                r.getTitle(),
+                r.getDescription(),
+                equipmentName,
+                departmentName,
+                locationName,
+                reporterName,
+                r.getAssignedToId(),
+                r.getPriority(),
+                r.getCriticality(),
+                r.getStatus(),
+                r.getSource(),
+                r.getDetectedAt(),
+                r.getTargetCompletionAt(),
+                r.getActualCompletionAt(),
+                r.getReactedAt(),
+                r.getRejectionReason(),
+                r.getCloseResult()
+        );
     }
 
     private RepairRequest getOrThrow(UUID id) {
