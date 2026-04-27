@@ -1,4 +1,5 @@
 package com.toir.entity;
+import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 
 import jakarta.persistence.*;
@@ -16,13 +17,13 @@ import java.util.UUID;
 @Builder
 public class Equipment extends BaseEntity {
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String code;
 
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "inventory_number", nullable = false, unique = true)
+    @Column(name = "inventory_number", nullable = false)
     private String inventoryNumber;
 
     @Column(name = "technical_number", unique = true)
@@ -57,6 +58,10 @@ public class Equipment extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private EquipmentStatus status = EquipmentStatus.ACTIVE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private EquipmentCategory category = EquipmentCategory.PRODUCTION_EQUIPMENT;
 
     @Column(name = "commissioned_at")
     private LocalDate commissionedAt;
