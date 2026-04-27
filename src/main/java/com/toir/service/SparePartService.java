@@ -1,5 +1,6 @@
 package com.toir.service;
 import com.toir.entity.SparePart;
+import com.toir.enums.InventoryItemKind;
 import com.toir.repository.SparePartRepository;
 
 import com.toir.exception.RestException;
@@ -8,6 +9,9 @@ import com.toir.dto.sparepart.SparePartRequest;
 import com.toir.entity.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.cache.spi.support.AbstractReadWriteAccess;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,12 +28,15 @@ public class SparePartService {
     private final WarehouseStockRepository stockRepository;
 
     @Transactional(readOnly = true)
-    public List<SparePartDto> findAll() {
+    public List<SparePartDto> findAll(Integer pageSize, Integer page, String itemType, String search) {
         Map<UUID, List<WarehouseStock>> stocksByPart = stockRepository.findAllByIsDeletedFalse().stream()
                 .filter(s -> s.getSparePartId() != null)
                 .collect(Collectors.groupingBy(WarehouseStock::getSparePartId));
+        page = page>0 ?page-1 : page;
+        Pageable pageable = PageRequest.of(page,pageSize);
+        InventoryItemKind inventoryItemKind = map(itemType);
 
-        return repository.findAllByIsDeletedFalse().stream()
+        return repository.findAllByFilter(inventoryItemKind,search,pageable).stream()
                 .map(part -> {
                     List<WarehouseStock> stocks = stocksByPart.getOrDefault(part.getId(), List.of());
                     double currentStock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
@@ -37,6 +44,11 @@ public class SparePartService {
                     return SparePartDto.from(part, currentStock, reservedStock, stocks.size());
                 })
                 .toList();
+    }
+
+    private InventoryItemKind map(String itemType) {
+        if (itemType == null || itemType.equalsIgnoreCase("ALL")) return null;
+        return InventoryItemKind.valueOf(itemType.toUpperCase());
     }
 
     @Transactional(readOnly = true)
