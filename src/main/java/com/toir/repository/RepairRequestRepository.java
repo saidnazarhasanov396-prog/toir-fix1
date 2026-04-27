@@ -60,33 +60,38 @@ public interface RepairRequestRepository extends JpaRepository<RepairRequest, UU
             """ 
             select * from repair_requests r where
             r.is_deleted = false
-            and (cast(:status as varchar) is null or r.status = cast(:status as varchar))
+            and (cast(:status as text) is null or r.status = cast(:status as text))
+            and (cast(:priority as text) is null or r.priority = cast(:priority as text))
             and (cast(:departmentId as uuid) is null or r.department_id = cast(:departmentId as uuid))
             and (cast(:equipmentId as uuid) is null or r.equipment_id = cast(:equipmentId as uuid))
-            and (cast(:search as varchar) is null or lower(r.number) like lower(concat('%', cast(:search as varchar), '%'))
-            and (cast(:priority as text) is null or r.priority = cast(:priority as text))
-            or lower(r.title) like lower(concat('%', cast(:search as varchar), '%'))
-            or lower(r.description) like lower(concat('%', cast(:search as varchar), '%'))
-            or lower(r.rejection_reason) like lower(concat('%', cast(:search as varchar), '%'))
-            or lower(r.close_result) like lower(concat('%', cast(:search as varchar), '%')))
+            and (cast(:search as varchar) is null or (
+                lower(r.number) like lower(concat('%', cast(:search as varchar), '%'))
+                or lower(r.title) like lower(concat('%', cast(:search as varchar), '%'))
+                or lower(r.description) like lower(concat('%', cast(:search as varchar), '%'))
+                or lower(r.rejection_reason) like lower(concat('%', cast(:search as varchar), '%'))
+                or lower(r.close_result) like lower(concat('%', cast(:search as varchar), '%'))
+            ))
             order by r.detected_at desc
                         """, countQuery =
             """
             select count(*) from repair_requests r where
             r.is_deleted = false
-            and (cast(:status as varchar) is null or r.status = cast(:status as varchar))
+            and (cast(:status as text) is null or r.status = cast(:status as text))
+            and (cast(:priority as text) is null or r.priority = cast(:priority as text))
             and (cast(:departmentId as uuid) is null or r.department_id = cast(:departmentId as uuid))
             and (cast(:equipmentId as uuid) is null or r.equipment_id = cast(:equipmentId as uuid))
-            and (cast(:search as varchar) is null or lower(r.number) like lower(concat('%', cast(:search as varchar), '%'))
-            or lower(r.title) like lower(concat('%', cast(:search as varchar), '%'))
-            or lower(r.description) like lower(concat('%', cast(:search as varchar), '%'))
-            or lower(r.rejection_reason) like lower(concat('%', cast(:search as varchar), '%'))
-            or lower(r.close_result) like lower(concat('%', cast(:search as varchar), '%')))
+            and (cast(:search as varchar) is null or (
+                lower(r.number) like lower(concat('%', cast(:search as varchar), '%'))
+                or lower(r.title) like lower(concat('%', cast(:search as varchar), '%'))
+                or lower(r.description) like lower(concat('%', cast(:search as varchar), '%'))
+                or lower(r.rejection_reason) like lower(concat('%', cast(:search as varchar), '%'))
+                or lower(r.close_result) like lower(concat('%', cast(:search as varchar), '%'))
+            ))
                         """)
-    Page<RepairRequest> searchPaginated(@Param("status") RequestStatus status,
+    Page<RepairRequest> searchPaginated(@Param("status") String status,
                                         @Param("departmentId") UUID departmentId,
                                         @Param("equipmentId") UUID equipmentId,
                                         @Param("search") String search,
-                                        @Param("priority") PriorityLevel priority,
+                                        @Param("priority") String priority,
                                         Pageable pageable);
 }
