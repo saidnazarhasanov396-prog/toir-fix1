@@ -2,25 +2,21 @@ package com.toir.config;
 
 import com.toir.entity.Role;
 import com.toir.entity.User;
-import com.toir.enums.UserStatus;
-import com.toir.exception.RestException;
 import com.toir.repository.UserRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.JwtService;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
-import io.swagger.v3.oas.models.headers.Header;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import lombok.RequiredArgsConstructor;
-import lombok.val;
 import org.hibernate.Hibernate;
+import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.Environment;
 
 import java.util.*;
 
@@ -61,12 +57,10 @@ public class OpenApiConfig {
             servers.add(prodServer);
             servers.add(devServer);
         }
-        String jwtToken = getAdminToken();
-
         return new OpenAPI()
                 .info(new Info()
                         .title("TOIR Backend API")
-                        .description("### Admin Token:\n```text\n" + jwtToken + "\n```")
+                        .description("### Admin Token:\n```text\nLoading...\n```")
                         .version("1.0.0"))
                 .servers(servers)
                 .addSecurityItem(new SecurityRequirement().addList(SCHEME_NAME))
@@ -76,6 +70,12 @@ public class OpenApiConfig {
                                 .type(SecurityScheme.Type.HTTP)
                                 .scheme("bearer")
                                 .bearerFormat("JWT")));
+    }
+
+    @Bean
+    public OpenApiCustomizer adminTokenCustomizer() {
+        return openApi -> openApi.getInfo()
+                .setDescription("### Admin Token:\n```text\n" + getAdminToken() + "\n```");
     }
 
     private String getAdminToken() {

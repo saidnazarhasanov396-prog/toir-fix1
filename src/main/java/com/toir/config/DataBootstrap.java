@@ -56,15 +56,15 @@ public class DataBootstrap implements CommandLineRunner {
     @Override
     public void run(String... args) {
         Role adminRole = roleRepository.findByCodeAndIsDeletedFalse(ADMIN_ROLE_CODE).orElseGet(() -> {
-            Role r = new Role();
-            r.setCode(ADMIN_ROLE_CODE);
-            r.setName("Системный администратор");
-            r.setNameEn("System Administrator");
-            r.setNameUz("Tizim administratori");
-            r.setDescription("Полный доступ ко всем модулям");
-            r.setSystem(true);
-            r.setPermissions(List.of("*"));
-            return roleRepository.save(r);
+            Role r1 = new Role();
+            r1.setCode(ADMIN_ROLE_CODE);
+            r1.setName("Системный администратор");
+            r1.setNameEn("System Administrator");
+            r1.setNameUz("Tizim administratori");
+            r1.setDescription("Полный доступ ко всем модулям");
+            r1.setSystem(true);
+            r1.setPermissions(List.of("*"));
+            return roleRepository.save(r1);
         });
 
         for (String[] row : BASE_ROLES) {
