@@ -6,4 +6,6 @@ target/generated-sources/
 *.log
 .DS_Store
 .env
+.vscode
+src/main/java/com/toir/Main.java
 uploads/
