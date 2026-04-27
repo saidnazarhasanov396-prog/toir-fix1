@@ -1,5 +1,6 @@
 package com.toir.dto.equipment;
 
+import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -22,6 +23,7 @@ public record EquipmentRequest(
         UUID responsibleId,
         String manufacturer,
         EquipmentStatus status,
+        EquipmentCategory category,
         LocalDate commissionedAt,
         LocalDate warrantyUntil,
         String description

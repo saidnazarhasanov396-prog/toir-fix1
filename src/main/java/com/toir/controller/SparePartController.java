@@ -1,4 +1,5 @@
 package com.toir.controller;
+import com.toir.enums.InventoryItemKind;
 import com.toir.service.SparePartService;
 
 import com.toir.dto.sparepart.SparePartDto;
@@ -24,7 +25,12 @@ public class SparePartController {
     }
 
     @GetMapping
-    public List<SparePartDto> list() { return service.findAll(); }
+    public List<SparePartDto> list(
+            @RequestParam(defaultValue = "0", required = false) Integer page,
+            @RequestParam(defaultValue = "0", required = false) Integer pageSize,
+            @RequestParam(required = false)String itemType,
+            @RequestParam(required = false, defaultValue = "") String search
+            ) { return service.findAll(pageSize,page,itemType,search); }
 
     @GetMapping("/{id}")
     public SparePartDto get(@PathVariable UUID id) { return service.findById(id); }
