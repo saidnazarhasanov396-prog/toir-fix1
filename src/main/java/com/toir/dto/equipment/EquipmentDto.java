@@ -1,6 +1,7 @@
 package com.toir.dto.equipment;
 
 import com.toir.entity.Equipment;
+import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 
 import java.time.LocalDate;
@@ -22,6 +23,7 @@ public record EquipmentDto(
         UUID responsibleId,
         String manufacturer,
         EquipmentStatus status,
+        EquipmentCategory category,
         LocalDate commissionedAt,
         LocalDate warrantyUntil,
         String description,
@@ -54,7 +56,7 @@ public record EquipmentDto(
                 e.getId(), e.getCode(), e.getName(), e.getInventoryNumber(), e.getTechnicalNumber(),
                 e.getSerialNumber(), e.getModel(), e.getEquipmentTypeId(), e.getDepartmentId(),
                 e.getLocationId(), e.getParentId(), e.getCriticalityClassId(), e.getResponsibleId(),
-                e.getManufacturer(), e.getStatus(),
+                e.getManufacturer(), e.getStatus(), e.getCategory(),
                 e.getCommissionedAt(), e.getWarrantyUntil(), e.getDescription(),
                 department, location, equipmentType, parent, passport
         );

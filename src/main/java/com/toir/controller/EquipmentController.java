@@ -1,5 +1,6 @@
 package com.toir.controller;
 import com.toir.config.PaginatedResponse;
+import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.service.EquipmentService;
 
@@ -33,6 +34,7 @@ public class EquipmentController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) EquipmentStatus status,
+            @RequestParam(required = false) EquipmentCategory category,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize
@@ -44,6 +46,7 @@ public class EquipmentController {
                         securityScope.enforceDepartmentScope(departmentId),
                         equipmentTypeId,
                         status,
+                        category,
                         search,
                         safePage - 1,
                         safePageSize),

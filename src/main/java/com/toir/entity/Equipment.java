@@ -1,4 +1,5 @@
 package com.toir.entity;
+import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 
 import jakarta.persistence.*;
@@ -57,6 +58,10 @@ public class Equipment extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private EquipmentStatus status = EquipmentStatus.ACTIVE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private EquipmentCategory category = EquipmentCategory.PRODUCTION_EQUIPMENT;
 
     @Column(name = "commissioned_at")
     private LocalDate commissionedAt;
