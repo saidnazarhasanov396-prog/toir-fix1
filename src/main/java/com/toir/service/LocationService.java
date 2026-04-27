@@ -5,7 +5,10 @@ import com.toir.repository.LocationRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.location.LocationDto;
 import com.toir.dto.location.LocationRequest;
+import com.toir.enums.LocationType;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +25,12 @@ public class LocationService {
     @Transactional(readOnly = true)
     public List<LocationDto> findAll() {
         return repository.findAllByIsDeletedFalse().stream().map(LocationDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<LocationDto> search(LocationType locationType, String search, int page, int pageSize) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        return repository.search(locationType, search, pageable).map(LocationDto::from);
     }
 
     @Transactional(readOnly = true)

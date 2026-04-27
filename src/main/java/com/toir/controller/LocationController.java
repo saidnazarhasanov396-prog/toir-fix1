@@ -1,15 +1,16 @@
 package com.toir.controller;
 import com.toir.service.LocationService;
 
+import com.toir.dto.common.PageResponse;
 import com.toir.dto.location.LocationDto;
 import com.toir.dto.location.LocationRequest;
+import com.toir.enums.LocationType;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -24,7 +25,14 @@ public class LocationController {
     }
 
     @GetMapping
-    public List<LocationDto> list() { return service.findAll(); }
+    public PageResponse<LocationDto> list(
+            @RequestParam(required = false) LocationType locationType,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize
+    ) {
+        return PageResponse.from(service.search(locationType, search, page, pageSize));
+    }
 
     @GetMapping("/{id}")
     public LocationDto get(@PathVariable UUID id) { return service.findById(id); }
