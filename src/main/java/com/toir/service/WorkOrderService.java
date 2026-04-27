@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class WorkOrderService {
 
@@ -52,10 +53,21 @@ public class WorkOrderService {
     }
 
     @Transactional(readOnly = true)
+    public Page<WorkOrderDto> mobileFeed(UUID departmentId, UUID equipmentId, String search, int page, int pageSize) {
+        return repository.searchMobileFeed(
+                departmentId,
+                equipmentId,
+                search,
+                PaginationUtils.pageRequest(page, pageSize)
+        ).map(WorkOrderDto::from);
+    }
+
+    @Transactional(readOnly = true)
     public WorkOrderDto findById(UUID id) {
         return WorkOrderDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public WorkOrderDto create(WorkOrderRequest request) {
         if (request.equipmentId() == null) {
             throw RestException.badRequest("Equipment is required to create a work order");
@@ -82,6 +94,7 @@ public class WorkOrderService {
         return WorkOrderDto.from(saved);
     }
 
+    @Transactional
     public WorkOrderDto approve(UUID id, UUID approverId) {
         WorkOrder entity = getOrThrow(id);
         if (entity.getStatus() != WorkOrderStatus.DRAFT && entity.getStatus() != WorkOrderStatus.PLANNED) {
@@ -93,6 +106,7 @@ public class WorkOrderService {
         return WorkOrderDto.from(entity);
     }
 
+    @Transactional
     public WorkOrderDto start(UUID id) {
         WorkOrder entity = getOrThrow(id);
         entity.setStatus(WorkOrderStatus.IN_PROGRESS);
@@ -101,6 +115,7 @@ public class WorkOrderService {
         return WorkOrderDto.from(entity);
     }
 
+    @Transactional
     public WorkOrderDto complete(UUID id, CompleteWorkOrderRequest request) {
         WorkOrder entity = getOrThrow(id);
         if (entity.getStatus() != WorkOrderStatus.IN_PROGRESS) {
@@ -119,6 +134,7 @@ public class WorkOrderService {
         return WorkOrderDto.from(entity);
     }
 
+    @Transactional
     public WorkOrderDto close(UUID id, CloseWorkOrderRequest request) {
         WorkOrder entity = getOrThrow(id);
         if (request.result() == null || request.result().isBlank()) {

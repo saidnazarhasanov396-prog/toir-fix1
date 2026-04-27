@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class LocationService {
 
@@ -38,6 +39,7 @@ public class LocationService {
         return LocationDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public LocationDto create(LocationRequest request) {
         if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Location code already exists: " + request.code());
@@ -47,12 +49,14 @@ public class LocationService {
         return LocationDto.from(repository.save(entity));
     }
 
+    @Transactional
     public LocationDto update(UUID id, LocationRequest request) {
         Location entity = getOrThrow(id);
         apply(entity, request);
         return LocationDto.from(entity);
     }
 
+    @Transactional
     public void delete(UUID id) {
         Location entity = getOrThrow(id);
         if (!repository.findAllByParentIdAndIsDeletedFalse(id).isEmpty()) {
