@@ -1,5 +1,6 @@
 package com.toir.controller;
 import com.toir.config.PaginatedResponse;
+import com.toir.dto.common.PageResponse;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.service.EquipmentService;
@@ -9,6 +10,7 @@ import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -30,7 +32,7 @@ public class EquipmentController {
     }
 
     @GetMapping
-    public PaginatedResponse<EquipmentDto> list(
+    public PageResponse<EquipmentDto> list(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) EquipmentStatus status,
@@ -41,17 +43,14 @@ public class EquipmentController {
     ) {
         int safePage = Math.max(1, page);
         int safePageSize = Math.max(1, pageSize);
-        return PaginatedResponse.from(
-                service.search(
+        return  PageResponse.from(service.search(
                         securityScope.enforceDepartmentScope(departmentId),
                         equipmentTypeId,
                         status,
                         category,
                         search,
                         safePage - 1,
-                        safePageSize),
-                safePage,
-                safePageSize);
+                        safePageSize));
     }
 
     @GetMapping("/{id}")

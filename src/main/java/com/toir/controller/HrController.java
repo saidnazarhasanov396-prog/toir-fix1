@@ -34,7 +34,7 @@ public class HrController {
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean activeOnly) {
-        return service.listEmployees(page, pageSize, search, activeOnly);
+        return service.listEmployees(page-1, pageSize, search, activeOnly);
     }
 
     @GetMapping("/employees/{id}")
