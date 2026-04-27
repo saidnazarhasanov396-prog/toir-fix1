@@ -1,6 +1,5 @@
 package com.toir.service;
 
-import com.toir.config.PaginatedResponse;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleRequest;
@@ -14,9 +13,14 @@ import com.toir.repository.EquipmentRepository;
 import com.toir.repository.VehicleDetailsRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -33,7 +37,7 @@ public class VehicleService {
     private final EquipmentService equipmentService;
 
     @Transactional(readOnly = true)
-    public PaginatedResponse<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, String search, int page, int pageSize) {
+    public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, String search, int page, int pageSize) {
         int safePage = Math.max(page, 1);
         int safePageSize = Math.max(pageSize, 1);
         Page<EquipmentDto> equipmentPage = equipmentService.search(
@@ -56,9 +60,7 @@ public class VehicleService {
                 })
                 .filter(Objects::nonNull)
                 .toList();
-        return new PaginatedResponse<>(
-                items,
-                new PaginatedResponse.Meta(safePage, safePageSize, equipmentPage.getTotalElements()));
+        return new FixedTotalPage<>(items, equipmentPage.getPageable(), equipmentPage.getTotalElements());
     }
 
     @Transactional(readOnly = true)
@@ -213,5 +215,104 @@ public class VehicleService {
 
     private static String normalizeBlankToNull(String value) {
         return hasText(value) ? value : null;
+    }
+
+    private static final class FixedTotalPage<T> implements Page<T> {
+        private final List<T> content;
+        private final Pageable pageable;
+        private final long totalElements;
+
+        private FixedTotalPage(List<T> content, Pageable pageable, long totalElements) {
+            this.content = content == null ? List.of() : List.copyOf(content);
+            this.pageable = pageable == null ? Pageable.unpaged() : pageable;
+            this.totalElements = totalElements;
+        }
+
+        @Override
+        public int getTotalPages() {
+            if (getSize() == 0) {
+                return totalElements > 0 ? 1 : 0;
+            }
+            return (int) Math.ceil((double) totalElements / (double) getSize());
+        }
+
+        @Override
+        public long getTotalElements() {
+            return totalElements;
+        }
+
+        @Override
+        public int getNumber() {
+            return pageable.isPaged() ? pageable.getPageNumber() : 0;
+        }
+
+        @Override
+        public int getSize() {
+            return pageable.isPaged() ? pageable.getPageSize() : content.size();
+        }
+
+        @Override
+        public int getNumberOfElements() {
+            return content.size();
+        }
+
+        @Override
+        public List<T> getContent() {
+            return content;
+        }
+
+        @Override
+        public boolean hasContent() {
+            return !content.isEmpty();
+        }
+
+        @Override
+        public Sort getSort() {
+            return pageable.getSort();
+        }
+
+        @Override
+        public boolean isFirst() {
+            return !hasPrevious();
+        }
+
+        @Override
+        public boolean isLast() {
+            return !hasNext();
+        }
+
+        @Override
+        public boolean hasNext() {
+            return getNumber() + 1 < getTotalPages();
+        }
+
+        @Override
+        public boolean hasPrevious() {
+            return getNumber() > 0;
+        }
+
+        @Override
+        public Pageable nextPageable() {
+            return hasNext() ? pageable.next() : Pageable.unpaged();
+        }
+
+        @Override
+        public Pageable previousPageable() {
+            return hasPrevious() ? pageable.previousOrFirst() : Pageable.unpaged();
+        }
+
+        @Override
+        public Iterator<T> iterator() {
+            return Collections.unmodifiableList(content).iterator();
+        }
+
+        @Override
+        public <U> Page<U> map(Function<? super T, ? extends U> converter) {
+            List<U> mapped = new ArrayList<>(content.size());
+            for (T item : content) {
+                mapped.add(converter.apply(item));
+            }
+            return new FixedTotalPage<>(mapped, pageable, totalElements);
+        }
     }
 }

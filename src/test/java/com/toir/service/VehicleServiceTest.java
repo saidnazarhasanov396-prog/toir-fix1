@@ -1,6 +1,5 @@
 package com.toir.service;
 
-import com.toir.config.PaginatedResponse;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleRequest;
@@ -19,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
@@ -340,11 +340,11 @@ class VehicleServiceTest {
         when(vehicleDetailsRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(completeId, incompleteId)))
                 .thenReturn(List.of(completeDetails));
 
-        PaginatedResponse<VehicleSummaryDto> result = service.list(null, null, null, 1, 20);
+        Page<VehicleSummaryDto> result = service.list(null, null, null, 1, 20);
 
-        assertThat(result.items()).hasSize(1);
-        assertThat(result.items().get(0).equipmentId()).isEqualTo(completeId);
-        assertThat(result.meta().total()).isEqualTo(2);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).equipmentId()).isEqualTo(completeId);
+        assertThat(result.getTotalElements()).isEqualTo(2);
     }
 
     private static VehicleRequest fullRequest(String code, String name, String inventoryNumber, String plateNumber, String vin) {
