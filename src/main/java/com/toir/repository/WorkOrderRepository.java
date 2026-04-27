@@ -65,4 +65,27 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
                                     @Param("equipmentId") UUID equipmentId,
                                     @Param("search") String search,
                                     Pageable pageable);
+
+    @Query(nativeQuery = true, value = """
+            select * from work_orders w where
+            w.is_deleted = false
+            and w.status in ('APPROVED', 'IN_PROGRESS')
+            and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+            and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
+            and (cast(:search as varchar) is null or lower(w.number) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(w.title) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(w.summary) like lower(concat('%', cast(:search as varchar), '%')))
+            order by w.created_at desc""", countQuery = """
+            select count(*) from work_orders w where
+            w.is_deleted = false
+            and w.status in ('APPROVED', 'IN_PROGRESS')
+            and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+            and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
+            and (cast(:search as varchar) is null or lower(w.number) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(w.title) like lower(concat('%', cast(:search as varchar), '%'))
+            or lower(w.summary) like lower(concat('%', cast(:search as varchar), '%')))""")
+    Page<WorkOrder> searchMobileFeed(@Param("departmentId") UUID departmentId,
+                                     @Param("equipmentId") UUID equipmentId,
+                                     @Param("search") String search,
+                                     Pageable pageable);
 }

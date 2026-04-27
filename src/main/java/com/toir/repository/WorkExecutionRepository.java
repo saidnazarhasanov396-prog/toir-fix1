@@ -28,8 +28,15 @@ public interface WorkExecutionRepository extends JpaRepository<WorkExecution, UU
     @Query(value = "SELECT * FROM work_executions WHERE work_order_id = :workOrderId AND is_deleted = false ORDER BY started_at ASC", nativeQuery = true)
     List<WorkExecution> findAllByWorkOrderIdAndIsDeletedFalseOrderByStartedAtAsc(@Param("workOrderId") UUID workOrderId);
 
-    @Query(value = "SELECT * FROM work_executions WHERE is_deleted = false ORDER BY started_at DESC",
-            countQuery = "SELECT COUNT(*) FROM work_executions WHERE is_deleted = false",
+    @Query(value = """
+            SELECT * FROM work_executions
+            WHERE is_deleted = false
+            AND (cast(:workOrderId as varchar) IS NULL OR work_order_id = cast(:workOrderId as uuid))
+            ORDER BY started_at DESC""",
+            countQuery = """
+            SELECT COUNT(*) FROM work_executions
+            WHERE is_deleted = false
+            AND (cast(:workOrderId as varchar) IS NULL OR work_order_id = cast(:workOrderId as uuid))""",
             nativeQuery = true)
-    Page<WorkExecution> findAllByIsDeletedFalseOrderByStartedAtDesc(Pageable pageable);
+    Page<WorkExecution> findExecutionLogs(@Param("workOrderId") UUID workOrderId, Pageable pageable);
 }
