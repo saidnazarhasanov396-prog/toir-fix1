@@ -2,6 +2,7 @@ package com.toir.service;
 import com.toir.entity.Department;
 import com.toir.entity.Equipment;
 import com.toir.entity.EquipmentPassport;
+import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.entity.EquipmentType;
 import com.toir.entity.Location;
@@ -42,8 +43,8 @@ public class EquipmentService {
 
 
     @Transactional(readOnly = true)
-    public Page<EquipmentDto> search(UUID departmentId, UUID equipmentTypeId, EquipmentStatus status, String search, int page, int pageSize) {
-        Page<Equipment> items = repository.search(departmentId, equipmentTypeId, status, search, PageRequest.of(page, pageSize));
+    public Page<EquipmentDto> search(UUID departmentId, UUID equipmentTypeId, EquipmentStatus status, EquipmentCategory category, String search, int page, int pageSize) {
+        Page<Equipment> items = repository.search(departmentId, equipmentTypeId, status, category, search, PageRequest.of(page, pageSize));
 
         if (items.isEmpty()) return items.map(e -> null); // should not hit the null because it's empty
 
@@ -185,6 +186,7 @@ public class EquipmentService {
         entity.setResponsibleId(request.responsibleId());
         entity.setManufacturer(request.manufacturer());
         if (request.status() != null) entity.setStatus(request.status());
+        entity.setCategory(request.category() != null ? request.category() : EquipmentCategory.PRODUCTION_EQUIPMENT);
         entity.setCommissionedAt(request.commissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil());
         entity.setDescription(request.description());
