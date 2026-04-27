@@ -45,7 +45,7 @@ public class EquipmentService {
     public Page<EquipmentDto> search(UUID departmentId, UUID equipmentTypeId, EquipmentStatus status, String search, int page, int pageSize) {
         Page<Equipment> items = repository.search(departmentId, equipmentTypeId, status, search, PageRequest.of(page, pageSize));
 
-        if (items.isEmpty()) return items.map(e -> null); // should not hit the null because it's empty
+        if (items.isEmpty()) return items.map(e -> EquipmentDto.from(e)); // should not hit the null because it's empty
 
         Set<UUID> deptIds = collectIds(items.getContent(), Equipment::getDepartmentId);
         Set<UUID> locIds = collectIds(items.getContent(), Equipment::getLocationId);
