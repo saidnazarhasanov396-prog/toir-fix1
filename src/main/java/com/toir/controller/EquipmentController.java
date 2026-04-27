@@ -37,7 +37,7 @@ public class EquipmentController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize
     ) {
-        return service.search(securityScope.enforceDepartmentScope(departmentId), equipmentTypeId, status, search, page, pageSize);
+        return service.search(securityScope.enforceDepartmentScope(departmentId), equipmentTypeId, status, search, page-1, pageSize);
     }
 
     @GetMapping("/{id}")
