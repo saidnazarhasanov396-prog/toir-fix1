@@ -38,7 +38,7 @@ public class WorkOrderController {
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String search
     ) {
-        return service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId, page, pageSize, search);
+        return service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId, page-1, pageSize, search);
     }
 
     @GetMapping("/mobile-feed")
