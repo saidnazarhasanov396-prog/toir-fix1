@@ -12,6 +12,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 @Service
 public class JwtService {
@@ -36,6 +37,7 @@ public class JwtService {
                 .claim("username", username)
                 .claim("authorities", authorities)
                 .claims(extraClaims)
+                .id(UUID.randomUUID().toString())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiresAt))
                 .signWith(key)
