@@ -33,7 +33,6 @@ public class HrService {
         String part1 = null;
         String part2 = null;
 
-        // Parse search string to extract name parts for flexible name matching
         if (search != null && !search.isBlank()) {
             String[] parts = search.trim().split("\\s+");
             if (parts.length >= 2) {
