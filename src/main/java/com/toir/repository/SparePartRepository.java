@@ -29,15 +29,15 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
 
     @Query(value = """
         select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
-        and (:search is null
-            or lower(sp.code) like lower(concat('%', :search, '%'))
-            or lower(sp.name) like lower(concat('%', :search, '%'))
-            or lower(sp.manufacturer) like lower(concat('%', :search, '%'))
-            or lower(sp.sku) like lower(concat('%', :search, '%'))
-            or lower(sp.specification) like lower(concat('%', :search, '%')))
+        and (:searchPattern is null
+            or lower(sp.code) like :searchPattern
+            or lower(sp.name) like :searchPattern
+            or lower(sp.manufacturer) like :searchPattern
+            or lower(sp.sku) like :searchPattern
+            or lower(sp.specification) like :searchPattern)
         and sp.isDeleted = false
 """)
     Page<SparePart> findAllByFilter(@Param("itemType") InventoryItemKind itemType,
-                                    @Param("search") String search,
+                                    @Param("searchPattern") String searchPattern,
                                     Pageable pageable);
 }
