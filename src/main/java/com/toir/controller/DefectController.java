@@ -4,7 +4,7 @@ import com.toir.repository.DefectRepository;
 import com.toir.service.DefectService;
 
 import com.toir.exception.RestException;
-import com.toir.dto.defect.DefectDto;
+import com.toir.dto.defect.DefectResponse;
 import com.toir.dto.defect.DefectRequest;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.repository.KnowledgeArticleRepository;
@@ -37,7 +37,7 @@ public class DefectController {
     }
 
     @GetMapping
-    public Page<DefectDto> list(
+    public Page<DefectResponse> list(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -47,20 +47,20 @@ public class DefectController {
     }
 
     @GetMapping("/{id}")
-    public DefectDto get(@PathVariable UUID id) { return service.findById(id); }
+    public DefectResponse get(@PathVariable UUID id) { return service.findById(id); }
 
     @PostMapping
-    public ResponseEntity<DefectDto> create(@Valid @RequestBody DefectRequest request) {
+    public ResponseEntity<DefectResponse> create(@Valid @RequestBody DefectRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
     @PutMapping("/{id}")
-    public DefectDto update(@PathVariable UUID id, @Valid @RequestBody DefectRequest request) {
+    public DefectResponse update(@PathVariable UUID id, @Valid @RequestBody DefectRequest request) {
         return service.update(id, request);
     }
 
     @PostMapping("/{id}/resolve")
-    public DefectDto resolve(@PathVariable UUID id) { return service.resolve(id); }
+    public DefectResponse resolve(@PathVariable UUID id) { return service.resolve(id); }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)

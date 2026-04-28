@@ -32,6 +32,7 @@ import java.util.UUID;
  * Таймаут 5 секунд — интеграции не должны блокировать основной flow.
  */
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class WebhookService {
 
