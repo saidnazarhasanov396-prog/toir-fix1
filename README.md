@@ -9,12 +9,18 @@ Monolithic backend for ТОиР Navoiyazot — equipment maintenance & repair ma
 - springdoc-openapi (Swagger UI)
 
 ## Architecture
-Package-by-feature. Each feature package contains its own `controller`, `service`, `repository`, entity and `dto/` sub-package. Shared concerns (JWT, exception handling, base entity, request context, audit) live under `com.toir.common`.
+Layered Spring Boot application under `com.toir`:
+- `controller`: REST endpoints
+- `service`: business logic and orchestration
+- `repository`: Spring Data JPA repositories
+- `entity`: JPA entities
+- `dto`: request/response DTOs grouped by domain
+- `config`, `security`, `exception`, `util`: shared infrastructure
 
 ## Running locally
 
 ```bash
-./mvnw spring-boot:run
+mvn spring-boot:run
 ```
 
 Or with Docker Compose (PostgreSQL + backend):
@@ -23,13 +29,14 @@ Or with Docker Compose (PostgreSQL + backend):
 docker compose up --build
 ```
 
-API base URL: `http://localhost:8080/api`
-Swagger UI: `http://localhost:8080/api/swagger-ui.html`
+API base URL: `http://localhost:8080/api/v1`
+Swagger UI: `http://localhost:8080/swagger-ui.html`
+OpenAPI docs: `http://localhost:8080/api/v1/v3/api-docs`
 
 ## Default credentials
 When `create-default-admin: true`, `DataBootstrap` creates a default admin only if that user does not already exist:
 - username: `admin`
-- password: `P@ssw0rd123`
+- password: `Root123456`
 
 **Change the password immediately in production.**
 
@@ -39,9 +46,9 @@ Config is split by profile:
 - `application-dev.yml`: development
 - `application-prod.yml`: production overrides
 
-Use `dev` or `prod` Spring profile. Default profile is `dev`. Demo seeders run only in `dev`.
+Use `dev` or `prod` Spring profile. The current default profile is `prod`. Demo seeders run only in `dev`.
 
-DB schema is auto-managed by Hibernate (`ddl-auto: update`). No Flyway/Liquibase.
+DB schema handling currently combines Hibernate `ddl-auto: update`, Flyway migrations under `db/migration`, and manual SQL initialization from `db/manual`.
 
 ## Feature modules
 
@@ -88,10 +95,10 @@ All errors return:
 }
 ```
 
-Thrown via `com.toir.common.exception.RestException` and mapped by `GlobalExceptionHandler`.
+Thrown via `com.toir.exception.RestException` and mapped by `GlobalExceptionHandler`.
 
 ## Security
-- All endpoints require `Authorization: Bearer <token>` except: `/auth/login`, Swagger, `/actuator/health`
+- All endpoints require `Authorization: Bearer <token>` except: `/api/v1/auth/login`, Swagger, `/actuator/health`
 - JWT payload: `sub`, `username`, `authorities` (role codes), `permissions`, `departmentId`, `primaryRoleCode`
 - `@CurrentUser` parameter resolver injects `AuthenticatedUser` into controllers
 - `JwtAuthenticationEntryPoint` and `RestAccessDeniedHandler` return the unified error format
