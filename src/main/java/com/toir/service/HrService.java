@@ -30,7 +30,19 @@ public class HrService {
 
     @Transactional(readOnly = true)
     public Page<EmployeeDto> listEmployees(int page, int pageSize, String search, Boolean activeOnly) {
-        return employeeRepository.searchEmployees(search, activeOnly, PaginationUtils.pageRequest(page, pageSize))
+        String part1 = null;
+        String part2 = null;
+
+        // Parse search string to extract name parts for flexible name matching
+        if (search != null && !search.isBlank()) {
+            String[] parts = search.trim().split("\\s+");
+            if (parts.length >= 2) {
+                part1 = parts[0];
+                part2 = parts[1];
+            }
+        }
+
+        return employeeRepository.searchEmployees(search, part1, part2, activeOnly, PaginationUtils.pageRequest(page, pageSize))
                 .map(EmployeeDto::from);
     }
 
