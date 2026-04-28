@@ -5,6 +5,8 @@ import com.toir.entity.PprTask;
 import com.toir.enums.PprTaskStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.UUID;
@@ -24,5 +26,6 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
 
     List<PprTask> findAllByPlanIdAndIsDeletedFalse(UUID planId);
 
-    long countByStatusAndIsDeletedFalse(PprTaskStatus status);
+    @Query(value = "SELECT COUNT(*) FROM ppr_tasks WHERE status = :status AND is_deleted = false", nativeQuery = true)
+    long countByStatusAndIsDeletedFalse(@Param("status") String status);
 }

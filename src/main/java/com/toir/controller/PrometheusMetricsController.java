@@ -97,15 +97,15 @@ public class PrometheusMetricsController {
         gauge(sb, "toir_equipment_total", "Total equipment records", equipmentRepository.countByIsDeletedFalse());
         gauge(sb, "toir_defects_open", "Defects not yet closed", defectsOpen);
         gauge(sb, "toir_repair_requests_open", "Open/in-progress repair requests",
-                repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN)
-                        + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS));
+                repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN.toString())
+                        + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS.toString()));
         gauge(sb, "toir_work_orders_open", "Open work orders", workOrdersOpen);
         gauge(sb, "toir_ppr_tasks_planned", "PPR tasks planned",
-                pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED));
+                pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED.toString()));
         gauge(sb, "toir_ppr_tasks_overdue", "PPR tasks overdue",
-                pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE));
+                pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE.toString()));
         gauge(sb, "toir_procurement_draft", "Draft procurement requests",
-                procurementRequestRepository.countByStatusAndIsDeletedFalse(ProcurementRequestStatus.DRAFT));
+                procurementRequestRepository.countByStatusAndIsDeletedFalse(ProcurementRequestStatus.DRAFT.toString()));
         gauge(sb, "toir_brigades", "Brigades registered", brigadeRepository.countByIsDeletedFalse());
         gauge(sb, "toir_condition_readings_total", "Condition readings recorded",
                 conditionReadingRepository.countByIsDeletedFalse());
