@@ -95,14 +95,14 @@ public class OpsMetricsController {
         counts.put("equipment", equipmentRepository.countByIsDeletedFalse());
         counts.put("defectsOpen", defectRepository.findAllByIsDeletedFalse().stream()
                 .filter(d -> d.getStatus() != DefectStatus.CLOSED).count());
-        counts.put("repairRequestsOpen", repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN)
-                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS));
+        counts.put("repairRequestsOpen", repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN.name())
+                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS.name()));
         counts.put("workOrdersOpen", workOrderRepository.findAllByIsDeletedFalse().stream()
                 .filter(w -> w.getStatus() != WorkOrderStatus.CLOSED
                         && w.getStatus() != WorkOrderStatus.CANCELLED).count());
-        counts.put("pprTasksPlanned", pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED));
-        counts.put("pprTasksOverdue", pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE));
-        counts.put("procurementDraft", procurementRequestRepository.countByStatusAndIsDeletedFalse(ProcurementRequestStatus.DRAFT));
+        counts.put("pprTasksPlanned", pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED.name()));
+        counts.put("pprTasksOverdue", pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE.name()));
+        counts.put("procurementDraft", procurementRequestRepository.countByStatusAndIsDeletedFalse(ProcurementRequestStatus.DRAFT.name()));
         counts.put("brigades", brigadeRepository.countByIsDeletedFalse());
         counts.put("conditionReadings", conditionReadingRepository.countByIsDeletedFalse());
         counts.put("conditionAlarms", conditionReadingRepository

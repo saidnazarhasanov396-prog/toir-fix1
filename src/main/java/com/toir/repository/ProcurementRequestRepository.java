@@ -5,6 +5,8 @@ import com.toir.entity.ProcurementRequest;
 import com.toir.enums.ProcurementRequestStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.UUID;
@@ -28,5 +30,6 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
 
     boolean existsByNumberAndIsDeletedFalse(String number);
 
-    long countByStatusAndIsDeletedFalse(ProcurementRequestStatus status);
+    @Query(value = "SELECT COUNT(*) FROM procurement_requests WHERE status = :status AND is_deleted = false", nativeQuery = true)
+    long countByStatusAndIsDeletedFalse(@Param("status") String status);
 }

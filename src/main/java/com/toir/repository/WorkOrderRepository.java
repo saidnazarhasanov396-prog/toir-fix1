@@ -28,7 +28,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
 
     boolean existsByNumberAndIsDeletedFalse(String number);
 
-    long countByStatusAndIsDeletedFalse(WorkOrderStatus status);
+    @Query(value = "SELECT COUNT(*) FROM work_orders WHERE status = :status AND is_deleted = false", nativeQuery = true)
+    long countByStatusAndIsDeletedFalse(@Param("status") String status);
 
     @Query("SELECT w FROM WorkOrder w WHERE w.isDeleted = false " +
             "AND (:status IS NULL OR w.status = :status) " +

@@ -49,16 +49,16 @@ public class AnalyticsService {
 
 
     public AnalyticsOverview overview() {
-        long openRequests = repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN)
-                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS);
+        long openRequests = repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN.name())
+                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS.name());
         long emergencyRequests = repairRequestRepository.search(null, null, null).stream()
                 .filter(r -> r.getStatus() != RequestStatus.CLOSED && r.getStatus() != RequestStatus.CANCELLED)
                 .filter(r -> "EMERGENCY".equals(r.getPriority().name()))
                 .count();
-        long closedWorkOrders = workOrderRepository.countByStatusAndIsDeletedFalse(WorkOrderStatus.CLOSED);
-        long activeDefects = defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.OPEN)
-                + defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.IN_ANALYSIS)
-                + defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.IN_PROGRESS);
+        long closedWorkOrders = workOrderRepository.countByStatusAndIsDeletedFalse(WorkOrderStatus.CLOSED.name());
+        long activeDefects = defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.OPEN.name())
+                + defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.IN_ANALYSIS.name())
+                + defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.IN_PROGRESS.name());
 
         Totals totals = new Totals(openRequests, emergencyRequests, closedWorkOrders, activeDefects);
 
@@ -97,10 +97,10 @@ public class AnalyticsService {
                 .average().orElse(0) / 60.0;
 
         long pprTotalForKpi = pprTaskRepository.countByIsDeletedFalse();
-        long pprDoneForKpi = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED);
+        long pprDoneForKpi = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED.name());
         double pprCompletionRate = pprTotalForKpi > 0 ? (double) pprDoneForKpi / pprTotalForKpi * 100 : 0;
 
-        long pprOverdueCount = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE);
+        long pprOverdueCount = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE.name());
         double overdueWorkShare = pprTotalForKpi > 0 ? (double) pprOverdueCount / pprTotalForKpi * 100 : 0;
 
         Kpis kpis = new Kpis(mtbfAvg, mttrAvg, unplannedShare, downtimeHoursTotal,
@@ -173,7 +173,7 @@ public class AnalyticsService {
                 .toList();
 
         long pprTotal = pprTaskRepository.countByIsDeletedFalse();
-        long pprDone = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED);
+        long pprDone = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED.name());
         double pprCompletion = pprTotal > 0 ? (double) pprDone / pprTotal * 100 : 0;
 
         List<MaintenanceKpiRow> maintenanceKpis = allWorkOrders.stream()
