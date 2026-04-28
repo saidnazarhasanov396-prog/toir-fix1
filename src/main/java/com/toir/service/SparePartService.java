@@ -34,7 +34,7 @@ public class SparePartService {
         InventoryItemKind inventoryItemKind = map(itemType);
         Page<SparePart> parts = repository.findAllByFilter(
                 inventoryItemKind,
-                normalizeSearch(search),
+                toSearchPattern(search),
                 PaginationUtils.pageRequest(safePage, safePageSize)
         );
         if (parts.isEmpty()) {
@@ -109,7 +109,10 @@ public class SparePartService {
         entity.setMinStock(request.minStock());
     }
 
-    private String normalizeSearch(String search) {
-        return search == null || search.isBlank() ? null : search.trim();
+    private String toSearchPattern(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+        return "%" + search.trim().toLowerCase() + "%";
     }
 }
