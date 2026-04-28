@@ -10,10 +10,12 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.entity.CostCategory;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.dto.costcategory.CostCategoryDto;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
@@ -102,7 +104,9 @@ public class BudgetSummaryController {
     }
 
     @GetMapping("/actual-costs/register")
-    public Map<String, Object> actualCostRegister() {
+    public Map<String, Object> actualCostRegister(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
         List<ActualCost> items = actualCostRepository.findAllByIsDeletedFalse();
         double totalAmount = items.stream().mapToDouble(ActualCost::getAmount).sum();
         double approvedAmount = items.stream().filter(c -> c.getStatus() == ActualCostStatus.APPROVED)
@@ -126,20 +130,20 @@ public class BudgetSummaryController {
         summary.put("pendingCount", pendingCount);
         summary.put("rejectedCount", rejectedCount);
 
-        Map<String, Object> result = new java.util.HashMap<>();
-        result.put("items", items.stream().map(this::actualCostRow).toList());
-        result.put("meta", Map.of("page", 0, "pageSize", items.size(), "total", items.size()));
-        result.put("summary", summary);
-        return result;
+        return PaginationUtils.pageResponse(
+                items.stream().map(this::actualCostRow).toList(),
+                page,
+                pageSize,
+                Map.of("summary", summary)
+        );
     }
 
     @GetMapping("/actual-costs/review-queue")
-    public Map<String, Object> reviewQueue() {
+    public Map<String, Object> reviewQueue(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
         List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING);
-        return Map.of(
-                "items", pending.stream().map(this::actualCostRow).toList(),
-                "meta", Map.of("page", 0, "pageSize", pending.size(), "total", pending.size())
-        );
+        return PaginationUtils.pageResponse(pending.stream().map(this::actualCostRow).toList(), page, pageSize);
     }
 
     @GetMapping("/actual-costs/{id}/review-history")
@@ -159,7 +163,9 @@ public class BudgetSummaryController {
     }
 
     @GetMapping("/actual-costs/review-activity")
-    public Map<String, Object> reviewActivity() {
+    public Map<String, Object> reviewActivity(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
         Instant weekAgo = Instant.now().minus(7, ChronoUnit.DAYS);
         List<ActualCost> recent = actualCostRepository.findAllByIsDeletedFalse().stream()
                 .filter(c -> c.getReviewedAt() != null && c.getReviewedAt().isAfter(weekAgo))
@@ -174,15 +180,18 @@ public class BudgetSummaryController {
                 "affectedActualCosts", recent.stream().map(ActualCost::getId).distinct().count()
         );
 
-        Map<String, Object> result = new java.util.HashMap<>();
-        result.put("items", recent.stream().map(this::actualCostRow).toList());
-        result.put("meta", Map.of("page", 0, "pageSize", recent.size(), "total", recent.size()));
-        result.put("summary", summary);
-        return result;
+        return PaginationUtils.pageResponse(
+                recent.stream().map(this::actualCostRow).toList(),
+                page,
+                pageSize,
+                Map.of("summary", summary)
+        );
     }
 
     @GetMapping("/actual-costs/handovers")
-    public Map<String, Object> handovers() {
+    public Map<String, Object> handovers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
         Map<String, Object> summary = new java.util.HashMap<>();
         summary.put("total", 0);
         summary.put("uniqueActualCosts", 0);
@@ -192,31 +201,25 @@ public class BudgetSummaryController {
         summary.put("byTargetRole", List.of());
         summary.put("byDepartment", List.of());
 
-        Map<String, Object> result = new java.util.HashMap<>();
-        result.put("items", List.of());
-        result.put("meta", Map.of("page", 0, "pageSize", 0, "total", 0));
-        result.put("summary", summary);
-        return result;
+        return PaginationUtils.pageResponse(List.of(), page, pageSize, Map.of("summary", summary));
     }
 
     @GetMapping("/actual-costs/approval-pack")
-    public Map<String, Object> approvalPack() {
+    public Map<String, Object> approvalPack(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
         List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING);
-        return Map.of(
-                "items", pending.stream().map(this::actualCostRow).toList(),
-                "meta", Map.of("page", 0, "pageSize", pending.size(), "total", pending.size())
-        );
+        return PaginationUtils.pageResponse(pending.stream().map(this::actualCostRow).toList(), page, pageSize);
     }
 
     @GetMapping("/actual-costs/review-history-pack")
-    public Map<String, Object> reviewHistoryPack() {
+    public Map<String, Object> reviewHistoryPack(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
         List<ActualCost> reviewed = actualCostRepository.findAllByIsDeletedFalse().stream()
                 .filter(c -> c.getReviewedAt() != null)
                 .toList();
-        return Map.of(
-                "items", reviewed.stream().map(this::actualCostRow).toList(),
-                "meta", Map.of("page", 0, "pageSize", reviewed.size(), "total", reviewed.size())
-        );
+        return PaginationUtils.pageResponse(reviewed.stream().map(this::actualCostRow).toList(), page, pageSize);
     }
 
     @GetMapping("/contractor-works/{id}/recommendation")
