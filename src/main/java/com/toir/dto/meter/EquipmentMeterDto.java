@@ -9,6 +9,7 @@ import java.util.UUID;
 public record EquipmentMeterDto(
         UUID id,
         UUID equipmentId,
+        String equipmentName,
         MeterType meterType,
         String name,
         String unit,
@@ -17,9 +18,9 @@ public record EquipmentMeterDto(
         Double rolloverValue,
         boolean active
 ) {
-    public static EquipmentMeterDto from(EquipmentMeter m) {
+    public static EquipmentMeterDto from(EquipmentMeter m,String equipmentName) {
         return new EquipmentMeterDto(
-                m.getId(), m.getEquipmentId(), m.getMeterType(), m.getName(), m.getUnit(),
+                m.getId(), m.getEquipmentId(),equipmentName, m.getMeterType(), m.getName(), m.getUnit(),
                 m.getCurrentValue(), m.getLastReadAt(), m.getRolloverValue(), m.isActive()
         );
     }
