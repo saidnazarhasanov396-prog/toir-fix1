@@ -3,6 +3,7 @@ import com.toir.entity.Equipment;
 import com.toir.entity.EquipmentMeter;
 import com.toir.entity.MeterReading;
 import com.toir.repository.EquipmentMeterRepository;
+import com.toir.repository.EquipmentRepository;
 import com.toir.repository.MeterReadingRepository;
 
 import com.toir.exception.RestException;
@@ -25,21 +26,25 @@ public class MeterService {
 
     private final EquipmentMeterRepository meterRepository;
     private final MeterReadingRepository readingRepository;
+    private final EquipmentRepository equipmentRepository;
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listByEquipment(UUID equipmentId) {
         return meterRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream()
-                .map(EquipmentMeterDto::from).toList();
+                .map(this::enrichWithEquipmentName)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listAll() {
-        return meterRepository.findAllByIsDeletedFalse().stream().map(EquipmentMeterDto::from).toList();
+        return meterRepository.findAllByIsDeletedFalse().stream()
+                .map(this::enrichWithEquipmentName)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public EquipmentMeterDto findMeter(UUID id) {
-        return EquipmentMeterDto.from(getMeterOrThrow(id));
+        return enrichWithEquipmentName(getMeterOrThrow(id));
     }
 
     public EquipmentMeterDto createMeter(EquipmentMeterRequest request) {
@@ -51,7 +56,7 @@ public class MeterService {
         meter.setCurrentValue(request.initialValue());
         meter.setRolloverValue(request.rolloverValue());
         if (request.active() != null) meter.setActive(request.active());
-        return EquipmentMeterDto.from(meterRepository.save(meter));
+        return enrichWithEquipmentName(meterRepository.save(meter));
     }
 
     public EquipmentMeterDto updateMeter(UUID id, EquipmentMeterRequest request) {
@@ -62,7 +67,8 @@ public class MeterService {
         meter.setUnit(request.unit());
         meter.setRolloverValue(request.rolloverValue());
         if (request.active() != null) meter.setActive(request.active());
-        return EquipmentMeterDto.from(meter);
+        meterRepository.save(meter);
+        return enrichWithEquipmentName(meter);
     }
 
     public void deleteMeter(UUID id) {
@@ -134,5 +140,12 @@ public class MeterService {
     private EquipmentMeter getMeterOrThrow(UUID id) {
         return meterRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment meter not found: " + id));
+    }
+
+    private EquipmentMeterDto enrichWithEquipmentName(EquipmentMeter meter) {
+        String equipmentName = equipmentRepository.findByIdAndIsDeletedFalse(meter.getEquipmentId())
+                .map(Equipment::getName)
+                .orElse("Unknown");
+        return EquipmentMeterDto.from(meter, equipmentName);
     }
 }
