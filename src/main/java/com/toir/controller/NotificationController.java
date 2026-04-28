@@ -7,6 +7,8 @@ import com.toir.dto.notification.NotificationDto;
 import com.toir.dto.notification.NotificationSummaryDto;
 import com.toir.dto.sla.SlaRuleDto;
 import com.toir.service.SlaRuleService;
+import com.toir.enums.NotificationStatus;
+import com.toir.enums.NotificationSeverity;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -62,15 +64,30 @@ public class NotificationController {
     public NotificationDto markRead(@PathVariable UUID id) { return service.markRead(id); }
 
     @GetMapping("/financial-review-inbox")
-    public java.util.Map<String, Object> financialReviewInbox(@CurrentUser AuthenticatedUser user) {
+    public java.util.Map<String, Object> financialReviewInbox(
+            @CurrentUser AuthenticatedUser user,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
         List<NotificationDto> items = user != null
                 ? service.findForUser(UUID.fromString(user.id())).stream()
                         .filter(n -> n.entityType() != null && n.entityType().toUpperCase().contains("COST"))
                         .toList()
                 : List.of();
-        return java.util.Map.of(
-                "items", items,
-                "meta", java.util.Map.of("page", 0, "pageSize", items.size(), "total", items.size())
+        long read = items.stream().filter(n -> n.status() == NotificationStatus.READ).count();
+        long dueSoon = items.stream().filter(n -> n.severity() == NotificationSeverity.WARNING).count();
+        long overdue = items.stream().filter(n -> n.severity() == NotificationSeverity.CRITICAL).count();
+        return PaginationUtils.pageResponse(
+                items,
+                page,
+                pageSize,
+                java.util.Map.of("summary", java.util.Map.of(
+                        "total", items.size(),
+                        "unread", items.size() - read,
+                        "dueSoon", dueSoon,
+                        "overdue", overdue,
+                        "acknowledged", read,
+                        "unacknowledged", items.size() - read
+                ))
         );
     }
 
