@@ -45,5 +45,6 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID> {
                   )
             order by d.createdAt desc
             """)
+
     List<Department> findAllByIsDeletedFalseAndByType(DepartmentType type, String search);
 }
