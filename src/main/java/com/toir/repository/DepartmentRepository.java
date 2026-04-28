@@ -33,10 +33,11 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID> {
     @Query("""
             select d
             from Department d
-            where d.type = :type
-              and d.isDeleted = false
+            where d.isDeleted = false
+              and (:type is null or d.type = :type)
               and (
                     :search is null
+                    or :search = ''
                     or lower(d.name) like lower(concat('%', :search, '%'))
                     or lower(d.nameEn) like lower(concat('%', :search, '%'))
                     or lower(d.nameUz) like lower(concat('%', :search, '%'))
@@ -44,5 +45,6 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID> {
                   )
             order by d.createdAt desc
             """)
+
     List<Department> findAllByIsDeletedFalseAndByType(DepartmentType type, String search);
 }
