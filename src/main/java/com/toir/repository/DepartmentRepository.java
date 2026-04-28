@@ -1,5 +1,6 @@
 package com.toir.repository;
 
+import com.toir.enums.DepartmentType;
 import org.springframework.stereotype.Repository;
 import com.toir.entity.Department;
 
@@ -28,4 +29,20 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID> {
 
     @Query(value = "SELECT * FROM departments WHERE parent_id = :parentId AND is_deleted = false", nativeQuery = true)
     List<Department> findAllByParentIdAndIsDeletedFalse(@Param("parentId") UUID parentId);
+
+    @Query("""
+            select d
+            from Department d
+            where d.type = :type
+              and d.isDeleted = false
+              and (
+                    :search is null
+                    or lower(d.name) like lower(concat('%', :search, '%'))
+                    or lower(d.nameEn) like lower(concat('%', :search, '%'))
+                    or lower(d.nameUz) like lower(concat('%', :search, '%'))
+                    or lower(d.description) like lower(concat('%', :search, '%'))
+                  )
+            order by d.createdAt desc
+            """)
+    List<Department> findAllByIsDeletedFalseAndByType(DepartmentType type, String search);
 }

@@ -1,4 +1,5 @@
 package com.toir.controller;
+import com.toir.enums.DepartmentType;
 import com.toir.service.DepartmentService;
 
 import com.toir.dto.department.DepartmentDto;
@@ -24,7 +25,12 @@ public class DepartmentController {
     }
 
     @GetMapping
-    public List<DepartmentDto> list() { return service.findAll(); }
+    public List<DepartmentDto> list(
+            @RequestParam(required = false) DepartmentType type,
+            @RequestParam(required = false, defaultValue = "") String search
+    ) {
+        return service.findAll(type,search);
+    }
 
     @GetMapping("/{id}")
     public DepartmentDto get(@PathVariable UUID id) { return service.findById(id); }
