@@ -54,17 +54,19 @@ public class AuthService {
         }
 
         Set<String> permissions = new LinkedHashSet<>();
-        Set<Role> roles = user.getRoles();
+        Set<Role> roles = new LinkedHashSet<>(user.getRoles());
+
+        // Ensure primary role is included in roles
+        if (user.getPrimaryRole() != null) {
+            roles.add(user.getPrimaryRole());
+        }
+
         Set<String> authorityCodes = new LinkedHashSet<>(roles.stream().map(Role::getCode).toList());
         for (Role role : roles) {
             if (role.getPermissions() != null) permissions.addAll(role.getPermissions());
         }
-        if (user.getPrimaryRole() != null && user.getPrimaryRole().getPermissions() != null) {
-            permissions.addAll(user.getPrimaryRole().getPermissions());
-        }
 
         String primaryRoleCode = user.getPrimaryRole() != null ? user.getPrimaryRole().getCode() : null;
-        if (primaryRoleCode != null) authorityCodes.add(primaryRoleCode);
         AuthenticatedUser principal = new AuthenticatedUser(
                 user.getId().toString(),
                 user.getUsername(),
