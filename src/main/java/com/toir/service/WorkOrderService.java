@@ -12,6 +12,7 @@ import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
+import com.toir.dto.workorder.WorkOrderTaskDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+
+import com.toir.entity.Equipment;
+import com.toir.entity.Department;
+import com.toir.repository.EquipmentRepository;
+import com.toir.repository.DepartmentRepository;
 
 @Service
 @Transactional
@@ -30,6 +36,8 @@ public class WorkOrderService {
     private static final String ENTITY = "WorkOrder";
 
     private final WorkOrderRepository repository;
+    private final EquipmentRepository equipmentRepository;
+    private final DepartmentRepository departmentRepository;
     private final AuditLogService auditLogService;
     private final RequestContext requestContext;
     private final SecurityScope securityScope;
@@ -37,7 +45,7 @@ public class WorkOrderService {
 
     @Transactional(readOnly = true)
     public List<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId) {
-        return repository.search(status, departmentId, equipmentId).stream().map(WorkOrderDto::from).toList();
+        return repository.search(status, departmentId, equipmentId).stream().map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
@@ -49,7 +57,7 @@ public class WorkOrderService {
                 equipmentId,
                 search,
                 pageable
-        ).map(WorkOrderDto::from);
+        ).map(this::toDto);
     }
 
     @Transactional(readOnly = true)
@@ -59,12 +67,13 @@ public class WorkOrderService {
                 equipmentId,
                 search,
                 PaginationUtils.pageRequest(page, pageSize)
-        ).map(WorkOrderDto::from);
+        ).map(this::toDto);
     }
 
     @Transactional(readOnly = true)
     public WorkOrderDto findById(UUID id) {
-        return WorkOrderDto.from(getOrThrow(id));
+        WorkOrder entity = getOrThrow(id);
+        return toDto(entity);
     }
 
     @Transactional
@@ -91,7 +100,7 @@ public class WorkOrderService {
         entity.setSummary(request.summary());
         WorkOrder saved = repository.save(entity);
         audit(AuditAction.CREATE, saved.getId(), "Создан наряд " + saved.getNumber());
-        return WorkOrderDto.from(saved);
+        return toDto(saved);
     }
 
     @Transactional
@@ -103,7 +112,7 @@ public class WorkOrderService {
         entity.setStatus(WorkOrderStatus.APPROVED);
         entity.setApprovedById(approverId);
         audit(AuditAction.APPROVE, entity.getId(), "Утверждён наряд " + entity.getNumber());
-        return WorkOrderDto.from(entity);
+        return toDto(entity);
     }
 
     @Transactional
@@ -112,7 +121,7 @@ public class WorkOrderService {
         entity.setStatus(WorkOrderStatus.IN_PROGRESS);
         entity.setStartedAt(Instant.now());
         audit(AuditAction.UPDATE, entity.getId(), "Начато выполнение наряда " + entity.getNumber());
-        return WorkOrderDto.from(entity);
+        return toDto(entity);
     }
 
     @Transactional
@@ -131,7 +140,7 @@ public class WorkOrderService {
         entity.setStatus(WorkOrderStatus.COMPLETED);
         entity.setCompletedAt(Instant.now());
         audit(AuditAction.UPDATE, entity.getId(), "Завершён наряд " + entity.getNumber());
-        return WorkOrderDto.from(entity);
+        return toDto(entity);
     }
 
     @Transactional
@@ -145,7 +154,7 @@ public class WorkOrderService {
         entity.setStatus(WorkOrderStatus.CLOSED);
         entity.setCompletedAt(Instant.now());
         audit(AuditAction.CLOSE, entity.getId(), "Закрыт наряд " + entity.getNumber());
-        return WorkOrderDto.from(entity);
+        return toDto(entity);
     }
 
     private WorkOrder getOrThrow(UUID id) {
@@ -159,5 +168,24 @@ public class WorkOrderService {
                 : null;
         auditLogService.record(userId, MODULE, ENTITY, entityId.toString(), action, message,
                 requestContext.getIpAddress(), requestContext.getUserAgent());
+    }
+
+    private WorkOrderDto toDto(WorkOrder entity) {
+        String equipmentName = equipmentRepository.findById(entity.getEquipmentId())
+                .map(Equipment::getName)
+                .orElse(null);
+        String departmentName = departmentRepository.findById(entity.getDepartmentId())
+                .map(Department::getName)
+                .orElse(null);
+        return new WorkOrderDto(
+                entity.getId(), entity.getNumber(), entity.getTitle(), entity.getEquipmentId(), entity.getDepartmentId(),
+                equipmentName, departmentName,
+                entity.getRepairRequestId(), entity.getPprTaskId(), entity.getContractorId(),
+                entity.getStatus(), entity.getType(), entity.getPriority(),
+                entity.getStartPlannedAt(), entity.getEndPlannedAt(), entity.getStartedAt(), entity.getCompletedAt(),
+                entity.getSummary(), entity.getResult(), entity.getClosureNotes(),
+                entity.getCreatedById(), entity.getApprovedById(),
+                entity.getTasks().stream().map(WorkOrderTaskDto::from).toList()
+        );
     }
 }
