@@ -33,7 +33,7 @@ public class WarehouseController {
     @GetMapping("/{id}/stocks")
     public List<WarehouseStockDto> stocks(@PathVariable UUID id) { return service.findStocks(id); }
 
-    @PostMapping
+    @PostMapping("/create")
     public ResponseEntity<WarehouseDto> create(@Valid @RequestBody WarehouseRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
