@@ -6,7 +6,9 @@ import com.toir.exception.RestException;
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementRequest;
 import com.toir.entity.WarehouseStock;
+import com.toir.entity.SparePart;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.SparePartRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,7 @@ public class StockMovementService {
 
     private final StockMovementRepository repository;
     private final WarehouseStockRepository stockRepository;
+    private final SparePartRepository sparePartRepository;
 
 
     @Transactional(readOnly = true)
@@ -32,9 +35,11 @@ public class StockMovementService {
         WarehouseStock stock = stockRepository
                 .findByWarehouseIdAndSparePartIdAndIsDeletedFalse(request.warehouseId(), request.sparePartId())
                 .orElseGet(() -> {
+                    SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(request.sparePartId())
+                            .orElseThrow(() -> RestException.notFound("SparePart not found: " + request.sparePartId()));
                     WarehouseStock s = new WarehouseStock();
                     s.setWarehouseId(request.warehouseId());
-                    s.setSparePartId(request.sparePartId());
+                    s.setSparePart(sparePart);
                     s.setQuantity(0);
                     s.setReservedQty(0);
                     s.setMinQty(0);
