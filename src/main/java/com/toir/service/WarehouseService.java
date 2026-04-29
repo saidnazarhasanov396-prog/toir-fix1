@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -43,10 +44,8 @@ public class WarehouseService {
     }
 
     public WarehouseDto create(WarehouseRequest request) {
-        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Warehouse code already exists: " + request.code());
-        }
         Warehouse entity = new Warehouse();
+        entity.setCode(nextCode());
         apply(entity, request);
         return WarehouseDto.from(repository.save(entity));
     }
@@ -69,11 +68,26 @@ public class WarehouseService {
     }
 
     private void apply(Warehouse entity, WarehouseRequest request) {
-        entity.setCode(request.code());
         entity.setName(request.name());
         entity.setDepartmentId(request.departmentId());
         entity.setLocationId(request.locationId());
         entity.setResponsibleId(request.responsibleId());
         if (request.active() != null) entity.setActive(request.active());
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "WH-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("WH", year, sequence);
+        while (repository.existsByCode(code)) {
+            sequence++;
+            code = formatCode("WH", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }

@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,10 +42,8 @@ public class LocationService {
 
     @Transactional
     public LocationDto create(LocationRequest request) {
-        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Location code already exists: " + request.code());
-        }
         Location entity = new Location();
+        entity.setCode(nextCode());
         apply(entity, request);
         return LocationDto.from(repository.save(entity));
     }
@@ -72,11 +71,26 @@ public class LocationService {
     }
 
     private void apply(Location entity, LocationRequest request) {
-        entity.setCode(request.code());
         entity.setName(request.name());
         entity.setType(request.type());
         entity.setParentId(request.parentId());
         entity.setDepartmentId(request.departmentId());
         entity.setDescription(request.description());
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "LOC-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("LOC", year, sequence);
+        while (repository.existsByCode(code)) {
+            sequence++;
+            code = formatCode("LOC", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }
