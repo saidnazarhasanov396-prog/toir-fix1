@@ -28,4 +28,14 @@ public interface WebhookSubscriptionRepository extends JpaRepository<WebhookSubs
 
     @Query(value = "SELECT * FROM webhook_subscriptions WHERE is_active = true AND is_deleted = false", nativeQuery = true)
     List<WebhookSubscription> findAllByActiveTrueAndIsDeletedFalse();
+
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM webhook_subscriptions
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
+
+    boolean existsByCode(String code);
 }
