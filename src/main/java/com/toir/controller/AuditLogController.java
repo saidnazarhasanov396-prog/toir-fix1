@@ -1,5 +1,5 @@
 package com.toir.controller;
-import com.toir.entity.AuditLog;
+import com.toir.dto.audit.AuditLogResponseDto;
 import com.toir.service.AuditLogService;
 
 import com.toir.security.RequiresAdmin;
@@ -23,7 +23,7 @@ public class AuditLogController {
     }
 
     @GetMapping
-    public Page<AuditLog> list(
+    public Page<AuditLogResponseDto> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
