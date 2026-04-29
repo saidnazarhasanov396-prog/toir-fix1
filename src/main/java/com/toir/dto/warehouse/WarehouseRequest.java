@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.util.UUID;
 
 public record WarehouseRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         UUID departmentId,
         UUID locationId,
