@@ -12,3 +12,7 @@ spring:
     baseline-on-migrate: true
     baseline-version: 0
     locations: classpath:db/migration
+
+springdoc:
+  cache:
+    disabled: true

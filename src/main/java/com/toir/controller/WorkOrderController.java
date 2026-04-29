@@ -14,7 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -43,14 +42,14 @@ public class WorkOrderController {
     }
 
     @GetMapping("/mobile-feed")
-    public List<WorkOrderDto> mobileFeed(
+    public Page<WorkOrderDto> mobileFeed(
             @RequestParam(required = false) UUID departmentId,
-            @RequestParam(required = false) UUID equipmentId
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize
     ) {
-        UUID scope = securityScope.enforceDepartmentScope(departmentId);
-        List<WorkOrderDto> approved = service.search(WorkOrderStatus.APPROVED, scope, equipmentId);
-        List<WorkOrderDto> inProgress = service.search(WorkOrderStatus.IN_PROGRESS, scope, equipmentId);
-        return java.util.stream.Stream.concat(approved.stream(), inProgress.stream()).toList();
+        return service.mobileFeed(securityScope.enforceDepartmentScope(departmentId), equipmentId, search, page, pageSize);
     }
 
     @GetMapping("/{id}")

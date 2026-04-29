@@ -18,6 +18,7 @@ import java.util.UUID;
 
 @Repository
 public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
+
     java.util.Optional<Equipment> findByIdAndIsDeletedFalse(java.util.UUID id);
 
     java.util.List<Equipment> findAllByIsDeletedFalse();

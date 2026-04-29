@@ -1,7 +1,6 @@
 package com.toir.dto.workexecution;
 
 import com.toir.entity.WorkExecution;
-import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -11,7 +10,7 @@ public record WorkExecutionDto(
         UUID workOrderId,
         UUID performerId,
         String notes,
-        @NotNull Instant startedAt,
+        Instant startedAt,
         Instant endedAt,
         String result
 ) {

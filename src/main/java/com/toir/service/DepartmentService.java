@@ -1,5 +1,6 @@
 package com.toir.service;
 import com.toir.entity.Department;
+import com.toir.enums.DepartmentType;
 import com.toir.repository.DepartmentRepository;
 
 import com.toir.exception.RestException;
@@ -13,14 +14,15 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class DepartmentService {
 
     private final DepartmentRepository repository;
 
     @Transactional(readOnly = true)
-    public List<DepartmentDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(DepartmentDto::from).toList();
+    public List<DepartmentDto> findAll(DepartmentType type, String search) {
+        return repository.findAllByIsDeletedFalseAndByType(type,search).stream().map(DepartmentDto::from).toList();
     }
 
     @Transactional(readOnly = true)

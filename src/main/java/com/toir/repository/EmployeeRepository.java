@@ -47,12 +47,20 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
             "(:activeOnly = false and e.isDeleted = true)) " +
             "and (cast(:search as string) is null or " +
             "lower(e.personnelNumber) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.firstName) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.lastName) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.middleName) like lower(concat('%', cast(:search as string), '%')) or " +
             "lower(e.position) like lower(concat('%', cast(:search as string), '%')) or " +
             "lower(e.grade) like lower(concat('%', cast(:search as string), '%')) or " +
             "lower(e.phone) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.email) like lower(concat('%', cast(:search as string), '%')))")
-    Page<Employee> searchEmployees(@Param("search") String search, @Param("activeOnly") Boolean activeOnly, Pageable pageable);
+            "lower(e.email) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.firstName) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.lastName) like lower(concat('%', cast(:search as string), '%')) or " +
+            "lower(e.middleName) like lower(concat('%', cast(:search as string), '%')) or " +
+            "(" +
+            "  (lower(e.lastName) like lower(concat('%', :part1, '%')) and lower(e.firstName) like lower(concat('%', :part2, '%'))) or " +
+            "  (lower(e.firstName) like lower(concat('%', :part1, '%')) and lower(e.lastName) like lower(concat('%', :part2, '%'))) or " +
+            "  (lower(e.firstName) like lower(concat('%', :part1, '%')) and lower(e.middleName) like lower(concat('%', :part2, '%'))) or " +
+            "  (lower(e.middleName) like lower(concat('%', :part1, '%')) and lower(e.firstName) like lower(concat('%', :part2, '%'))) or " +
+            "  (lower(e.lastName) like lower(concat('%', :part1, '%')) and lower(e.middleName) like lower(concat('%', :part2, '%'))) or " +
+            "  (lower(e.middleName) like lower(concat('%', :part1, '%')) and lower(e.lastName) like lower(concat('%', :part2, '%')))" +
+            "))")
+    Page<Employee> searchEmployees(@Param("search") String search, @Param("part1") String part1, @Param("part2") String part2, @Param("activeOnly") Boolean activeOnly, Pageable pageable);
 }

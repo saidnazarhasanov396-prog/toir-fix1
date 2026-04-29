@@ -1,6 +1,5 @@
 package com.toir.controller;
 
-import com.toir.config.PaginatedResponse;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleSummaryDto;
@@ -9,8 +8,10 @@ import com.toir.security.SecurityScope;
 import com.toir.service.VehicleService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,11 +39,11 @@ public class VehicleController {
     }
 
     @GetMapping
-    public PaginatedResponse<VehicleSummaryDto> list(
+    public Page<VehicleSummaryDto> list(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) EquipmentStatus status,
             @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize
     ) {
         return service.list(

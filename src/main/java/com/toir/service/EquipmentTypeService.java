@@ -1,5 +1,4 @@
 package com.toir.service;
-import com.toir.entity.Equipment;
 import com.toir.entity.EquipmentType;
 import com.toir.repository.EquipmentTypeRepository;
 
@@ -14,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class EquipmentTypeService {
 
@@ -21,8 +21,12 @@ public class EquipmentTypeService {
 
 
     @Transactional(readOnly = true)
-    public List<EquipmentTypeDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(EquipmentTypeDto::from).toList();
+    public List<EquipmentTypeDto> findAll(String search, String category) {
+        search = search == null ? null : "%" + search.toLowerCase() + "%";
+        return repository.findAllByIsDeletedFalseAndBySearchParam(search,category)
+                .stream()
+                .map(EquipmentTypeDto::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)

@@ -20,6 +20,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.Year;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -32,10 +33,11 @@ import java.util.UUID;
  * Таймаут 5 секунд — интеграции не должны блокировать основной flow.
  */
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class WebhookService {
 
-    private final WebhookSubscriptionRepository subscriptionRepository;
+    private final WebhookSubscriptionRepository repository;
     private final WebhookEventLogRepository eventLogRepository;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -44,18 +46,31 @@ public class WebhookService {
 
 
     public List<WebhookSubscription> findAll() {
-        return subscriptionRepository.findAllByIsDeletedFalse();
+        return repository.findAllByIsDeletedFalse();
     }
 
     public WebhookSubscription create(WebhookSubscription sub) {
-        if (subscriptionRepository.existsByCodeAndIsDeletedFalse(sub.getCode())) {
-            throw RestException.conflict("Webhook code already exists: " + sub.getCode());
+        sub.setCode(webHookGenerateCode());
+        return repository.save(sub);
+    }
+
+    private String webHookGenerateCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "LOC-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("LOC", year, sequence);
+        while (repository.existsByCode(code)) {
+            sequence++;
+            code = formatCode("LOC", year, sequence);
         }
-        return subscriptionRepository.save(sub);
+        return code;
+    }
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 
     public WebhookSubscription update(UUID id, WebhookSubscription patch) {
-        WebhookSubscription existing = subscriptionRepository.findByIdAndIsDeletedFalse(id)
+        WebhookSubscription existing = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Webhook subscription not found: " + id));
         existing.setName(patch.getName());
         existing.setTargetUrl(patch.getTargetUrl());
@@ -66,14 +81,14 @@ public class WebhookService {
     }
 
     public void delete(UUID id) {
-        var entity = subscriptionRepository.findByIdAndIsDeletedFalse(id).orElseThrow();
+        var entity = repository.findByIdAndIsDeletedFalse(id).orElseThrow();
         entity.setDeleted(true);
-        subscriptionRepository.save(entity);
+        repository.save(entity);
     }
 
     /** Публикует событие всем активным подписчикам. Исключения в сети не бросаем — пишем в лог. */
     public int publish(String eventCode, Object payload) {
-        List<WebhookSubscription> subs = subscriptionRepository.findAllByActiveTrueAndIsDeletedFalse();
+        List<WebhookSubscription> subs = repository.findAllByActiveTrueAndIsDeletedFalse();
         if (subs.isEmpty()) return 0;
 
         String body;

@@ -1,5 +1,4 @@
 package com.toir.controller;
-import com.toir.config.PaginatedResponse;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.service.EquipmentService;
@@ -9,11 +8,11 @@ import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -30,26 +29,23 @@ public class EquipmentController {
     }
 
     @GetMapping
-    public PaginatedResponse<EquipmentDto> list(
+    public Page<EquipmentDto> list(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) EquipmentStatus status,
             @RequestParam(required = false) EquipmentCategory category,
             @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize
     ) {
-        int safePage = Math.max(1, page);
+        int safePage = Math.max(0, page);
         int safePageSize = Math.max(1, pageSize);
-        return PaginatedResponse.from(
-                service.search(
-                        securityScope.enforceDepartmentScope(departmentId),
-                        equipmentTypeId,
-                        status,
-                        category,
-                        search,
-                        safePage - 1,
-                        safePageSize),
+        return service.search(
+                securityScope.enforceDepartmentScope(departmentId),
+                equipmentTypeId,
+                status,
+                category,
+                search,
                 safePage,
                 safePageSize);
     }

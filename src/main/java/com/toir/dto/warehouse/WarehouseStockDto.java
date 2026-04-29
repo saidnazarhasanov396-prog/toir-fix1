@@ -21,8 +21,8 @@ public record WarehouseStockDto(
     public record SparePartRef(UUID id, String code, String name) {}
 
     public static WarehouseStockDto from(WarehouseStock s) {
-        SparePartRef ref = s.getSparePartId() != null
-                ? new SparePartRef(s.getSparePartId(), s.getSparePartId().toString().substring(0, 8), "")
+        SparePartRef spare = s.getSparePart() != null
+                ? new SparePartRef(s.getSparePart().getId(), s.getSparePart().getCode(), s.getSparePart().getName())
                 : null;
         return new WarehouseStockDto(
                 s.getId(),
@@ -32,7 +32,7 @@ public record WarehouseStockDto(
                 s.getMaxQty(),
                 s.getBinLocation(),
                 s.getUpdatedAt(),
-                ref,
+                spare,
                 null,
                 List.of()
         );

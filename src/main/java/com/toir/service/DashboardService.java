@@ -44,7 +44,6 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -85,13 +84,13 @@ public class DashboardService {
     public DashboardOverview overview() {
         Instant monthAgo = Instant.now().minus(30, ChronoUnit.DAYS);
 
-        long openRequests = repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN)
-                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS);
+        long openRequests = repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN.name())
+                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS.name());
         long emergencyRequests = repairRequestRepository.search(null, null, null).stream()
                 .filter(r -> r.getStatus() != RequestStatus.CLOSED && r.getStatus() != RequestStatus.CANCELLED)
                 .filter(r -> "EMERGENCY".equals(r.getPriority().name()))
                 .count();
-        long overduePpr = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE);
+        long overduePpr = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE.name());
 
         List<WorkOrder> allWorkOrders = workOrderRepository.findAllByIsDeletedFalse();
         long repairsThisMonth = allWorkOrders.stream()
@@ -146,12 +145,12 @@ public class DashboardService {
                 dueCalibrations
         );
 
-        long plannedTasks = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED)
-                + pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.APPROVED)
-                + pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.IN_PROGRESS)
-                + pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED);
-        long completedTasks = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED);
-        long completedRepairs = workOrderRepository.countByStatusAndIsDeletedFalse(WorkOrderStatus.CLOSED);
+        long plannedTasks = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED.name())
+                + pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.APPROVED.name())
+                + pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.IN_PROGRESS.name())
+                + pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED.name());
+        long completedTasks = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED.name());
+        long completedRepairs = workOrderRepository.countByStatusAndIsDeletedFalse(WorkOrderStatus.CLOSED.name());
         PlanFact planFact = new PlanFact(plannedTasks, completedTasks, completedRepairs);
 
         List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalse();
@@ -181,8 +180,8 @@ public class DashboardService {
                 .mapToLong(r -> java.time.Duration.between(r.getCreatedAt(), r.getUpdatedAt()).toMinutes())
                 .average().orElse(0) / 60.0;
         long pprTotal = pprTaskRepository.countByIsDeletedFalse();
-        long pprDone = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED);
-        long pprOver = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE);
+        long pprDone = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED.name());
+        long pprOver = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE.name());
         double pprCompletionRate = pprTotal > 0 ? (double) pprDone / pprTotal * 100 : 0;
         double overdueWorkShare = pprTotal > 0 ? (double) pprOver / pprTotal * 100 : 0;
 

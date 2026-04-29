@@ -10,9 +10,9 @@ import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeRequest;
 import com.toir.dto.hr.TimesheetEntryDto;
 import com.toir.dto.hr.TimesheetEntryRequest;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class HrService {
 
@@ -29,7 +30,18 @@ public class HrService {
 
     @Transactional(readOnly = true)
     public Page<EmployeeDto> listEmployees(int page, int pageSize, String search, Boolean activeOnly) {
-        return employeeRepository.searchEmployees(search, activeOnly, PageRequest.of(page, pageSize))
+        String part1 = null;
+        String part2 = null;
+
+        if (search != null && !search.isBlank()) {
+            String[] parts = search.trim().split("\\s+");
+            if (parts.length >= 2) {
+                part1 = parts[0];
+                part2 = parts[1];
+            }
+        }
+
+        return employeeRepository.searchEmployees(search, part1, part2, activeOnly, PaginationUtils.pageRequest(page, pageSize))
                 .map(EmployeeDto::from);
     }
 

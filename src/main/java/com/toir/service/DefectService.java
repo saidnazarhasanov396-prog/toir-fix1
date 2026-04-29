@@ -1,7 +1,10 @@
 package com.toir.service;
+import com.toir.dto.defect.DefectResponse;
 import com.toir.entity.Defect;
+import com.toir.entity.Equipment;
 import com.toir.enums.DefectStatus;
 import com.toir.repository.DefectRepository;
+import com.toir.repository.EquipmentRepository;
 
 import com.toir.exception.RestException;
 import com.toir.util.PaginationUtils;
@@ -17,56 +20,65 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class DefectService {
 
     private final DefectRepository repository;
+    private final EquipmentRepository equipmentRepository;
 
     @Transactional(readOnly = true)
-    public List<DefectDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(DefectDto::from).toList();
+    public List<DefectResponse> findAll() {
+        return repository.findAllByIsDeletedFalse().stream()
+                .map(DefectDto::from)
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
-    public Page<DefectDto> search(UUID equipmentId, int page, int size, String search) {
+    public Page<DefectResponse> search(UUID equipmentId, int page, int size, String search) {
         var pageable = PaginationUtils.pageRequest(page, size);
         return repository.searchPaginated(
                 equipmentId,
                 search,
                 pageable
-        ).map(DefectDto::from);
+        ).map(DefectDto::from)
+         .map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
-    public DefectDto findById(UUID id) {
-        return DefectDto.from(getOrThrow(id));
+    public DefectResponse findById(UUID id) {
+        return toResponse(DefectDto.from(getOrThrow(id)));
     }
 
     @Transactional(readOnly = true)
-    public List<DefectDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(DefectDto::from).toList();
+    public List<DefectResponse> findByEquipment(UUID equipmentId) {
+        return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream()
+                .map(DefectDto::from)
+                .map(this::toResponse)
+                .toList();
     }
 
-    public DefectDto create(DefectRequest request) {
+    public DefectResponse create(DefectRequest request) {
         if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Defect code already exists: " + request.code());
         }
         Defect entity = new Defect();
         apply(entity, request);
-        return DefectDto.from(repository.save(entity));
+        return toResponse(DefectDto.from(repository.save(entity)));
     }
 
-    public DefectDto update(UUID id, DefectRequest request) {
+    public DefectResponse update(UUID id, DefectRequest request) {
         Defect entity = getOrThrow(id);
         apply(entity, request);
-        return DefectDto.from(entity);
+        return toResponse(DefectDto.from(entity));
     }
 
-    public DefectDto resolve(UUID id) {
+    public DefectResponse resolve(UUID id) {
         Defect entity = getOrThrow(id);
         entity.setStatus(DefectStatus.RESOLVED);
         entity.setResolvedAt(Instant.now());
-        return DefectDto.from(entity);
+        return toResponse(DefectDto.from(entity));
     }
 
     public void delete(UUID id) {
@@ -91,5 +103,18 @@ public class DefectService {
         entity.setSeverity(request.severity());
         entity.setFailureReason(request.failureReason());
         entity.setRootCause(request.rootCause());
+    }
+
+    private DefectResponse toResponse(DefectDto dto) {
+        return DefectResponse.from(dto, findEquipmentName(dto.equipmentId()));
+    }
+
+    private String findEquipmentName(UUID equipmentId) {
+        if (equipmentId == null) {
+            return null;
+        }
+        return equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .map(Equipment::getName)
+                .orElse(null);
     }
 }

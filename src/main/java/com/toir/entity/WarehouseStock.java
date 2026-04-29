@@ -18,7 +18,11 @@ public class WarehouseStock extends BaseEntity {
     @Column(name = "warehouse_id", nullable = false)
     private UUID warehouseId;
 
-    @Column(name = "spare_part_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "spare_part_id", nullable = false)
+    private SparePart sparePart;
+
+    @Column(name = "spare_part_id", nullable = false, insertable = false, updatable = false)
     private UUID sparePartId;
 
     @Column(nullable = false)

@@ -15,9 +15,9 @@ import com.toir.repository.LocationRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentRequest;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +32,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class EquipmentService {
 
@@ -44,31 +45,8 @@ public class EquipmentService {
 
     @Transactional(readOnly = true)
     public Page<EquipmentDto> search(UUID departmentId, UUID equipmentTypeId, EquipmentStatus status, EquipmentCategory category, String search, int page, int pageSize) {
-        Page<Equipment> items = repository.search(departmentId, equipmentTypeId, status, category, search, PageRequest.of(page, pageSize));
-
-        if (items.isEmpty()) return items.map(e -> null); // should not hit the null because it's empty
-
-        Set<UUID> deptIds = collectIds(items.getContent(), Equipment::getDepartmentId);
-        Set<UUID> locIds = collectIds(items.getContent(), Equipment::getLocationId);
-        Set<UUID> typeIds = collectIds(items.getContent(), Equipment::getEquipmentTypeId);
-        Set<UUID> parentIds = collectIds(items.getContent(), Equipment::getParentId);
-        Set<UUID> equipmentIds = items.getContent().stream().map(Equipment::getId).collect(Collectors.toSet());
-
-        Map<UUID, Department> deptMap = byId(departmentRepository.findAllByIdInAndIsDeletedFalse(deptIds), Department::getId);
-        Map<UUID, Location> locMap = byId(locationRepository.findAllByIdInAndIsDeletedFalse(locIds), Location::getId);
-        Map<UUID, EquipmentType> typeMap = byId(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(typeIds), EquipmentType::getId);
-        Map<UUID, Equipment> parentMap = byId(repository.findAllByIdInAndIsDeletedFalse(parentIds), Equipment::getId);
-        Map<UUID, EquipmentPassport> passportMap = passportRepository
-                .findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
-                .collect(Collectors.toMap(EquipmentPassport::getEquipmentId, Function.identity(), (a, b) -> a));
-
-        return items.map(e -> EquipmentDto.from(
-                e,
-                deptRef(deptMap.get(e.getDepartmentId())),
-                locRef(locMap.get(e.getLocationId())),
-                typeRef(typeMap.get(e.getEquipmentTypeId())),
-                parentRef(parentMap.get(e.getParentId())),
-                passportRef(passportMap.get(e.getId()))));
+        Page<Equipment> items = repository.search(departmentId, equipmentTypeId, status, category, search, PaginationUtils.pageRequest(page, pageSize));
+        return enrich(items);
     }
 
     @Transactional(readOnly = true)
@@ -76,6 +54,7 @@ public class EquipmentService {
         return enrich(List.of(getOrThrow(id))).get(0);
     }
 
+    @Transactional
     public EquipmentDto create(EquipmentRequest request) {
         if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Equipment code already exists: " + request.code());
@@ -89,12 +68,14 @@ public class EquipmentService {
         return enrich(List.of(saved)).get(0);
     }
 
+    @Transactional
     public EquipmentDto update(UUID id, EquipmentRequest request) {
         Equipment entity = getOrThrow(id);
         apply(entity, request);
         return enrich(List.of(entity)).get(0);
     }
 
+    @Transactional
     public void delete(UUID id) {
         Equipment entity = getOrThrow(id);
         if (!repository.findAllByParentIdAndIsDeletedFalse(id).isEmpty()) {
@@ -107,6 +88,14 @@ public class EquipmentService {
     Equipment getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
+    }
+
+    Page<EquipmentDto> enrich(Page<Equipment> items) {
+        if (items.isEmpty()) return items.map(EquipmentDto::from);
+
+        Map<UUID, EquipmentDto> enrichedById = enrich(items.getContent()).stream()
+                .collect(Collectors.toMap(EquipmentDto::id, Function.identity(), (a, b) -> a));
+        return items.map(e -> enrichedById.get(e.getId()));
     }
 
     private List<EquipmentDto> enrich(List<Equipment> items) {
