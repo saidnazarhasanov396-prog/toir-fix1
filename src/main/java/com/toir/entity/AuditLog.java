@@ -3,6 +3,8 @@ package com.toir.entity;
 import com.toir.enums.AuditAction;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -44,6 +46,18 @@ public class AuditLog {
 
     @Column(name = "user_agent")
     private String userAgent;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "previous_snapshot", columnDefinition = "jsonb")
+    private String previousSnapshot;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "current_snapshot", columnDefinition = "jsonb")
+    private String currentSnapshot;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "diff_json", columnDefinition = "jsonb")
+    private String diffJson;
 
     @Builder.Default
     @Column(name = "is_deleted", nullable = false, columnDefinition = "boolean default false")
