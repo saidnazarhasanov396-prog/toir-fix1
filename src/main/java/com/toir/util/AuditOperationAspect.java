@@ -162,7 +162,13 @@ public class AuditOperationAspect {
         return cleaned.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
     }
 
-    private String description(String entityType, AuditAction action, String methodName) {
-        return "%s %s via %s".formatted(entityType, action.name().toLowerCase(), methodName);
+    String description(String entityType, AuditAction action, String methodName) {
+        return switch (action) {
+            case CREATE -> "Создан объект %s методом %s".formatted(entityType, methodName);
+            case UPDATE -> "Обновлен объект %s методом %s".formatted(entityType, methodName);
+            case DELETE -> "Удален объект %s методом %s".formatted(entityType, methodName);
+            default -> "Выполнено действие %s над объектом %s методом %s"
+                    .formatted(action.name(), entityType, methodName);
+        };
     }
 }
