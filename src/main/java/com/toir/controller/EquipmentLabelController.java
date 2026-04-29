@@ -87,6 +87,7 @@ public class EquipmentLabelController {
         String qrPayload = String.format("toir://equipment/%s?code=%s&inv=%s",
                 eq.getId(), eq.getCode(), eq.getInventoryNumber());
         return Map.of(
+                "equipment", eq,
                 "equipmentId", eq.getId(),
                 "code", eq.getCode(),
                 "inventoryNumber", eq.getInventoryNumber(),
