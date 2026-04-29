@@ -15,6 +15,8 @@ public record WorkOrderDto(
         String title,
         UUID equipmentId,
         UUID departmentId,
+        String equipmentName,
+        String departmentName,
         UUID repairRequestId,
         UUID pprTaskId,
         UUID contractorId,
@@ -32,15 +34,15 @@ public record WorkOrderDto(
         UUID approvedById,
         List<WorkOrderTaskDto> tasks
 ) {
-    public static WorkOrderDto from(WorkOrder w) {
-        return new WorkOrderDto(
-                w.getId(), w.getNumber(), w.getTitle(), w.getEquipmentId(), w.getDepartmentId(),
-                w.getRepairRequestId(), w.getPprTaskId(), w.getContractorId(),
-                w.getStatus(), w.getType(), w.getPriority(),
-                w.getStartPlannedAt(), w.getEndPlannedAt(), w.getStartedAt(), w.getCompletedAt(),
-                w.getSummary(), w.getResult(), w.getClosureNotes(),
-                w.getCreatedById(), w.getApprovedById(),
-                w.getTasks().stream().map(WorkOrderTaskDto::from).toList()
-        );
-    }
+//    public static WorkOrderDto from(WorkOrder w) {
+//        return new WorkOrderDto(
+//                w.getId(), w.getNumber(), w.getTitle(), w.getEquipmentId(), w.getDepartmentId(),
+//                w.getRepairRequestId(), w.getPprTaskId(), w.getContractorId(),
+//                w.getStatus(), w.getType(), w.getPriority(),
+//                w.getStartPlannedAt(), w.getEndPlannedAt(), w.getStartedAt(), w.getCompletedAt(),
+//                w.getSummary(), w.getResult(), w.getClosureNotes(),
+//                w.getCreatedById(), w.getApprovedById(),
+//                w.getTasks().stream().map(WorkOrderTaskDto::from).toList()
+//        );
+//    }
 }
