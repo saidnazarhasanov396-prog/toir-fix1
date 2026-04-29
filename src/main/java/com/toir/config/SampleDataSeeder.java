@@ -723,9 +723,10 @@ public class SampleDataSeeder implements CommandLineRunner {
     }
 
     private void seedStock(UUID warehouseId, UUID sparePartId, double qty, double minQty) {
+        com.toir.entity.SparePart sparePart = sparePartRepository.findById(sparePartId).orElseThrow();
         WarehouseStock s = new WarehouseStock();
         s.setWarehouseId(warehouseId);
-        s.setSparePartId(sparePartId);
+        s.setSparePart(sparePart);
         s.setQuantity(qty);
         s.setMinQty(minQty);
         stockRepository.save(s);

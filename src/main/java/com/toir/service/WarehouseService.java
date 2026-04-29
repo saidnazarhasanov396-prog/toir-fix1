@@ -2,6 +2,9 @@ package com.toir.service;
 import com.toir.entity.Warehouse;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.DepartmentRepository;
+import com.toir.repository.LocationRepository;
+import com.toir.repository.EmployeeRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.warehouse.WarehouseDto;
@@ -22,19 +25,24 @@ public class WarehouseService {
 
     private final WarehouseRepository repository;
     private final WarehouseStockRepository stockRepository;
+    private final DepartmentRepository departmentRepository;
+    private final LocationRepository locationRepository;
+    private final EmployeeRepository employeeRepository;
 
 
     @Transactional(readOnly = true)
     public List<WarehouseDto> findAll() {
         return repository.findAllByIsDeletedFalse().stream()
-                .map(w -> WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(w.getId())))
+                .map(w -> WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(w.getId()),
+                        departmentRepository, locationRepository, employeeRepository))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public WarehouseDto findById(UUID id) {
         Warehouse w = getOrThrow(id);
-        return WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(id));
+        return WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(id),
+                departmentRepository, locationRepository, employeeRepository);
     }
 
     @Transactional(readOnly = true)
@@ -47,13 +55,16 @@ public class WarehouseService {
         Warehouse entity = new Warehouse();
         entity.setCode(nextCode());
         apply(entity, request);
-        return WarehouseDto.from(repository.save(entity));
+        Warehouse saved = repository.save(entity);
+        return WarehouseDto.fromWithStocks(saved, List.of(), departmentRepository, locationRepository, employeeRepository);
     }
 
     public WarehouseDto update(UUID id, WarehouseRequest request) {
         Warehouse entity = getOrThrow(id);
         apply(entity, request);
-        return WarehouseDto.from(entity);
+        Warehouse updated = repository.save(entity);
+        return WarehouseDto.fromWithStocks(updated, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(id),
+                departmentRepository, locationRepository, employeeRepository);
     }
 
     public void delete(UUID id) {

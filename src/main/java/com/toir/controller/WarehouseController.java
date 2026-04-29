@@ -25,7 +25,9 @@ public class WarehouseController {
     }
 
     @GetMapping
-    public List<WarehouseDto> list() { return service.findAll(); }
+    public List<WarehouseDto> list() {
+        return service.findAll();
+    }
 
     @GetMapping("/{id}")
     public WarehouseDto get(@PathVariable UUID id) { return service.findById(id); }
