@@ -27,7 +27,7 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
     @Query(value = "SELECT * FROM warehouse_stocks WHERE warehouse_id = :warehouseId AND spare_part_id = :sparePartId AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<WarehouseStock> findByWarehouseIdAndSparePartIdAndIsDeletedFalse(@Param("warehouseId") UUID warehouseId, @Param("sparePartId") UUID sparePartId);
 
-    @Query(value = "SELECT * FROM warehouse_stocks WHERE warehouse_id = :warehouseId AND is_deleted = false", nativeQuery = true)
+    @Query("SELECT DISTINCT ws FROM WarehouseStock ws LEFT JOIN FETCH ws.sparePart WHERE ws.warehouseId = :warehouseId AND ws.isDeleted = false")
     List<WarehouseStock> findAllByWarehouseIdAndIsDeletedFalse(@Param("warehouseId") UUID warehouseId);
 
     @Query(value = "SELECT * FROM warehouse_stocks WHERE spare_part_id = :sparePartId AND is_deleted = false", nativeQuery = true)
