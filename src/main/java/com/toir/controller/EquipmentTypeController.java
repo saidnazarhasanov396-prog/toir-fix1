@@ -24,7 +24,11 @@ public class EquipmentTypeController {
     }
 
     @GetMapping
-    public List<EquipmentTypeDto> list() { return service.findAll(); }
+    public List<EquipmentTypeDto> list(@RequestParam(required = false) String search,
+                                       @RequestParam(required = false) String category
+    ) {
+        return service.findAll(search,category);
+    }
 
     @GetMapping("/{id}")
     public EquipmentTypeDto get(@PathVariable UUID id) { return service.findById(id); }
