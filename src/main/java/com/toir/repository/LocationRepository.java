@@ -29,6 +29,16 @@ public interface LocationRepository extends JpaRepository<Location, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM locations WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
+    boolean existsByCode(String code);
+
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM locations
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
+
     @Query(value = "SELECT * FROM locations WHERE parent_id = :parentId AND is_deleted = false", nativeQuery = true)
     List<Location> findAllByParentIdAndIsDeletedFalse(@Param("parentId") UUID parentId);
 

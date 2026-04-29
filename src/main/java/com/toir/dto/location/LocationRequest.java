@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
 public record LocationRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         @NotNull LocationType type,
         UUID parentId,
