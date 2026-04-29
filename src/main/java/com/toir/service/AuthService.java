@@ -94,7 +94,7 @@ public class AuthService {
                 "User",
                 user.getId().toString(),
                 AuditAction.LOGIN,
-                "User " + user.getUsername() + " logged in",
+                "Пользователь " + user.getUsername() + " вошел в систему",
                 requestContext.getIpAddress(),
                 requestContext.getUserAgent()
         );
@@ -130,7 +130,7 @@ public class AuthService {
                 "User",
                 user.getId().toString(),
                 AuditAction.CREATE,
-                "User " + user.getUsername() + " registered",
+                "Пользователь " + user.getUsername() + " зарегистрирован",
                 requestContext.getIpAddress(),
                 requestContext.getUserAgent()
         );
