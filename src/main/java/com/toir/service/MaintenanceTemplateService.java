@@ -28,8 +28,7 @@ public class MaintenanceTemplateService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceTemplateDto> findAll(String search, MaintenanceKind type) {
-        String status = type!=null ? type.name() : null;
-        return repository.findAllByIsDeletedFalseAndMaintenanceKindAndSearch(sparePartService.toSearchPattern(search),status).stream().map(MaintenanceTemplateDto::from).toList();
+        return repository.findAllByIsDeletedFalseAndMaintenanceKindAndSearch(sparePartService.toSearchPattern(search), type).stream().map(MaintenanceTemplateDto::from).toList();
     }
 
     @Transactional(readOnly = true)
