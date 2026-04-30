@@ -26,8 +26,8 @@ public class CertificationService {
 
     // types
     @Transactional(readOnly = true)
-    public List<CertificationTypeDto> findTypes() {
-        return typeRepo.findAllByIsDeletedFalse().stream().map(CertificationTypeDto::from).toList();
+    public List<CertificationTypeDto> findTypes(String code, String category,String search) {
+        return typeRepo.findAllByIsDeletedFalse(code,category,search).stream().map(CertificationTypeDto::from).toList();
     }
 
     public CertificationTypeDto createType(CertificationTypeDto r) {
