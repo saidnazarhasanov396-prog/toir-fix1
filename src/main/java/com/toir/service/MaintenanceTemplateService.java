@@ -23,12 +23,13 @@ public class MaintenanceTemplateService {
 
     private final MaintenanceTemplateRepository repository;
     private final MaintenanceOperationRepository operationRepository;
+    private final SparePartService sparePartService;
 
 
     @Transactional(readOnly = true)
     public List<MaintenanceTemplateDto> findAll(String search, MaintenanceKind type) {
         String status = type!=null ? type.name() : null;
-        return repository.findAllByIsDeletedFalseAndMaintenanceKindAndSearch(search,status).stream().map(MaintenanceTemplateDto::from).toList();
+        return repository.findAllByIsDeletedFalseAndMaintenanceKindAndSearch(sparePartService.toSearchPattern(search),status).stream().map(MaintenanceTemplateDto::from).toList();
     }
 
     @Transactional(readOnly = true)
