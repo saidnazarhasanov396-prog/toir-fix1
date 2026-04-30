@@ -29,12 +29,18 @@ public interface MaintenanceTemplateRepository extends JpaRepository<Maintenance
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query("""
-    select mt from MaintenanceTemplate mt where
-        mt.isDeleted = false and
-         (:search is null or lower(mt.code) like lower(concat('%', :search ,'%')) or
-         :search is null or lower(mt.description) like lower(concat('%', :search ,'%')) or
-         :search is null or lower(mt.name) like lower(concat('%', :search ,'%')))
-         or (:type is null or mt.maintenanceKind = :type)
+        select mt from MaintenanceTemplate mt
+        where mt.isDeleted = false
+        and (
+            :search is null or (
+                lower(mt.code) like lower(concat('%', :search, '%')) or
+                lower(mt.description) like lower(concat('%', :search, '%')) or
+                lower(mt.name) like lower(concat('%', :search, '%'))
+            )
+        )
+        and (
+            :type is null or mt.maintenanceKind = :type
+        )
 """)
     List<MaintenanceTemplate> findAllByIsDeletedFalseAndMaintenanceKindAndSearch(String search, String type);
 
