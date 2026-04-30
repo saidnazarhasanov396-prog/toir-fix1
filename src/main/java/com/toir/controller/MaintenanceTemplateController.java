@@ -1,4 +1,5 @@
 package com.toir.controller;
+import com.toir.enums.MaintenanceKind;
 import com.toir.service.MaintenanceTemplateService;
 
 import com.toir.dto.maintenancetemplate.MaintenanceOperationDto;
@@ -22,7 +23,12 @@ public class MaintenanceTemplateController {
 
     public MaintenanceTemplateController(MaintenanceTemplateService service) { this.service = service; }
 
-    @GetMapping public List<MaintenanceTemplateDto> list() { return service.findAll(); }
+    @GetMapping public List<MaintenanceTemplateDto> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) MaintenanceKind type
+    ) {
+        return service.findAll(search,type);
+    }
 
     @GetMapping("/{id}")
     public MaintenanceTemplateDto get(@PathVariable UUID id) { return service.findById(id); }
