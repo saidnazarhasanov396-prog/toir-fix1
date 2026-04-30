@@ -1,6 +1,7 @@
 package com.toir.service;
 import com.toir.entity.MaintenanceOperation;
 import com.toir.entity.MaintenanceTemplate;
+import com.toir.enums.MaintenanceKind;
 import com.toir.repository.MaintenanceOperationRepository;
 import com.toir.repository.MaintenanceTemplateRepository;
 
@@ -25,8 +26,9 @@ public class MaintenanceTemplateService {
 
 
     @Transactional(readOnly = true)
-    public List<MaintenanceTemplateDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(MaintenanceTemplateDto::from).toList();
+    public List<MaintenanceTemplateDto> findAll(String search, MaintenanceKind type) {
+        String status = type!=null ? type.name() : null;
+        return repository.findAllByIsDeletedFalseAndMaintenanceKindAndSearch(search,status).stream().map(MaintenanceTemplateDto::from).toList();
     }
 
     @Transactional(readOnly = true)
