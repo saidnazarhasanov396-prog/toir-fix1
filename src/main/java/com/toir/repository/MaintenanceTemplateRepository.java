@@ -40,6 +40,6 @@ public interface MaintenanceTemplateRepository extends JpaRepository<Maintenance
         )
         and ( :type is null or mt.maintenanceKind = :type)
 """)
-    List<MaintenanceTemplate> findAllByIsDeletedFalseAndMaintenanceKindAndSearch(String search, String type);
+    List<MaintenanceTemplate> findAllByIsDeletedFalseAndMaintenanceKindAndSearch(String search, MaintenanceKind type);
 
 }
