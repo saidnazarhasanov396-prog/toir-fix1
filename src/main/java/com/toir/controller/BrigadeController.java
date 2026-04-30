@@ -28,9 +28,10 @@ public class BrigadeController {
     @GetMapping
     public List<BrigadeDto> list(
             @RequestParam(required = false) UUID departmentId,
-            @RequestParam(required = false) Boolean activeOnly
+            @RequestParam(required = false) Boolean activeOnly,
+            @RequestParam(required = false) String search
     ) {
-        return service.findAll(departmentId, activeOnly);
+        return service.findAll(departmentId, activeOnly,search);
     }
 
     @GetMapping("/{id}")
