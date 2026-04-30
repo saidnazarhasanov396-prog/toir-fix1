@@ -33,14 +33,12 @@ public interface MaintenanceTemplateRepository extends JpaRepository<Maintenance
         where mt.isDeleted = false
         and (
             :search is null or (
-                lower(mt.code) like lower(concat('%', :search, '%')) or
-                lower(mt.description) like lower(concat('%', :search, '%')) or
-                lower(mt.name) like lower(concat('%', :search, '%'))
+                lower(mt.code) like :search or
+                lower(mt.description) like :search or
+                lower(mt.name) like :search
             )
         )
-        and (
-            :type is null or mt.maintenanceKind = :type
-        )
+        and ( :type is null or mt.maintenanceKind = :type)
 """)
     List<MaintenanceTemplate> findAllByIsDeletedFalseAndMaintenanceKindAndSearch(String search, String type);
 

@@ -109,7 +109,7 @@ public class SparePartService {
         entity.setMinStock(request.minStock());
     }
 
-    private String toSearchPattern(String search) {
+    public String toSearchPattern(String search) {
         if (search == null || search.isBlank()) {
             return null;
         }
