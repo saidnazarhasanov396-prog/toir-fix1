@@ -20,12 +20,12 @@ public interface CertificationTypeRepository extends JpaRepository<Certification
         join User u on u.id = uc.userId
     WHERE ct.isDeleted = false
             AND (:code IS NULL OR ct.code = :code)
-            AND (:category IS NULL OR ct.category = :category)
+            AND (:name IS NULL OR ct.name = :name)
             AND (:search IS NULL OR u.fullName = :search)
             """)
     java.util.List<CertificationType> findAllByIsDeletedFalse(
             @Param("code") String code,
-            @Param("category")  String category,
+            @Param("name")  String name,
             @Param("search") String search
     );
 
