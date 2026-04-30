@@ -3,8 +3,8 @@ package com.toir.dto.warehouse;
 import com.toir.entity.Warehouse;
 import com.toir.entity.WarehouseStock;
 import com.toir.repository.DepartmentRepository;
-import com.toir.repository.LocationRepository;
 import com.toir.repository.EmployeeRepository;
+import com.toir.repository.LocationRepository;
 
 import java.util.List;
 import java.util.UUID;
@@ -13,6 +13,9 @@ public record WarehouseDto(
         UUID id,
         String code,
         String name,
+        UUID departmentId,
+        UUID locationId,
+        UUID responsibleId,
         boolean isActive,
         DepartmentRef department,
         LocationRef location,
@@ -26,7 +29,8 @@ public record WarehouseDto(
     public record Summary(int totalItems, double totalQuantity, double totalReserved, int lowStockItems) {}
 
     public static WarehouseDto from(Warehouse w) {
-        return new WarehouseDto(w.getId(), w.getCode(), w.getName(), w.isActive(),
+        return new WarehouseDto(w.getId(), w.getCode(), w.getName(),
+                w.getDepartmentId(), w.getLocationId(), w.getResponsibleId(), w.isActive(),
                 null, null, null,
                 new Summary(0, 0, 0, 0),
                 List.of());
@@ -37,7 +41,8 @@ public record WarehouseDto(
         double totalReserved = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
         long lowStock = stocks.stream().filter(s -> s.getQuantity() <= s.getMinQty()).count();
         return new WarehouseDto(
-                w.getId(), w.getCode(), w.getName(), w.isActive(),
+                w.getId(), w.getCode(), w.getName(),
+                w.getDepartmentId(), w.getLocationId(), w.getResponsibleId(), w.isActive(),
                 null, null, null,
                 new Summary(stocks.size(), totalQty, totalReserved, (int) lowStock),
                 stocks.stream().map(WarehouseStockDto::from).toList()
@@ -52,7 +57,6 @@ public record WarehouseDto(
         double totalReserved = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
         long lowStock = stocks.stream().filter(s -> s.getQuantity() <= s.getMinQty()).count();
 
-        // Fetch department, location, and employee (responsible)
         DepartmentRef department = null;
         LocationRef location = null;
         ResponsibleRef responsible = null;
@@ -83,7 +87,8 @@ public record WarehouseDto(
         }
 
         return new WarehouseDto(
-                w.getId(), w.getCode(), w.getName(), w.isActive(),
+                w.getId(), w.getCode(), w.getName(),
+                w.getDepartmentId(), w.getLocationId(), w.getResponsibleId(), w.isActive(),
                 department, location, responsible,
                 new Summary(stocks.size(), totalQty, totalReserved, (int) lowStock),
                 stocks.stream().map(WarehouseStockDto::from).toList()

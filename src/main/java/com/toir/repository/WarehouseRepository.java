@@ -27,6 +27,28 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, UUID> {
 
     boolean existsByCode(String code);
 
+    @Query("""
+            select w
+            from Warehouse w
+            where w.isDeleted = false
+              and (:departmentId is null or w.departmentId = :departmentId)
+              and (:locationId is null or w.locationId = :locationId)
+              and (:responsibleId is null or w.responsibleId = :responsibleId)
+              and (:active is null or w.active = :active)
+              and (
+                    :search is null
+                    or :search = ''
+                    or lower(w.code) like lower(concat('%', :search, '%'))
+                    or lower(w.name) like lower(concat('%', :search, '%'))
+                  )
+            order by w.code asc
+            """)
+    java.util.List<Warehouse> search(@Param("search") String search,
+                                      @Param("departmentId") java.util.UUID departmentId,
+                                      @Param("locationId") java.util.UUID locationId,
+                                      @Param("responsibleId") java.util.UUID responsibleId,
+                                      @Param("active") Boolean active);
+
     @Query(value = """
             SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
             FROM warehouses
