@@ -1,10 +1,12 @@
 package com.toir.controller;
 
 import com.toir.entity.Defect;
+import com.toir.entity.Equipment;
 import com.toir.repository.DefectRepository;
 import com.toir.entity.DowntimeEvent;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.entity.WorkOrder;
+import com.toir.repository.EquipmentRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,13 +33,15 @@ public class ParetoController {
     private final DefectRepository defectRepository;
     private final DowntimeEventRepository downtimeRepository;
     private final WorkOrderRepository workOrderRepository;
+    private final EquipmentRepository equipmentRepository;
 
     public ParetoController(DefectRepository defectRepository,
                             DowntimeEventRepository downtimeRepository,
-                            WorkOrderRepository workOrderRepository) {
+                            WorkOrderRepository workOrderRepository, EquipmentRepository equipmentRepository) {
         this.defectRepository = defectRepository;
         this.downtimeRepository = downtimeRepository;
         this.workOrderRepository = workOrderRepository;
+        this.equipmentRepository = equipmentRepository;
     }
 
     public record ParetoItem(
@@ -48,6 +52,7 @@ public class ParetoController {
 
     public record TopEquipmentItem(
             UUID equipmentId,
+            String equipmentName,
             int failures,
             long totalDowntimeMinutes,
             int openWorkOrders
@@ -130,10 +135,12 @@ public class ParetoController {
         keys.addAll(downtimeByEq.keySet());
         keys.addAll(openWorkOrdersByEq.keySet());
         for (UUID eqId : keys) {
-            int failures = failuresByEq.getOrDefault(eqId, new int[]{0})[0];
-            long downtime = downtimeByEq.getOrDefault(eqId, 0L);
-            int openWo = openWorkOrdersByEq.getOrDefault(eqId, 0);
-            all.add(new TopEquipmentItem(eqId, failures, downtime, openWo));
+            equipmentRepository.findById(eqId).ifPresent(eq -> {
+                int failures = failuresByEq.getOrDefault(eqId, new int[]{0})[0];
+                long downtime = downtimeByEq.getOrDefault(eqId, 0L);
+                int openWo = openWorkOrdersByEq.getOrDefault(eqId, 0);
+                all.add(new TopEquipmentItem(eqId, eq.getName(), failures, downtime, openWo));
+            });
         }
 
         int safeLimit = Math.max(Math.min(limit, 100), 1);
@@ -144,6 +151,8 @@ public class ParetoController {
                 .limit(safeLimit)
                 .toList();
     }
+
+
 
     private List<ParetoItem> pareto(Map<String, Double> raw) {
         double total = raw.values().stream().mapToDouble(Double::doubleValue).sum();
