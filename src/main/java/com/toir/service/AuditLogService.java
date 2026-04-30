@@ -3,6 +3,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.toir.dto.audit.AuditLogResponseDto;
+import com.toir.dto.user.UserDto;
 import com.toir.enums.AuditAction;
 import com.toir.entity.AuditLog;
 import com.toir.repository.AuditLogRepository;
@@ -25,6 +26,7 @@ public class AuditLogService {
 
     private final AuditLogRepository repository;
     private final ObjectMapper objectMapper;
+    private final UserService userService;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(UUID userId, String module, String entityType, String entityId,
@@ -71,10 +73,11 @@ public class AuditLogService {
                 }
             });
         }
+        UserDto user = userService.findById(log.getUserId());
 
         return new AuditLogResponseDto(
                 log.getId(),
-                log.getUserId(),
+                user,
                 log.getModule(),
                 log.getEntityType(),
                 log.getEntityId(),
