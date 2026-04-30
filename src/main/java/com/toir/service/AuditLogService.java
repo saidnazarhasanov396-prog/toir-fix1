@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -54,8 +55,8 @@ public class AuditLogService {
     }
 
     @Transactional(readOnly = true)
-    public Page<AuditLogResponseDto> find(int page, int size) {
-        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(PaginationUtils.pageRequest(page, size))
+    public Page<AuditLogResponseDto> find(int page, int size, AuditAction action, LocalDate fromDate, LocalDate toDate, String search,UUID userId) {
+        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(PaginationUtils.pageRequest(page, size),action,fromDate,toDate,search,userId)
                 .map(this::toResponse);
     }
 
