@@ -25,8 +25,22 @@ public class WarehouseController {
     }
 
     @GetMapping
-    public List<WarehouseDto> list() {
-        return service.findAll();
+    public List<WarehouseDto> list(@RequestParam(required = false) String search,
+                                   @RequestParam(required = false) UUID departmentId,
+                                   @RequestParam(name = "department_id", required = false) UUID departmentIdAlias,
+                                   @RequestParam(required = false) UUID locationId,
+                                   @RequestParam(name = "location_id", required = false) UUID locationIdAlias,
+                                   @RequestParam(required = false) UUID responsibleId,
+                                   @RequestParam(name = "responsible_id", required = false) UUID responsibleIdAlias,
+                                   @RequestParam(required = false) Boolean active,
+                                   @RequestParam(name = "is_active", required = false) Boolean activeAlias) {
+        return service.findAll(
+                search,
+                firstNonNull(departmentId, departmentIdAlias),
+                firstNonNull(locationId, locationIdAlias),
+                firstNonNull(responsibleId, responsibleIdAlias),
+                firstNonNull(active, activeAlias)
+        );
     }
 
     @GetMapping("/{id}")
@@ -35,7 +49,7 @@ public class WarehouseController {
     @GetMapping("/{id}/stocks")
     public List<WarehouseStockDto> stocks(@PathVariable UUID id) { return service.findStocks(id); }
 
-    @PostMapping("/create")
+    @PostMapping
     public ResponseEntity<WarehouseDto> create(@Valid @RequestBody WarehouseRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
@@ -48,4 +62,8 @@ public class WarehouseController {
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) { service.delete(id); }
+
+    private <T> T firstNonNull(T primary, T alias) {
+        return primary != null ? primary : alias;
+    }
 }
