@@ -25,7 +25,13 @@ public class CertificationController {
     }
 
     @GetMapping("/certification-types")
-    public List<CertificationTypeDto> listTypes() { return service.findTypes(); }
+    public List<CertificationTypeDto> listTypes(
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String search
+    ) {
+        return service.findTypes(code,category,search);
+    }
 
     @PostMapping("/certification-types")
     public ResponseEntity<CertificationTypeDto> createType(@Valid @RequestBody CertificationTypeDto r) {

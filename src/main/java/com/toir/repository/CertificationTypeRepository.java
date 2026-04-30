@@ -14,7 +14,20 @@ import java.util.UUID;
 public interface CertificationTypeRepository extends JpaRepository<CertificationType, UUID> {
     java.util.Optional<CertificationType> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<CertificationType> findAllByIsDeletedFalse();
+    @Query("""
+    SELECT ct FROM CertificationType ct
+        join UserCertification uc on ct.code = uc.typeCode
+        join User u on u.id = uc.userId
+    WHERE ct.isDeleted = false
+            AND (:code IS NULL OR ct.code = :code)
+            AND (:category IS NULL OR ct.category = :category)
+            AND (:search IS NULL OR u.fullName = :search)
+            """)
+    java.util.List<CertificationType> findAllByIsDeletedFalse(
+            @Param("code") String code,
+            @Param("category")  String category,
+            @Param("search") String search
+    );
 
     java.util.List<CertificationType> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
