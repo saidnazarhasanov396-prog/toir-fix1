@@ -31,4 +31,15 @@ public interface BrigadeRepository extends JpaRepository<Brigade, UUID> {
 
     @Query(value = "SELECT * FROM brigades WHERE is_active = true AND is_deleted = false", nativeQuery = true)
     List<Brigade> findAllByActiveTrueAndIsDeletedFalse();
+
+    @Query("""
+        select b from Brigade b
+        where b.isDeleted = false
+        and (:departmentId is null or b.departmentId = :departmentId)
+        and (:activeOnly is null or :activeOnly = false or b.active = true)
+        and (:search is null or lower(b.name) like :search or
+             :search is null or lower(b.code) like :search or
+             :search is null or lower(b.specialization) like :search)
+""")
+    List<Brigade> findAllByDepartmentAndIsActiveOnlyAndDeletedAndSearch(UUID departmentId, Boolean activeOnly, String search);
 }
