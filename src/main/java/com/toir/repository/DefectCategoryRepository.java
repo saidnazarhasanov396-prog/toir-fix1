@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.UUID;
 
 
@@ -15,15 +16,17 @@ public interface DefectCategoryRepository extends JpaRepository<DefectCategory, 
     java.util.Optional<DefectCategory> findByIdAndIsDeletedFalse(java.util.UUID id);
     @Query("""
     SELECT dc FROM DefectCategory dc
-        WHERE dc.isDeleted = false
-            AND (:code IS NULL OR dc.code = :code)
-            AND (:name IS NULL OR dc.name = :name)
-            AND (:search IS NULL OR lower(dc.code) like lower(concat('%', :search, '%')) or lower(dc.name) like lower(concat('%', :search, '%')))
+    WHERE dc.isDeleted = false
+        AND (:code IS NULL OR dc.code = :code)
+        AND (:name IS NULL OR dc.name = :name)
+        AND (:search IS NULL OR 
+             lower(dc.code) LIKE lower(CONCAT('%', :search, '%')) OR
+             lower(dc.name) LIKE lower(CONCAT('%', :search, '%')))
 """)
-    java.util.List<DefectCategory> findAllByIsDeletedFalse(
-            @Param("search")  String search,
+    List<DefectCategory> findAllByIsDeletedFalse(
+            @Param("search") String search,
             @Param("code") String code,
-            @Param("name")  String name
+            @Param("name") String name
     );
 
     java.util.List<DefectCategory> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
