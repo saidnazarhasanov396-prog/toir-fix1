@@ -3,7 +3,6 @@ import com.toir.entity.CertificationType;
 import com.toir.entity.UserCertification;
 import com.toir.repository.CertificationTypeRepository;
 import com.toir.repository.UserCertificationRepository;
-import com.toir.entity.User;
 
 import com.toir.dto.certification.CertificationTypeDto;
 import com.toir.dto.certification.UserCertificationDto;
@@ -26,8 +25,8 @@ public class CertificationService {
 
     // types
     @Transactional(readOnly = true)
-    public List<CertificationTypeDto> findTypes() {
-        return com.toir.util.UpdatedAtSorter.descending(typeRepo.findAllByIsDeletedFalse()).stream().map(CertificationTypeDto::from).toList();
+    public List<CertificationTypeDto> findTypes(String code, String name,String search) {
+        return typeRepo.findAllByIsDeletedFalse(code,name,search).stream().map(CertificationTypeDto::from).toList();
     }
 
     public CertificationTypeDto createType(CertificationTypeDto r) {
@@ -68,8 +67,8 @@ public class CertificationService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserCertificationDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(certRepo.findAllByIsDeletedFalse()).stream().map(UserCertificationDto::from).toList();
+    public List<UserCertificationDto> findAll(String search) {
+        return certRepo.findUserCertifications(search).stream().map(UserCertificationDto::from).toList();
     }
 
     public UserCertificationDto issue(UserCertificationRequest r) {
@@ -135,5 +134,10 @@ public class CertificationService {
         t.setValidityMonths(r.validityMonths());
         if (r.category() != null) t.setCategory(r.category());
         t.setDescription(r.description());
+    }
+
+    public UserCertificationDto findOne(UUID id) {
+        return certRepo.findAllByUserIdAndIsDeletedFalse(id).stream().findFirst().map(UserCertificationDto::from)
+                .orElseThrow(() -> RestException.notFound("User certification not found: " + id));
     }
 }

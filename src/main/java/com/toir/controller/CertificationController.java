@@ -25,7 +25,13 @@ public class CertificationController {
     }
 
     @GetMapping("/certification-types")
-    public List<CertificationTypeDto> listTypes() { return service.findTypes(); }
+    public List<CertificationTypeDto> listTypes(
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String search
+    ) {
+        return service.findTypes(code,name,search);
+    }
 
     @PostMapping("/certification-types")
     public ResponseEntity<CertificationTypeDto> createType(@Valid @RequestBody CertificationTypeDto r) {
@@ -44,8 +50,15 @@ public class CertificationController {
     }
 
     @GetMapping("/user-certifications")
-    public List<UserCertificationDto> list(@RequestParam(required = false) UUID userId) {
-        return userId != null ? service.findForUser(userId) : service.findAll();
+    public List<UserCertificationDto> list(
+            @RequestParam(required = false) String search
+    ) {
+        return service.findAll(search);
+    }
+
+    @GetMapping("/user-certification/{id}")
+    public UserCertificationDto findOne(@PathVariable UUID id) {
+        return service.findOne(id);
     }
 
     @GetMapping("/user-certifications/expiring")

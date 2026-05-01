@@ -1,5 +1,6 @@
 package com.toir.dto.audit;
 
+import com.toir.dto.user.UserDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.toir.enums.AuditAction;
 
@@ -8,7 +9,7 @@ import java.util.UUID;
 
 public record AuditLogResponseDto(
         UUID id,
-        UUID userId,
+        UserDto user,
         String module,
         String entityType,
         String entityId,

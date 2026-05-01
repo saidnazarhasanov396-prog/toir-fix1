@@ -21,8 +21,8 @@ public class DefectCategoryService {
 
 
     @Transactional(readOnly = true)
-    public List<DefectCategoryDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(DefectCategoryDto::from).toList();
+    public List<DefectCategoryDto> findAll(String search) {
+        return repository.findAll(search).stream().map(DefectCategoryDto::from).toList();
     }
 
     public DefectCategoryDto create(DefectCategoryDto r) {

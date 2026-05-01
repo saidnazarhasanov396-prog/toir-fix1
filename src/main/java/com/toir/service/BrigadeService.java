@@ -3,13 +3,11 @@ import com.toir.entity.Brigade;
 import com.toir.entity.BrigadeMember;
 import com.toir.repository.BrigadeMemberRepository;
 import com.toir.repository.BrigadeRepository;
-import com.toir.entity.User;
 
 import com.toir.dto.brigade.BrigadeDto;
 import com.toir.dto.brigade.BrigadeMemberDto;
 import com.toir.dto.brigade.BrigadeMemberRequest;
 import com.toir.dto.brigade.BrigadeRequest;
-import com.toir.service.CertificationGuard;
 import com.toir.exception.RestException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,19 +24,14 @@ public class BrigadeService {
     private final BrigadeRepository brigadeRepo;
     private final BrigadeMemberRepository memberRepo;
     private final CertificationGuard certificationGuard;
+    private final SparePartService sparePartService;
 
 
     @Transactional(readOnly = true)
-    public List<BrigadeDto> findAll(UUID departmentId, Boolean activeOnly) {
-        List<Brigade> list;
-        if (departmentId != null) {
-            list = brigadeRepo.findAllByDepartmentIdAndIsDeletedFalse(departmentId);
-        } else if (Boolean.TRUE.equals(activeOnly)) {
-            list = brigadeRepo.findAllByActiveTrueAndIsDeletedFalse();
-        } else {
-            list = brigadeRepo.findAllByIsDeletedFalse();
-        }
-        return com.toir.util.UpdatedAtSorter.descending(list).stream().map(BrigadeDto::from).toList();
+    public List<BrigadeDto> findAll(UUID departmentId, Boolean activeOnly, String search) {
+        List<Brigade> list = brigadeRepo.findAllByDepartmentAndIsActiveOnlyAndDeletedAndSearch
+                (departmentId,activeOnly,sparePartService.toSearchPattern(search));
+        return list.stream().map(BrigadeDto::from).toList();
     }
 
     @Transactional(readOnly = true)

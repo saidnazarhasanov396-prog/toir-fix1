@@ -1,15 +1,12 @@
 package com.toir.service;
 import com.toir.entity.Warehouse;
-import com.toir.repository.DepartmentRepository;
-import com.toir.repository.EmployeeRepository;
-import com.toir.repository.LocationRepository;
-import com.toir.repository.WarehouseRepository;
-import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.*;
 
 import com.toir.exception.RestException;
 import com.toir.dto.warehouse.WarehouseDto;
 import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.dto.warehouse.WarehouseStockDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +16,7 @@ import java.util.UUID;
 
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class WarehouseService {
 
     private final WarehouseRepository repository;
@@ -27,22 +25,7 @@ public class WarehouseService {
     private final LocationRepository locationRepository;
     private final EmployeeRepository employeeRepository;
 
-    public WarehouseService(WarehouseRepository repository,
-                            WarehouseStockRepository stockRepository,
-                            DepartmentRepository departmentRepository,
-                            LocationRepository locationRepository,
-                            EmployeeRepository employeeRepository) {
-        this.repository = repository;
-        this.stockRepository = stockRepository;
-        this.departmentRepository = departmentRepository;
-        this.locationRepository = locationRepository;
-        this.employeeRepository = employeeRepository;
-    }
 
-    @Transactional(readOnly = true)
-    public List<WarehouseDto> findAll() {
-        return findAll(null, null, null, null, null);
-    }
 
     @Transactional(readOnly = true)
     public List<WarehouseDto> findAll(String search, UUID departmentId, UUID locationId, UUID responsibleId, Boolean active) {

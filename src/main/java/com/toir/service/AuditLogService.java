@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.toir.dto.audit.AuditLogResponseDto;
+import com.toir.dto.user.UserDto;
 import com.toir.enums.AuditAction;
 import com.toir.entity.AuditLog;
 import com.toir.repository.AuditLogRepository;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Service
@@ -24,6 +26,7 @@ public class AuditLogService {
 
     private final AuditLogRepository repository;
     private final ObjectMapper objectMapper;
+    private final UserService userService;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(UUID userId, String module, String entityType, String entityId,
@@ -51,8 +54,10 @@ public class AuditLogService {
     }
 
     @Transactional(readOnly = true)
-    public Page<AuditLogResponseDto> find(int page, int size) {
-        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(PaginationUtils.updatedAtDescPageRequest(page, size))
+    public Page<AuditLogResponseDto> find(int page, int size, AuditAction action, LocalDate fromDate, LocalDate toDate, String search,UUID userId) {
+        String actionStr = action != null ? action.name() : null;
+        String searchPattern = search != null ? "%" + search + "%" : null;
+        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(actionStr, fromDate, toDate, searchPattern, userId, PaginationUtils.pageRequest(page, size))
                 .map(this::toResponse);
     }
 
@@ -70,10 +75,11 @@ public class AuditLogService {
                 }
             });
         }
+        UserDto user = userService.findById(log.getUserId());
 
         return new AuditLogResponseDto(
                 log.getId(),
-                log.getUserId(),
+                user,
                 log.getModule(),
                 log.getEntityType(),
                 log.getEntityId(),

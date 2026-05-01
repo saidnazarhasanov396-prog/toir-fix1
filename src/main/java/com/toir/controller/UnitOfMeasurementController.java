@@ -18,9 +18,15 @@ public class UnitOfMeasurementController {
 
     private final UnitOfMeasurementService service;
 
-    public UnitOfMeasurementController(UnitOfMeasurementService service) { this.service = service; }
+    public UnitOfMeasurementController(UnitOfMeasurementService service) {
+        this.service = service;
+    }
 
-    @GetMapping public List<UnitOfMeasurementDto> list() { return service.findAll(); }
+    @GetMapping public List<UnitOfMeasurementDto> list(
+            @RequestParam(required = false) String search
+            ) {
+        return service.findAll(search);
+    }
 
     @PostMapping
     public ResponseEntity<UnitOfMeasurementDto> create(@Valid @RequestBody UnitOfMeasurementDto r) {

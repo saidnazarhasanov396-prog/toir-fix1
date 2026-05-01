@@ -18,6 +18,17 @@ public interface UserCertificationRepository extends JpaRepository<UserCertifica
 
     java.util.List<UserCertification> findAllByIsDeletedFalse();
 
+    @Query("""
+            SELECT uc FROM UserCertification uc
+                WHERE uc.isDeleted = false
+                AND (CAST(:search AS string) IS NULL OR CAST(:search AS string) = '' OR
+                    LOWER(uc.typeCode) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR
+                    LOWER(uc.certificateNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))
+    """)
+    java.util.List<UserCertification> findUserCertifications(
+            @Param("search") String search
+    );
+
     java.util.List<UserCertification> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
     boolean existsByIdAndIsDeletedFalse(java.util.UUID id);

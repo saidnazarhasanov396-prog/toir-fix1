@@ -25,14 +25,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Автогенерация ППР-задач из регламентов: для заданного плана проходит по
- * всем активным регламентам, находит оборудование соответствующего типа
- * (кроме DECOMMISSIONED) и создаёт задачу с датами исходя из периодичности
- * регламента и месяца плана.
- *
- * Идемпотентен: если задача с таким же code уже существует — пропускает.
- */
 @Service
 @RequiredArgsConstructor
 public class PprGeneratorService {
@@ -42,7 +34,7 @@ public class PprGeneratorService {
     private final MaintenanceRegulationRepository regulationRepository;
     private final EquipmentRepository equipmentRepository;
 
-
+    @Transactional
     public GenerationResult generateForPlan(UUID planId) {
         PprPlan plan = planRepository.findByIdAndIsDeletedFalse(planId)
                 .orElseThrow(() -> RestException.notFound("PPR plan not found: " + planId));
