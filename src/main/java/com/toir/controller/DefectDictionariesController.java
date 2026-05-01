@@ -30,9 +30,9 @@ public class DefectDictionariesController {
 
 
     @GetMapping
-    public Map<String, Object> dictionaries(String search, String code,String name) {
+    public Map<String, Object> dictionaries() {
         return Map.of(
-                "categories", categoryRepository.findAllByIsDeletedFalse(search,code,name).stream().map(DefectCategoryDto::from).toList(),
+                "categories", categoryRepository.findAllByIsDeletedFalse().stream().map(DefectCategoryDto::from).toList(),
                 "severities", severityRepository.findAllByIsDeletedFalse().stream().map(DefectSeverityDto::from).toList(),
                 "failureReasons", failureReasonRepository.findAllByIsDeletedFalse().stream().map(FailureReasonDto::from).toList(),
                 "rootCauses", rootCauseRepository.findAllByIsDeletedFalse().stream().map(RootCauseDto::from).toList()
