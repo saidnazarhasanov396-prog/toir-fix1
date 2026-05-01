@@ -1,4 +1,5 @@
 package com.toir.controller;
+import com.toir.dto.equipmentlabel.EquipmentLabelResponse;
 import com.toir.entity.Equipment;
 import com.toir.repository.EquipmentRepository;
 
@@ -14,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -29,14 +29,14 @@ public class EquipmentLabelController {
     }
 
     @GetMapping("/{id}/label")
-    public Map<String, Object> label(@PathVariable UUID id) {
+    public EquipmentLabelResponse label(@PathVariable UUID id) {
         Equipment eq = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
         return buildPayload(eq);
     }
 
     @GetMapping("/by-code/{code}")
-    public Map<String, Object> resolveByCode(@PathVariable String code) {
+    public EquipmentLabelResponse resolveByCode(@PathVariable String code) {
         Equipment eq = repository.findByCodeAndIsDeletedFalse(code)
                 .or(() -> repository.findByInventoryNumberAndIsDeletedFalse(code))
                 .orElseThrow(() -> RestException.notFound("Equipment not found by code/inventory: " + code));
@@ -44,7 +44,7 @@ public class EquipmentLabelController {
     }
 
     @GetMapping("/resolve-scan")
-    public Map<String, Object> resolveScan(@RequestParam String payload) {
+    public EquipmentLabelResponse resolveScan(@RequestParam String payload) {
         String value = payload;
         if (payload != null && payload.startsWith("toir://equipment/")) {
             String rest = payload.substring("toir://equipment/".length());
@@ -83,17 +83,17 @@ public class EquipmentLabelController {
                 .body(svg.getBytes(StandardCharsets.UTF_8));
     }
 
-    private Map<String, Object> buildPayload(Equipment eq) {
+    private EquipmentLabelResponse buildPayload(Equipment eq) {
         String qrPayload = String.format("toir://equipment/%s?code=%s&inv=%s",
                 eq.getId(), eq.getCode(), eq.getInventoryNumber());
-        return Map.of(
-                "equipment", eq,
-                "equipmentId", eq.getId(),
-                "code", eq.getCode(),
-                "inventoryNumber", eq.getInventoryNumber(),
-                "name", eq.getName(),
-                "qrPayload", qrPayload,
-                "issuedAt", Instant.now().toString()
+        return new EquipmentLabelResponse(
+                eq,
+                eq.getId(),
+                eq.getCode(),
+                eq.getInventoryNumber(),
+                eq.getName(),
+                qrPayload,
+                Instant.now().toString()
         );
     }
 

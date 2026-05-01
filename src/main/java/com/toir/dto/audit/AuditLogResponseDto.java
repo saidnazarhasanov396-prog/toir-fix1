@@ -1,9 +1,9 @@
 package com.toir.dto.audit;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.toir.enums.AuditAction;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
 
 public record AuditLogResponseDto(
@@ -17,10 +17,10 @@ public record AuditLogResponseDto(
         String ipAddress,
         String userAgent,
         Instant createdAt,
-        Map<String, Object> previous,
-        Map<String, Object> current,
-        Map<String, Object> old,
-        Map<String, Object> newValue,
+        JsonNode previous,
+        JsonNode current,
+        JsonNode old,
+        JsonNode newValue,
         String diffJson
 ) {
 }

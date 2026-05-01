@@ -21,7 +21,7 @@ public class FinancialApprovalRuleService {
 
     @Transactional(readOnly = true)
     public List<FinancialApprovalRuleDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(FinancialApprovalRuleDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(FinancialApprovalRuleDto::from).toList();
     }
 
     public FinancialApprovalRuleDto create(FinancialApprovalRuleDto r) {

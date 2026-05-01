@@ -1,5 +1,6 @@
 package com.toir.controller;
 
+import com.toir.dto.defect.DefectDictionariesResponse;
 import com.toir.repository.DefectCategoryRepository;
 import com.toir.dto.defectcategory.DefectCategoryDto;
 import com.toir.repository.DefectSeverityRepository;
@@ -12,8 +13,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/defects/dictionaries")
@@ -36,12 +35,12 @@ public class DefectDictionariesController {
     }
 
     @GetMapping
-    public Map<String, Object> dictionaries() {
-        return Map.of(
-                "categories", categoryRepository.findAllByIsDeletedFalse().stream().map(DefectCategoryDto::from).toList(),
-                "severities", severityRepository.findAllByIsDeletedFalse().stream().map(DefectSeverityDto::from).toList(),
-                "failureReasons", failureReasonRepository.findAllByIsDeletedFalse().stream().map(FailureReasonDto::from).toList(),
-                "rootCauses", rootCauseRepository.findAllByIsDeletedFalse().stream().map(RootCauseDto::from).toList()
+    public DefectDictionariesResponse dictionaries() {
+        return new DefectDictionariesResponse(
+                com.toir.util.UpdatedAtSorter.descending(categoryRepository.findAllByIsDeletedFalse()).stream().map(DefectCategoryDto::from).toList(),
+                com.toir.util.UpdatedAtSorter.descending(severityRepository.findAllByIsDeletedFalse()).stream().map(DefectSeverityDto::from).toList(),
+                com.toir.util.UpdatedAtSorter.descending(failureReasonRepository.findAllByIsDeletedFalse()).stream().map(FailureReasonDto::from).toList(),
+                com.toir.util.UpdatedAtSorter.descending(rootCauseRepository.findAllByIsDeletedFalse()).stream().map(RootCauseDto::from).toList()
         );
     }
 }

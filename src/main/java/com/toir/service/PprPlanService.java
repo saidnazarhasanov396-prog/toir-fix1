@@ -31,7 +31,7 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public List<PprPlanDto> findAll() {
-        return planRepository.findAllByIsDeletedFalse().stream().map(PprPlanDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(planRepository.findAllByIsDeletedFalse()).stream().map(PprPlanDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -121,7 +121,7 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public List<PprTaskDto> findTasksByPlan(UUID planId) {
-        return taskRepository.findAllByPlanIdAndIsDeletedFalse(planId).stream().map(PprTaskDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(taskRepository.findAllByPlanIdAndIsDeletedFalse(planId)).stream().map(PprTaskDto::from).toList();
     }
 
     private PprPlan getPlan(UUID id) {

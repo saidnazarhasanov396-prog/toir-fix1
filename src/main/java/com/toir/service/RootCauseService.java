@@ -21,7 +21,7 @@ public class RootCauseService {
 
     @Transactional(readOnly = true)
     public List<RootCauseDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(RootCauseDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(RootCauseDto::from).toList();
     }
 
     public RootCauseDto create(RootCauseDto r) {

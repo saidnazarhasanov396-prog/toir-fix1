@@ -27,7 +27,7 @@ public class CertificationService {
     // types
     @Transactional(readOnly = true)
     public List<CertificationTypeDto> findTypes() {
-        return typeRepo.findAllByIsDeletedFalse().stream().map(CertificationTypeDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(typeRepo.findAllByIsDeletedFalse()).stream().map(CertificationTypeDto::from).toList();
     }
 
     public CertificationTypeDto createType(CertificationTypeDto r) {
@@ -55,13 +55,13 @@ public class CertificationService {
     // user certifications
     @Transactional(readOnly = true)
     public List<UserCertificationDto> findForUser(UUID userId) {
-        return certRepo.findAllByUserIdAndIsDeletedFalse(userId).stream().map(UserCertificationDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(certRepo.findAllByUserIdAndIsDeletedFalse(userId)).stream().map(UserCertificationDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<UserCertificationDto> findExpiring(int withinDays) {
         LocalDate cutoff = LocalDate.now().plusDays(withinDays);
-        return certRepo.findAllByExpiresAtBeforeAndIsDeletedFalse(cutoff).stream()
+        return com.toir.util.UpdatedAtSorter.descending(certRepo.findAllByExpiresAtBeforeAndIsDeletedFalse(cutoff)).stream()
                 .filter(c -> "ACTIVE".equals(c.getStatus()) || "EXPIRED".equals(c.getStatus()))
                 .map(UserCertificationDto::from)
                 .toList();
@@ -69,7 +69,7 @@ public class CertificationService {
 
     @Transactional(readOnly = true)
     public List<UserCertificationDto> findAll() {
-        return certRepo.findAllByIsDeletedFalse().stream().map(UserCertificationDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(certRepo.findAllByIsDeletedFalse()).stream().map(UserCertificationDto::from).toList();
     }
 
     public UserCertificationDto issue(UserCertificationRequest r) {

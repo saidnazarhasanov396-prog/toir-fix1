@@ -21,7 +21,7 @@ public class MaterialService {
 
     @Transactional(readOnly = true)
     public List<MaterialDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(MaterialDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(MaterialDto::from).toList();
     }
 
     public MaterialDto create(MaterialDto r) {

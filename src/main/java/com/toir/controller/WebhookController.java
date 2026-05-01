@@ -1,4 +1,5 @@
 package com.toir.controller;
+import com.toir.dto.webhook.WebhookTestResponse;
 import com.toir.entity.WebhookEventLog;
 import com.toir.service.WebhookService;
 import com.toir.entity.WebhookSubscription;
@@ -50,9 +51,9 @@ public class WebhookController {
     }
 
     @PostMapping("/test")
-    public Map<String, Integer> test(@RequestParam String eventCode,
-                                     @RequestBody(required = false) Object payload) {
+    public WebhookTestResponse test(@RequestParam String eventCode,
+                                    @RequestBody(required = false) Object payload) {
         int delivered = service.publish(eventCode, payload != null ? payload : Map.of("test", true));
-        return Map.of("delivered", delivered);
+        return new WebhookTestResponse(delivered);
     }
 }

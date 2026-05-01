@@ -20,7 +20,7 @@ public class TechnicalDocumentService {
 
     @Transactional(readOnly = true)
     public List<TechnicalDocumentDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(TechnicalDocumentDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).stream().map(TechnicalDocumentDto::from).toList();
     }
 
     public TechnicalDocumentDto create(UUID equipmentId, TechnicalDocumentDto r) {

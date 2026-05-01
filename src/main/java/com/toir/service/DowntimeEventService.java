@@ -23,7 +23,7 @@ public class DowntimeEventService {
 
     @Transactional(readOnly = true)
     public List<DowntimeEventDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId).stream()
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId)).stream()
                 .map(DowntimeEventDto::from).toList();
     }
 

@@ -37,7 +37,7 @@ public class FileAssetService {
 
     @Transactional(readOnly = true)
     public List<FileAssetDto> findByEntity(String entityType, String entityId) {
-        return repository.findAllByEntityTypeAndEntityIdAndIsDeletedFalse(entityType, entityId).stream()
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByEntityTypeAndEntityIdAndIsDeletedFalse(entityType, entityId)).stream()
                 .map(FileAssetDto::from).toList();
     }
 

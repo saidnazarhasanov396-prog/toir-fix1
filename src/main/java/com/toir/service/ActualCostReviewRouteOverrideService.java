@@ -21,12 +21,12 @@ public class ActualCostReviewRouteOverrideService {
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewRouteOverrideDto> findActive() {
-        return repository.findAllByActiveTrueAndIsDeletedFalse().stream().map(ActualCostReviewRouteOverrideDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByActiveTrueAndIsDeletedFalse()).stream().map(ActualCostReviewRouteOverrideDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewRouteOverrideDto> findByActualCost(UUID actualCostId) {
-        return repository.findAllByActualCostIdAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId).stream()
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByActualCostIdAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId)).stream()
                 .map(ActualCostReviewRouteOverrideDto::from).toList();
     }
 

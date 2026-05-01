@@ -22,7 +22,7 @@ public class ContractorWorkService {
 
     @Transactional(readOnly = true)
     public List<ContractorWorkDto> findByContractor(UUID contractorId) {
-        return repository.findAllByContractorIdAndIsDeletedFalse(contractorId).stream().map(ContractorWorkDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByContractorIdAndIsDeletedFalse(contractorId)).stream().map(ContractorWorkDto::from).toList();
     }
 
     public ContractorWorkDto create(ContractorWorkDto r) {

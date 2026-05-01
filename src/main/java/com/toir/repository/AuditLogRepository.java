@@ -23,7 +23,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM audit_logs WHERE is_deleted = false ORDER BY created_at DESC",
+    @Query(value = "SELECT * FROM audit_logs WHERE is_deleted = false ORDER BY updated_at DESC",
             countQuery = "SELECT COUNT(*) FROM audit_logs WHERE is_deleted = false",
             nativeQuery = true)
     Page<AuditLog> findAllByIsDeletedFalseOrderByCreatedAtDesc(Pageable pageable);

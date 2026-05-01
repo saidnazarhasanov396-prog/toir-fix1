@@ -21,7 +21,7 @@ public class SlaRuleService {
 
     @Transactional(readOnly = true)
     public List<SlaRuleDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(SlaRuleDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(SlaRuleDto::from).toList();
     }
 
     public SlaRuleDto create(SlaRuleDto r) {

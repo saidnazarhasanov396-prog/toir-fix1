@@ -88,9 +88,9 @@ public class PrometheusMetricsController {
     public ResponseEntity<String> prometheus() {
         StringBuilder sb = new StringBuilder();
 
-        long defectsOpen = defectRepository.findAllByIsDeletedFalse().stream()
+        long defectsOpen = com.toir.util.UpdatedAtSorter.descending(defectRepository.findAllByIsDeletedFalse()).stream()
                 .filter(d -> d.getStatus() != DefectStatus.CLOSED).count();
-        long workOrdersOpen = workOrderRepository.findAllByIsDeletedFalse().stream()
+        long workOrdersOpen = com.toir.util.UpdatedAtSorter.descending(workOrderRepository.findAllByIsDeletedFalse()).stream()
                 .filter(w -> w.getStatus() != WorkOrderStatus.CLOSED
                         && w.getStatus() != WorkOrderStatus.CANCELLED).count();
 

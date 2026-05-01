@@ -1,5 +1,6 @@
 package com.toir.controller;
 
+import com.toir.dto.ops.OpsMetricsResponse;
 import com.toir.repository.BrigadeRepository;
 import com.toir.repository.CalibrationRecordRepository;
 import com.toir.repository.UserCertificationRepository;
@@ -26,8 +27,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * ÐžÐ¿ÐµÑ€Ð°Ñ‚Ð¸Ð²Ð½Ñ‹Ðµ Ð¼ÐµÑ‚Ñ€Ð¸ÐºÐ¸ ÑÐ¸ÑÑ‚ÐµÐ¼Ñ‹ â€” Ð»Ñ‘Ð³ÐºÐ¸Ð¹ ÑÐ½Ð¸Ð¼Ð¾Ðº ÑÐ¾ÑÑ‚Ð¾ÑÐ½Ð¸Ñ Ð´Ð»Ñ Ð¼Ð¾Ð½Ð¸Ñ‚Ð¾Ñ€Ð¸Ð½Ð³Ð°
@@ -87,37 +86,34 @@ public class OpsMetricsController {
     }
 
     @GetMapping("/metrics")
-    public Map<String, Object> metrics() {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("timestamp", Instant.now().toString());
-
-        Map<String, Object> counts = new LinkedHashMap<>();
-        counts.put("equipment", equipmentRepository.countByIsDeletedFalse());
-        counts.put("defectsOpen", defectRepository.findAllByIsDeletedFalse().stream()
-                .filter(d -> d.getStatus() != DefectStatus.CLOSED).count());
-        counts.put("repairRequestsOpen", repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN.name())
-                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS.name()));
-        counts.put("workOrdersOpen", workOrderRepository.findAllByIsDeletedFalse().stream()
-                .filter(w -> w.getStatus() != WorkOrderStatus.CLOSED
-                        && w.getStatus() != WorkOrderStatus.CANCELLED).count());
-        counts.put("pprTasksPlanned", pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED.name()));
-        counts.put("pprTasksOverdue", pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE.name()));
-        counts.put("procurementDraft", procurementRequestRepository.countByStatusAndIsDeletedFalse(ProcurementRequestStatus.DRAFT.name()));
-        counts.put("brigades", brigadeRepository.countByIsDeletedFalse());
-        counts.put("conditionReadings", conditionReadingRepository.countByIsDeletedFalse());
-        counts.put("conditionAlarms", conditionReadingRepository
-                .findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("ALARM").size());
-        counts.put("activeCertifications", userCertificationRepository.findAllByStatusAndIsDeletedFalse("ACTIVE").size());
-        counts.put("expiredCertifications", userCertificationRepository.findAllByStatusAndIsDeletedFalse("EXPIRED").size());
-        counts.put("calibrationRecords", calibrationRecordRepository.countByIsDeletedFalse());
-        counts.put("inspectionRoutes", inspectionRouteRepository.countByIsDeletedFalse());
-        counts.put("inspectionRounds", inspectionRoundRepository.countByIsDeletedFalse());
-        counts.put("rcmSnapshots", rcmSnapshotRepository.countByIsDeletedFalse());
-        counts.put("notifications", notificationRepository.countByIsDeletedFalse());
-        counts.put("webhookDeliveries", webhookEventLogRepository.countByIsDeletedFalse());
-        m.put("counts", counts);
-
-        m.put("status", "UP");
-        return m;
+    public OpsMetricsResponse metrics() {
+        return new OpsMetricsResponse(
+                Instant.now().toString(),
+                new OpsMetricsResponse.Counts(
+                        equipmentRepository.countByIsDeletedFalse(),
+                        com.toir.util.UpdatedAtSorter.descending(defectRepository.findAllByIsDeletedFalse()).stream()
+                                .filter(d -> d.getStatus() != DefectStatus.CLOSED).count(),
+                        repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN.name())
+                                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS.name()),
+                        com.toir.util.UpdatedAtSorter.descending(workOrderRepository.findAllByIsDeletedFalse()).stream()
+                                .filter(w -> w.getStatus() != WorkOrderStatus.CLOSED
+                                        && w.getStatus() != WorkOrderStatus.CANCELLED).count(),
+                        pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED.name()),
+                        pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE.name()),
+                        procurementRequestRepository.countByStatusAndIsDeletedFalse(ProcurementRequestStatus.DRAFT.name()),
+                        brigadeRepository.countByIsDeletedFalse(),
+                        conditionReadingRepository.countByIsDeletedFalse(),
+                        conditionReadingRepository.findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("ALARM").size(),
+                        userCertificationRepository.findAllByStatusAndIsDeletedFalse("ACTIVE").size(),
+                        userCertificationRepository.findAllByStatusAndIsDeletedFalse("EXPIRED").size(),
+                        calibrationRecordRepository.countByIsDeletedFalse(),
+                        inspectionRouteRepository.countByIsDeletedFalse(),
+                        inspectionRoundRepository.countByIsDeletedFalse(),
+                        rcmSnapshotRepository.countByIsDeletedFalse(),
+                        notificationRepository.countByIsDeletedFalse(),
+                        webhookEventLogRepository.countByIsDeletedFalse()
+                ),
+                "UP"
+        );
     }
 }

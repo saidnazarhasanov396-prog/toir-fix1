@@ -43,7 +43,7 @@ public class InspectionService {
         if (departmentId != null) list = routeRepo.findAllByDepartmentIdAndIsDeletedFalse(departmentId);
         else if (Boolean.TRUE.equals(activeOnly)) list = routeRepo.findAllByActiveTrueAndIsDeletedFalse();
         else list = routeRepo.findAllByIsDeletedFalse();
-        return list.stream().map(InspectionRouteDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(list).stream().map(InspectionRouteDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -94,7 +94,7 @@ public class InspectionService {
         if (routeId != null) list = roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(routeId);
         else if (performedBy != null) list = roundRepo.findAllByPerformedByAndIsDeletedFalseOrderByStartedAtDesc(performedBy);
         else list = roundRepo.findAllByIsDeletedFalse();
-        return list.stream().map(InspectionRoundDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(list).stream().map(InspectionRoundDto::from).toList();
     }
 
     @Transactional(readOnly = true)

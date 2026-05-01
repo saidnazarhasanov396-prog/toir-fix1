@@ -38,7 +38,7 @@ public class BrigadeService {
         } else {
             list = brigadeRepo.findAllByIsDeletedFalse();
         }
-        return list.stream().map(BrigadeDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(list).stream().map(BrigadeDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -109,7 +109,7 @@ public class BrigadeService {
     @Transactional(readOnly = true)
     public List<BrigadeMemberDto> listMembers(UUID brigadeId) {
         load(brigadeId);
-        return memberRepo.findAllByBrigadeIdAndIsDeletedFalse(brigadeId).stream().map(BrigadeMemberDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(memberRepo.findAllByBrigadeIdAndIsDeletedFalse(brigadeId)).stream().map(BrigadeMemberDto::from).toList();
     }
 
     private Brigade load(UUID id) {

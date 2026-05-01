@@ -21,7 +21,7 @@ public class UnitOfMeasurementService {
 
     @Transactional(readOnly = true)
     public List<UnitOfMeasurementDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(UnitOfMeasurementDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(UnitOfMeasurementDto::from).toList();
     }
 
     public UnitOfMeasurementDto create(UnitOfMeasurementDto r) {
