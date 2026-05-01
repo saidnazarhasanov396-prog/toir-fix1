@@ -14,7 +14,22 @@ import java.util.UUID;
 public interface UnitOfMeasurementRepository extends JpaRepository<UnitOfMeasurement, UUID> {
     java.util.Optional<UnitOfMeasurement> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<UnitOfMeasurement> findAllByIsDeletedFalse();
+    @Query("""
+            SELECT u FROM UnitOfMeasurement u WHERE
+                        u.isDeleted = false AND
+                        u.code is null or  u.code = :code AND
+                        u.name is null or u.name = :name AND
+                        (cast(:search as string) is null or
+                        lower(u.code) like lower(concat('%', cast(:search as string), '%')) or
+                        lower(u.name) like lower(concat('%', cast(:search as string), '%')))
+            """
+    )
+
+    java.util.List<UnitOfMeasurement> findAllByIsDeletedFalse(
+            @Param("code") String code,
+            @Param("name") String name,
+            @Param("search") String search
+    );
 
     java.util.List<UnitOfMeasurement> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

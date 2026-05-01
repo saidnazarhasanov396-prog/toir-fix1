@@ -27,25 +27,25 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT * FROM audit_logs al WHERE al.is_deleted = false " +
-            "AND (COALESCE(?1::text, al.action::text) = al.action::text) " +
-            "AND (?2 IS NULL OR CAST(al.created_at AS date) >= ?2) " +
-            "AND (?3 IS NULL OR CAST(al.created_at AS date) <= ?3) " +
-            "AND (?5 IS NULL OR al.user_id = ?5) " +
-            "AND (?4 IS NULL OR al.message ILIKE ?4 OR al.entity_type ILIKE ?4) " +
+            "AND (COALESCE(:action::text, al.action::text) = al.action::text) " +
+            "AND (:fromDate IS NULL OR CAST(al.created_at AS date) >= :fromDate) " +
+            "AND (:toDate IS NULL OR CAST(al.created_at AS date) <= :toDate) " +
+            "AND (:userId IS NULL OR al.user_id = :userId) " +
+            "AND (:searchPattern IS NULL OR al.message ILIKE :searchPattern OR al.entity_type ILIKE :searchPattern) " +
             "ORDER BY al.created_at DESC",
             countQuery = "SELECT COUNT(*) FROM audit_logs al WHERE al.is_deleted = false " +
-            "AND (COALESCE(?1::text, al.action::text) = al.action::text) " +
-            "AND (?2 IS NULL OR CAST(al.created_at AS date) >= ?2) " +
-            "AND (?3 IS NULL OR CAST(al.created_at AS date) <= ?3) " +
-            "AND (?5 IS NULL OR al.user_id = ?5) " +
-            "AND (?4 IS NULL OR al.message ILIKE ?4 OR al.entity_type ILIKE ?4)",
+            "AND (COALESCE(:action::text, al.action::text) = al.action::text) " +
+            "AND (:fromDate IS NULL OR CAST(al.created_at AS date) >= :fromDate) " +
+            "AND (:toDate IS NULL OR CAST(al.created_at AS date) <= :toDate) " +
+            "AND (:userId IS NULL OR al.user_id = :userId) " +
+            "AND (:searchPattern IS NULL OR al.message ILIKE :searchPattern OR al.entity_type ILIKE :searchPattern)",
             nativeQuery = true)
     Page<AuditLog> findAllByIsDeletedFalseOrderByCreatedAtDesc(
-            @Param("1") AuditAction action,
-            @Param("2") LocalDate fromDate,
-            @Param("3") LocalDate toDate,
-            @Param("4") String searchPattern,
-            @Param("5") UUID userId,
+            @Param("action") AuditAction action,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate,
+            @Param("searchPattern") String searchPattern,
+            @Param("userId") UUID userId,
             Pageable pageable
             );
 }
