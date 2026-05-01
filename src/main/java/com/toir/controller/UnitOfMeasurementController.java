@@ -23,11 +23,9 @@ public class UnitOfMeasurementController {
     }
 
     @GetMapping public List<UnitOfMeasurementDto> list(
-            @RequestParam(required = false) String code,
-            @RequestParam(required = false ) String name,
             @RequestParam(required = false) String search
             ) {
-        return service.findAll(code,name, search);
+        return service.findAll(search);
     }
 
     @PostMapping

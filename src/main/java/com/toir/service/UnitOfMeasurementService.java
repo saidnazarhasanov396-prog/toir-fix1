@@ -20,8 +20,8 @@ public class UnitOfMeasurementService {
 
 
     @Transactional(readOnly = true)
-    public List<UnitOfMeasurementDto> findAll(String code, String name, String search) {
-        return repository.findAllByIsDeletedFalse(code,name, search).stream().map(UnitOfMeasurementDto::from).toList();
+    public List<UnitOfMeasurementDto> findAll(String search) {
+        return repository.findAllByIsDeletedFalse(search).stream().map(UnitOfMeasurementDto::from).toList();
     }
 
     public UnitOfMeasurementDto create(UnitOfMeasurementDto r) {

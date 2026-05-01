@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.UUID;
 
 
@@ -15,19 +16,13 @@ public interface UnitOfMeasurementRepository extends JpaRepository<UnitOfMeasure
     java.util.Optional<UnitOfMeasurement> findByIdAndIsDeletedFalse(java.util.UUID id);
 
     @Query("""
-            SELECT u FROM UnitOfMeasurement u WHERE
-                        u.isDeleted = false AND
-                        u.code is null or  u.code = :code AND
-                        u.name is null or u.name = :name AND
-                        (cast(:search as string) is null or
-                        lower(u.code) like lower(concat('%', cast(:search as string), '%')) or
-                        lower(u.name) like lower(concat('%', cast(:search as string), '%')))
-            """
-    )
-
-    java.util.List<UnitOfMeasurement> findAllByIsDeletedFalse(
-            @Param("code") String code,
-            @Param("name") String name,
+            SELECT u FROM UnitOfMeasurement u
+            WHERE u.isDeleted = false
+            AND (cast(:search as string) IS NULL OR
+                 lower(u.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                 lower(u.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            """)
+    List<UnitOfMeasurement> findAllByIsDeletedFalse(
             @Param("search") String search
     );
 
