@@ -34,7 +34,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             "AND (CAST(:searchPattern AS text) IS NULL OR al.message ILIKE CAST(:searchPattern AS text) OR al.entity_type ILIKE CAST(:searchPattern AS text)) " +
             "ORDER BY al.created_at DESC",
             countQuery = "SELECT COUNT(*) FROM audit_logs al WHERE al.is_deleted = false " +
-            "AND (AND (CAST(:action AS text) IS NULL OR al.action = CAST(:action AS text)) " +
+            "AND (CAST(:action AS text) IS NULL OR al.action = CAST(:action AS text)) " +
             "AND (CAST(:fromDate AS date) IS NULL OR CAST(al.created_at AS date) >= CAST(:fromDate AS date)) " +
             "AND (CAST(:toDate AS date) IS NULL OR CAST(al.created_at AS date) <= CAST(:toDate AS date)) " +
             "AND (CAST(:userId AS uuid) IS NULL OR al.user_id = CAST(:userId AS uuid)) " +
