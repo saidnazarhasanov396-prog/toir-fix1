@@ -8,19 +8,32 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 
 @Repository
 public interface CalibrationRecordRepository extends JpaRepository<CalibrationRecord, UUID> {
-    java.util.Optional<CalibrationRecord> findByIdAndIsDeletedFalse(java.util.UUID id);
+    Optional<CalibrationRecord> findByIdAndIsDeletedFalse(UUID id);
 
-    java.util.List<CalibrationRecord> findAllByIsDeletedFalse();
+    List<CalibrationRecord> findAllByIsDeletedFalse();
 
-    java.util.List<CalibrationRecord> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query("""
+            SELECT cr FROM CalibrationRecord cr
+                        WHERE cr.isDeleted = false
+                        AND (CAST(:param AS string) IS NULL OR CAST(:param AS string) = '' OR
+                            LOWER(cr.certificateNumber) LIKE LOWER(CONCAT('%', CAST(:param AS string), '%')) OR
+                            LOWER(cr.performedBy) LIKE LOWER(CONCAT('%', CAST(:param AS string), '%')))
+            """)
+    List<CalibrationRecord> findAll(
+            @Param("param") String search
+    );
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    List<CalibrationRecord> findAllByIdInAndIsDeletedFalse(Collection<UUID> ids);
+
+    boolean existsByIdAndIsDeletedFalse(UUID id);
 
     long countByIsDeletedFalse();
 

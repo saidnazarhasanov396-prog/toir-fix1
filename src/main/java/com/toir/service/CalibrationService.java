@@ -7,12 +7,15 @@ import com.toir.dto.calibration.CalibrationRecordRequest;
 import com.toir.exception.RestException;
 import com.toir.repository.EquipmentRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+
+import static java.util.Locale.filter;
 
 @Service
 @Transactional
@@ -29,8 +32,8 @@ public class CalibrationService {
     }
 
     @Transactional(readOnly = true)
-    public List<CalibrationRecordDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repo.findAllByIsDeletedFalse()).stream().map(CalibrationRecordDto::from).toList();
+    public List<CalibrationRecordDto> findAll(String search) {
+        return com.toir.util.UpdatedAtSorter.descending(repo.findAll(search)).stream().map(CalibrationRecordDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -84,5 +87,12 @@ public class CalibrationService {
                 .orElseThrow(() -> RestException.notFound("Calibration record not found: " + id));
         c.setDeleted(true);
         repo.save(c);
+    }
+
+    public CalibrationRecordDto findById(UUID id) {
+        return repo.findById(id)
+                .filter(c -> !c.isDeleted())
+                .map(CalibrationRecordDto::from)
+                .orElseThrow(() -> RestException.notFound("Calibration record not found: " + id));
     }
 }
