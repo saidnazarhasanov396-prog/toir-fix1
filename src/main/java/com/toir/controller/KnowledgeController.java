@@ -34,10 +34,10 @@ public class KnowledgeController {
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) String kind
     ) {
-        if (equipmentId != null) return repo.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
-        if (equipmentTypeId != null) return repo.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId);
-        if (kind != null) return repo.findAllByKindAndIsDeletedFalse(kind);
-        return repo.findAllByIsDeletedFalse();
+        if (equipmentId != null) return com.toir.util.UpdatedAtSorter.descending(repo.findAllByEquipmentIdAndIsDeletedFalse(equipmentId));
+        if (equipmentTypeId != null) return com.toir.util.UpdatedAtSorter.descending(repo.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId));
+        if (kind != null) return com.toir.util.UpdatedAtSorter.descending(repo.findAllByKindAndIsDeletedFalse(kind));
+        return com.toir.util.UpdatedAtSorter.descending(repo.findAllByIsDeletedFalse());
     }
 
     @GetMapping("/{id}")

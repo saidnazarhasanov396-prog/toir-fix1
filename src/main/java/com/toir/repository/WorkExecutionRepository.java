@@ -32,7 +32,7 @@ public interface WorkExecutionRepository extends JpaRepository<WorkExecution, UU
             SELECT * FROM work_executions
             WHERE is_deleted = false
             AND (cast(:workOrderId as varchar) IS NULL OR work_order_id = cast(:workOrderId as uuid))
-            ORDER BY started_at DESC""",
+            ORDER BY updated_at DESC""",
             countQuery = """
             SELECT COUNT(*) FROM work_executions
             WHERE is_deleted = false

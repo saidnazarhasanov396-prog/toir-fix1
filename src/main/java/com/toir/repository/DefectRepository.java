@@ -38,7 +38,7 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
             or lower(d.severity) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.failure_reason) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.root_cause) like lower(concat('%', cast(:search as varchar), '%')))
-            order by d.detected_at desc
+            order by d.updated_at desc
             """, countQuery = """
             select count(*) from defects d where
             d.is_deleted = false

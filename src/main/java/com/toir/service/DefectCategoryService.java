@@ -1,5 +1,4 @@
 package com.toir.service;
-import com.toir.entity.Defect;
 import com.toir.entity.DefectCategory;
 import com.toir.repository.DefectCategoryRepository;
 
@@ -9,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,17 +26,17 @@ public class DefectCategoryService {
     }
 
     public DefectCategoryDto create(DefectCategoryDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Defect category code already exists: " + r.code());
-        }
         DefectCategory e = new DefectCategory();
-        e.setCode(r.code()); e.setName(r.name()); e.setDescription(r.description());
+        e.setCode(nextCode());
+        e.setName(r.name());
+        e.setDescription(r.description());
         return DefectCategoryDto.from(repository.save(e));
     }
 
     public DefectCategoryDto update(UUID id, DefectCategoryDto r) {
         DefectCategory e = getOrThrow(id);
-        e.setCode(r.code()); e.setName(r.name()); e.setDescription(r.description());
+        e.setName(r.name());
+        e.setDescription(r.description());
         return DefectCategoryDto.from(e);
     }
 
@@ -47,5 +47,21 @@ public class DefectCategoryService {
     private DefectCategory getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Defect category not found: " + id));
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "DC-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("DC", year, sequence);
+        while (repository.existsByCode(code)) {
+            sequence++;
+            code = formatCode("DC", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }

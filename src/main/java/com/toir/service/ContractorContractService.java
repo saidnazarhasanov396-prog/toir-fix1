@@ -20,7 +20,7 @@ public class ContractorContractService {
 
     @Transactional(readOnly = true)
     public List<ContractorContractDto> findByContractor(UUID contractorId) {
-        return repository.findAllByContractorIdAndIsDeletedFalse(contractorId).stream().map(ContractorContractDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByContractorIdAndIsDeletedFalse(contractorId)).stream().map(ContractorContractDto::from).toList();
     }
 
     public ContractorContractDto create(ContractorContractDto r) {

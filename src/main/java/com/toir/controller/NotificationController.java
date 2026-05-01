@@ -3,7 +3,11 @@ import com.toir.service.NotificationService;
 
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
+import com.toir.dto.common.PageResponseWithSummary;
+import com.toir.dto.notification.FinancialReviewInboxSummary;
 import com.toir.dto.notification.NotificationDto;
+import com.toir.dto.notification.NotificationDispatchResponse;
+import com.toir.dto.notification.NotificationEvaluationResponse;
 import com.toir.dto.notification.NotificationSummaryDto;
 import com.toir.dto.sla.SlaRuleDto;
 import com.toir.service.SlaRuleService;
@@ -64,7 +68,7 @@ public class NotificationController {
     public NotificationDto markRead(@PathVariable UUID id) { return service.markRead(id); }
 
     @GetMapping("/financial-review-inbox")
-    public java.util.Map<String, Object> financialReviewInbox(
+    public PageResponseWithSummary<NotificationDto, FinancialReviewInboxSummary> financialReviewInbox(
             @CurrentUser AuthenticatedUser user,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
@@ -76,18 +80,18 @@ public class NotificationController {
         long read = items.stream().filter(n -> n.status() == NotificationStatus.READ).count();
         long dueSoon = items.stream().filter(n -> n.severity() == NotificationSeverity.WARNING).count();
         long overdue = items.stream().filter(n -> n.severity() == NotificationSeverity.CRITICAL).count();
-        return PaginationUtils.pageResponse(
+        return PageResponseWithSummary.of(
                 items,
                 page,
                 pageSize,
-                java.util.Map.of("summary", java.util.Map.of(
-                        "total", items.size(),
-                        "unread", items.size() - read,
-                        "dueSoon", dueSoon,
-                        "overdue", overdue,
-                        "acknowledged", read,
-                        "unacknowledged", items.size() - read
-                ))
+                new FinancialReviewInboxSummary(
+                        items.size(),
+                        items.size() - read,
+                        dueSoon,
+                        overdue,
+                        read,
+                        items.size() - read
+                )
         );
     }
 
@@ -96,7 +100,7 @@ public class NotificationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize
     ) {
-        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        var pageable = PaginationUtils.updatedAtDescPageRequest(page, pageSize);
         List<SlaRuleDto> all = slaRuleService.findAll();
         int fromIndex = Math.min(PaginationUtils.offset(pageable), all.size());
         int toIndex = Math.min(fromIndex + pageable.getPageSize(), all.size());
@@ -105,16 +109,12 @@ public class NotificationController {
     }
 
     @PostMapping("/evaluate")
-    public java.util.Map<String, Object> evaluate() {
-        return java.util.Map.of(
-                "createdNotifications", 0,
-                "createdEscalations", 0,
-                "resolvedEscalations", 0
-        );
+    public NotificationEvaluationResponse evaluate() {
+        return new NotificationEvaluationResponse(0, 0, 0);
     }
 
     @PostMapping("/dispatch-pending")
-    public java.util.Map<String, Object> dispatch() {
-        return java.util.Map.of("dispatched", 0);
+    public NotificationDispatchResponse dispatch() {
+        return new NotificationDispatchResponse(0);
     }
 }

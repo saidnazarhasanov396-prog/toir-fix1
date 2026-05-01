@@ -22,7 +22,9 @@ public class DepartmentService {
 
     @Transactional(readOnly = true)
     public List<DepartmentDto> findAll(DepartmentType type, String search) {
-        return repository.findAllByIsDeletedFalseAndByType(type,search).stream().map(DepartmentDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalseAndByType(type, search)).stream()
+                .map(DepartmentDto::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)

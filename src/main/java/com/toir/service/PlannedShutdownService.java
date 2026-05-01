@@ -22,7 +22,7 @@ public class PlannedShutdownService {
 
     @Transactional(readOnly = true)
     public List<PlannedShutdownDto> findByDepartment(UUID departmentId) {
-        return repository.findAllByDepartmentIdAndIsDeletedFalseOrderByStartAtDesc(departmentId).stream()
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByDepartmentIdAndIsDeletedFalseOrderByStartAtDesc(departmentId)).stream()
                 .map(PlannedShutdownDto::from).toList();
     }
 

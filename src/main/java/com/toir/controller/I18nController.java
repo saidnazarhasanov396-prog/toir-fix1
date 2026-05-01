@@ -1,5 +1,6 @@
 package com.toir.controller;
 
+import com.toir.dto.i18n.I18nBundleResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,8 +22,8 @@ public class I18nController {
     private static final Map<String, Map<String, Map<String, String>>> BUNDLES = build();
 
     @GetMapping("/{lang}")
-    public Map<String, Map<String, String>> bundle(@PathVariable String lang) {
-        return BUNDLES.getOrDefault(lang, BUNDLES.get("en"));
+    public I18nBundleResponse bundle(@PathVariable String lang) {
+        return I18nBundleResponse.from(BUNDLES.getOrDefault(lang, BUNDLES.get("en")));
     }
 
     private static Map<String, Map<String, Map<String, String>>> build() {

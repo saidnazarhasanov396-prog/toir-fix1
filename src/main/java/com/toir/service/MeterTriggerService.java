@@ -25,7 +25,7 @@ public class MeterTriggerService {
 
     public List<MeterTriggerMatch> dueTriggers(UUID equipmentId) {
         List<EquipmentMeter> meters = meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId);
-        List<MaintenanceRegulation> regs = regulationRepository.findAllByIsDeletedFalse().stream()
+        List<MaintenanceRegulation> regs = com.toir.util.UpdatedAtSorter.descending(regulationRepository.findAllByIsDeletedFalse()).stream()
                 .filter(r -> r.isActive() && r.getTriggerMeterType() != null
                         && r.getTriggerMeterInterval() != null && r.getTriggerMeterInterval() > 0)
                 .toList();

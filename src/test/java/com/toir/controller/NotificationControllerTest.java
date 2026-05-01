@@ -1,5 +1,7 @@
 package com.toir.controller;
 
+import com.toir.dto.common.PageResponseWithSummary;
+import com.toir.dto.notification.FinancialReviewInboxSummary;
 import com.toir.dto.notification.NotificationDto;
 import com.toir.enums.NotificationChannel;
 import com.toir.enums.NotificationSeverity;
@@ -15,7 +17,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,42 +43,23 @@ class NotificationControllerTest {
                 notification(NotificationStatus.SENT, NotificationSeverity.INFO, "WORK_ORDER")
         ));
 
-        Map<String, Object> response = controller.financialReviewInbox(
+        PageResponseWithSummary<NotificationDto, FinancialReviewInboxSummary> response = controller.financialReviewInbox(
                 new AuthenticatedUser(userId.toString(), "admin", "admin@test.local", "Admin", null, "ADMIN", List.of()),
                 1,
                 1
         );
 
-        assertThat(response).containsKeys(
-                "content",
-                "pageable",
-                "last",
-                "totalElements",
-                "totalPages",
-                "first",
-                "size",
-                "number",
-                "sort",
-                "numberOfElements",
-                "empty",
-                "summary"
-        );
-        assertThat(response).doesNotContainKeys("items", "meta");
-        assertThat(response.get("totalElements")).isEqualTo(2L);
-        assertThat(response.get("numberOfElements")).isEqualTo(1);
-        assertThat(response.get("number")).isEqualTo(1);
-        assertThat(response.get("size")).isEqualTo(1);
-        assertThat((List<?>) response.get("content")).hasSize(1);
-
-        Map<?, ?> pageable = (Map<?, ?>) response.get("pageable");
-        assertThat(pageable.get("pageNumber")).isEqualTo(1);
-        assertThat(pageable.get("pageSize")).isEqualTo(1);
-
-        Map<?, ?> summary = (Map<?, ?>) response.get("summary");
-        assertThat(summary.get("total")).isEqualTo(2);
-        assertThat(summary.get("unread")).isEqualTo(1L);
-        assertThat(summary.get("dueSoon")).isEqualTo(1L);
-        assertThat(summary.get("overdue")).isEqualTo(1L);
+        assertThat(response.totalElements()).isEqualTo(2L);
+        assertThat(response.numberOfElements()).isEqualTo(1);
+        assertThat(response.number()).isEqualTo(1);
+        assertThat(response.size()).isEqualTo(1);
+        assertThat(response.content()).hasSize(1);
+        assertThat(response.pageable().pageNumber()).isEqualTo(1);
+        assertThat(response.pageable().pageSize()).isEqualTo(1);
+        assertThat(response.summary().total()).isEqualTo(2);
+        assertThat(response.summary().unread()).isEqualTo(1L);
+        assertThat(response.summary().dueSoon()).isEqualTo(1L);
+        assertThat(response.summary().overdue()).isEqualTo(1L);
     }
 
     private static NotificationDto notification(NotificationStatus status,

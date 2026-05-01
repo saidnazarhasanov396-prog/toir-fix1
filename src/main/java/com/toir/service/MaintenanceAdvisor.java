@@ -42,7 +42,7 @@ public class MaintenanceAdvisor {
     public List<EquipmentAdvice> adviceAll() {
         Map<UUID, EquipmentRiskScore> scoreByEq = rcmService.computeAll().stream()
                 .collect(Collectors.toMap(EquipmentRiskScore::equipmentId, s -> s));
-        Map<UUID, Long> openDefectsByEq = defectRepository.findAllByIsDeletedFalse().stream()
+        Map<UUID, Long> openDefectsByEq = com.toir.util.UpdatedAtSorter.descending(defectRepository.findAllByIsDeletedFalse()).stream()
                 .filter(d -> d.getStatus() != DefectStatus.CLOSED)
                 .collect(Collectors.groupingBy(Defect::getEquipmentId, Collectors.counting()));
         LocalDate today = LocalDate.now();

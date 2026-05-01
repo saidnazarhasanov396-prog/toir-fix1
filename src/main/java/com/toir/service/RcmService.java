@@ -37,15 +37,15 @@ public class RcmService {
 
 
     public List<EquipmentRiskScore> computeAll() {
-        Map<UUID, CriticalityClass> critById = criticalityClassRepository.findAllByIsDeletedFalse().stream()
+        Map<UUID, CriticalityClass> critById = com.toir.util.UpdatedAtSorter.descending(criticalityClassRepository.findAllByIsDeletedFalse()).stream()
                 .collect(Collectors.toMap(CriticalityClass::getId, c -> c));
-        Map<UUID, Long> openDefectsByEq = defectRepository.findAllByIsDeletedFalse().stream()
+        Map<UUID, Long> openDefectsByEq = com.toir.util.UpdatedAtSorter.descending(defectRepository.findAllByIsDeletedFalse()).stream()
                 .filter(d -> d.getStatus() != DefectStatus.CLOSED)
                 .collect(Collectors.groupingBy(Defect::getEquipmentId, Collectors.counting()));
-        Map<UUID, ReliabilityMetric> metricByEq = reliabilityMetricRepository.findAllByIsDeletedFalse().stream()
+        Map<UUID, ReliabilityMetric> metricByEq = com.toir.util.UpdatedAtSorter.descending(reliabilityMetricRepository.findAllByIsDeletedFalse()).stream()
                 .collect(Collectors.toMap(ReliabilityMetric::getEquipmentId, m -> m, (a, b) -> a));
 
-        return equipmentRepository.findAllByIsDeletedFalse().stream()
+        return com.toir.util.UpdatedAtSorter.descending(equipmentRepository.findAllByIsDeletedFalse()).stream()
                 .map(eq -> score(eq, critById, openDefectsByEq, metricByEq))
                 .sorted(Comparator.comparingInt(EquipmentRiskScore::riskScore).reversed())
                 .toList();
@@ -81,7 +81,7 @@ public class RcmService {
     }
 
     public List<RcmSnapshot> historyFor(UUID equipmentId) {
-        return snapshotRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByCapturedAtDesc(equipmentId);
+        return com.toir.util.UpdatedAtSorter.descending(snapshotRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByCapturedAtDesc(equipmentId));
     }
 
     private EquipmentRiskScore score(Equipment eq,

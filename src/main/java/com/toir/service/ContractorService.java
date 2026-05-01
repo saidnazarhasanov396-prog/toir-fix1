@@ -21,7 +21,7 @@ public class ContractorService {
 
     @Transactional(readOnly = true)
     public List<ContractorDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(ContractorDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(ContractorDto::from).toList();
     }
 
     @Transactional(readOnly = true)

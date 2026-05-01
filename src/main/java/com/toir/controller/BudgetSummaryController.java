@@ -9,8 +9,16 @@ import com.toir.repository.ActualCostRepository;
 import com.toir.enums.ActualCostStatus;
 import com.toir.entity.CostCategory;
 import com.toir.repository.CostCategoryRepository;
+import com.toir.dto.budget.ActualCostBudgetRow;
+import com.toir.dto.budget.ActualCostHandoverSummary;
+import com.toir.dto.budget.ActualCostRegisterSummary;
+import com.toir.dto.budget.ActualCostReviewActivitySummary;
+import com.toir.dto.budget.ActualCostReviewHistoryResponse;
+import com.toir.dto.budget.BudgetSummaryResponse;
+import com.toir.dto.budget.ContractorWorkRecommendationResponse;
+import com.toir.dto.common.PageResponse;
+import com.toir.dto.common.PageResponseWithSummary;
 import com.toir.dto.costcategory.CostCategoryDto;
-import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -51,63 +59,67 @@ public class BudgetSummaryController {
     }
 
     @GetMapping("/summary")
-    public Map<String, Object> summary() {
-        List<MaintenanceBudget> budgets = budgetRepository.findAllByIsDeletedFalse();
+    public BudgetSummaryResponse summary() {
+        List<MaintenanceBudget> budgets = com.toir.util.UpdatedAtSorter.descending(budgetRepository.findAllByIsDeletedFalse());
         double totalPlanned = budgets.stream().mapToDouble(MaintenanceBudget::getTotalPlanned).sum();
         double totalActual = budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum();
         double variance = totalPlanned - totalActual;
         double executionPercent = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
 
-        Map<UUID, CostCategory> catById = costCategoryRepository.findAllByIsDeletedFalse().stream()
+        Map<UUID, CostCategory> catById = com.toir.util.UpdatedAtSorter.descending(costCategoryRepository.findAllByIsDeletedFalse()).stream()
                 .collect(Collectors.toMap(CostCategory::getId, c -> c));
 
-        List<Map<String, Object>> byCategory = lineRepository.findAllByIsDeletedFalse().stream()
+        List<BudgetSummaryResponse.CategoryRow> byCategory = com.toir.util.UpdatedAtSorter.descending(lineRepository.findAllByIsDeletedFalse()).stream()
                 .collect(Collectors.groupingBy(BudgetLine::getCostCategoryId))
                 .entrySet().stream()
                 .map(entry -> {
                     CostCategory cat = catById.get(entry.getKey());
                     double planned = entry.getValue().stream().mapToDouble(BudgetLine::getPlannedAmount).sum();
                     double actual = entry.getValue().stream().mapToDouble(BudgetLine::getActualAmount).sum();
-                    Map<String, Object> row = new java.util.HashMap<>();
-                    row.put("category", cat != null
-                            ? Map.of("id", cat.getId(), "code", cat.getCode(), "name", cat.getName())
-                            : Map.of("id", entry.getKey(), "code", "â€”", "name", "â€”"));
-                    row.put("plannedAmount", planned);
-                    row.put("actualAmount", actual);
-                    row.put("variance", planned - actual);
-                    return row;
+                    return new BudgetSummaryResponse.CategoryRow(
+                            cat != null
+                                    ? new BudgetSummaryResponse.CategoryRef(cat.getId(), cat.getCode(), cat.getName())
+                                    : new BudgetSummaryResponse.CategoryRef(entry.getKey(), "—", "—"),
+                            planned,
+                            actual,
+                            planned - actual
+                    );
                 })
                 .toList();
 
-        Map<String, Object> result = new java.util.HashMap<>();
-        result.put("items", budgets.stream().map(b -> Map.of(
-                "id", b.getId(),
-                "year", b.getYear(),
-                "month", b.getMonth() != null ? b.getMonth() : 0,
-                "totalPlanned", b.getTotalPlanned(),
-                "totalActual", b.getTotalActual()
-        )).toList());
-        result.put("totalPlanned", totalPlanned);
-        result.put("totalActual", totalActual);
-        result.put("totalRemaining", variance);
-        result.put("variance", variance);
-        result.put("executionPercent", executionPercent);
-        result.put("byCategory", byCategory);
-        return result;
+        return new BudgetSummaryResponse(
+                budgets.stream()
+                        .map(b -> new BudgetSummaryResponse.Item(
+                                b.getId(),
+                                b.getYear(),
+                                b.getMonth() != null ? b.getMonth() : 0,
+                                b.getTotalPlanned(),
+                                b.getTotalActual()
+                        ))
+                        .toList(),
+                totalPlanned,
+                totalActual,
+                variance,
+                variance,
+                executionPercent,
+                byCategory
+        );
     }
 
     @GetMapping("/cost-categories")
-    public CostCategoryDto[] costCategories() {
-        return costCategoryRepository.findAllByIsDeletedFalse().stream()
+    public PageResponse<CostCategoryDto> costCategories(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        return PageResponse.of(com.toir.util.UpdatedAtSorter.descending(costCategoryRepository.findAllByIsDeletedFalse()).stream()
                 .map(CostCategoryDto::from)
-                .toArray(CostCategoryDto[]::new);
+                .toList(), page, pageSize);
     }
 
     @GetMapping("/actual-costs/register")
-    public Map<String, Object> actualCostRegister(
+    public PageResponseWithSummary<ActualCostBudgetRow, ActualCostRegisterSummary> actualCostRegister(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        List<ActualCost> items = actualCostRepository.findAllByIsDeletedFalse();
+        List<ActualCost> items = com.toir.util.UpdatedAtSorter.descending(actualCostRepository.findAllByIsDeletedFalse());
         double totalAmount = items.stream().mapToDouble(ActualCost::getAmount).sum();
         double approvedAmount = items.stream().filter(c -> c.getStatus() == ActualCostStatus.APPROVED)
                 .mapToDouble(ActualCost::getAmount).sum();
@@ -120,131 +132,132 @@ public class BudgetSummaryController {
         long pendingCount = items.stream().filter(c -> c.getStatus() == ActualCostStatus.PENDING).count();
         long rejectedCount = items.stream().filter(c -> c.getStatus() == ActualCostStatus.REJECTED).count();
 
-        Map<String, Object> summary = new java.util.HashMap<>();
-        summary.put("totalAmount", totalAmount);
-        summary.put("approvedAmount", approvedAmount);
-        summary.put("pendingAmount", pendingAmount);
-        summary.put("rejectedAmount", rejectedAmount);
-        summary.put("totalCount", (long) items.size());
-        summary.put("approvedCount", approvedCount);
-        summary.put("pendingCount", pendingCount);
-        summary.put("rejectedCount", rejectedCount);
+        ActualCostRegisterSummary summary = new ActualCostRegisterSummary(
+                totalAmount,
+                approvedAmount,
+                pendingAmount,
+                rejectedAmount,
+                items.size(),
+                approvedCount,
+                pendingCount,
+                rejectedCount
+        );
 
-        return PaginationUtils.pageResponse(
+        return PageResponseWithSummary.of(
                 items.stream().map(this::actualCostRow).toList(),
                 page,
                 pageSize,
-                Map.of("summary", summary)
+                summary
         );
     }
 
     @GetMapping("/actual-costs/review-queue")
-    public Map<String, Object> reviewQueue(
+    public PageResponse<ActualCostBudgetRow> reviewQueue(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING);
-        return PaginationUtils.pageResponse(pending.stream().map(this::actualCostRow).toList(), page, pageSize);
+        List<ActualCost> pending = com.toir.util.UpdatedAtSorter.descending(actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING));
+        return PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, pageSize);
     }
 
     @GetMapping("/actual-costs/{id}/review-history")
-    public Map<String, Object> reviewHistory(@PathVariable UUID id) {
+    public ActualCostReviewHistoryResponse reviewHistory(@PathVariable UUID id) {
         return actualCostRepository.findByIdAndIsDeletedFalse(id)
-                .map(c -> Map.<String, Object>of(
-                        "actualCostId", id.toString(),
-                        "events", c.getReviewedAt() != null
-                                ? List.of(Map.of(
-                                        "reviewedAt", c.getReviewedAt(),
-                                        "status", c.getStatus().name(),
-                                        "reviewedById", c.getReviewedById() != null ? c.getReviewedById() : "",
-                                        "comment", c.getReviewComment() != null ? c.getReviewComment() : ""))
+                .map(c -> new ActualCostReviewHistoryResponse(
+                        id.toString(),
+                        c.getReviewedAt() != null
+                                ? List.of(new ActualCostReviewHistoryResponse.Event(
+                                        c.getReviewedAt(),
+                                        c.getStatus().name(),
+                                        c.getReviewedById(),
+                                        c.getReviewComment() != null ? c.getReviewComment() : ""
+                                ))
                                 : List.of()
                 ))
-                .orElse(Map.of("actualCostId", id.toString(), "events", List.of()));
+                .orElse(new ActualCostReviewHistoryResponse(id.toString(), List.of()));
     }
 
     @GetMapping("/actual-costs/review-activity")
-    public Map<String, Object> reviewActivity(
+    public PageResponseWithSummary<ActualCostBudgetRow, ActualCostReviewActivitySummary> reviewActivity(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         Instant weekAgo = Instant.now().minus(7, ChronoUnit.DAYS);
-        List<ActualCost> recent = actualCostRepository.findAllByIsDeletedFalse().stream()
+        List<ActualCost> recent = com.toir.util.UpdatedAtSorter.descending(actualCostRepository.findAllByIsDeletedFalse()).stream()
                 .filter(c -> c.getReviewedAt() != null && c.getReviewedAt().isAfter(weekAgo))
                 .toList();
 
-        Map<String, Object> summary = Map.of(
-                "total", recent.size(),
-                "routeEvents", 0,
-                "slaEvents", 0,
-                "reviewEvents", recent.size(),
-                "auditRecords", recent.size(),
-                "affectedActualCosts", recent.stream().map(ActualCost::getId).distinct().count()
+        ActualCostReviewActivitySummary summary = new ActualCostReviewActivitySummary(
+                recent.size(),
+                0,
+                0,
+                recent.size(),
+                0,
+                0,
+                recent.size(),
+                recent.stream().map(ActualCost::getId).distinct().count()
         );
 
-        return PaginationUtils.pageResponse(
+        return PageResponseWithSummary.of(
                 recent.stream().map(this::actualCostRow).toList(),
                 page,
                 pageSize,
-                Map.of("summary", summary)
+                summary
         );
     }
 
     @GetMapping("/actual-costs/handovers")
-    public Map<String, Object> handovers(
+    public PageResponseWithSummary<ActualCostBudgetRow, ActualCostHandoverSummary> handovers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        Map<String, Object> summary = new java.util.HashMap<>();
-        summary.put("total", 0);
-        summary.put("uniqueActualCosts", 0);
-        summary.put("uniqueDepartments", 0);
-        summary.put("uniqueTargetRoles", 0);
-        summary.put("uniqueActors", 0);
-        summary.put("byTargetRole", List.of());
-        summary.put("byDepartment", List.of());
+        ActualCostHandoverSummary summary = new ActualCostHandoverSummary(
+                0,
+                0,
+                0,
+                0,
+                0,
+                List.of(),
+                List.of()
+        );
 
-        return PaginationUtils.pageResponse(List.of(), page, pageSize, Map.of("summary", summary));
+        return PageResponseWithSummary.of(List.of(), page, pageSize, summary);
     }
 
     @GetMapping("/actual-costs/approval-pack")
-    public Map<String, Object> approvalPack(
+    public PageResponse<ActualCostBudgetRow> approvalPack(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING);
-        return PaginationUtils.pageResponse(pending.stream().map(this::actualCostRow).toList(), page, pageSize);
+        List<ActualCost> pending = com.toir.util.UpdatedAtSorter.descending(actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING));
+        return PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, pageSize);
     }
 
     @GetMapping("/actual-costs/review-history-pack")
-    public Map<String, Object> reviewHistoryPack(
+    public PageResponse<ActualCostBudgetRow> reviewHistoryPack(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        List<ActualCost> reviewed = actualCostRepository.findAllByIsDeletedFalse().stream()
+        List<ActualCost> reviewed = com.toir.util.UpdatedAtSorter.descending(actualCostRepository.findAllByIsDeletedFalse()).stream()
                 .filter(c -> c.getReviewedAt() != null)
                 .toList();
-        return PaginationUtils.pageResponse(reviewed.stream().map(this::actualCostRow).toList(), page, pageSize);
+        return PageResponse.of(reviewed.stream().map(this::actualCostRow).toList(), page, pageSize);
     }
 
     @GetMapping("/contractor-works/{id}/recommendation")
-    public Map<String, Object> contractorWorkRecommendation(@PathVariable UUID id) {
-        return Map.of(
-                "contractorWorkId", id.toString(),
-                "recommendedAmount", 0,
-                "candidates", List.of()
-        );
+    public ContractorWorkRecommendationResponse contractorWorkRecommendation(@PathVariable UUID id) {
+        return new ContractorWorkRecommendationResponse(id.toString(), 0, List.of());
     }
 
-    private Map<String, Object> actualCostRow(ActualCost c) {
-        Map<String, Object> row = new java.util.HashMap<>();
-        row.put("id", c.getId());
-        row.put("workOrderId", c.getWorkOrderId());
-        row.put("repairRequestId", c.getRepairRequestId());
-        row.put("contractorWorkId", c.getContractorWorkId());
-        row.put("costCategoryId", c.getCostCategoryId());
-        row.put("status", c.getStatus().name());
-        row.put("amount", c.getAmount());
-        row.put("costDate", c.getCostDate());
-        row.put("notes", c.getNotes());
-        row.put("reviewedAt", c.getReviewedAt());
-        row.put("reviewedById", c.getReviewedById());
-        row.put("reviewComment", c.getReviewComment());
-        return row;
+    private ActualCostBudgetRow actualCostRow(ActualCost c) {
+        return new ActualCostBudgetRow(
+                c.getId(),
+                c.getWorkOrderId(),
+                c.getRepairRequestId(),
+                c.getContractorWorkId(),
+                c.getCostCategoryId(),
+                c.getStatus().name(),
+                c.getAmount(),
+                c.getCostDate(),
+                c.getNotes(),
+                c.getReviewedAt(),
+                c.getReviewedById(),
+                c.getReviewComment()
+        );
     }
 }

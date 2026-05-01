@@ -11,8 +11,8 @@ import com.toir.dto.meter.EquipmentMeterDto;
 import com.toir.dto.meter.EquipmentMeterRequest;
 import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.meter.MeterReadingRequest;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,14 +30,14 @@ public class MeterService {
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listByEquipment(UUID equipmentId) {
-        return meterRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream()
+        return com.toir.util.UpdatedAtSorter.descending(meterRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).stream()
                 .map(this::enrichWithEquipmentName)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listAll() {
-        return meterRepository.findAllByIsDeletedFalse().stream()
+        return com.toir.util.UpdatedAtSorter.descending(meterRepository.findAllByIsDeletedFalse()).stream()
                 .map(this::enrichWithEquipmentName)
                 .toList();
     }
@@ -118,15 +118,16 @@ public class MeterService {
     public List<MeterReadingDto> history(UUID meterId, int limit) {
         getMeterOrThrow(meterId);
         int safeLimit = Math.min(Math.max(limit, 1), 1000);
-        return readingRepository
-                .findAllByMeterIdAndIsDeletedFalseOrderByReadAtDesc(meterId, PageRequest.of(0, safeLimit))
-                .getContent().stream().map(MeterReadingDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(readingRepository
+                        .findAllByMeterIdAndIsDeletedFalseOrderByReadAtDesc(meterId, PaginationUtils.updatedAtDescPageRequest(0, safeLimit))
+                        .getContent())
+                .stream().map(MeterReadingDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<MeterReadingDto> historyBetween(UUID meterId, Instant from, Instant to) {
         getMeterOrThrow(meterId);
-        return readingRepository.findAllByMeterIdAndReadAtBetweenAndIsDeletedFalseOrderByReadAtAsc(meterId, from, to)
+        return com.toir.util.UpdatedAtSorter.descending(readingRepository.findAllByMeterIdAndReadAtBetweenAndIsDeletedFalseOrderByReadAtAsc(meterId, from, to))
                 .stream().map(MeterReadingDto::from).toList();
     }
 

@@ -179,7 +179,7 @@ public class OverdueDetectorService {
     private int createNotification(java.util.UUID recipientId, String title, String message,
                                    NotificationSeverity severity, String entityType, String entityId) {
         // idempotent: skip if we already have an open notification for the same entity
-        boolean exists = notificationRepository.findAllByIsDeletedFalse().stream()
+        boolean exists = com.toir.util.UpdatedAtSorter.descending(notificationRepository.findAllByIsDeletedFalse()).stream()
                 .anyMatch(n -> entityType.equals(n.getEntityType())
                         && entityId.equals(n.getEntityId())
                         && (n.getStatus() == NotificationStatus.PENDING || n.getStatus() == NotificationStatus.SENT));

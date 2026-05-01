@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,7 +24,7 @@ public class EquipmentTypeService {
     @Transactional(readOnly = true)
     public List<EquipmentTypeDto> findAll(String search, String category) {
         search = search == null ? null : "%" + search.toLowerCase() + "%";
-        return repository.findAllByIsDeletedFalseAndBySearchParam(search,category)
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalseAndBySearchParam(search, category))
                 .stream()
                 .map(EquipmentTypeDto::from)
                 .toList();
@@ -39,10 +40,8 @@ public class EquipmentTypeService {
     }
 
     public EquipmentTypeDto create(EquipmentTypeRequest request) {
-        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Equipment type code already exists: " + request.code());
-        }
         EquipmentType entity = new EquipmentType();
+        entity.setCode(nextCode());
         apply(entity, request);
         return EquipmentTypeDto.from(repository.save(entity));
     }
@@ -65,9 +64,24 @@ public class EquipmentTypeService {
     }
 
     private void apply(EquipmentType entity, EquipmentTypeRequest request) {
-        entity.setCode(request.code());
         entity.setName(request.name());
         entity.setCategory(request.category());
         entity.setDescription(request.description());
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "ET-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("ET", year, sequence);
+        while (repository.existsByCode(code)) {
+            sequence++;
+            code = formatCode("ET", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }

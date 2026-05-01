@@ -24,19 +24,19 @@ public class CalibrationService {
 
     @Transactional(readOnly = true)
     public List<CalibrationRecordDto> findForEquipment(UUID equipmentId) {
-        return repo.findAllByEquipmentIdAndIsDeletedFalseOrderByPerformedAtDesc(equipmentId).stream()
+        return com.toir.util.UpdatedAtSorter.descending(repo.findAllByEquipmentIdAndIsDeletedFalseOrderByPerformedAtDesc(equipmentId)).stream()
                 .map(CalibrationRecordDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<CalibrationRecordDto> findAll() {
-        return repo.findAllByIsDeletedFalse().stream().map(CalibrationRecordDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repo.findAllByIsDeletedFalse()).stream().map(CalibrationRecordDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<CalibrationRecordDto> findDueWithin(int days) {
         LocalDate cutoff = LocalDate.now().plusDays(days);
-        return repo.findAllByNextDueAtBeforeAndIsDeletedFalse(cutoff).stream()
+        return com.toir.util.UpdatedAtSorter.descending(repo.findAllByNextDueAtBeforeAndIsDeletedFalse(cutoff)).stream()
                 .map(CalibrationRecordDto::from).toList();
     }
 

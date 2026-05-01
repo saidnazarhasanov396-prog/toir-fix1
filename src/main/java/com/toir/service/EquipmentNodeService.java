@@ -21,7 +21,7 @@ public class EquipmentNodeService {
 
     @Transactional(readOnly = true)
     public List<EquipmentNodeDto> findByEquipment(UUID equipmentId) {
-        return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(EquipmentNodeDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).stream().map(EquipmentNodeDto::from).toList();
     }
 
     public EquipmentNodeDto create(UUID equipmentId, EquipmentNodeDto r) {

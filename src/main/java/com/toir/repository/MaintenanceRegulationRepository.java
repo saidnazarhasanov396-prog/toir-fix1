@@ -31,7 +31,7 @@ public interface MaintenanceRegulationRepository extends JpaRepository<Maintenan
             and (:search is null or lower(m.code) like lower(concat('%', :search, '%'))
             or lower(m.name) like lower(concat('%', :search, '%'))
             or lower(m.description) like lower(concat('%', :search, '%')))
-            order by m.created_at desc
+            order by m.updated_at desc
             """, countQuery = """
             select count(*) from maintenance_regulations m where
             m.is_deleted = false

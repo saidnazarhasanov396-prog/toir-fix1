@@ -46,15 +46,15 @@ public class PprGeneratorService {
         LocalDate monthStart = planMonth.atDay(1);
         LocalDate monthEnd = planMonth.atEndOfMonth();
 
-        List<MaintenanceRegulation> regulations = regulationRepository.findAllByIsDeletedFalse().stream()
+        List<MaintenanceRegulation> regulations = com.toir.util.UpdatedAtSorter.descending(regulationRepository.findAllByIsDeletedFalse()).stream()
                 .filter(MaintenanceRegulation::isActive)
                 .toList();
 
-        List<Equipment> allEquipment = equipmentRepository.findAllByIsDeletedFalse().stream()
+        List<Equipment> allEquipment = com.toir.util.UpdatedAtSorter.descending(equipmentRepository.findAllByIsDeletedFalse()).stream()
                 .filter(e -> e.getStatus() != EquipmentStatus.DECOMMISSIONED)
                 .toList();
 
-        java.util.Set<String> existingCodes = taskRepository.findAllByIsDeletedFalse().stream()
+        java.util.Set<String> existingCodes = com.toir.util.UpdatedAtSorter.descending(taskRepository.findAllByIsDeletedFalse()).stream()
                 .map(PprTask::getCode)
                 .collect(java.util.stream.Collectors.toSet());
 

@@ -45,12 +45,14 @@ public class WorkOrderService {
 
     @Transactional(readOnly = true)
     public List<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId) {
-        return repository.search(status, departmentId, equipmentId).stream().map(this::toDto).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.search(status, departmentId, equipmentId)).stream()
+                .map(this::toDto)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
-        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        var pageable = PaginationUtils.updatedAtDescPageRequest(page, pageSize);
         return repository.searchPaginated(
                 status,
                 departmentId,
@@ -66,7 +68,7 @@ public class WorkOrderService {
                 departmentId,
                 equipmentId,
                 search,
-                PaginationUtils.pageRequest(page, pageSize)
+                PaginationUtils.updatedAtDescPageRequest(page, pageSize)
         ).map(this::toDto);
     }
 

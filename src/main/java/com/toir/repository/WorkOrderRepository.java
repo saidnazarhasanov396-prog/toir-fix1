@@ -50,7 +50,7 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
             or lower(w.summary) like lower(concat('%', cast(:search as varchar), '%')) 
             or lower(w.result) like lower(concat('%', cast(:search as varchar), '%')) 
             or lower(w.closure_notes) like lower(concat('%', cast(:search as varchar), '%'))) 
-            order by w.created_at desc""", countQuery = """
+            order by w.updated_at desc""", countQuery = """
             select count(*) from work_orders w where
             w.is_deleted = false
             and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
@@ -76,7 +76,7 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
             and (cast(:search as varchar) is null or lower(w.number) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(w.title) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(w.summary) like lower(concat('%', cast(:search as varchar), '%')))
-            order by w.created_at desc""", countQuery = """
+            order by w.updated_at desc""", countQuery = """
             select count(*) from work_orders w where
             w.is_deleted = false
             and w.status in ('APPROVED', 'IN_PROGRESS')

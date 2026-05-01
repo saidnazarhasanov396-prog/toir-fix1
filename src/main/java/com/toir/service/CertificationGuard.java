@@ -44,7 +44,7 @@ public class CertificationGuard {
 
     public boolean hasActiveCertification(UUID userId, String typeCode) {
         LocalDate today = LocalDate.now();
-        return repo.findAllByUserIdAndIsDeletedFalse(userId).stream()
+        return com.toir.util.UpdatedAtSorter.descending(repo.findAllByUserIdAndIsDeletedFalse(userId)).stream()
                 .filter(c -> typeCode.equals(c.getTypeCode()))
                 .filter(c -> "ACTIVE".equals(c.getStatus()))
                 .anyMatch(c -> c.getExpiresAt() == null || !c.getExpiresAt().isBefore(today));

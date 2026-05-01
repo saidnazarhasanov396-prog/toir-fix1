@@ -42,7 +42,7 @@ public class ProcurementRequestService {
         if (status != null) list = repo.findAllByStatusAndIsDeletedFalse(status);
         else if (departmentId != null) list = repo.findAllByDepartmentIdAndIsDeletedFalse(departmentId);
         else list = repo.findAllByIsDeletedFalse();
-        return list.stream().map(ProcurementRequestDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(list).stream().map(ProcurementRequestDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -144,7 +144,7 @@ public class ProcurementRequestService {
 
     /** Сгенерировать заявку(и) на закупку из low-stock позиций (по складу). */
     public List<ProcurementRequestDto> generateFromLowStock(UUID warehouseId) {
-        List<WarehouseStock> stocks = stockRepository.findAllByIsDeletedFalse().stream()
+        List<WarehouseStock> stocks = com.toir.util.UpdatedAtSorter.descending(stockRepository.findAllByIsDeletedFalse()).stream()
                 .filter(s -> warehouseId == null || s.getWarehouseId().equals(warehouseId))
                 .filter(s -> s.getAvailable() < s.getMinQty())
                 .toList();

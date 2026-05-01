@@ -41,7 +41,7 @@ public class HrService {
             }
         }
 
-        return employeeRepository.searchEmployees(search, part1, part2, activeOnly, PaginationUtils.pageRequest(page, pageSize))
+        return employeeRepository.searchEmployees(search, part1, part2, activeOnly, PaginationUtils.updatedAtDescPageRequest(page, pageSize))
                 .map(EmployeeDto::from);
     }
 
@@ -73,14 +73,14 @@ public class HrService {
 
     @Transactional(readOnly = true)
     public List<TimesheetEntryDto> timesheetFor(UUID employeeId, LocalDate from, LocalDate to) {
-        return timesheetRepository
-                .findAllByEmployeeIdAndWorkDateBetweenAndIsDeletedFalseOrderByWorkDateAsc(employeeId, from, to)
+        return com.toir.util.UpdatedAtSorter.descending(timesheetRepository
+                        .findAllByEmployeeIdAndWorkDateBetweenAndIsDeletedFalseOrderByWorkDateAsc(employeeId, from, to))
                 .stream().map(TimesheetEntryDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<TimesheetEntryDto> timesheetRange(LocalDate from, LocalDate to) {
-        return timesheetRepository.findAllByWorkDateBetweenAndIsDeletedFalse(from, to)
+        return com.toir.util.UpdatedAtSorter.descending(timesheetRepository.findAllByWorkDateBetweenAndIsDeletedFalse(from, to))
                 .stream().map(TimesheetEntryDto::from).toList();
     }
 
