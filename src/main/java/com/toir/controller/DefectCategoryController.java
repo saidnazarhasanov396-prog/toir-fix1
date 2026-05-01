@@ -20,7 +20,13 @@ public class DefectCategoryController {
 
     public DefectCategoryController(DefectCategoryService service) { this.service = service; }
 
-    @GetMapping public List<DefectCategoryDto> list() { return service.findAll(); }
+    @GetMapping public List<DefectCategoryDto> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String name
+    ) {
+        return service.findAll(search,code,name);
+    }
 
     @PostMapping
     public ResponseEntity<DefectCategoryDto> create(@Valid @RequestBody DefectCategoryDto r) {

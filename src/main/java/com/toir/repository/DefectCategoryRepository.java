@@ -13,8 +13,18 @@ import java.util.UUID;
 @Repository
 public interface DefectCategoryRepository extends JpaRepository<DefectCategory, UUID> {
     java.util.Optional<DefectCategory> findByIdAndIsDeletedFalse(java.util.UUID id);
-
-    java.util.List<DefectCategory> findAllByIsDeletedFalse();
+    @Query("""
+    SELECT dc FROM DefectCategory dc
+        WHERE dc.isDeleted = false
+            AND (:code IS NULL OR dc.code = :code)
+            AND (:name IS NULL OR dc.name = :name)
+            AND (:search IS NULL OR lower(dc.code) like lower(concat('%', :search, '%')) or lower(dc.name) like lower(concat('%', :search, '%')))
+""")
+    java.util.List<DefectCategory> findAllByIsDeletedFalse(
+            @Param("search")  String search,
+            @Param("code") String code,
+            @Param("name")  String name
+    );
 
     java.util.List<DefectCategory> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
