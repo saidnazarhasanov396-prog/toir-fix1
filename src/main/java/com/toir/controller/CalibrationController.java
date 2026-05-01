@@ -24,8 +24,17 @@ public class CalibrationController {
     }
 
     @GetMapping("/calibration-records")
-    public List<CalibrationRecordDto> list(@RequestParam(required = false) UUID equipmentId) {
-        return equipmentId != null ? service.findForEquipment(equipmentId) : service.findAll();
+    public List<CalibrationRecordDto> list(
+            @RequestParam(required = false) String search
+    ) {
+        return service.findAll(search);
+    }
+
+    @GetMapping("/calibration-records/{id}")
+    public ResponseEntity<CalibrationRecordDto> getById(
+            @PathVariable UUID id
+    ) {
+        return ResponseEntity.ok().body(service.findById(id));
     }
 
     @GetMapping("/calibration-records/due")
