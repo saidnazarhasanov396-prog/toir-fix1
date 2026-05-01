@@ -18,16 +18,12 @@ public interface DefectCategoryRepository extends JpaRepository<DefectCategory, 
     @Query("""
     SELECT dc FROM DefectCategory dc
     WHERE dc.isDeleted = false
-        AND (:code IS NULL OR dc.code = :code)
-        AND (:name IS NULL OR dc.name = :name)
-        AND (:search IS NULL OR 
-             lower(dc.code) LIKE lower(CONCAT('%', :search, '%')) OR
-             lower(dc.name) LIKE lower(CONCAT('%', :search, '%')))
+        AND (cast(:search as string) IS NULL OR
+                 lower(dc.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                 lower(dc.name) LIKE lower(concat('%', cast(:search as string), '%')))
 """)
     List<DefectCategory> findAll(
-            @Param("search") String search,
-            @Param("code") String code,
-            @Param("name") String name
+            @Param("search") String search
     );
     
     

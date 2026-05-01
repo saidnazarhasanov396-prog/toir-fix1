@@ -22,10 +22,9 @@ public class DefectCategoryController {
 
     @GetMapping public List<DefectCategoryDto> list(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String code,
-            @RequestParam(required = false) String name
+
     ) {
-        return service.findAll(search,code,name);
+        return service.findAll(search);
     }
 
     @PostMapping
