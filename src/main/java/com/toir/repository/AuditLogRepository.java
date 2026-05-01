@@ -27,21 +27,21 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT * FROM audit_logs al WHERE al.is_deleted = false " +
-            "AND (COALESCE(:action::text, al.action::text) = al.action::text) " +
-            "AND (:fromDate IS NULL OR CAST(al.created_at AS date) >= :fromDate) " +
-            "AND (:toDate IS NULL OR CAST(al.created_at AS date) <= :toDate) " +
-            "AND (:userId IS NULL OR al.user_id = :userId) " +
-            "AND (:searchPattern IS NULL OR al.message ILIKE :searchPattern OR al.entity_type ILIKE :searchPattern) " +
+            "AND (CAST(:action AS text) IS NULL OR al.action = CAST(:action AS text)) " +
+            "AND (CAST(:fromDate AS date) IS NULL OR CAST(al.created_at AS date) >= CAST(:fromDate AS date)) " +
+            "AND (CAST(:toDate AS date) IS NULL OR CAST(al.created_at AS date) <= CAST(:toDate AS date)) " +
+            "AND (CAST(:userId AS uuid) IS NULL OR al.user_id = CAST(:userId AS uuid)) " +
+            "AND (CAST(:searchPattern AS text) IS NULL OR al.message ILIKE CAST(:searchPattern AS text) OR al.entity_type ILIKE CAST(:searchPattern AS text)) " +
             "ORDER BY al.created_at DESC",
             countQuery = "SELECT COUNT(*) FROM audit_logs al WHERE al.is_deleted = false " +
-            "AND (COALESCE(:action::text, al.action::text) = al.action::text) " +
-            "AND (:fromDate IS NULL OR CAST(al.created_at AS date) >= :fromDate) " +
-            "AND (:toDate IS NULL OR CAST(al.created_at AS date) <= :toDate) " +
-            "AND (:userId IS NULL OR al.user_id = :userId) " +
-            "AND (:searchPattern IS NULL OR al.message ILIKE :searchPattern OR al.entity_type ILIKE :searchPattern)",
+            "AND (AND (CAST(:action AS text) IS NULL OR al.action = CAST(:action AS text)) " +
+            "AND (CAST(:fromDate AS date) IS NULL OR CAST(al.created_at AS date) >= CAST(:fromDate AS date)) " +
+            "AND (CAST(:toDate AS date) IS NULL OR CAST(al.created_at AS date) <= CAST(:toDate AS date)) " +
+            "AND (CAST(:userId AS uuid) IS NULL OR al.user_id = CAST(:userId AS uuid)) " +
+            "AND (CAST(:searchPattern AS text) IS NULL OR al.message ILIKE CAST(:searchPattern AS text) OR al.entity_type ILIKE CAST(:searchPattern AS text))",
             nativeQuery = true)
     Page<AuditLog> findAllByIsDeletedFalseOrderByCreatedAtDesc(
-            @Param("action") AuditAction action,
+            @Param("action") String action,
             @Param("fromDate") LocalDate fromDate,
             @Param("toDate") LocalDate toDate,
             @Param("searchPattern") String searchPattern,
