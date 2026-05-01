@@ -56,7 +56,8 @@ public class AuditLogService {
 
     @Transactional(readOnly = true)
     public Page<AuditLogResponseDto> find(int page, int size, AuditAction action, LocalDate fromDate, LocalDate toDate, String search,UUID userId) {
-        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(PaginationUtils.pageRequest(page, size),action,fromDate,toDate,search,userId)
+        String searchPattern = search != null ? "%" + search + "%" : null;
+        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(action, fromDate, toDate, searchPattern, userId, PaginationUtils.pageRequest(page, size))
                 .map(this::toResponse);
     }
 
