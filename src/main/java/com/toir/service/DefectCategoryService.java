@@ -21,8 +21,8 @@ public class DefectCategoryService {
 
 
     @Transactional(readOnly = true)
-    public List<DefectCategoryDto> findAll(String search,String code,String name) {
-        return repository.findAll(search,code,name).stream().map(DefectCategoryDto::from).toList();
+    public List<DefectCategoryDto> findAll(String search) {
+        return repository.findAll(search).stream().map(DefectCategoryDto::from).toList();
     }
 
     public DefectCategoryDto create(DefectCategoryDto r) {
