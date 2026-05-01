@@ -21,7 +21,7 @@ public class DefectCategoryController {
     public DefectCategoryController(DefectCategoryService service) { this.service = service; }
 
     @GetMapping public List<DefectCategoryDto> list(
-            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String search
 
     ) {
         return service.findAll(search);
