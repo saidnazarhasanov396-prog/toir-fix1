@@ -38,29 +38,28 @@ public class VehicleService {
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, String search, int page, int pageSize) {
-        int safePage = Math.max(page, 1);
+        int safePage = Math.max(page, 0);
         int safePageSize = Math.max(pageSize, 1);
-        Page<EquipmentDto> equipmentPage = equipmentService.search(
+        Page<Equipment> equipmentPage = vehicleDetailsRepository.searchVehicleEquipment(
                 departmentId,
-                null,
                 status,
                 EquipmentCategory.VEHICLE,
                 search,
-                safePage - 1,
-                safePageSize
+                org.springframework.data.domain.PageRequest.of(safePage, safePageSize)
         );
+        Page<EquipmentDto> enrichedEquipmentPage = equipmentService.enrich(equipmentPage);
         Map<UUID, VehicleDetails> detailsByEquipment = vehicleDetailsRepository
-                .findAllByEquipmentIdInAndIsDeletedFalse(equipmentPage.getContent().stream().map(EquipmentDto::id).toList())
+                .findAllByEquipmentIdInAndIsDeletedFalse(enrichedEquipmentPage.getContent().stream().map(EquipmentDto::id).toList())
                 .stream()
                 .collect(Collectors.toMap(VehicleDetails::getEquipmentId, Function.identity(), (a, b) -> a));
-        List<VehicleSummaryDto> items = equipmentPage.getContent().stream()
+        List<VehicleSummaryDto> items = enrichedEquipmentPage.getContent().stream()
                 .map(equipment -> {
                     VehicleDetails details = detailsByEquipment.get(equipment.id());
                     return details == null ? null : VehicleSummaryDto.from(equipment, details);
                 })
                 .filter(Objects::nonNull)
                 .toList();
-        return new FixedTotalPage<>(items, equipmentPage.getPageable(), equipmentPage.getTotalElements());
+        return new FixedTotalPage<>(items, enrichedEquipmentPage.getPageable(), enrichedEquipmentPage.getTotalElements());
     }
 
     @Transactional(readOnly = true)
