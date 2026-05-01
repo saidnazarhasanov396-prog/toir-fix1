@@ -64,7 +64,7 @@ public class ParetoController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
-        List<DowntimeEvent> events = downtimeRepository.findAllByIsDeletedFalse().stream()
+        List<DowntimeEvent> events = com.toir.util.UpdatedAtSorter.descending(downtimeRepository.findAllByIsDeletedFalse()).stream()
                 .filter(e -> !e.getStartAt().isBefore(start) && !e.getStartAt().isAfter(end))
                 .toList();
         Map<String, Double> byType = new HashMap<>();
@@ -85,7 +85,7 @@ public class ParetoController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
-        List<Defect> defects = defectRepository.findAllByIsDeletedFalse().stream()
+        List<Defect> defects = com.toir.util.UpdatedAtSorter.descending(defectRepository.findAllByIsDeletedFalse()).stream()
                 .filter(d -> !d.getDetectedAt().isBefore(start) && !d.getDetectedAt().isAfter(end))
                 .toList();
         Map<String, Double> byCause = new HashMap<>();

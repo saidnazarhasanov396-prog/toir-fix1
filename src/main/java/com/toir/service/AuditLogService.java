@@ -1,6 +1,7 @@
 package com.toir.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.toir.dto.audit.AuditLogResponseDto;
 import com.toir.dto.user.UserDto;
@@ -16,8 +17,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -63,16 +62,16 @@ public class AuditLogService {
     }
 
     private AuditLogResponseDto toResponse(AuditLog log) {
-        Map<String, Object> oldMap = new HashMap<>();
-        Map<String, Object> newMap = new HashMap<>();
+        ObjectNode oldNode = objectMapper.createObjectNode();
+        ObjectNode newNode = objectMapper.createObjectNode();
 
         JsonNode diffNode = readJson(log.getDiffJson());
         if (diffNode != null && diffNode.isObject()) {
             diffNode.fieldNames().forEachRemaining(field -> {
                 JsonNode change = diffNode.get(field);
                 if (change != null && change.isObject()) {
-                    oldMap.put(field, toJavaValue(change.get("old")));
-                    newMap.put(field, toJavaValue(change.get("new")));
+                    oldNode.set(field, valueOrNull(change.get("old")));
+                    newNode.set(field, valueOrNull(change.get("new")));
                 }
             });
         }
@@ -89,10 +88,10 @@ public class AuditLogService {
                 log.getIpAddress(),
                 log.getUserAgent(),
                 log.getCreatedAt(),
-                toMap(readJson(log.getPreviousSnapshot())),
-                toMap(readJson(log.getCurrentSnapshot())),
-                oldMap,
-                newMap,
+                toJsonObject(readJson(log.getPreviousSnapshot())),
+                toJsonObject(readJson(log.getCurrentSnapshot())),
+                oldNode,
+                newNode,
                 log.getDiffJson()
         );
     }
@@ -108,23 +107,19 @@ public class AuditLogService {
         }
     }
 
-    private Map<String, Object> toMap(JsonNode node) {
+    private JsonNode toJsonObject(JsonNode node) {
         if (node == null || node.isNull()) {
             return null;
         }
-        JsonNode normalized = node;
-        if (!node.isObject()) {
-            ObjectNode wrapper = objectMapper.createObjectNode();
-            wrapper.set("value", node);
-            normalized = wrapper;
+        if (node.isObject()) {
+            return node;
         }
-        return objectMapper.convertValue(normalized, Map.class);
+        ObjectNode wrapper = objectMapper.createObjectNode();
+        wrapper.set("value", node);
+        return wrapper;
     }
 
-    private Object toJavaValue(JsonNode node) {
-        if (node == null || node.isNull()) {
-            return null;
-        }
-        return objectMapper.convertValue(node, Object.class);
+    private JsonNode valueOrNull(JsonNode node) {
+        return node == null ? NullNode.getInstance() : node;
     }
 }

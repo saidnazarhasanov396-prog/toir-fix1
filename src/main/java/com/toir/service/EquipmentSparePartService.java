@@ -30,7 +30,7 @@ public class EquipmentSparePartService {
         if (!equipmentRepository.existsByIdAndIsDeletedFalse(equipmentId)) {
             throw RestException.notFound("Equipment not found: " + equipmentId);
         }
-        return repo.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(this::enrich).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repo.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).stream().map(this::enrich).toList();
     }
 
     @Transactional(readOnly = true)
@@ -38,7 +38,7 @@ public class EquipmentSparePartService {
         if (!sparePartRepository.existsByIdAndIsDeletedFalse(sparePartId)) {
             throw RestException.notFound("Spare part not found: " + sparePartId);
         }
-        return repo.findAllBySparePartIdAndIsDeletedFalse(sparePartId).stream().map(this::enrich).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repo.findAllBySparePartIdAndIsDeletedFalse(sparePartId)).stream().map(this::enrich).toList();
     }
 
     public EquipmentSparePartDto add(UUID equipmentId, EquipmentSparePartRequest r) {

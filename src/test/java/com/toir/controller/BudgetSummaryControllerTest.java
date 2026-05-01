@@ -1,5 +1,11 @@
 package com.toir.controller;
 
+import com.toir.dto.budget.ActualCostBudgetRow;
+import com.toir.dto.budget.ActualCostHandoverSummary;
+import com.toir.dto.budget.ActualCostRegisterSummary;
+import com.toir.dto.budget.ActualCostReviewActivitySummary;
+import com.toir.dto.common.PageResponse;
+import com.toir.dto.common.PageResponseWithSummary;
 import com.toir.entity.ActualCost;
 import com.toir.enums.ActualCostStatus;
 import com.toir.repository.ActualCostRepository;
@@ -14,7 +20,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,82 +44,78 @@ class BudgetSummaryControllerTest {
     BudgetSummaryController controller;
 
     @Test
-    void actualCostRegisterReturnsStandardPageWithSummary() {
+    void actualCostRegisterReturnsTypedPageWithSummary() {
         when(actualCostRepository.findAllByIsDeletedFalse()).thenReturn(List.of(
                 actualCost(ActualCostStatus.PENDING, 100, null),
                 actualCost(ActualCostStatus.APPROVED, 200, null),
                 actualCost(ActualCostStatus.REJECTED, 300, null)
         ));
 
-        Map<String, Object> response = controller.actualCostRegister(1, 2);
+        PageResponseWithSummary<ActualCostBudgetRow, ActualCostRegisterSummary> response =
+                controller.actualCostRegister(1, 2);
 
-        assertStandardPage(response, 1, 2, 3L, 1);
-        assertNoLegacyItemsMeta(response);
-        assertThat(response).containsKey("summary");
-        assertThat(((Map<?, ?>) response.get("summary")).get("totalCount")).isEqualTo(3L);
+        assertTypedPage(response, 1, 2, 3L, 1);
+        assertThat(response.summary().totalCount()).isEqualTo(3L);
     }
 
     @Test
-    void reviewQueueReturnsStandardPage() {
+    void reviewQueueReturnsTypedPage() {
         when(actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING)).thenReturn(List.of(
                 actualCost(ActualCostStatus.PENDING, 100, null),
                 actualCost(ActualCostStatus.PENDING, 200, null)
         ));
 
-        Map<String, Object> response = controller.reviewQueue(0, 1);
+        PageResponse<ActualCostBudgetRow> response = controller.reviewQueue(0, 1);
 
-        assertStandardPage(response, 0, 1, 2L, 1);
-        assertNoLegacyItemsMeta(response);
+        assertTypedPage(response, 0, 1, 2L, 1);
     }
 
     @Test
-    void reviewActivityReturnsStandardPageWithSummary() {
+    void reviewActivityReturnsTypedPageWithSummary() {
         when(actualCostRepository.findAllByIsDeletedFalse()).thenReturn(List.of(
                 actualCost(ActualCostStatus.APPROVED, 100, Instant.now()),
                 actualCost(ActualCostStatus.APPROVED, 200, Instant.now().minusSeconds(10)),
                 actualCost(ActualCostStatus.APPROVED, 300, null)
         ));
 
-        Map<String, Object> response = controller.reviewActivity(0, 1);
+        PageResponseWithSummary<ActualCostBudgetRow, ActualCostReviewActivitySummary> response =
+                controller.reviewActivity(0, 1);
 
-        assertStandardPage(response, 0, 1, 2L, 1);
-        assertNoLegacyItemsMeta(response);
-        assertThat(((Map<?, ?>) response.get("summary")).get("total")).isEqualTo(2);
+        assertTypedPage(response, 0, 1, 2L, 1);
+        assertThat(response.summary().total()).isEqualTo(2);
     }
 
     @Test
-    void handoversReturnsStandardEmptyPageWithSummary() {
-        Map<String, Object> response = controller.handovers(0, 20);
+    void handoversReturnsTypedEmptyPageWithSummary() {
+        PageResponseWithSummary<ActualCostBudgetRow, ActualCostHandoverSummary> response =
+                controller.handovers(0, 20);
 
-        assertStandardPage(response, 0, 20, 0L, 0);
-        assertNoLegacyItemsMeta(response);
-        assertThat(((Map<?, ?>) response.get("summary")).get("total")).isEqualTo(0);
+        assertTypedPage(response, 0, 20, 0L, 0);
+        assertThat(response.summary().total()).isEqualTo(0);
     }
 
     @Test
-    void approvalPackReturnsStandardPage() {
+    void approvalPackReturnsTypedPage() {
         when(actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING)).thenReturn(List.of(
                 actualCost(ActualCostStatus.PENDING, 100, null),
                 actualCost(ActualCostStatus.PENDING, 200, null)
         ));
 
-        Map<String, Object> response = controller.approvalPack(0, 2);
+        PageResponse<ActualCostBudgetRow> response = controller.approvalPack(0, 2);
 
-        assertStandardPage(response, 0, 2, 2L, 2);
-        assertNoLegacyItemsMeta(response);
+        assertTypedPage(response, 0, 2, 2L, 2);
     }
 
     @Test
-    void reviewHistoryPackReturnsStandardPage() {
+    void reviewHistoryPackReturnsTypedPage() {
         when(actualCostRepository.findAllByIsDeletedFalse()).thenReturn(List.of(
                 actualCost(ActualCostStatus.APPROVED, 100, Instant.now()),
                 actualCost(ActualCostStatus.PENDING, 200, null)
         ));
 
-        Map<String, Object> response = controller.reviewHistoryPack(0, 20);
+        PageResponse<ActualCostBudgetRow> response = controller.reviewHistoryPack(0, 20);
 
-        assertStandardPage(response, 0, 20, 1L, 1);
-        assertNoLegacyItemsMeta(response);
+        assertTypedPage(response, 0, 20, 1L, 1);
     }
 
     private static ActualCost actualCost(ActualCostStatus status, double amount, Instant reviewedAt) {
@@ -128,36 +129,31 @@ class BudgetSummaryControllerTest {
         return actualCost;
     }
 
-    private static void assertStandardPage(Map<String, Object> response,
+    private static <T> void assertTypedPage(PageResponse<T> response,
                                            int page,
                                            int pageSize,
                                            long totalElements,
                                            int numberOfElements) {
-        assertThat(response).containsKeys(
-                "content",
-                "pageable",
-                "last",
-                "totalElements",
-                "totalPages",
-                "first",
-                "size",
-                "number",
-                "sort",
-                "numberOfElements",
-                "empty"
-        );
-        assertThat(response.get("totalElements")).isEqualTo(totalElements);
-        assertThat(response.get("numberOfElements")).isEqualTo(numberOfElements);
-        assertThat(response.get("number")).isEqualTo(page);
-        assertThat(response.get("size")).isEqualTo(pageSize);
-        assertThat((List<?>) response.get("content")).hasSize(numberOfElements);
-
-        Map<?, ?> pageable = (Map<?, ?>) response.get("pageable");
-        assertThat(pageable.get("pageNumber")).isEqualTo(page);
-        assertThat(pageable.get("pageSize")).isEqualTo(pageSize);
+        assertThat(response.totalElements()).isEqualTo(totalElements);
+        assertThat(response.numberOfElements()).isEqualTo(numberOfElements);
+        assertThat(response.number()).isEqualTo(page);
+        assertThat(response.size()).isEqualTo(pageSize);
+        assertThat(response.content()).hasSize(numberOfElements);
+        assertThat(response.pageable().pageNumber()).isEqualTo(page);
+        assertThat(response.pageable().pageSize()).isEqualTo(pageSize);
     }
 
-    private static void assertNoLegacyItemsMeta(Map<String, Object> response) {
-        assertThat(response).doesNotContainKeys("items", "meta");
+    private static <T, S> void assertTypedPage(PageResponseWithSummary<T, S> response,
+                                              int page,
+                                              int pageSize,
+                                              long totalElements,
+                                              int numberOfElements) {
+        assertThat(response.totalElements()).isEqualTo(totalElements);
+        assertThat(response.numberOfElements()).isEqualTo(numberOfElements);
+        assertThat(response.number()).isEqualTo(page);
+        assertThat(response.size()).isEqualTo(pageSize);
+        assertThat(response.content()).hasSize(numberOfElements);
+        assertThat(response.pageable().pageNumber()).isEqualTo(page);
+        assertThat(response.pageable().pageSize()).isEqualTo(pageSize);
     }
 }

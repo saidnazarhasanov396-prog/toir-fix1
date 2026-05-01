@@ -1,4 +1,5 @@
 package com.toir.controller;
+import com.toir.dto.integration.RunDueSyncsResponse;
 import com.toir.enums.IntegrationSyncStatus;
 import com.toir.service.IntegrationEndpointService;
 
@@ -38,20 +39,18 @@ public class IntegrationEndpointController {
     }
 
     @PostMapping("/run-due-syncs")
-    public java.util.Map<String, Object> runDueSyncs() {
+    public RunDueSyncsResponse runDueSyncs() {
         List<IntegrationEndpointDto> endpoints = service.findAll().stream()
                 .filter(e -> Boolean.TRUE.equals(e.active()))
                 .toList();
         for (IntegrationEndpointDto e : endpoints) {
             service.recordSync(e.id(), IntegrationSyncStatus.SUCCESS);
         }
-        return java.util.Map.of(
-                "processed", endpoints.size(),
-                "results", endpoints.stream().map(e -> java.util.Map.of(
-                        "endpointId", e.id(),
-                        "code", e.code(),
-                        "status", "SUCCESS"
-                )).toList()
+        return new RunDueSyncsResponse(
+                endpoints.size(),
+                endpoints.stream()
+                        .map(e -> new RunDueSyncsResponse.Result(e.id(), e.code(), "SUCCESS"))
+                        .toList()
         );
     }
 

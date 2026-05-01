@@ -45,7 +45,7 @@ public class RepairRequestService {
 
     @Transactional(readOnly = true)
     public Page<RepairRequestDto> search(RequestStatus status, UUID departmentId, UUID equipmentId, PriorityLevel priority, Integer page, Integer pageSize, String search) {
-        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        var pageable = PaginationUtils.updatedAtDescPageRequest(page, pageSize);
 
         String statusStr = (status != null) ? status.name() : null;
         String priorityStr = (priority != null) ? priority.name() : null;

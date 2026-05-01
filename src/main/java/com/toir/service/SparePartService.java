@@ -35,7 +35,7 @@ public class SparePartService {
         Page<SparePart> parts = repository.findAllByFilter(
                 inventoryItemKind,
                 toSearchPattern(search),
-                PaginationUtils.pageRequest(safePage, safePageSize)
+                PaginationUtils.updatedAtDescPageRequest(safePage, safePageSize)
         );
         if (parts.isEmpty()) {
             return parts.map(SparePartDto::from);

@@ -22,7 +22,7 @@ public class RoleService {
 
     @Transactional(readOnly = true)
     public List<RoleDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(RoleDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(RoleDto::from).toList();
     }
 
     @Transactional(readOnly = true)

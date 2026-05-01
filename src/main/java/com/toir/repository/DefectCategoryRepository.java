@@ -25,8 +25,8 @@ public interface DefectCategoryRepository extends JpaRepository<DefectCategory, 
     List<DefectCategory> findAll(
             @Param("search") String search
     );
-    
-    
+
+
 
     java.util.List<DefectCategory> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -36,6 +36,16 @@ public interface DefectCategoryRepository extends JpaRepository<DefectCategory, 
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_categories WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
+
+    boolean existsByCode(String code);
+
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM defect_categories
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
 
     java.util.List<DefectCategory> findAllByIsDeletedFalse();
 }

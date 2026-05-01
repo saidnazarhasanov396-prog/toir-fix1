@@ -34,7 +34,7 @@ public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
             and (:search is null or lower(d.code) like lower(concat('%', :search, '%'))
             or lower(d.title) like lower(concat('%', :search, '%'))
             or lower(d.notes) like lower(concat('%', :search, '%')))
-            order by d.created_at desc
+            order by d.updated_at desc
             """, countQuery = """
             select count(*) from defect_lists d where
             d.is_deleted = false
@@ -56,6 +56,6 @@ public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
     @Query(value = "SELECT * FROM defect_lists WHERE repair_request_id = :repairRequestId AND is_deleted = false", nativeQuery = true)
     List<DefectList> findAllByRepairRequestIdAndIsDeletedFalse(@Param("repairRequestId") UUID repairRequestId);
 
-    @Query(value = "SELECT * FROM defect_lists WHERE status = :status AND is_deleted = false ORDER BY created_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM defect_lists WHERE status = :status AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<DefectList> findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(@Param("status") DefectListStatus status);
 }

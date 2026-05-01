@@ -2,6 +2,10 @@ package com.toir.controller;
 import com.toir.service.AnalyticsService;
 
 import com.toir.dto.analytics.AnalyticsOverview;
+import com.toir.dto.analytics.EquipmentAnalyticsResponse;
+import com.toir.dto.analytics.FailureParetoResponse;
+import com.toir.dto.analytics.RcaEquipmentResponse;
+import com.toir.dto.analytics.RcaOverviewResponse;
 import com.toir.entity.ReliabilityMetric;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -30,22 +33,22 @@ public class AnalyticsController {
     }
 
     @GetMapping("/pareto/failures")
-    public Map<String, Object> paretoFailures() {
+    public FailureParetoResponse paretoFailures() {
         return service.failurePareto();
     }
 
     @GetMapping("/rca/overview")
-    public Map<String, Object> rcaOverview() {
+    public RcaOverviewResponse rcaOverview() {
         return service.rcaOverview();
     }
 
     @GetMapping("/rca/equipment/{equipmentId}")
-    public Map<String, Object> rcaEquipment(@PathVariable UUID equipmentId) {
+    public RcaEquipmentResponse rcaEquipment(@PathVariable UUID equipmentId) {
         return service.rcaEquipment(equipmentId);
     }
 
     @GetMapping("/equipment/{equipmentId}")
-    public Map<String, Object> equipmentAnalytics(@PathVariable UUID equipmentId) {
+    public EquipmentAnalyticsResponse equipmentAnalytics(@PathVariable UUID equipmentId) {
         return service.equipmentAnalytics(equipmentId);
     }
 

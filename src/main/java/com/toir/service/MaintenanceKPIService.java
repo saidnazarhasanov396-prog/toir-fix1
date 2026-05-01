@@ -21,7 +21,7 @@ public class MaintenanceKPIService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceKPIDto> findByDepartment(UUID departmentId) {
-        return repository.findAllByDepartmentIdAndIsDeletedFalseOrderByPeriodStartDesc(departmentId).stream()
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByDepartmentIdAndIsDeletedFalseOrderByPeriodStartDesc(departmentId)).stream()
                 .map(MaintenanceKPIDto::from).toList();
     }
 

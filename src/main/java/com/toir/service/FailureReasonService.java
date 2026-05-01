@@ -21,7 +21,7 @@ public class FailureReasonService {
 
     @Transactional(readOnly = true)
     public List<FailureReasonDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(FailureReasonDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(FailureReasonDto::from).toList();
     }
 
     public FailureReasonDto create(FailureReasonDto r) {

@@ -40,7 +40,7 @@ public class InboundErpController {
         int created = 0;
         int updated = 0;
         for (SparePartImport item : items) {
-            SparePart existing = sparePartRepository.findAllByIsDeletedFalse().stream()
+            SparePart existing = com.toir.util.UpdatedAtSorter.descending(sparePartRepository.findAllByIsDeletedFalse()).stream()
                     .filter(sp -> item.code.equals(sp.getCode()))
                     .findFirst()
                     .orElse(null);
@@ -74,7 +74,7 @@ public class InboundErpController {
         int created = 0;
         int updated = 0;
         for (DepartmentImport item : items) {
-            Department existing = departmentRepository.findAllByIsDeletedFalse().stream()
+            Department existing = com.toir.util.UpdatedAtSorter.descending(departmentRepository.findAllByIsDeletedFalse()).stream()
                     .filter(d -> item.code.equals(d.getCode()))
                     .findFirst()
                     .orElse(null);

@@ -29,13 +29,13 @@ public class WorkExecutionService {
 
     @Transactional(readOnly = true)
     public List<WorkExecutionDto> findByWorkOrder(UUID workOrderId) {
-        return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByStartedAtAsc(workOrderId).stream()
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByStartedAtAsc(workOrderId)).stream()
                 .map(WorkExecutionDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public Page<ExecutionLogDto> findExecutionLogs(UUID workOrderId, int page, int pageSize) {
-        var result = repository.findExecutionLogs(workOrderId, PaginationUtils.pageRequest(page, pageSize));
+        var result = repository.findExecutionLogs(workOrderId, PaginationUtils.updatedAtDescPageRequest(page, pageSize));
         return result.map(ExecutionLogDto::from);
     }
 

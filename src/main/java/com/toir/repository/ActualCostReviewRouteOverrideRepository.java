@@ -24,10 +24,10 @@ public interface ActualCostReviewRouteOverrideRepository extends JpaRepository<A
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM actual_cost_review_route_overrides WHERE actual_cost_id = :actualCostId AND is_deleted = false ORDER BY created_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM actual_cost_review_route_overrides WHERE actual_cost_id = :actualCostId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ActualCostReviewRouteOverride> findAllByActualCostIdAndIsDeletedFalseOrderByCreatedAtDesc(@Param("actualCostId") UUID actualCostId);
 
-    @Query(value = "SELECT * FROM actual_cost_review_route_overrides WHERE actual_cost_id = :actualCostId AND is_active = true AND is_deleted = false ORDER BY created_at DESC LIMIT 1", nativeQuery = true)
+    @Query(value = "SELECT * FROM actual_cost_review_route_overrides WHERE actual_cost_id = :actualCostId AND is_active = true AND is_deleted = false ORDER BY updated_at DESC LIMIT 1", nativeQuery = true)
     Optional<ActualCostReviewRouteOverride> findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(@Param("actualCostId") UUID actualCostId);
 
     @Query(value = "SELECT * FROM actual_cost_review_route_overrides WHERE is_active = true AND is_deleted = false", nativeQuery = true)

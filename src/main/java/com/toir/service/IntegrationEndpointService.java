@@ -23,7 +23,7 @@ public class IntegrationEndpointService {
 
     @Transactional(readOnly = true)
     public List<IntegrationEndpointDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(IntegrationEndpointDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(IntegrationEndpointDto::from).toList();
     }
 
     public IntegrationEndpointDto create(IntegrationEndpointDto r) {

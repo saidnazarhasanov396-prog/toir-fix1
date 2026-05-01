@@ -23,13 +23,13 @@ public class EscalationEventService {
 
     @Transactional(readOnly = true)
     public List<EscalationEventDto> findOpen() {
-        return repository.findAllByStatusAndIsDeletedFalseOrderByRaisedAtDesc(EscalationStatus.OPEN).stream()
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByStatusAndIsDeletedFalseOrderByRaisedAtDesc(EscalationStatus.OPEN)).stream()
                 .map(EscalationEventDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<EscalationEventDto> findAll() {
-        return repository.findAllByIsDeletedFalse().stream().map(EscalationEventDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(EscalationEventDto::from).toList();
     }
 
     @Transactional

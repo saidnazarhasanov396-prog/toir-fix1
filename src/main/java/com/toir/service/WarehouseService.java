@@ -29,7 +29,7 @@ public class WarehouseService {
 
     @Transactional(readOnly = true)
     public List<WarehouseDto> findAll(String search, UUID departmentId, UUID locationId, UUID responsibleId, Boolean active) {
-        return repository.search(normalizeSearch(search), departmentId, locationId, responsibleId, active).stream()
+        return com.toir.util.UpdatedAtSorter.descending(repository.search(normalizeSearch(search), departmentId, locationId, responsibleId, active)).stream()
                 .map(w -> WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(w.getId()),
                         departmentRepository, locationRepository, employeeRepository))
                 .toList();
@@ -45,7 +45,7 @@ public class WarehouseService {
     @Transactional(readOnly = true)
     public List<WarehouseStockDto> findStocks(UUID warehouseId) {
         getOrThrow(warehouseId);
-        return stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId).stream().map(WarehouseStockDto::from).toList();
+        return com.toir.util.UpdatedAtSorter.descending(stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId)).stream().map(WarehouseStockDto::from).toList();
     }
 
     public WarehouseDto create(WarehouseRequest request) {
