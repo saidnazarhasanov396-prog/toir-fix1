@@ -50,7 +50,9 @@ public class CertificationController {
     }
 
     @GetMapping("/user-certifications")
-    public List<UserCertificationDto> list(@RequestParam(required = false) UUID userId) {
+    public List<UserCertificationDto> list(
+            @RequestParam(required = false) UUID userId
+    ) {
         return userId != null ? service.findForUser(userId) : service.findAll();
     }
 
