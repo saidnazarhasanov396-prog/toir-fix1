@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,11 +24,13 @@ public interface DefectCategoryRepository extends JpaRepository<DefectCategory, 
              lower(dc.code) LIKE lower(CONCAT('%', :search, '%')) OR
              lower(dc.name) LIKE lower(CONCAT('%', :search, '%')))
 """)
-    List<DefectCategory> findAllByIsDeletedFalse(
+    List<DefectCategory> findAll(
             @Param("search") String search,
             @Param("code") String code,
             @Param("name") String name
     );
+    
+    
 
     java.util.List<DefectCategory> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -37,4 +40,6 @@ public interface DefectCategoryRepository extends JpaRepository<DefectCategory, 
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_categories WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
+
+    java.util.List<DefectCategory> findAllByIsDeletedFalse();
 }
