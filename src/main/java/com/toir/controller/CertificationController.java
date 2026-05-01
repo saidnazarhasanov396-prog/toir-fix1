@@ -51,9 +51,14 @@ public class CertificationController {
 
     @GetMapping("/user-certifications")
     public List<UserCertificationDto> list(
-            @RequestParam(required = false) UUID userId
+            @RequestParam(required = false) String search
     ) {
-        return userId != null ? service.findForUser(userId) : service.findAll();
+        return service.findAll(search);
+    }
+
+    @GetMapping("/user-certification/{id}")
+    public UserCertificationDto findOne(@PathVariable UUID id) {
+        return service.findOne(id);
     }
 
     @GetMapping("/user-certifications/expiring")
