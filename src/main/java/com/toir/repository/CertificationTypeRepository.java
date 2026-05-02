@@ -1,18 +1,20 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.CertificationType;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface CertificationTypeRepository extends JpaRepository<CertificationType, UUID> {
-    java.util.Optional<CertificationType> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM certification_types WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<CertificationType> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
     @Query("""
     SELECT ct FROM CertificationType ct
@@ -24,16 +26,16 @@ public interface CertificationTypeRepository extends JpaRepository<Certification
             AND (:search IS NULL OR u.fullName = :search)
             ORDER BY ct.updatedAt DESC
             """)
-    java.util.List<CertificationType> findAllByIsDeletedFalse(
-            @Param("code") String code,
-            @Param("name")  String name,
-            @Param("search") String search
-    );
+    @Query(value = "SELECT * FROM certification_types WHERE is_deleted = false", nativeQuery = true)
+    List<CertificationType> findAllByIsDeletedFalse(@Param("code") String code, @Param("name")  String name, @Param("search") String search);
 
-    java.util.List<CertificationType> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM certification_types WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<CertificationType> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM certification_types WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM certification_types WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM certification_types WHERE code = :code AND is_deleted = false)", nativeQuery = true)

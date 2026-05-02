@@ -1,25 +1,31 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.CostCategory;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface CostCategoryRepository extends JpaRepository<CostCategory, UUID> {
-    java.util.Optional<CostCategory> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM cost_categories WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<CostCategory> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<CostCategory> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM cost_categories WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<CostCategory> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<CostCategory> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM cost_categories WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<CostCategory> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM cost_categories WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM cost_categories WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM cost_categories WHERE code = :code AND is_deleted = false)", nativeQuery = true)

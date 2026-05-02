@@ -1,29 +1,34 @@
 package com.toir.repository;
 
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Repository;
 import com.toir.entity.Defect;
 import com.toir.enums.DefectStatus;
-
-import org.springframework.data.jpa.repository.JpaRepository;
-
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface DefectRepository extends JpaRepository<Defect, UUID> {
-    java.util.Optional<Defect> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM defects WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<Defect> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<Defect> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM defects WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<Defect> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<Defect> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM defects WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<Defect> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM defects WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM defects WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
 

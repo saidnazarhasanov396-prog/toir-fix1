@@ -1,25 +1,31 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.DefectSeverity;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface DefectSeverityRepository extends JpaRepository<DefectSeverity, UUID> {
-    java.util.Optional<DefectSeverity> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM defect_severities WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<DefectSeverity> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<DefectSeverity> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM defect_severities WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<DefectSeverity> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<DefectSeverity> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM defect_severities WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<DefectSeverity> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_severities WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM defect_severities WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_severities WHERE code = :code AND is_deleted = false)", nativeQuery = true)

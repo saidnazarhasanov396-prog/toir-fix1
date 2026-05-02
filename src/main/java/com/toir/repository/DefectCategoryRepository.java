@@ -1,20 +1,20 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.DefectCategory;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface DefectCategoryRepository extends JpaRepository<DefectCategory, UUID> {
-    java.util.Optional<DefectCategory> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM defect_categories WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<DefectCategory> findByIdAndIsDeletedFalse(@Param("id") UUID id);
     @Query("""
     SELECT dc FROM DefectCategory dc
     WHERE dc.isDeleted = false
@@ -28,10 +28,13 @@ public interface DefectCategoryRepository extends JpaRepository<DefectCategory, 
 
 
 
-    java.util.List<DefectCategory> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM defect_categories WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<DefectCategory> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_categories WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM defect_categories WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_categories WHERE code = :code AND is_deleted = false)", nativeQuery = true)
@@ -47,5 +50,5 @@ public interface DefectCategoryRepository extends JpaRepository<DefectCategory, 
             """, nativeQuery = true)
     long maxSequenceByCodePrefix(@Param("prefix") String prefix);
 
-    java.util.List<DefectCategory> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    List<DefectCategory> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 }

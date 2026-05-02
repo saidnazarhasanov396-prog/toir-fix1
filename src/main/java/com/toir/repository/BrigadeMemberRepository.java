@@ -1,27 +1,31 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.BrigadeMember;
-
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface BrigadeMemberRepository extends JpaRepository<BrigadeMember, UUID> {
-    java.util.Optional<BrigadeMember> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM brigade_members WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<BrigadeMember> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<BrigadeMember> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM brigade_members WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<BrigadeMember> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<BrigadeMember> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM brigade_members WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<BrigadeMember> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM brigade_members WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM brigade_members WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT * FROM brigade_members WHERE brigade_id = :brigadeId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
