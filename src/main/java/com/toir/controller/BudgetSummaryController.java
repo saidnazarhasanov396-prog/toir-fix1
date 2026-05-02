@@ -109,8 +109,10 @@ public class BudgetSummaryController {
     @GetMapping("/cost-categories")
     public PageResponse<CostCategoryDto> costCategories(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize) {
-        return PageResponse.of(com.toir.util.UpdatedAtSorter.descending(costCategoryRepository.findAllByIsDeletedFalse()).stream()
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) String search
+    ) {
+        return PageResponse.of(com.toir.util.UpdatedAtSorter.descending(costCategoryRepository.findAll(search)).stream()
                 .map(CostCategoryDto::from)
                 .toList(), page, pageSize);
     }
