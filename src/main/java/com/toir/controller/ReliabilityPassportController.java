@@ -103,9 +103,9 @@ public class ReliabilityPassportController {
         long downtimeLastYearMinutes = downtimes.stream()
                 .filter(ev -> ev.getStartAt().isAfter(horizon))
                 .mapToLong(ev -> {
-                    if (ev.getDurationMinutes() != null) return ResponseEntity.ok(ev.getDurationMinutes());
-                    if (ev.getEndAt() != null) return ResponseEntity.ok(Duration.between(ev.getStartAt(), ev.getEndAt()).toMinutes());
-                    return ResponseEntity.ok(0L);
+                    if (ev.getDurationMinutes() != null) return ev.getDurationMinutes();
+                    if (ev.getEndAt() != null) return Duration.between(ev.getStartAt(), ev.getEndAt()).toMinutes();
+                    return 0L;
                 }).sum();
         double availabilityPct = periodHours > 0
                 ? Math.max(0, 100.0 - (downtimeLastYearMinutes / 60.0) / periodHours * 100.0)

@@ -71,14 +71,14 @@ public class BudgetSummaryController {
                     CostCategory cat = catById.get(entry.getKey());
                     double planned = entry.getValue().stream().mapToDouble(BudgetLine::getPlannedAmount).sum();
                     double actual = entry.getValue().stream().mapToDouble(BudgetLine::getActualAmount).sum();
-                    return ResponseEntity.ok(new BudgetSummaryResponse.CategoryRow(
+                    return new BudgetSummaryResponse.CategoryRow(
                             cat != null
                                     ? new BudgetSummaryResponse.CategoryRef(cat.getId(), cat.getCode(), cat.getName())
                                     : new BudgetSummaryResponse.CategoryRef(entry.getKey(), "—", "—"),
                             planned,
                             actual,
                             planned - actual
-                    ));
+                    );
                 })
                 .toList();
 
