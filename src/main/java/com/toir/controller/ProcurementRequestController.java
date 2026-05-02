@@ -4,10 +4,12 @@ import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.service.ProcurementRequestService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,11 +26,11 @@ public class ProcurementRequestController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ProcurementRequestDto>> list(
+    public ResponseEntity<Page<ProcurementRequestDto>> list(
             @RequestParam(required = false) ProcurementRequestStatus status,
             @RequestParam(required = false) UUID departmentId
-    ) {
-        return ResponseEntity.ok(service.findAll(status, departmentId));
+    , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(status, departmentId), page, size));
     }
 
     @GetMapping("/{id}")
@@ -65,7 +67,9 @@ public class ProcurementRequestController {
     public ResponseEntity<ProcurementRequestDto> cancel(@PathVariable UUID id) { return ResponseEntity.ok(service.cancel(id)); }
 
     @PostMapping("/generate-from-low-stock")
-    public ResponseEntity<List<ProcurementRequestDto>> generateFromLowStock(@RequestParam(required = false) UUID warehouseId) {
-        return ResponseEntity.ok(service.generateFromLowStock(warehouseId));
+    public ResponseEntity<Page<ProcurementRequestDto>> generateFromLowStock(@RequestParam(required = false) UUID warehouseId,
+                                                                            @RequestParam(defaultValue = "0") int page,
+                                                                            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.generateFromLowStock(warehouseId), page, size));
     }
 }

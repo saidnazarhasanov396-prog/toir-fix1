@@ -23,6 +23,14 @@ public final class PaginationUtils {
         return new PageImpl<>(content != null ? content : List.of(), pageRequest(page, pageSize), total);
     }
 
+    public static <T> Page<T> page(List<T> allContent, int page, int pageSize) {
+        List<T> safeContent = allContent != null ? allContent : List.of();
+        Pageable pageable = pageRequest(page, pageSize);
+        int fromIndex = Math.min(offset(pageable), safeContent.size());
+        int toIndex = Math.min(fromIndex + pageable.getPageSize(), safeContent.size());
+        return page(safeContent.subList(fromIndex, toIndex), page, pageSize, safeContent.size());
+    }
+
     public static int offset(Pageable pageable) {
         return Math.toIntExact(pageable.getOffset());
     }

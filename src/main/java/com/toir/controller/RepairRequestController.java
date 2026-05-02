@@ -34,10 +34,10 @@ public class RepairRequestController {
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false)PriorityLevel priority,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search
     ) {
-        return ResponseEntity.ok(service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId,priority, page, pageSize, search));
+        return ResponseEntity.ok(service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId,priority, page, size, search));
     }
 
     @GetMapping("/{id}")

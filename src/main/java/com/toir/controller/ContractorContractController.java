@@ -1,10 +1,12 @@
 package com.toir.controller;
 import com.toir.dto.contractorcontract.ContractorContractDto;
 import com.toir.service.ContractorContractService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,8 +21,8 @@ public class ContractorContractController {
     public ContractorContractController(ContractorContractService service) { this.service = service; }
 
     @GetMapping
-    public ResponseEntity<List<ContractorContractDto>> list(@RequestParam UUID contractorId) {
-        return ResponseEntity.ok(service.findByContractor(contractorId));
+    public ResponseEntity<Page<ContractorContractDto>> list(@RequestParam UUID contractorId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByContractor(contractorId), page, size));
     }
 
     @PostMapping

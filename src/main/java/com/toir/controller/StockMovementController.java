@@ -2,9 +2,11 @@ package com.toir.controller;
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementRequest;
 import com.toir.service.StockMovementService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,7 +23,7 @@ public class StockMovementController {
     }
 
     @GetMapping
-    public ResponseEntity<List<StockMovementDto>> list() { return ResponseEntity.ok(service.findAll()); }
+    public ResponseEntity<Page<StockMovementDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
 
     @PostMapping
     public ResponseEntity<StockMovementDto> create(@Valid @RequestBody StockMovementRequest request) {

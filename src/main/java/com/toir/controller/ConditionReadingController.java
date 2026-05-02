@@ -5,10 +5,12 @@ import com.toir.enums.ConditionParameter;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
 import com.toir.service.ConditionReadingService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,9 +29,9 @@ public class ConditionReadingController {
     }
 
     @GetMapping("/equipment/{equipmentId}/condition-readings")
-    public ResponseEntity<List<ConditionReadingDto>> list(@PathVariable UUID equipmentId,
-                                          @RequestParam(required = false) ConditionParameter parameter) {
-        return ResponseEntity.ok(service.findForEquipment(equipmentId, parameter));
+    public ResponseEntity<Page<ConditionReadingDto>> list(@PathVariable UUID equipmentId,
+                                          @RequestParam(required = false) ConditionParameter parameter, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findForEquipment(equipmentId, parameter), page, size));
     }
 
     @PostMapping("/equipment/{equipmentId}/condition-readings")
@@ -47,7 +49,7 @@ public class ConditionReadingController {
     }
 
     @GetMapping("/condition-readings/alarms")
-    public ResponseEntity<List<ConditionReadingDto>> alarms() {
-        return ResponseEntity.ok(service.findAlarms());
+    public ResponseEntity<Page<ConditionReadingDto>> alarms(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAlarms(), page, size));
     }
 }

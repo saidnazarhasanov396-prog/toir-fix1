@@ -1,10 +1,12 @@
 package com.toir.controller;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.service.RepairMaterialUsageService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,8 +21,8 @@ public class RepairMaterialUsageController {
     public RepairMaterialUsageController(RepairMaterialUsageService service) { this.service = service; }
 
     @GetMapping("/work-orders/{workOrderId}/material-usage")
-    public ResponseEntity<List<RepairMaterialUsageDto>> list(@PathVariable UUID workOrderId) {
-        return ResponseEntity.ok(service.findByWorkOrder(workOrderId));
+    public ResponseEntity<Page<RepairMaterialUsageDto>> list(@PathVariable UUID workOrderId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByWorkOrder(workOrderId), page, size));
     }
 
     @PostMapping("/work-orders/{workOrderId}/material-usage")

@@ -1,10 +1,12 @@
 package com.toir.controller;
 import com.toir.dto.defectcategory.DefectCategoryDto;
 import com.toir.service.DefectCategoryService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,11 +20,11 @@ public class DefectCategoryController {
 
     public DefectCategoryController(DefectCategoryService service) { this.service = service; }
 
-    @GetMapping public ResponseEntity<List<DefectCategoryDto>> list(
+    @GetMapping public ResponseEntity<Page<DefectCategoryDto>> list(
             @RequestParam(required = false) String search
 
-    ) {
-        return ResponseEntity.ok(service.findAll(search));
+    , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search), page, size));
     }
 
     @PostMapping

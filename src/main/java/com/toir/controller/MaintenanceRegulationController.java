@@ -24,10 +24,10 @@ public class MaintenanceRegulationController {
     @GetMapping
     public ResponseEntity<Page<MaintenanceRegulationDto>> list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search
     ) {
-        return ResponseEntity.ok(service.search(page, pageSize, search));
+        return ResponseEntity.ok(service.search(page, size, search));
     }
 
     @GetMapping("/{id}")

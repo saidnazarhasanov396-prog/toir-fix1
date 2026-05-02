@@ -2,10 +2,12 @@ package com.toir.controller;
 import com.toir.dto.calibration.CalibrationRecordDto;
 import com.toir.dto.calibration.CalibrationRecordRequest;
 import com.toir.service.CalibrationService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,10 +24,10 @@ public class CalibrationController {
     }
 
     @GetMapping("/calibration-records")
-    public ResponseEntity<List<CalibrationRecordDto>> list(
+    public ResponseEntity<Page<CalibrationRecordDto>> list(
             @RequestParam(required = false) String search
-    ) {
-        return ResponseEntity.ok(service.findAll(search));
+    , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search), page, size));
     }
 
     @GetMapping("/calibration-records/{id}")
@@ -36,8 +38,8 @@ public class CalibrationController {
     }
 
     @GetMapping("/calibration-records/due")
-    public ResponseEntity<List<CalibrationRecordDto>> due(@RequestParam(defaultValue = "30") int withinDays) {
-        return ResponseEntity.ok(service.findDueWithin(withinDays));
+    public ResponseEntity<Page<CalibrationRecordDto>> due(@RequestParam(defaultValue = "30") int withinDays, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findDueWithin(withinDays), page, size));
     }
 
     @PostMapping("/calibration-records")

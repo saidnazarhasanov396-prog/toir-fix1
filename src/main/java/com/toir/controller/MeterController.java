@@ -7,12 +7,14 @@ import com.toir.dto.meter.MeterTriggerMatch;
 import com.toir.enums.MeterType;
 import com.toir.service.MeterService;
 import com.toir.service.MeterTriggerService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,16 +33,16 @@ public class MeterController {
     }
 
     @GetMapping("/triggers")
-    public ResponseEntity<List<MeterTriggerMatch>> triggers(@RequestParam UUID equipmentId) {
-        return ResponseEntity.ok(triggerService.dueTriggers(equipmentId));
+    public ResponseEntity<Page<MeterTriggerMatch>> triggers(@RequestParam UUID equipmentId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(triggerService.dueTriggers(equipmentId), page, size));
     }
 
     @GetMapping
-    public ResponseEntity<List<EquipmentMeterDto>> list(
+    public ResponseEntity<Page<EquipmentMeterDto>> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) MeterType meterType
-            ) {
-        return ResponseEntity.ok(service.listAll(search,meterType));
+            , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.listAll(search,meterType), page, size));
     }
 
 
@@ -72,15 +74,17 @@ public class MeterController {
     }
 
     @GetMapping("/{id}/readings")
-    public ResponseEntity<List<MeterReadingDto>> history(
+    public ResponseEntity<Page<MeterReadingDto>> history(
             @PathVariable UUID id,
             @RequestParam(defaultValue = "100") int limit,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         if (from != null && to != null) {
-            return ResponseEntity.ok(service.historyBetween(id, from, to));
+            return ResponseEntity.ok(PaginationUtils.page(service.historyBetween(id, from, to), page, size));
         }
-        return ResponseEntity.ok(service.history(id, limit));
+        return ResponseEntity.ok(PaginationUtils.page(service.history(id, limit), page, size));
     }
 
     @DeleteMapping("/readings/{readingId}")

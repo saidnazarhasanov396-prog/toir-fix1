@@ -2,9 +2,11 @@ package com.toir.controller;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.exception.RestException;
 import com.toir.repository.KnowledgeArticleRepository;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,15 +29,16 @@ public class KnowledgeController {
     }
 
     @GetMapping
-    public ResponseEntity<List<KnowledgeArticle>> list(
+    public ResponseEntity<Page<KnowledgeArticle>> list(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) String kind
+            , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size
     ) {
-        if (equipmentId != null) return ResponseEntity.ok(repo.findAllByEquipmentIdAndIsDeletedFalse(equipmentId));
-        if (equipmentTypeId != null) return ResponseEntity.ok(repo.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId));
-        if (kind != null) return ResponseEntity.ok(repo.findAllByKindAndIsDeletedFalse(kind));
-        return ResponseEntity.ok(repo.findAllByIsDeletedFalseOrderByUpdatedAtDesc());
+        if (equipmentId != null) return ResponseEntity.ok(PaginationUtils.page(repo.findAllByEquipmentIdAndIsDeletedFalse(equipmentId), page, size));
+        if (equipmentTypeId != null) return ResponseEntity.ok(PaginationUtils.page(repo.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId), page, size));
+        if (kind != null) return ResponseEntity.ok(PaginationUtils.page(repo.findAllByKindAndIsDeletedFalse(kind), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(repo.findAllByIsDeletedFalseOrderByUpdatedAtDesc(), page, size));
     }
 
     @GetMapping("/{id}")

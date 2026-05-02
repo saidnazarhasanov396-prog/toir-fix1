@@ -6,10 +6,12 @@ import com.toir.dto.integration.RunDueSyncsResponse;
 import com.toir.enums.IntegrationSyncStatus;
 import com.toir.security.RequiresAdmin;
 import com.toir.service.IntegrationEndpointService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,13 +31,13 @@ public class IntegrationEndpointController {
         this.mesService = mesService;
     }
 
-    @GetMapping public ResponseEntity<List<IntegrationEndpointDto>> list() { return ResponseEntity.ok(service.findAll()); }
+    @GetMapping public ResponseEntity<Page<IntegrationEndpointDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
 
     @GetMapping("/logs")
-    public ResponseEntity<List<IntegrationEndpointDto>> logs() {
-        return ResponseEntity.ok(service.findAll().stream()
+    public ResponseEntity<Page<IntegrationEndpointDto>> logs(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll().stream()
                 .filter(e -> e.lastSyncAt() != null)
-                .toList());
+                .toList(), page, size));
     }
 
     @PostMapping("/run-due-syncs")
@@ -81,9 +83,9 @@ public class IntegrationEndpointController {
     }
 
     @GetMapping("/sync-logs")
-    public ResponseEntity<List<IntegrationSyncLogDto>> syncLogs(
-            @RequestParam(required = false) UUID endpointId) {
-        return ResponseEntity.ok(mesService.getLogs(endpointId));
+    public ResponseEntity<Page<IntegrationSyncLogDto>> syncLogs(
+            @RequestParam(required = false) UUID endpointId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(mesService.getLogs(endpointId), page, size));
     }
 
     @DeleteMapping("/{id}")

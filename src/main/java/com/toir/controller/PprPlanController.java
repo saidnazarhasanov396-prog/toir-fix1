@@ -7,8 +7,10 @@ import com.toir.dto.pprplanning.PprTaskDto;
 import com.toir.dto.pprplanning.PprTaskRequest;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -30,8 +32,8 @@ public class PprPlanController {
     }
 
     @GetMapping
-    public ResponseEntity<List<PprPlanDto>> list() {
-        return ResponseEntity.ok(service.findAll());
+    public ResponseEntity<Page<PprPlanDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size));
     }
 
     @GetMapping("/{id}")
@@ -66,8 +68,8 @@ public class PprPlanController {
     }
 
     @GetMapping("/{id}/tasks")
-    public ResponseEntity<List<PprTaskDto>> tasks(@PathVariable UUID id) {
-        return ResponseEntity.ok(service.findTasksByPlan(id));
+    public ResponseEntity<Page<PprTaskDto>> tasks(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findTasksByPlan(id), page, size));
     }
 
     @PostMapping("/{id}/tasks")

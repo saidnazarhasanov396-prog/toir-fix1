@@ -3,10 +3,12 @@ import com.toir.dto.department.DepartmentDto;
 import com.toir.dto.department.DepartmentRequest;
 import com.toir.enums.DepartmentType;
 import com.toir.service.DepartmentService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,11 +25,11 @@ public class DepartmentController {
     }
 
     @GetMapping
-    public ResponseEntity<List<DepartmentDto>> list(
+    public ResponseEntity<Page<DepartmentDto>> list(
             @RequestParam(required = false) DepartmentType type,
             @RequestParam(required = false, defaultValue = "") String search
-    ) {
-        return ResponseEntity.ok(service.findAll(type,search));
+    , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(type,search), page, size));
     }
 
     @GetMapping("/{id}")

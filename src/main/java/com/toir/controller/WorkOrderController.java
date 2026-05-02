@@ -33,10 +33,10 @@ public class WorkOrderController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search
     ) {
-        return ResponseEntity.ok(service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId, page, pageSize, search));
+        return ResponseEntity.ok(service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId, page, size, search));
     }
 
     @GetMapping("/mobile-feed")
@@ -45,9 +45,9 @@ public class WorkOrderController {
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize
+            @RequestParam(name = "size", defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(service.mobileFeed(securityScope.enforceDepartmentScope(departmentId), equipmentId, search, page, pageSize));
+        return ResponseEntity.ok(service.mobileFeed(securityScope.enforceDepartmentScope(departmentId), equipmentId, search, page, size));
     }
 
     @GetMapping("/{id}")

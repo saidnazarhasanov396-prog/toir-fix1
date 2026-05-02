@@ -34,10 +34,10 @@ public class EquipmentController {
             @RequestParam(required = false) EquipmentCategory category,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize
+            @RequestParam(name = "size", defaultValue = "20") int size
     ) {
         int safePage = Math.max(0, page);
-        int safePageSize = Math.max(1, pageSize);
+        int safePageSize = Math.max(1, size);
         return ResponseEntity.ok(service.search(
                 securityScope.enforceDepartmentScope(departmentId),
                 equipmentTypeId,

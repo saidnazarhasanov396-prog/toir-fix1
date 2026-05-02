@@ -42,14 +42,14 @@ public class VehicleController {
             @RequestParam(required = false) EquipmentStatus status,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize
+            @RequestParam(name = "size", defaultValue = "20") int size
     ) {
         return ResponseEntity.ok(service.list(
                 securityScope.enforceDepartmentScope(departmentId),
                 status,
                 search,
                 page,
-                pageSize
+                size
         ));
     }
 

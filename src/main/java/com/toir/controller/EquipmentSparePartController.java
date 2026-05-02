@@ -2,10 +2,12 @@ package com.toir.controller;
 import com.toir.dto.equipmentsparepart.EquipmentSparePartDto;
 import com.toir.dto.equipmentsparepart.EquipmentSparePartRequest;
 import com.toir.service.EquipmentSparePartService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,8 +24,8 @@ public class EquipmentSparePartController {
     }
 
     @GetMapping("/equipment/{equipmentId}/spare-parts")
-    public ResponseEntity<List<EquipmentSparePartDto>> listForEquipment(@PathVariable UUID equipmentId) {
-        return ResponseEntity.ok(service.listForEquipment(equipmentId));
+    public ResponseEntity<Page<EquipmentSparePartDto>> listForEquipment(@PathVariable UUID equipmentId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.listForEquipment(equipmentId), page, size));
     }
 
     @PostMapping("/equipment/{equipmentId}/spare-parts")
@@ -44,7 +46,7 @@ public class EquipmentSparePartController {
     }
 
     @GetMapping("/spare-parts/{sparePartId}/equipment")
-    public ResponseEntity<List<EquipmentSparePartDto>> listForSparePart(@PathVariable UUID sparePartId) {
-        return ResponseEntity.ok(service.listForSparePart(sparePartId));
+    public ResponseEntity<Page<EquipmentSparePartDto>> listForSparePart(@PathVariable UUID sparePartId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.listForSparePart(sparePartId), page, size));
     }
 }

@@ -1,10 +1,12 @@
 package com.toir.controller;
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.service.ActualCostService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,11 +21,11 @@ public class ActualCostController {
     public ActualCostController(ActualCostService service) { this.service = service; }
 
     @GetMapping("/pending")
-    public ResponseEntity<List<ActualCostDto>> pending() { return ResponseEntity.ok(service.findPending()); }
+    public ResponseEntity<Page<ActualCostDto>> pending(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findPending(), page, size)); }
 
     @GetMapping
-    public ResponseEntity<List<ActualCostDto>> list(@RequestParam UUID workOrderId) {
-        return ResponseEntity.ok(service.findByWorkOrder(workOrderId));
+    public ResponseEntity<Page<ActualCostDto>> list(@RequestParam UUID workOrderId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByWorkOrder(workOrderId), page, size));
     }
 
     @PostMapping

@@ -4,10 +4,12 @@ import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
 import com.toir.enums.MaintenanceKind;
 import com.toir.service.MaintenanceTemplateService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,11 +23,11 @@ public class MaintenanceTemplateController {
 
     public MaintenanceTemplateController(MaintenanceTemplateService service) { this.service = service; }
 
-    @GetMapping public ResponseEntity<List<MaintenanceTemplateDto>> list(
+    @GetMapping public ResponseEntity<Page<MaintenanceTemplateDto>> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) MaintenanceKind type
-    ) {
-        return ResponseEntity.ok(service.findAll(search,type));
+    , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search,type), page, size));
     }
 
     @GetMapping("/{id}")
