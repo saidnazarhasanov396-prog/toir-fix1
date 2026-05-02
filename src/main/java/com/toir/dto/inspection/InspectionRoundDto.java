@@ -2,6 +2,7 @@ package com.toir.dto.inspection;
 import com.toir.dto.inspection.InspectionRoundResultDto;
 
 import com.toir.entity.InspectionRound;
+import com.toir.enums.InspectionRoundStatus;
 
 import java.time.Instant;
 import java.util.List;
@@ -13,7 +14,7 @@ public record InspectionRoundDto(
         UUID performedBy,
         Instant startedAt,
         Instant completedAt,
-        String status,
+        InspectionRoundStatus status,
         int findingsCount,
         int alarmCount,
         String notes,

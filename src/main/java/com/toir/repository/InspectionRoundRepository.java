@@ -29,8 +29,18 @@ public interface InspectionRoundRepository extends JpaRepository<InspectionRound
     @Query(value = "SELECT COUNT(*) FROM inspection_rounds WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM inspection_rounds WHERE route_id = :routeId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<InspectionRound> findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(@Param("routeId") UUID routeId);
+    @Query(value = """
+            SELECT ir.* FROM inspection_rounds ir 
+            WHERE  is_deleted = false 
+                  AND (CAST(:routeId as uuid) IS NULL OR ir.route_id = CAST(:routeId as uuid)) 
+                  AND (CAST(:performedBy as uuid) IS NULL OR ir.performed_by = CAST(:performedBy as uuid)) 
+                  AND (CAST(:status as text) IS NULL OR ir.status = CAST(:status as text))
+            ORDER BY updated_at DESC""", nativeQuery = true)
+    List<InspectionRound> findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(
+            @Param("routeId") UUID routeId,
+            @Param("performedBy") UUID performedBy,
+            @Param("status") String status
+    );
 
     @Query(value = "SELECT * FROM inspection_rounds WHERE performed_by = :performedBy AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<InspectionRound> findAllByPerformedByAndIsDeletedFalseOrderByStartedAtDesc(@Param("performedBy") UUID performedBy);
