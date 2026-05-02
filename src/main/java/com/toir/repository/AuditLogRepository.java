@@ -46,6 +46,5 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             "AND (CAST(:userId AS uuid) IS NULL OR al.user_id = CAST(:userId AS uuid)) " +
             "AND (CAST(:searchPattern AS text) IS NULL OR al.message ILIKE CAST(:searchPattern AS text) OR al.entity_type ILIKE CAST(:searchPattern AS text))",
             nativeQuery = true)
-    @Query(value = "SELECT * FROM audit_logs WHERE is_deleted = false ORDER BY created_at DESC", nativeQuery = true)
     Page<AuditLog> findAllByIsDeletedFalseOrderByCreatedAtDesc(@Param("action") String action, @Param("fromDate") LocalDate fromDate, @Param("toDate") LocalDate toDate, @Param("searchPattern") String searchPattern, @Param("userId") UUID userId, @Param("pageable") Pageable pageable);
 }

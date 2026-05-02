@@ -26,7 +26,6 @@ public interface CertificationTypeRepository extends JpaRepository<Certification
             AND (:search IS NULL OR u.fullName = :search)
             ORDER BY ct.updatedAt DESC
             """)
-    @Query(value = "SELECT * FROM certification_types WHERE is_deleted = false", nativeQuery = true)
     List<CertificationType> findAllByIsDeletedFalse(@Param("code") String code, @Param("name")  String name, @Param("search") String search);
 
     @Query(value = "SELECT * FROM certification_types WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
