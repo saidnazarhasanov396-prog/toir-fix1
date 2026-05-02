@@ -1,32 +1,32 @@
 package com.toir.controller;
 
 import com.toir.dto.ops.OpsMetricsResponse;
+import com.toir.enums.DefectStatus;
+import com.toir.enums.PprTaskStatus;
+import com.toir.enums.ProcurementRequestStatus;
+import com.toir.enums.RequestStatus;
+import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.BrigadeRepository;
 import com.toir.repository.CalibrationRecordRepository;
-import com.toir.repository.UserCertificationRepository;
 import com.toir.repository.ConditionReadingRepository;
 import com.toir.repository.DefectRepository;
-import com.toir.enums.DefectStatus;
 import com.toir.repository.EquipmentRepository;
 import com.toir.repository.InspectionRoundRepository;
 import com.toir.repository.InspectionRouteRepository;
 import com.toir.repository.NotificationRepository;
 import com.toir.repository.PprTaskRepository;
-import com.toir.enums.PprTaskStatus;
 import com.toir.repository.ProcurementRequestRepository;
-import com.toir.enums.ProcurementRequestStatus;
 import com.toir.repository.RcmSnapshotRepository;
 import com.toir.repository.RepairRequestRepository;
-import com.toir.enums.RequestStatus;
+import com.toir.repository.UserCertificationRepository;
 import com.toir.repository.WebhookEventLogRepository;
 import com.toir.repository.WorkOrderRepository;
-import com.toir.enums.WorkOrderStatus;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.Instant;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.time.Instant;
 
 /**
  * ÐžÐ¿ÐµÑ€Ð°Ñ‚Ð¸Ð²Ð½Ñ‹Ðµ Ð¼ÐµÑ‚Ñ€Ð¸ÐºÐ¸ ÑÐ¸ÑÑ‚ÐµÐ¼Ñ‹ â€” Ð»Ñ‘Ð³ÐºÐ¸Ð¹ ÑÐ½Ð¸Ð¼Ð¾Ðº ÑÐ¾ÑÑ‚Ð¾ÑÐ½Ð¸Ñ Ð´Ð»Ñ Ð¼Ð¾Ð½Ð¸Ñ‚Ð¾Ñ€Ð¸Ð½Ð³Ð°
@@ -86,8 +86,8 @@ public class OpsMetricsController {
     }
 
     @GetMapping("/metrics")
-    public OpsMetricsResponse metrics() {
-        return new OpsMetricsResponse(
+    public ResponseEntity<OpsMetricsResponse> metrics() {
+        return ResponseEntity.ok(new OpsMetricsResponse(
                 Instant.now().toString(),
                 new OpsMetricsResponse.Counts(
                         equipmentRepository.countByIsDeletedFalse(),
@@ -114,6 +114,6 @@ public class OpsMetricsController {
                         webhookEventLogRepository.countByIsDeletedFalse()
                 ),
                 "UP"
-        );
+        ));
     }
 }

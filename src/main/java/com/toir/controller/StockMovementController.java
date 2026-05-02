@@ -1,15 +1,13 @@
 package com.toir.controller;
-import com.toir.service.StockMovementService;
-
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementRequest;
+import com.toir.service.StockMovementService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/stock-movements")
@@ -23,7 +21,7 @@ public class StockMovementController {
     }
 
     @GetMapping
-    public List<StockMovementDto> list() { return service.findAll(); }
+    public ResponseEntity<List<StockMovementDto>> list() { return ResponseEntity.ok(service.findAll()); }
 
     @PostMapping
     public ResponseEntity<StockMovementDto> create(@Valid @RequestBody StockMovementRequest request) {

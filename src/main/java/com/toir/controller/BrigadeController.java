@@ -1,18 +1,16 @@
 package com.toir.controller;
-import com.toir.service.BrigadeService;
-
 import com.toir.dto.brigade.BrigadeDto;
 import com.toir.dto.brigade.BrigadeMemberDto;
 import com.toir.dto.brigade.BrigadeMemberRequest;
 import com.toir.dto.brigade.BrigadeRequest;
+import com.toir.service.BrigadeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/brigades")
@@ -26,16 +24,16 @@ public class BrigadeController {
     }
 
     @GetMapping
-    public List<BrigadeDto> list(
+    public ResponseEntity<List<BrigadeDto>> list(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) Boolean activeOnly,
             @RequestParam(required = false) String search
     ) {
-        return service.findAll(departmentId, activeOnly,search);
+        return ResponseEntity.ok(service.findAll(departmentId, activeOnly,search));
     }
 
     @GetMapping("/{id}")
-    public BrigadeDto get(@PathVariable UUID id) { return service.findById(id); }
+    public ResponseEntity<BrigadeDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
     public ResponseEntity<BrigadeDto> create(@Valid @RequestBody BrigadeRequest r) {
@@ -43,8 +41,8 @@ public class BrigadeController {
     }
 
     @PutMapping("/{id}")
-    public BrigadeDto update(@PathVariable UUID id, @Valid @RequestBody BrigadeRequest r) {
-        return service.update(id, r);
+    public ResponseEntity<BrigadeDto> update(@PathVariable UUID id, @Valid @RequestBody BrigadeRequest r) {
+        return ResponseEntity.ok(service.update(id, r));
     }
 
     @DeleteMapping("/{id}")
@@ -54,8 +52,8 @@ public class BrigadeController {
     }
 
     @GetMapping("/{id}/members")
-    public List<BrigadeMemberDto> listMembers(@PathVariable UUID id) {
-        return service.listMembers(id);
+    public ResponseEntity<List<BrigadeMemberDto>> listMembers(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.listMembers(id));
     }
 
     @PostMapping("/{id}/members")

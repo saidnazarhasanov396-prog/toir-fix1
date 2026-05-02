@@ -1,15 +1,13 @@
 package com.toir.controller;
-import com.toir.service.EquipmentNodeService;
-
 import com.toir.dto.equipmentnode.EquipmentNodeDto;
+import com.toir.service.EquipmentNodeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -21,8 +19,8 @@ public class EquipmentNodeController {
     public EquipmentNodeController(EquipmentNodeService service) { this.service = service; }
 
     @GetMapping("/equipment/{equipmentId}/nodes")
-    public List<EquipmentNodeDto> list(@PathVariable UUID equipmentId) {
-        return service.findByEquipment(equipmentId);
+    public ResponseEntity<List<EquipmentNodeDto>> list(@PathVariable UUID equipmentId) {
+        return ResponseEntity.ok(service.findByEquipment(equipmentId));
     }
 
     @PostMapping("/equipment/{equipmentId}/nodes")
@@ -31,11 +29,14 @@ public class EquipmentNodeController {
     }
 
     @PutMapping("/equipment-nodes/{id}")
-    public EquipmentNodeDto update(@PathVariable UUID id, @Valid @RequestBody EquipmentNodeDto r) {
-        return service.update(id, r);
+    public ResponseEntity<EquipmentNodeDto> update(@PathVariable UUID id, @Valid @RequestBody EquipmentNodeDto r) {
+        return ResponseEntity.ok(service.update(id, r));
     }
 
     @DeleteMapping("/equipment-nodes/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

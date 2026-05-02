@@ -1,12 +1,11 @@
 package com.toir.controller;
-import com.toir.service.EquipmentPassportService;
-
 import com.toir.dto.equipmentpassport.EquipmentPassportDto;
+import com.toir.service.EquipmentPassportService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.UUID;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/equipment/{equipmentId}/passport")
@@ -18,12 +17,12 @@ public class EquipmentPassportController {
     public EquipmentPassportController(EquipmentPassportService service) { this.service = service; }
 
     @GetMapping
-    public EquipmentPassportDto get(@PathVariable UUID equipmentId) {
-        return service.findByEquipment(equipmentId);
+    public ResponseEntity<EquipmentPassportDto> get(@PathVariable UUID equipmentId) {
+        return ResponseEntity.ok(service.findByEquipment(equipmentId));
     }
 
     @PutMapping
-    public EquipmentPassportDto upsert(@PathVariable UUID equipmentId, @Valid @RequestBody EquipmentPassportDto r) {
-        return service.upsert(equipmentId, r);
+    public ResponseEntity<EquipmentPassportDto> upsert(@PathVariable UUID equipmentId, @Valid @RequestBody EquipmentPassportDto r) {
+        return ResponseEntity.ok(service.upsert(equipmentId, r));
     }
 }

@@ -1,14 +1,17 @@
 package com.toir.controller;
+import com.toir.dto.file.FileAssetDto;
+import com.toir.dto.technicaldocument.TechnicalDocumentDto;
 import com.toir.entity.FileAsset;
 import com.toir.repository.FileAssetRepository;
-import com.toir.service.FileAssetService;
-
+import com.toir.repository.TechnicalDocumentRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
-import com.toir.dto.file.FileAssetDto;
-import com.toir.repository.TechnicalDocumentRepository;
-import com.toir.dto.technicaldocument.TechnicalDocumentDto;
+import com.toir.service.FileAssetService;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.net.MalformedURLException;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
@@ -17,11 +20,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.net.MalformedURLException;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/files")
@@ -41,22 +39,22 @@ public class FileAssetController {
     }
 
     @GetMapping
-    public List<FileAssetDto> list(@RequestParam String entityType, @RequestParam String entityId) {
-        return service.findByEntity(entityType, entityId);
+    public ResponseEntity<List<FileAssetDto>> list(@RequestParam String entityType, @RequestParam String entityId) {
+        return ResponseEntity.ok(service.findByEntity(entityType, entityId));
     }
 
     @GetMapping("/assets")
-    public List<FileAssetDto> legacyAssets(@RequestParam(required = false) String entityType,
+    public ResponseEntity<List<FileAssetDto>> legacyAssets(@RequestParam(required = false) String entityType,
                                            @RequestParam(required = false) String entityId) {
         if (entityType != null && entityId != null) {
-            return service.findByEntity(entityType, entityId);
+            return ResponseEntity.ok(service.findByEntity(entityType, entityId));
         }
-        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc().stream().map(FileAssetDto::from).toList();
+        return ResponseEntity.ok(repository.findAllByIsDeletedFalseOrderByCreatedAtDesc().stream().map(FileAssetDto::from).toList());
     }
 
     @GetMapping("/documents")
-    public List<TechnicalDocumentDto> legacyDocuments() {
-        return technicalDocumentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(TechnicalDocumentDto::from).toList();
+    public ResponseEntity<List<TechnicalDocumentDto>> legacyDocuments() {
+        return ResponseEntity.ok(technicalDocumentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(TechnicalDocumentDto::from).toList());
     }
 
     @PostMapping("/upload")
@@ -102,5 +100,8 @@ public class FileAssetController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

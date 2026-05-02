@@ -1,16 +1,14 @@
 package com.toir.controller;
-import com.toir.service.MaintenanceRegulationService;
-
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
+import com.toir.service.MaintenanceRegulationService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/maintenance-regulations")
@@ -24,16 +22,16 @@ public class MaintenanceRegulationController {
     }
 
     @GetMapping
-    public Page<MaintenanceRegulationDto> list(
+    public ResponseEntity<Page<MaintenanceRegulationDto>> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String search
     ) {
-        return service.search(page, pageSize, search);
+        return ResponseEntity.ok(service.search(page, pageSize, search));
     }
 
     @GetMapping("/{id}")
-    public MaintenanceRegulationDto get(@PathVariable UUID id) { return service.findById(id); }
+    public ResponseEntity<MaintenanceRegulationDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
     public ResponseEntity<MaintenanceRegulationDto> create(@Valid @RequestBody MaintenanceRegulationRequest request) {
@@ -41,11 +39,14 @@ public class MaintenanceRegulationController {
     }
 
     @PutMapping("/{id}")
-    public MaintenanceRegulationDto update(@PathVariable UUID id, @Valid @RequestBody MaintenanceRegulationRequest request) {
-        return service.update(id, request);
+    public ResponseEntity<MaintenanceRegulationDto> update(@PathVariable UUID id, @Valid @RequestBody MaintenanceRegulationRequest request) {
+        return ResponseEntity.ok(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

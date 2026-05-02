@@ -1,21 +1,19 @@
 package com.toir.controller;
+import com.toir.dto.file.FileAssetDto;
 import com.toir.entity.FileAsset;
 import com.toir.entity.RepairRequest;
-import com.toir.repository.RepairRequestRepository;
-
 import com.toir.exception.RestException;
+import com.toir.repository.RepairRequestRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.service.FileAssetService;
-import com.toir.dto.file.FileAssetDto;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.util.List;
-import java.util.UUID;
 
 /**
  * Photo attachment endpoints for a specific repair request.
@@ -38,9 +36,9 @@ public class RepairRequestPhotosController {
     }
 
     @GetMapping
-    public List<FileAssetDto> list(@PathVariable UUID requestId) {
+    public ResponseEntity<List<FileAssetDto>> list(@PathVariable UUID requestId) {
         ensureExists(requestId);
-        return fileAssetService.findByEntity(ENTITY_TYPE, requestId.toString());
+        return ResponseEntity.ok(fileAssetService.findByEntity(ENTITY_TYPE, requestId.toString()));
     }
 
     @PostMapping

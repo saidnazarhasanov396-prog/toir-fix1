@@ -1,16 +1,14 @@
 package com.toir.controller;
 import com.toir.entity.KnowledgeArticle;
-import com.toir.repository.KnowledgeArticleRepository;
-
 import com.toir.exception.RestException;
+import com.toir.repository.KnowledgeArticleRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 /**
  * CRUD + Ð¿Ð¾Ð¸ÑÐº ÑÑ‚Ð°Ñ‚ÐµÐ¹ Ð±Ð°Ð·Ñ‹ Ð·Ð½Ð°Ð½Ð¸Ð¹. Ð£Ð²ÐµÐ»Ð¸Ñ‡Ð¸Ð²Ð°ÐµÑ‚ ÑÑ‡Ñ‘Ñ‚Ñ‡Ð¸Ðº Ð¿Ñ€Ð¾ÑÐ¼Ð¾Ñ‚Ñ€Ð¾Ð² Ð¿Ñ€Ð¸
@@ -29,23 +27,23 @@ public class KnowledgeController {
     }
 
     @GetMapping
-    public List<KnowledgeArticle> list(
+    public ResponseEntity<List<KnowledgeArticle>> list(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) String kind
     ) {
-        if (equipmentId != null) return repo.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
-        if (equipmentTypeId != null) return repo.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId);
-        if (kind != null) return repo.findAllByKindAndIsDeletedFalse(kind);
-        return repo.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        if (equipmentId != null) return ResponseEntity.ok(repo.findAllByEquipmentIdAndIsDeletedFalse(equipmentId));
+        if (equipmentTypeId != null) return ResponseEntity.ok(repo.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId));
+        if (kind != null) return ResponseEntity.ok(repo.findAllByKindAndIsDeletedFalse(kind));
+        return ResponseEntity.ok(repo.findAllByIsDeletedFalseOrderByUpdatedAtDesc());
     }
 
     @GetMapping("/{id}")
-    public KnowledgeArticle get(@PathVariable UUID id) {
+    public ResponseEntity<KnowledgeArticle> get(@PathVariable UUID id) {
         KnowledgeArticle a = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Article not found: " + id));
         a.setViewCount(a.getViewCount() + 1);
-        return a;
+        return ResponseEntity.ok(a);
     }
 
     @PostMapping
@@ -61,7 +59,7 @@ public class KnowledgeController {
     }
 
     @PutMapping("/{id}")
-    public KnowledgeArticle update(@PathVariable UUID id, @RequestBody KnowledgeArticle patch) {
+    public ResponseEntity<KnowledgeArticle> update(@PathVariable UUID id, @RequestBody KnowledgeArticle patch) {
         KnowledgeArticle existing = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Article not found: " + id));
         existing.setTitle(patch.getTitle());
@@ -75,7 +73,7 @@ public class KnowledgeController {
         existing.setSolution(patch.getSolution());
         existing.setPreventiveActions(patch.getPreventiveActions());
         existing.setTags(patch.getTags());
-        return existing;
+        return ResponseEntity.ok(existing);
     }
 
     @DeleteMapping("/{id}")

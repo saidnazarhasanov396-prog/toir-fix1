@@ -1,16 +1,15 @@
 package com.toir.controller;
 import com.toir.entity.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
-
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/warehouses/reorder")
@@ -37,7 +36,7 @@ public class WarehouseReorderController {
     ) {}
 
     @GetMapping("/suggestions")
-    public List<ReorderSuggestion> suggestions(@RequestParam(required = false) UUID warehouseId) {
+    public ResponseEntity<List<ReorderSuggestion>> suggestions(@RequestParam(required = false) UUID warehouseId) {
         List<WarehouseStock> stocks = warehouseId != null
                 ? stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId)
                 : stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
@@ -66,6 +65,6 @@ public class WarehouseReorderController {
                     s.getQuantity(), available, minQty, rp, s.getReorderQty(),
                     shortfall, urgency));
         }
-        return result;
+        return ResponseEntity.ok(result);
     }
 }

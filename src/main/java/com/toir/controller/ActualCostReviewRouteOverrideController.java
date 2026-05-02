@@ -1,15 +1,13 @@
 package com.toir.controller;
-import com.toir.service.ActualCostReviewRouteOverrideService;
-
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
+import com.toir.service.ActualCostReviewRouteOverrideService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/budgets/actual-costs/review-route-overrides")
@@ -23,11 +21,11 @@ public class ActualCostReviewRouteOverrideController {
     }
 
     @GetMapping
-    public List<ActualCostReviewRouteOverrideDto> list() { return service.findActive(); }
+    public ResponseEntity<List<ActualCostReviewRouteOverrideDto>> list() { return ResponseEntity.ok(service.findActive()); }
 
     @GetMapping("/by-actual-cost/{actualCostId}")
-    public List<ActualCostReviewRouteOverrideDto> byActualCost(@PathVariable UUID actualCostId) {
-        return service.findByActualCost(actualCostId);
+    public ResponseEntity<List<ActualCostReviewRouteOverrideDto>> byActualCost(@PathVariable UUID actualCostId) {
+        return ResponseEntity.ok(service.findByActualCost(actualCostId));
     }
 
     @PostMapping
@@ -36,7 +34,7 @@ public class ActualCostReviewRouteOverrideController {
     }
 
     @PostMapping("/{id}/deactivate")
-    public ActualCostReviewRouteOverrideDto deactivate(@PathVariable UUID id, @RequestParam UUID userId, @RequestParam String comment) {
-        return service.deactivate(id, userId, comment);
+    public ResponseEntity<ActualCostReviewRouteOverrideDto> deactivate(@PathVariable UUID id, @RequestParam UUID userId, @RequestParam String comment) {
+        return ResponseEntity.ok(service.deactivate(id, userId, comment));
     }
 }

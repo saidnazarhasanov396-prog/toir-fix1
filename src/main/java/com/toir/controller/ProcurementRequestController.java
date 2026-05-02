@@ -1,18 +1,16 @@
 package com.toir.controller;
-import com.toir.enums.ProcurementRequestStatus;
-import com.toir.service.ProcurementRequestService;
-
 import com.toir.dto.procurement.ProcurementLineRequest;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
+import com.toir.enums.ProcurementRequestStatus;
+import com.toir.service.ProcurementRequestService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/procurement-requests")
@@ -26,15 +24,15 @@ public class ProcurementRequestController {
     }
 
     @GetMapping
-    public List<ProcurementRequestDto> list(
+    public ResponseEntity<List<ProcurementRequestDto>> list(
             @RequestParam(required = false) ProcurementRequestStatus status,
             @RequestParam(required = false) UUID departmentId
     ) {
-        return service.findAll(status, departmentId);
+        return ResponseEntity.ok(service.findAll(status, departmentId));
     }
 
     @GetMapping("/{id}")
-    public ProcurementRequestDto get(@PathVariable UUID id) { return service.findById(id); }
+    public ResponseEntity<ProcurementRequestDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
     public ResponseEntity<ProcurementRequestDto> create(@Valid @RequestBody ProcurementRequestRequest r) {
@@ -42,32 +40,32 @@ public class ProcurementRequestController {
     }
 
     @PostMapping("/{id}/lines")
-    public ProcurementRequestDto addLine(@PathVariable UUID id, @Valid @RequestBody ProcurementLineRequest r) {
-        return service.addLine(id, r);
+    public ResponseEntity<ProcurementRequestDto> addLine(@PathVariable UUID id, @Valid @RequestBody ProcurementLineRequest r) {
+        return ResponseEntity.ok(service.addLine(id, r));
     }
 
     @PostMapping("/{id}/submit")
-    public ProcurementRequestDto submit(@PathVariable UUID id) { return service.submit(id); }
+    public ResponseEntity<ProcurementRequestDto> submit(@PathVariable UUID id) { return ResponseEntity.ok(service.submit(id)); }
 
     @PostMapping("/{id}/approve")
-    public ProcurementRequestDto approve(@PathVariable UUID id) { return service.approve(id); }
+    public ResponseEntity<ProcurementRequestDto> approve(@PathVariable UUID id) { return ResponseEntity.ok(service.approve(id)); }
 
     @PostMapping("/{id}/reject")
-    public ProcurementRequestDto reject(@PathVariable UUID id, @RequestParam String reason) {
-        return service.reject(id, reason);
+    public ResponseEntity<ProcurementRequestDto> reject(@PathVariable UUID id, @RequestParam String reason) {
+        return ResponseEntity.ok(service.reject(id, reason));
     }
 
     @PostMapping("/{id}/ordered")
-    public ProcurementRequestDto markOrdered(@PathVariable UUID id) { return service.markOrdered(id); }
+    public ResponseEntity<ProcurementRequestDto> markOrdered(@PathVariable UUID id) { return ResponseEntity.ok(service.markOrdered(id)); }
 
     @PostMapping("/{id}/received")
-    public ProcurementRequestDto markReceived(@PathVariable UUID id) { return service.markReceived(id); }
+    public ResponseEntity<ProcurementRequestDto> markReceived(@PathVariable UUID id) { return ResponseEntity.ok(service.markReceived(id)); }
 
     @PostMapping("/{id}/cancel")
-    public ProcurementRequestDto cancel(@PathVariable UUID id) { return service.cancel(id); }
+    public ResponseEntity<ProcurementRequestDto> cancel(@PathVariable UUID id) { return ResponseEntity.ok(service.cancel(id)); }
 
     @PostMapping("/generate-from-low-stock")
-    public List<ProcurementRequestDto> generateFromLowStock(@RequestParam(required = false) UUID warehouseId) {
-        return service.generateFromLowStock(warehouseId);
+    public ResponseEntity<List<ProcurementRequestDto>> generateFromLowStock(@RequestParam(required = false) UUID warehouseId) {
+        return ResponseEntity.ok(service.generateFromLowStock(warehouseId));
     }
 }

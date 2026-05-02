@@ -1,16 +1,14 @@
 package com.toir.controller;
-import com.toir.service.MaintenanceBudgetService;
-
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
+import com.toir.service.MaintenanceBudgetService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/budgets")
@@ -22,10 +20,10 @@ public class MaintenanceBudgetController {
     public MaintenanceBudgetController(MaintenanceBudgetService service) { this.service = service; }
 
     @GetMapping
-    public List<MaintenanceBudgetDto> list(@RequestParam int year) { return service.findByYear(year); }
+    public ResponseEntity<List<MaintenanceBudgetDto>> list(@RequestParam int year) { return ResponseEntity.ok(service.findByYear(year)); }
 
     @GetMapping("/{id}")
-    public MaintenanceBudgetDto get(@PathVariable UUID id) { return service.findById(id); }
+    public ResponseEntity<MaintenanceBudgetDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
     public ResponseEntity<MaintenanceBudgetDto> create(@Valid @RequestBody MaintenanceBudgetDto r) {
@@ -33,7 +31,7 @@ public class MaintenanceBudgetController {
     }
 
     @PostMapping("/{id}/approve")
-    public MaintenanceBudgetDto approve(@PathVariable UUID id) { return service.approve(id); }
+    public ResponseEntity<MaintenanceBudgetDto> approve(@PathVariable UUID id) { return ResponseEntity.ok(service.approve(id)); }
 
     @PostMapping("/{id}/lines")
     public ResponseEntity<BudgetLineDto> addLine(@PathVariable UUID id, @Valid @RequestBody BudgetLineDto r) {

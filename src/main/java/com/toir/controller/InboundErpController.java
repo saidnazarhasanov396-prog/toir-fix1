@@ -1,19 +1,19 @@
 package com.toir.controller;
 
-import com.toir.exception.RestException;
 import com.toir.entity.Department;
-import com.toir.repository.DepartmentRepository;
+import com.toir.entity.SparePart;
 import com.toir.enums.DepartmentType;
 import com.toir.enums.InventoryItemKind;
-import com.toir.entity.SparePart;
+import com.toir.exception.RestException;
+import com.toir.repository.DepartmentRepository;
 import com.toir.repository.SparePartRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import java.util.List;
+import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 /**
  * Inbound integrations: Ð¿Ñ€Ð¸Ñ‘Ð¼ÐºÐ° ÑÐ¿Ñ€Ð°Ð²Ð¾Ñ‡Ð½Ð¸ÐºÐ¾Ð² Ð¸Ð· 1Ð¡ / ERP.
@@ -36,7 +36,7 @@ public class InboundErpController {
     }
 
     @PostMapping("/spare-parts")
-    public UpsertResult upsertSpareParts(@Valid @RequestBody List<SparePartImport> items) {
+    public ResponseEntity<UpsertResult> upsertSpareParts(@Valid @RequestBody List<SparePartImport> items) {
         int created = 0;
         int updated = 0;
         for (SparePartImport item : items) {
@@ -66,11 +66,11 @@ public class InboundErpController {
                 updated++;
             }
         }
-        return new UpsertResult(created, updated, items.size());
+        return ResponseEntity.ok(new UpsertResult(created, updated, items.size()));
     }
 
     @PostMapping("/departments")
-    public UpsertResult upsertDepartments(@Valid @RequestBody List<DepartmentImport> items) {
+    public ResponseEntity<UpsertResult> upsertDepartments(@Valid @RequestBody List<DepartmentImport> items) {
         int created = 0;
         int updated = 0;
         for (DepartmentImport item : items) {
@@ -95,7 +95,7 @@ public class InboundErpController {
                 updated++;
             }
         }
-        return new UpsertResult(created, updated, items.size());
+        return ResponseEntity.ok(new UpsertResult(created, updated, items.size()));
     }
 
     private InventoryItemKind parseKind(String kind) {

@@ -1,16 +1,14 @@
 package com.toir.controller;
-import com.toir.service.EquipmentTypeService;
-
 import com.toir.dto.equipmenttype.EquipmentTypeDto;
 import com.toir.dto.equipmenttype.EquipmentTypeRequest;
+import com.toir.service.EquipmentTypeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/equipment-types")
@@ -24,14 +22,14 @@ public class EquipmentTypeController {
     }
 
     @GetMapping
-    public List<EquipmentTypeDto> list(@RequestParam(required = false) String search,
+    public ResponseEntity<List<EquipmentTypeDto>> list(@RequestParam(required = false) String search,
                                        @RequestParam(required = false) String category
     ) {
-        return service.findAll(search,category);
+        return ResponseEntity.ok(service.findAll(search,category));
     }
 
     @GetMapping("/{id}")
-    public EquipmentTypeDto get(@PathVariable UUID id) { return service.findById(id); }
+    public ResponseEntity<EquipmentTypeDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
     public ResponseEntity<EquipmentTypeDto> create(@Valid @RequestBody EquipmentTypeRequest request) {
@@ -39,11 +37,14 @@ public class EquipmentTypeController {
     }
 
     @PutMapping("/{id}")
-    public EquipmentTypeDto update(@PathVariable UUID id, @Valid @RequestBody EquipmentTypeRequest request) {
-        return service.update(id, request);
+    public ResponseEntity<EquipmentTypeDto> update(@PathVariable UUID id, @Valid @RequestBody EquipmentTypeRequest request) {
+        return ResponseEntity.ok(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }
