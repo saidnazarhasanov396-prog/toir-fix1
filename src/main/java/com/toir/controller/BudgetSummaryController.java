@@ -21,7 +21,9 @@ import com.toir.dto.common.PageResponseWithSummary;
 import com.toir.dto.costcategory.CostCategoryDto;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -102,14 +104,13 @@ public class BudgetSummaryController {
     }
 
     @GetMapping("/cost-categories")
-    public PageResponse<CostCategoryDto> costCategories(
+    public ResponseEntity<Page<CostCategoryDto>> costCategories(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String search
     ) {
-        return PageResponse.of(costCategoryRepository.findAll(search).stream()
-                .map(CostCategoryDto::from)
-                .toList(),page,pageSize);
+        return ResponseEntity.ok(costCategoryRepository.findAll(search, PageRequest.of(page, pageSize))
+                .map(CostCategoryDto::from));
     }
 
     @GetMapping("/actual-costs/register")

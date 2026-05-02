@@ -36,7 +36,8 @@ public interface CostCategoryRepository extends JpaRepository<CostCategory, UUID
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query(value = "SELECT cr.* FROM cost_categories cr WHERE is_deleted = false order by cr.updated_at", nativeQuery = true)
-    List<CostCategory> findAll(
-            @Param("search") String search
+    Page<CostCategory> findAll(
+            @Param("search") String search,
+            Pageable pageable
     );
 }
