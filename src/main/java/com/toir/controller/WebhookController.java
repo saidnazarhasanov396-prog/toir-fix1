@@ -1,4 +1,5 @@
 package com.toir.controller;
+import com.toir.dto.webhook.WebhookDto;
 import com.toir.dto.webhook.WebhookTestResponse;
 import com.toir.entity.WebhookEventLog;
 import com.toir.entity.WebhookSubscription;
@@ -23,17 +24,20 @@ public class WebhookController {
     }
 
     @GetMapping
-    public ResponseEntity<List<WebhookSubscription>> list() {
-        return ResponseEntity.ok(service.findAll());
+    public ResponseEntity<List<WebhookDto>> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Boolean active
+    ) {
+        return ResponseEntity.ok(service.findAll(search,active));
     }
 
     @PostMapping
-    public ResponseEntity<WebhookSubscription> create(@RequestBody WebhookSubscription sub) {
+    public ResponseEntity<WebhookDto> create(@RequestBody WebhookSubscription sub) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(sub));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<WebhookSubscription> update(@PathVariable UUID id, @RequestBody WebhookSubscription patch) {
+    public ResponseEntity<WebhookDto> update(@PathVariable UUID id, @RequestBody WebhookSubscription patch) {
         return ResponseEntity.ok(service.update(id, patch));
     }
 

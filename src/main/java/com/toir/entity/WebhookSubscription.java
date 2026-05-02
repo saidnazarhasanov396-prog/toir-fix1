@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import java.time.Instant;
 
 import java.util.List;
 
@@ -46,7 +47,7 @@ public class WebhookSubscription extends BaseEntity {
     private String lastDeliveryStatus;
 
     @Column(name = "last_delivery_at")
-    private java.time.Instant lastDeliveryAt;
+    private Instant lastDeliveryAt;
 
     @Column(name = "failure_count", nullable = false)
     private int failureCount = 0;
