@@ -7,7 +7,7 @@ import java.util.UUID;
 
 public record ServiceClassDto(
         UUID id,
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         String description
 ) {

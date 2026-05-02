@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,17 +26,15 @@ public class DefectSeverityService {
     }
 
     public DefectSeverityDto create(DefectSeverityDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Severity code already exists: " + r.code());
-        }
         DefectSeverity e = new DefectSeverity();
-        e.setCode(r.code()); e.setName(r.name()); e.setWeight(r.weight());
+        e.setCode(nextCode());
+        e.setName(r.name()); e.setWeight(r.weight());
         return DefectSeverityDto.from(repository.save(e));
     }
 
     public DefectSeverityDto update(UUID id, DefectSeverityDto r) {
         DefectSeverity e = getOrThrow(id);
-        e.setCode(r.code()); e.setName(r.name()); e.setWeight(r.weight());
+        e.setName(r.name()); e.setWeight(r.weight());
         return DefectSeverityDto.from(e);
     }
 
@@ -46,5 +45,21 @@ public class DefectSeverityService {
     private DefectSeverity getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Severity not found: " + id));
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "DS-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("DS", year, sequence);
+        while (repository.existsByCodeAndIsDeletedFalse(code)) {
+            sequence++;
+            code = formatCode("DS", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }

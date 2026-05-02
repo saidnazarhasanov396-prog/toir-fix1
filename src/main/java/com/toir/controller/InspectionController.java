@@ -5,6 +5,7 @@ import com.toir.dto.inspection.InspectionRoundResultDto;
 import com.toir.dto.inspection.InspectionRoundResultRequest;
 import com.toir.dto.inspection.InspectionRouteDto;
 import com.toir.dto.inspection.InspectionRouteRequest;
+import com.toir.enums.InspectionRoundStatus;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
 import com.toir.service.InspectionService;
@@ -66,9 +67,12 @@ public class InspectionController {
 
     // rounds
     @GetMapping("/inspection-rounds")
-    public ResponseEntity<List<InspectionRoundDto>> listRounds(@RequestParam(required = false) UUID routeId,
-                                               @RequestParam(required = false) UUID performedBy) {
-        return ResponseEntity.ok(service.listRounds(routeId, performedBy));
+    public ResponseEntity<List<InspectionRoundDto>> listRounds(
+             @RequestParam(required = false) UUID routeId,
+             @RequestParam(required = false) UUID performedBy,
+             @RequestParam(required = false) InspectionRoundStatus status
+    ) {
+        return ResponseEntity.ok(service.listRounds(routeId, performedBy,status));
     }
 
     @GetMapping("/inspection-rounds/{id}")

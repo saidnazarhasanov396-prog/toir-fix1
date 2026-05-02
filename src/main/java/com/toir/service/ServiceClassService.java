@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,17 +31,15 @@ public class ServiceClassService {
     }
 
     public ServiceClassDto create(ServiceClassDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Service class code already exists: " + r.code());
-        }
         ServiceClass e = new ServiceClass();
-        e.setCode(r.code()); e.setName(r.name()); e.setDescription(r.description());
+        e.setCode(nextCode());
+        e.setName(r.name()); e.setDescription(r.description());
         return ServiceClassDto.from(repository.save(e));
     }
 
     public ServiceClassDto update(UUID id, ServiceClassDto r) {
         ServiceClass e = getOrThrow(id);
-        e.setCode(r.code()); e.setName(r.name()); e.setDescription(r.description());
+        e.setName(r.name()); e.setDescription(r.description());
         return ServiceClassDto.from(e);
     }
 
@@ -51,5 +50,21 @@ public class ServiceClassService {
     private ServiceClass getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Service class not found: " + id));
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "SC-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("SC", year, sequence);
+        while (repository.existsByCodeAndIsDeletedFalse(code)) {
+            sequence++;
+            code = formatCode("SC", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }
