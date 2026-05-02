@@ -1,5 +1,6 @@
 package com.toir.controller;
 import com.toir.dto.meter.MeterTriggerMatch;
+import com.toir.enums.MeterType;
 import com.toir.service.MeterService;
 import com.toir.service.MeterTriggerService;
 
@@ -37,9 +38,13 @@ public class MeterController {
     }
 
     @GetMapping
-    public List<EquipmentMeterDto> list(@RequestParam(required = false) UUID equipmentId) {
-        return equipmentId != null ? service.listByEquipment(equipmentId) : service.listAll();
+    public List<EquipmentMeterDto> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) MeterType meterType
+            ) {
+        return service.listAll(search,meterType);
     }
+
 
     @GetMapping("/{id}")
     public EquipmentMeterDto get(@PathVariable UUID id) {

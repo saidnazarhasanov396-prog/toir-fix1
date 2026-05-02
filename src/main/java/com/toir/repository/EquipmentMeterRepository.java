@@ -16,8 +16,19 @@ public interface EquipmentMeterRepository extends JpaRepository<EquipmentMeter, 
     @Query(value = "SELECT * FROM equipment_meters WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<EquipmentMeter> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    @Query(value = "SELECT * FROM equipment_meters WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<EquipmentMeter> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value =  """
+            SELECT em.* FROM equipment_meters em 
+            WHERE is_deleted = false
+            AND (:metricType IS NULL OR :metricType = '' OR em.meter_type = :metricType)
+            AND (CAST(:search AS text) IS NULL OR :search = '' OR
+                LOWER(em.name) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                LOWER(em.unit) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%'))
+            )
+            """, nativeQuery = true)
+    List<EquipmentMeter> findAllByIsDeletedFalseOrderByUpdatedAtDesc(
+            @Param("search")  String search,
+            @Param("metricType") String meterTypeStr
+    );
 
     @Query(value = "SELECT * FROM equipment_meters WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<EquipmentMeter> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);

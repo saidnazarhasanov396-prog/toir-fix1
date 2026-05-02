@@ -2,6 +2,7 @@ package com.toir.service;
 import com.toir.entity.Equipment;
 import com.toir.entity.EquipmentMeter;
 import com.toir.entity.MeterReading;
+import com.toir.enums.MeterType;
 import com.toir.repository.EquipmentMeterRepository;
 import com.toir.repository.EquipmentRepository;
 import com.toir.repository.MeterReadingRepository;
@@ -36,8 +37,9 @@ public class MeterService {
     }
 
     @Transactional(readOnly = true)
-    public List<EquipmentMeterDto> listAll() {
-        return meterRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+    public List<EquipmentMeterDto> listAll(String search, MeterType meterType) {
+        String meterTypeStr = meterType == null ? null : meterType.toString();
+        return meterRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc(search,meterTypeStr).stream()
                 .map(this::enrichWithEquipmentName)
                 .toList();
     }
