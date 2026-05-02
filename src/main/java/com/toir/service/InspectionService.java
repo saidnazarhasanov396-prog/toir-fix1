@@ -3,6 +3,7 @@ import com.toir.entity.InspectionCheckpoint;
 import com.toir.entity.InspectionRound;
 import com.toir.entity.InspectionRoundResult;
 import com.toir.entity.InspectionRoute;
+import com.toir.enums.InspectionRoundStatus;
 import com.toir.repository.InspectionCheckpointRepository;
 import com.toir.repository.InspectionRoundRepository;
 import com.toir.repository.InspectionRouteRepository;
@@ -87,12 +88,11 @@ public class InspectionService {
     // --- rounds ---
 
     @Transactional(readOnly = true)
-    public List<InspectionRoundDto> listRounds(UUID routeId, UUID performedBy) {
-        List<InspectionRound> list;
-        if (routeId != null) list = roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(routeId);
-        else if (performedBy != null) list = roundRepo.findAllByPerformedByAndIsDeletedFalseOrderByStartedAtDesc(performedBy);
-        else list = roundRepo.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
-        return list.stream().map(InspectionRoundDto::from).toList();
+    public List<InspectionRoundDto> listRounds(UUID routeId, UUID performedBy,InspectionRoundStatus status) {
+        String statusStr = status == null ? null : status.toString();
+        List<InspectionRoundDto> list = roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(routeId,performedBy,statusStr)
+                .stream().map(InspectionRoundDto::from).toList();
+        return list;
     }
 
     @Transactional(readOnly = true)
@@ -106,7 +106,7 @@ public class InspectionService {
         round.setRoute(route);
         round.setPerformedBy(performedBy);
         round.setStartedAt(Instant.now());
-        round.setStatus("IN_PROGRESS");
+        round.setStatus(InspectionRoundStatus.IN_PROGRESS);
         return InspectionRoundDto.from(roundRepo.save(round));
     }
 
@@ -156,7 +156,7 @@ public class InspectionService {
         if (!"IN_PROGRESS".equals(round.getStatus())) {
             throw RestException.badRequest("Round is not IN_PROGRESS");
         }
-        round.setStatus("COMPLETED");
+        round.setStatus(InspectionRoundStatus.COMPLETED);
         round.setCompletedAt(Instant.now());
         if (notes != null) round.setNotes(notes);
         return InspectionRoundDto.from(round);
@@ -164,7 +164,7 @@ public class InspectionService {
 
     public InspectionRoundDto cancelRound(UUID roundId, String reason) {
         InspectionRound round = loadRound(roundId);
-        round.setStatus("CANCELLED");
+        round.setStatus(InspectionRoundStatus.CANCELLED);
         round.setCompletedAt(Instant.now());
         round.setNotes(reason);
         return InspectionRoundDto.from(round);
