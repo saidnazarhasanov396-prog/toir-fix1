@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface OeeRecordRepository extends JpaRepository<OeeRecord, UUID> {
     java.util.Optional<OeeRecord> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<OeeRecord> findAllByIsDeletedFalse();
+    java.util.List<OeeRecord> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<OeeRecord> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -24,13 +24,13 @@ public interface OeeRecordRepository extends JpaRepository<OeeRecord, UUID> {
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM oee_records WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY shift_start DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM oee_records WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<OeeRecord> findAllByEquipmentIdAndIsDeletedFalseOrderByShiftStartDesc(@Param("equipmentId") UUID equipmentId);
 
-    @Query(value = "SELECT * FROM oee_records WHERE equipment_id = :equipmentId AND shift_start BETWEEN :from AND :to AND is_deleted = false ORDER BY shift_start ASC", nativeQuery = true)
+    @Query(value = "SELECT * FROM oee_records WHERE equipment_id = :equipmentId AND shift_start BETWEEN :from AND :to AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<OeeRecord> findAllByEquipmentIdAndShiftStartBetweenAndIsDeletedFalseOrderByShiftStartAsc(
             @Param("equipmentId") UUID equipmentId, @Param("from") Instant from, @Param("to") Instant to);
 
-    @Query(value = "SELECT * FROM oee_records WHERE shift_start BETWEEN :from AND :to AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM oee_records WHERE shift_start BETWEEN :from AND :to AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<OeeRecord> findAllByShiftStartBetweenAndIsDeletedFalse(@Param("from") Instant from, @Param("to") Instant to);
 }

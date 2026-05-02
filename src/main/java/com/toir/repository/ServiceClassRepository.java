@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface ServiceClassRepository extends JpaRepository<ServiceClass, UUID> {
     java.util.Optional<ServiceClass> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<ServiceClass> findAllByIsDeletedFalse();
+    java.util.List<ServiceClass> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<ServiceClass> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
     java.util.Optional<PprTask> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<PprTask> findAllByIsDeletedFalse();
+    java.util.List<PprTask> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<PprTask> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -24,7 +24,7 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
 
     long countByIsDeletedFalse();
 
-    List<PprTask> findAllByPlanIdAndIsDeletedFalse(UUID planId);
+    List<PprTask> findAllByPlanIdAndIsDeletedFalseOrderByUpdatedAtDesc(UUID planId);
 
     @Query(value = "SELECT COUNT(*) FROM ppr_tasks WHERE status = :status AND is_deleted = false", nativeQuery = true)
     long countByStatusAndIsDeletedFalse(@Param("status") String status);

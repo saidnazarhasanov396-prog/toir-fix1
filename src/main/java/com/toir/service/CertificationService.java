@@ -54,13 +54,13 @@ public class CertificationService {
     // user certifications
     @Transactional(readOnly = true)
     public List<UserCertificationDto> findForUser(UUID userId) {
-        return com.toir.util.UpdatedAtSorter.descending(certRepo.findAllByUserIdAndIsDeletedFalse(userId)).stream().map(UserCertificationDto::from).toList();
+        return certRepo.findAllByUserIdAndIsDeletedFalse(userId).stream().map(UserCertificationDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<UserCertificationDto> findExpiring(int withinDays) {
         LocalDate cutoff = LocalDate.now().plusDays(withinDays);
-        return com.toir.util.UpdatedAtSorter.descending(certRepo.findAllByExpiresAtBeforeAndIsDeletedFalse(cutoff)).stream()
+        return certRepo.findAllByExpiresAtBeforeAndIsDeletedFalse(cutoff).stream()
                 .filter(c -> "ACTIVE".equals(c.getStatus()) || "EXPIRED".equals(c.getStatus()))
                 .map(UserCertificationDto::from)
                 .toList();

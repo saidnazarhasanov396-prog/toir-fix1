@@ -100,7 +100,7 @@ public class NotificationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize
     ) {
-        var pageable = PaginationUtils.updatedAtDescPageRequest(page, pageSize);
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
         List<SlaRuleDto> all = slaRuleService.findAll();
         int fromIndex = Math.min(PaginationUtils.offset(pageable), all.size());
         int toIndex = Math.min(fromIndex + pageable.getPageSize(), all.size());

@@ -20,7 +20,7 @@ public class ManufacturerService {
 
     @Transactional(readOnly = true)
     public List<ManufacturerDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(ManufacturerDto::from).toList();
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(ManufacturerDto::from).toList();
     }
 
     @Transactional(readOnly = true)

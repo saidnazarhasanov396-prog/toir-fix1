@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface EquipmentKPIRepository extends JpaRepository<EquipmentKPI, UUID> {
     java.util.Optional<EquipmentKPI> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<EquipmentKPI> findAllByIsDeletedFalse();
+    java.util.List<EquipmentKPI> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<EquipmentKPI> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -23,6 +23,6 @@ public interface EquipmentKPIRepository extends JpaRepository<EquipmentKPI, UUID
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM equipment_kpis WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY period_start DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM equipment_kpis WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<EquipmentKPI> findAllByEquipmentIdAndIsDeletedFalseOrderByPeriodStartDesc(@Param("equipmentId") UUID equipmentId);
 }

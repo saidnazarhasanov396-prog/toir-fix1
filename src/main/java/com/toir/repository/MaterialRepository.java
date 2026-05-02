@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface MaterialRepository extends JpaRepository<Material, UUID> {
     java.util.Optional<Material> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<Material> findAllByIsDeletedFalse();
+    java.util.List<Material> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<Material> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

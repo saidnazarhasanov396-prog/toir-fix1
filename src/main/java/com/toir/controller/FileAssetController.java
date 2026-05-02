@@ -51,12 +51,12 @@ public class FileAssetController {
         if (entityType != null && entityId != null) {
             return service.findByEntity(entityType, entityId);
         }
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(FileAssetDto::from).toList();
+        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc().stream().map(FileAssetDto::from).toList();
     }
 
     @GetMapping("/documents")
     public List<TechnicalDocumentDto> legacyDocuments() {
-        return com.toir.util.UpdatedAtSorter.descending(technicalDocumentRepository.findAllByIsDeletedFalse()).stream().map(TechnicalDocumentDto::from).toList();
+        return technicalDocumentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(TechnicalDocumentDto::from).toList();
     }
 
     @PostMapping("/upload")

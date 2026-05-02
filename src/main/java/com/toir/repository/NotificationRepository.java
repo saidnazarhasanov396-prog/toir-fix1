@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface NotificationRepository extends JpaRepository<Notification, UUID> {
     java.util.Optional<Notification> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<Notification> findAllByIsDeletedFalse();
+    java.util.List<Notification> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<Notification> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

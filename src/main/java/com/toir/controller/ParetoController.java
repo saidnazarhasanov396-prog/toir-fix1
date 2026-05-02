@@ -64,7 +64,7 @@ public class ParetoController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
-        List<DowntimeEvent> events = com.toir.util.UpdatedAtSorter.descending(downtimeRepository.findAllByIsDeletedFalse()).stream()
+        List<DowntimeEvent> events = downtimeRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(e -> !e.getStartAt().isBefore(start) && !e.getStartAt().isAfter(end))
                 .toList();
         Map<String, Double> byType = new HashMap<>();
@@ -85,7 +85,7 @@ public class ParetoController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
-        List<Defect> defects = com.toir.util.UpdatedAtSorter.descending(defectRepository.findAllByIsDeletedFalse()).stream()
+        List<Defect> defects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> !d.getDetectedAt().isBefore(start) && !d.getDetectedAt().isAfter(end))
                 .toList();
         Map<String, Double> byCause = new HashMap<>();
@@ -107,13 +107,13 @@ public class ParetoController {
         Instant end = to != null ? to : Instant.now();
 
         Map<UUID, int[]> failuresByEq = new HashMap<>();
-        for (Defect d : defectRepository.findAllByIsDeletedFalse()) {
+        for (Defect d : defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (d.getDetectedAt().isBefore(start) || d.getDetectedAt().isAfter(end)) continue;
             failuresByEq.computeIfAbsent(d.getEquipmentId(), k -> new int[]{0})[0]++;
         }
 
         Map<UUID, Long> downtimeByEq = new HashMap<>();
-        for (DowntimeEvent ev : downtimeRepository.findAllByIsDeletedFalse()) {
+        for (DowntimeEvent ev : downtimeRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (ev.getStartAt().isBefore(start) || ev.getStartAt().isAfter(end)) continue;
             long minutes;
             if (ev.getDurationMinutes() != null) minutes = ev.getDurationMinutes();
@@ -123,7 +123,7 @@ public class ParetoController {
         }
 
         Map<UUID, Integer> openWorkOrdersByEq = new HashMap<>();
-        for (WorkOrder wo : workOrderRepository.findAllByIsDeletedFalse()) {
+        for (WorkOrder wo : workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (wo.getStatus() == WorkOrderStatus.COMPLETED || wo.getStatus() == WorkOrderStatus.CANCELLED) continue;
             if (wo.getEquipmentId() == null) continue;
             openWorkOrdersByEq.merge(wo.getEquipmentId(), 1, Integer::sum);

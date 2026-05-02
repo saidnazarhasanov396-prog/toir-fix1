@@ -35,13 +35,13 @@ public class SparePartService {
         Page<SparePart> parts = repository.findAllByFilter(
                 inventoryItemKind,
                 toSearchPattern(search),
-                PaginationUtils.updatedAtDescPageRequest(safePage, safePageSize)
+                PaginationUtils.pageRequest(safePage, safePageSize)
         );
         if (parts.isEmpty()) {
             return parts.map(SparePartDto::from);
         }
         Map<UUID, List<WarehouseStock>> stocksByPart = stockRepository
-                .findAllBySparePartIdInAndIsDeletedFalse(parts.getContent().stream().map(SparePart::getId).toList())
+                .findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(parts.getContent().stream().map(SparePart::getId).toList())
                 .stream()
                 .filter(s -> s.getSparePartId() != null)
                 .collect(Collectors.groupingBy(WarehouseStock::getSparePartId));

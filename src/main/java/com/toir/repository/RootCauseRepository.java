@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface RootCauseRepository extends JpaRepository<RootCause, UUID> {
     java.util.Optional<RootCause> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<RootCause> findAllByIsDeletedFalse();
+    java.util.List<RootCause> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<RootCause> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

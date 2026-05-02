@@ -19,7 +19,7 @@ import java.util.UUID;
 public interface RepairRequestRepository extends JpaRepository<RepairRequest, UUID> {
     java.util.Optional<RepairRequest> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<RepairRequest> findAllByIsDeletedFalse();
+    java.util.List<RepairRequest> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<RepairRequest> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

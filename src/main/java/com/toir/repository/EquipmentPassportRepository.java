@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface EquipmentPassportRepository extends JpaRepository<EquipmentPassport, UUID> {
     java.util.Optional<EquipmentPassport> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<EquipmentPassport> findAllByIsDeletedFalse();
+    java.util.List<EquipmentPassport> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<EquipmentPassport> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -30,6 +30,6 @@ public interface EquipmentPassportRepository extends JpaRepository<EquipmentPass
     @Query(value = "SELECT EXISTS(SELECT 1 FROM equipment_passports WHERE passport_number = :passportNumber AND is_deleted = false)", nativeQuery = true)
     boolean existsByPassportNumberAndIsDeletedFalse(@Param("passportNumber") String passportNumber);
 
-    @Query(value = "SELECT * FROM equipment_passports WHERE equipment_id IN (:equipmentIds) AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM equipment_passports WHERE equipment_id IN (:equipmentIds) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     java.util.List<EquipmentPassport> findAllByEquipmentIdInAndIsDeletedFalse(@Param("equipmentIds") Collection<UUID> equipmentIds);
 }

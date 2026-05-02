@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface ActualCostRepository extends JpaRepository<ActualCost, UUID> {
     java.util.Optional<ActualCost> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<ActualCost> findAllByIsDeletedFalse();
+    java.util.List<ActualCost> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<ActualCost> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -22,7 +22,7 @@ public interface ActualCostRepository extends JpaRepository<ActualCost, UUID> {
 
     long countByIsDeletedFalse();
 
-    List<ActualCost> findAllByWorkOrderIdAndIsDeletedFalse(UUID workOrderId);
+    List<ActualCost> findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(UUID workOrderId);
 
-    List<ActualCost> findAllByStatusAndIsDeletedFalse(ActualCostStatus status);
+    List<ActualCost> findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus status);
 }

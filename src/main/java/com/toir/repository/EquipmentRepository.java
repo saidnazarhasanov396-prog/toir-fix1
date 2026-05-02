@@ -21,7 +21,7 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
 
     java.util.Optional<Equipment> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<Equipment> findAllByIsDeletedFalse();
+    java.util.List<Equipment> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<Equipment> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -41,10 +41,10 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
     @Query(value = "SELECT * FROM equipment WHERE inventory_number = :inventoryNumber AND is_deleted = false", nativeQuery = true)
     Optional<Equipment> findByInventoryNumberAndIsDeletedFalse(@Param("inventoryNumber") String inventoryNumber);
 
-    @Query(value = "SELECT * FROM equipment WHERE department_id = :departmentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM equipment WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Equipment> findAllByDepartmentIdAndIsDeletedFalse(@Param("departmentId") UUID departmentId);
 
-    @Query(value = "SELECT * FROM equipment WHERE parent_id = :parentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM equipment WHERE parent_id = :parentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Equipment> findAllByParentIdAndIsDeletedFalse(@Param("parentId") UUID parentId);
 
     @Query("select e from Equipment e where " +
@@ -61,7 +61,8 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
             "lower(e.serialNumber) like lower(concat('%', cast(:search as string), '%')) or " +
             "lower(e.model) like lower(concat('%', cast(:search as string), '%')) or " +
             "lower(e.manufacturer) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.description) like lower(concat('%', cast(:search as string), '%')))")
+            "lower(e.description) like lower(concat('%', cast(:search as string), '%'))) " +
+            "order by e.updatedAt desc")
     Page<Equipment> search(@Param("departmentId") UUID departmentId,
                            @Param("equipmentTypeId") UUID equipmentTypeId,
                            @Param("status") EquipmentStatus status,

@@ -18,7 +18,7 @@ import java.util.UUID;
 public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
     java.util.Optional<DefectList> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<DefectList> findAllByIsDeletedFalse();
+    java.util.List<DefectList> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<DefectList> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -50,10 +50,10 @@ public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_lists WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
-    @Query(value = "SELECT * FROM defect_lists WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM defect_lists WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<DefectList> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
-    @Query(value = "SELECT * FROM defect_lists WHERE repair_request_id = :repairRequestId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM defect_lists WHERE repair_request_id = :repairRequestId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<DefectList> findAllByRepairRequestIdAndIsDeletedFalse(@Param("repairRequestId") UUID repairRequestId);
 
     @Query(value = "SELECT * FROM defect_lists WHERE status = :status AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)

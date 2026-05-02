@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface ProcurementRequestRepository extends JpaRepository<ProcurementRequest, UUID> {
     java.util.Optional<ProcurementRequest> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<ProcurementRequest> findAllByIsDeletedFalse();
+    java.util.List<ProcurementRequest> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<ProcurementRequest> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -24,9 +24,9 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
 
     long countByIsDeletedFalse();
 
-    List<ProcurementRequest> findAllByStatusAndIsDeletedFalse(ProcurementRequestStatus status);
+    List<ProcurementRequest> findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ProcurementRequestStatus status);
 
-    List<ProcurementRequest> findAllByDepartmentIdAndIsDeletedFalse(UUID departmentId);
+    List<ProcurementRequest> findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(UUID departmentId);
 
     boolean existsByNumberAndIsDeletedFalse(String number);
 

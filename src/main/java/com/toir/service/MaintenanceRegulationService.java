@@ -24,12 +24,12 @@ public class MaintenanceRegulationService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceRegulationDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(MaintenanceRegulationDto::from).toList();
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(MaintenanceRegulationDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public Page<MaintenanceRegulationDto> search(int page, int pageSize, String search) {
-        var pageable = PaginationUtils.updatedAtDescPageRequest(page, pageSize);
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
         return repository.searchPaginated(
                 search,
                 pageable

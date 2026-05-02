@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface InspectionRoundRepository extends JpaRepository<InspectionRound, UUID> {
     java.util.Optional<InspectionRound> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<InspectionRound> findAllByIsDeletedFalse();
+    java.util.List<InspectionRound> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<InspectionRound> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -24,12 +24,12 @@ public interface InspectionRoundRepository extends JpaRepository<InspectionRound
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM inspection_rounds WHERE route_id = :routeId AND is_deleted = false ORDER BY started_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM inspection_rounds WHERE route_id = :routeId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<InspectionRound> findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(@Param("routeId") UUID routeId);
 
-    @Query(value = "SELECT * FROM inspection_rounds WHERE performed_by = :performedBy AND is_deleted = false ORDER BY started_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM inspection_rounds WHERE performed_by = :performedBy AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<InspectionRound> findAllByPerformedByAndIsDeletedFalseOrderByStartedAtDesc(@Param("performedBy") UUID performedBy);
 
-    @Query(value = "SELECT * FROM inspection_rounds WHERE started_at > :since AND is_deleted = false ORDER BY started_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM inspection_rounds WHERE started_at > :since AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<InspectionRound> findAllByStartedAtAfterAndIsDeletedFalseOrderByStartedAtDesc(@Param("since") Instant since);
 }

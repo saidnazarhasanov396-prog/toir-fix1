@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface ActualCostReviewRouteOverrideRepository extends JpaRepository<ActualCostReviewRouteOverride, UUID> {
     java.util.Optional<ActualCostReviewRouteOverride> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<ActualCostReviewRouteOverride> findAllByIsDeletedFalse();
+    java.util.List<ActualCostReviewRouteOverride> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<ActualCostReviewRouteOverride> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -30,6 +30,6 @@ public interface ActualCostReviewRouteOverrideRepository extends JpaRepository<A
     @Query(value = "SELECT * FROM actual_cost_review_route_overrides WHERE actual_cost_id = :actualCostId AND is_active = true AND is_deleted = false ORDER BY updated_at DESC LIMIT 1", nativeQuery = true)
     Optional<ActualCostReviewRouteOverride> findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(@Param("actualCostId") UUID actualCostId);
 
-    @Query(value = "SELECT * FROM actual_cost_review_route_overrides WHERE is_active = true AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM actual_cost_review_route_overrides WHERE is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ActualCostReviewRouteOverride> findAllByActiveTrueAndIsDeletedFalse();
 }

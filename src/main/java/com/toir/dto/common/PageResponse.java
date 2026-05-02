@@ -33,13 +33,13 @@ public record PageResponse<T>(
 
     public static <T> PageResponse<T> of(List<T> items, int page, int pageSize) {
         List<T> safeItems = items != null ? items : List.of();
-        Pageable pageable = PaginationUtils.updatedAtDescPageRequest(page, pageSize);
+        Pageable pageable = PaginationUtils.pageRequest(page, pageSize);
         int fromIndex = Math.min(PaginationUtils.offset(pageable), safeItems.size());
         int toIndex = Math.min(fromIndex + pageable.getPageSize(), safeItems.size());
         List<T> content = safeItems.subList(fromIndex, toIndex);
         long totalElements = safeItems.size();
         int totalPages = totalPages(totalElements, pageable.getPageSize());
-        SortDto sort = updatedAtDescSort();
+        SortDto sort = emptySort();
         return new PageResponse<>(
                 content,
                 new PageableDto(pageable.getPageNumber(), pageable.getPageSize(), sort, pageable.getOffset(), true, false),
@@ -67,7 +67,4 @@ public record PageResponse<T>(
         return new SortDto(false, true, true);
     }
 
-    static SortDto updatedAtDescSort() {
-        return new SortDto(true, false, false);
-    }
 }

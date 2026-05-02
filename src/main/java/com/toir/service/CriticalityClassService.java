@@ -21,7 +21,7 @@ public class CriticalityClassService {
 
     @Transactional(readOnly = true)
     public List<CriticalityClassDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(CriticalityClassDto::from).toList();
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(CriticalityClassDto::from).toList();
     }
 
     @Transactional(readOnly = true)

@@ -326,7 +326,7 @@ public class SampleDataSeeder implements CommandLineRunner {
     }
 
     private void linkEquipmentCriticalityAndResponsible(List<Equipment> all) {
-        List<CriticalityClass> crits = criticalityClassRepository.findAllByIsDeletedFalse();
+        List<CriticalityClass> crits = criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         CriticalityClass critical = crits.stream().filter(c -> "CRIT-CRIT".equals(c.getCode())).findFirst().orElse(null);
         CriticalityClass high = crits.stream().filter(c -> "CRIT-HIGH".equals(c.getCode())).findFirst().orElse(null);
         CriticalityClass medium = crits.stream().filter(c -> "CRIT-MED".equals(c.getCode())).findFirst().orElse(null);
@@ -553,11 +553,11 @@ public class SampleDataSeeder implements CommandLineRunner {
     }
 
     private void seedBudgetsAndCosts(Department plant, Department ammonia, Department urea, Department nitric) {
-        CostCategory labor = costCategoryRepository.findAllByIsDeletedFalse().stream()
+        CostCategory labor = costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(c -> "LABOR".equals(c.getCode())).findFirst().orElseThrow();
-        CostCategory materials = costCategoryRepository.findAllByIsDeletedFalse().stream()
+        CostCategory materials = costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(c -> "MATERIALS".equals(c.getCode())).findFirst().orElseThrow();
-        CostCategory contractors = costCategoryRepository.findAllByIsDeletedFalse().stream()
+        CostCategory contractors = costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(c -> "CTR".equals(c.getCode())).findFirst().orElseThrow();
 
         MaintenanceBudget plantBudget = new MaintenanceBudget();

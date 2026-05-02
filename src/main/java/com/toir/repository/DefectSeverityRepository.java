@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface DefectSeverityRepository extends JpaRepository<DefectSeverity, UUID> {
     java.util.Optional<DefectSeverity> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<DefectSeverity> findAllByIsDeletedFalse();
+    java.util.List<DefectSeverity> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<DefectSeverity> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

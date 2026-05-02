@@ -12,7 +12,7 @@ import java.util.UUID;
 public interface RepairCampaignStageRepository extends JpaRepository<RepairCampaignStage, UUID> {
     java.util.Optional<RepairCampaignStage> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<RepairCampaignStage> findAllByIsDeletedFalse();
+    java.util.List<RepairCampaignStage> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<RepairCampaignStage> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

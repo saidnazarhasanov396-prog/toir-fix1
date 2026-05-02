@@ -18,7 +18,7 @@ import java.util.UUID;
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     java.util.Optional<AuditLog> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<AuditLog> findAllByIsDeletedFalse();
+    java.util.List<AuditLog> findAllByIsDeletedFalseOrderByCreatedAtDesc();
 
     java.util.List<AuditLog> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

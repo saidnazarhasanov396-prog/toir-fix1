@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface RcmSnapshotRepository extends JpaRepository<RcmSnapshot, UUID> {
     java.util.Optional<RcmSnapshot> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<RcmSnapshot> findAllByIsDeletedFalse();
+    java.util.List<RcmSnapshot> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<RcmSnapshot> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -24,9 +24,9 @@ public interface RcmSnapshotRepository extends JpaRepository<RcmSnapshot, UUID> 
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM rcm_snapshots WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY captured_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM rcm_snapshots WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<RcmSnapshot> findAllByEquipmentIdAndIsDeletedFalseOrderByCapturedAtDesc(@Param("equipmentId") UUID equipmentId);
 
-    @Query(value = "SELECT * FROM rcm_snapshots WHERE captured_at > :since AND is_deleted = false ORDER BY captured_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM rcm_snapshots WHERE captured_at > :since AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<RcmSnapshot> findAllByCapturedAtAfterAndIsDeletedFalseOrderByCapturedAtDesc(@Param("since") Instant since);
 }

@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface ManufacturerRepository extends JpaRepository<Manufacturer, UUID> {
     java.util.Optional<Manufacturer> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<Manufacturer> findAllByIsDeletedFalse();
+    java.util.List<Manufacturer> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<Manufacturer> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

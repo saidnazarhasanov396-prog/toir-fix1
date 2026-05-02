@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface FileAssetRepository extends JpaRepository<FileAsset, UUID> {
     java.util.Optional<FileAsset> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<FileAsset> findAllByIsDeletedFalse();
+    java.util.List<FileAsset> findAllByIsDeletedFalseOrderByCreatedAtDesc();
 
     java.util.List<FileAsset> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -23,6 +23,6 @@ public interface FileAssetRepository extends JpaRepository<FileAsset, UUID> {
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM file_assets WHERE entity_type = :entityType AND entity_id = :entityId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM file_assets WHERE entity_type = :entityType AND entity_id = :entityId AND is_deleted = false ORDER BY created_at DESC", nativeQuery = true)
     List<FileAsset> findAllByEntityTypeAndEntityIdAndIsDeletedFalse(@Param("entityType") String entityType, @Param("entityId") String entityId);
 }

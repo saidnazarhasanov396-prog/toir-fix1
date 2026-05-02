@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface EquipmentSparePartRepository extends JpaRepository<EquipmentSparePart, UUID> {
     java.util.Optional<EquipmentSparePart> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<EquipmentSparePart> findAllByIsDeletedFalse();
+    java.util.List<EquipmentSparePart> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<EquipmentSparePart> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -23,10 +23,10 @@ public interface EquipmentSparePartRepository extends JpaRepository<EquipmentSpa
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM equipment_spare_parts WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM equipment_spare_parts WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<EquipmentSparePart> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
-    @Query(value = "SELECT * FROM equipment_spare_parts WHERE spare_part_id = :sparePartId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM equipment_spare_parts WHERE spare_part_id = :sparePartId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<EquipmentSparePart> findAllBySparePartIdAndIsDeletedFalse(@Param("sparePartId") UUID sparePartId);
 
 }
