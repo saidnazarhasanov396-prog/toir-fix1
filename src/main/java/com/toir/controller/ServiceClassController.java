@@ -20,7 +20,11 @@ public class ServiceClassController {
 
     public ServiceClassController(ServiceClassService service) { this.service = service; }
 
-    @GetMapping public ResponseEntity<Page<ServiceClassDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
+    @GetMapping public ResponseEntity<Page<ServiceClassDto>> list(@RequestParam(required = false) String search,
+                                                                  @RequestParam(defaultValue = "0") int page,
+                                                                  @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search), page, size));
+    }
     @GetMapping("/{id}") public ResponseEntity<ServiceClassDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping

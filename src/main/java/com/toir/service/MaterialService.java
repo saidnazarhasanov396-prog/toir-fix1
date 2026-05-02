@@ -21,8 +21,8 @@ public class MaterialService {
 
 
     @Transactional(readOnly = true)
-    public List<MaterialDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(MaterialDto::from).toList();
+    public List<MaterialDto> findAll(String search) {
+        return repository.findAllBySearch(search).stream().map(MaterialDto::from).toList();
     }
 
     public MaterialDto create(MaterialDto r) {

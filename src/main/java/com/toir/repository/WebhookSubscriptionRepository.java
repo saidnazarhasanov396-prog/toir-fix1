@@ -1,10 +1,12 @@
 package com.toir.repository;
 
 import com.toir.entity.WebhookSubscription;
+
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,8 +18,24 @@ public interface WebhookSubscriptionRepository extends JpaRepository<WebhookSubs
     @Query(value = "SELECT * FROM webhook_subscriptions WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<WebhookSubscription> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    @Query(value = "SELECT * FROM webhook_subscriptions WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<WebhookSubscription> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = """
+            SELECT ws.*
+            FROM webhook_subscriptions ws
+            WHERE ws.is_deleted = false
+            AND (:active IS NULL OR ws.is_active = :active)
+            AND (
+                :search IS NULL OR
+                LOWER(ws.code::text) LIKE CONCAT('%', :search, '%') OR
+                LOWER(ws.name::text) LIKE CONCAT('%', :search, '%') OR
+                LOWER(ws.last_delivery_status::text) LIKE CONCAT('%', :search, '%') OR
+                LOWER(ws.secret::text) LIKE CONCAT('%', :search, '%') OR
+                LOWER(ws.target_url::text) LIKE CONCAT('%', :search, '%')
+            )
+            ORDER BY ws.updated_at DESC""", nativeQuery = true)
+    List<WebhookSubscription> findAllByIsDeletedFalseOrderByUpdatedAtDesc(
+            @Param("search") String search,
+            @Param("active") Boolean active
+    );
 
     @Query(value = "SELECT * FROM webhook_subscriptions WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<WebhookSubscription> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);

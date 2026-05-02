@@ -18,6 +18,15 @@ public interface DefectSeverityRepository extends JpaRepository<DefectSeverity, 
 
     @Query(value = "SELECT * FROM defect_severities WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<DefectSeverity> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query("""
+            SELECT ds FROM DefectSeverity ds
+            WHERE ds.isDeleted = false
+                AND (cast(:search as string) IS NULL OR
+                     lower(ds.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(ds.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY ds.updatedAt DESC
+            """)
+    List<DefectSeverity> findAllBySearch(@Param("search") String search);
 
     @Query(value = "SELECT * FROM defect_severities WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<DefectSeverity> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);

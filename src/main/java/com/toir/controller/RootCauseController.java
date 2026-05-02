@@ -20,7 +20,11 @@ public class RootCauseController {
 
     public RootCauseController(RootCauseService service) { this.service = service; }
 
-    @GetMapping public ResponseEntity<Page<RootCauseDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
+    @GetMapping public ResponseEntity<Page<RootCauseDto>> list(@RequestParam(required = false) String search,
+                                                               @RequestParam(defaultValue = "0") int page,
+                                                               @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search), page, size));
+    }
 
     @PostMapping
     public ResponseEntity<RootCauseDto> create(@Valid @RequestBody RootCauseDto r) {

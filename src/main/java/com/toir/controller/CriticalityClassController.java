@@ -23,7 +23,11 @@ public class CriticalityClassController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<CriticalityClassDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
+    public ResponseEntity<Page<CriticalityClassDto>> list(@RequestParam(required = false) String search,
+                                                          @RequestParam(defaultValue = "0") int page,
+                                                          @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search), page, size));
+    }
 
     @GetMapping("/{id}")
     public ResponseEntity<CriticalityClassDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }

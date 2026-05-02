@@ -18,6 +18,15 @@ public interface ContractorRepository extends JpaRepository<Contractor, UUID> {
 
     @Query(value = "SELECT * FROM contractors WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Contractor> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query("""
+            SELECT c FROM Contractor c
+            WHERE c.isDeleted = false
+                AND (cast(:search as string) IS NULL OR
+                     lower(c.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(c.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY c.updatedAt DESC
+            """)
+    List<Contractor> findAllBySearch(@Param("search") String search);
 
     @Query(value = "SELECT * FROM contractors WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<Contractor> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);

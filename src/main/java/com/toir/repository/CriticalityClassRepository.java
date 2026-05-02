@@ -18,6 +18,15 @@ public interface CriticalityClassRepository extends JpaRepository<CriticalityCla
 
     @Query(value = "SELECT * FROM criticality_classes WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<CriticalityClass> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query("""
+            SELECT cc FROM CriticalityClass cc
+            WHERE cc.isDeleted = false
+                AND (cast(:search as string) IS NULL OR
+                     lower(cc.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(cc.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY cc.updatedAt DESC
+            """)
+    List<CriticalityClass> findAllBySearch(@Param("search") String search);
 
     @Query(value = "SELECT * FROM criticality_classes WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<CriticalityClass> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);

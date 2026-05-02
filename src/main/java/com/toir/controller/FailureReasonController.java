@@ -20,7 +20,11 @@ public class FailureReasonController {
 
     public FailureReasonController(FailureReasonService service) { this.service = service; }
 
-    @GetMapping public ResponseEntity<Page<FailureReasonDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
+    @GetMapping public ResponseEntity<Page<FailureReasonDto>> list(@RequestParam(required = false) String search,
+                                                                    @RequestParam(defaultValue = "0") int page,
+                                                                    @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search), page, size));
+    }
 
     @PostMapping
     public ResponseEntity<FailureReasonDto> create(@Valid @RequestBody FailureReasonDto r) {

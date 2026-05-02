@@ -18,6 +18,15 @@ public interface RootCauseRepository extends JpaRepository<RootCause, UUID> {
 
     @Query(value = "SELECT * FROM root_causes WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<RootCause> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query("""
+            SELECT rc FROM RootCause rc
+            WHERE rc.isDeleted = false
+                AND (cast(:search as string) IS NULL OR
+                     lower(rc.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(rc.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY rc.updatedAt DESC
+            """)
+    List<RootCause> findAllBySearch(@Param("search") String search);
 
     @Query(value = "SELECT * FROM root_causes WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<RootCause> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);

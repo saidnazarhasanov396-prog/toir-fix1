@@ -20,8 +20,8 @@ public class ContractorService {
     private final ContractorRepository repository;
 
     @Transactional(readOnly = true)
-    public List<ContractorDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(ContractorDto::from).toList();
+    public List<ContractorDto> findAll(String search) {
+        return repository.findAllBySearch(search).stream().map(ContractorDto::from).toList();
     }
 
     @Transactional(readOnly = true)

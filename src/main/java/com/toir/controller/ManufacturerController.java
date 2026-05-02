@@ -23,7 +23,11 @@ public class ManufacturerController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<ManufacturerDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
+    public ResponseEntity<Page<ManufacturerDto>> list(@RequestParam(required = false) String search,
+                                                      @RequestParam(defaultValue = "0") int page,
+                                                      @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search), page, size));
+    }
 
     @GetMapping("/{id}")
     public ResponseEntity<ManufacturerDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }

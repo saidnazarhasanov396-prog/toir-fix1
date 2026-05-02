@@ -21,8 +21,8 @@ public class RootCauseService {
 
 
     @Transactional(readOnly = true)
-    public List<RootCauseDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(RootCauseDto::from).toList();
+    public List<RootCauseDto> findAll(String search) {
+        return repository.findAllBySearch(search).stream().map(RootCauseDto::from).toList();
     }
 
     public RootCauseDto create(RootCauseDto r) {
