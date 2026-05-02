@@ -18,6 +18,15 @@ public interface FailureReasonRepository extends JpaRepository<FailureReason, UU
 
     @Query(value = "SELECT * FROM failure_reasons WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<FailureReason> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query("""
+            SELECT fr FROM FailureReason fr
+            WHERE fr.isDeleted = false
+                AND (cast(:search as string) IS NULL OR
+                     lower(fr.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(fr.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY fr.updatedAt DESC
+            """)
+    List<FailureReason> findAllBySearch(@Param("search") String search);
 
     @Query(value = "SELECT * FROM failure_reasons WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<FailureReason> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);

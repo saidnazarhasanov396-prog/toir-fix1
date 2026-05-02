@@ -20,8 +20,8 @@ public class CriticalityClassService {
 
 
     @Transactional(readOnly = true)
-    public List<CriticalityClassDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(CriticalityClassDto::from).toList();
+    public List<CriticalityClassDto> findAll(String search) {
+        return repository.findAllBySearch(search).stream().map(CriticalityClassDto::from).toList();
     }
 
     @Transactional(readOnly = true)

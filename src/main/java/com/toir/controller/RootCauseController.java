@@ -18,7 +18,9 @@ public class RootCauseController {
 
     public RootCauseController(RootCauseService service) { this.service = service; }
 
-    @GetMapping public ResponseEntity<List<RootCauseDto>> list() { return ResponseEntity.ok(service.findAll()); }
+    @GetMapping public ResponseEntity<List<RootCauseDto>> list(@RequestParam(required = false) String search) {
+        return ResponseEntity.ok(service.findAll(search));
+    }
 
     @PostMapping
     public ResponseEntity<RootCauseDto> create(@Valid @RequestBody RootCauseDto r) {

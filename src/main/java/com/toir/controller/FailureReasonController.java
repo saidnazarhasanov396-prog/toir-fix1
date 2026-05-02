@@ -18,7 +18,9 @@ public class FailureReasonController {
 
     public FailureReasonController(FailureReasonService service) { this.service = service; }
 
-    @GetMapping public ResponseEntity<List<FailureReasonDto>> list() { return ResponseEntity.ok(service.findAll()); }
+    @GetMapping public ResponseEntity<List<FailureReasonDto>> list(@RequestParam(required = false) String search) {
+        return ResponseEntity.ok(service.findAll(search));
+    }
 
     @PostMapping
     public ResponseEntity<FailureReasonDto> create(@Valid @RequestBody FailureReasonDto r) {

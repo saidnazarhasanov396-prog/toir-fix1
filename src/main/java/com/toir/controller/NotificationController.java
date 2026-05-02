@@ -69,10 +69,15 @@ public class NotificationController {
     public ResponseEntity<PageResponseWithSummary<NotificationDto, FinancialReviewInboxSummary>> financialReviewInbox(
             @CurrentUser AuthenticatedUser user,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize) {
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) String search) {
         List<NotificationDto> items = user != null
                 ? service.findForUser(UUID.fromString(user.id())).stream()
                         .filter(n -> n.entityType() != null && n.entityType().toUpperCase().contains("COST"))
+                        .filter(n -> search == null || search.isBlank() ||
+                                containsIgnoreCase(n.title(), search) ||
+                                containsIgnoreCase(n.message(), search) ||
+                                containsIgnoreCase(n.entityType(), search))
                         .toList()
                 : List.of();
         long read = items.stream().filter(n -> n.status() == NotificationStatus.READ).count();
@@ -114,5 +119,9 @@ public class NotificationController {
     @PostMapping("/dispatch-pending")
     public ResponseEntity<NotificationDispatchResponse> dispatch() {
         return ResponseEntity.ok(new NotificationDispatchResponse(0));
+    }
+
+    private boolean containsIgnoreCase(String value, String search) {
+        return value != null && value.toLowerCase().contains(search.toLowerCase());
     }
 }

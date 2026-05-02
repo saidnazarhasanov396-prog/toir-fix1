@@ -18,6 +18,15 @@ public interface ManufacturerRepository extends JpaRepository<Manufacturer, UUID
 
     @Query(value = "SELECT * FROM manufacturers WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Manufacturer> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query("""
+            SELECT m FROM Manufacturer m
+            WHERE m.isDeleted = false
+                AND (cast(:search as string) IS NULL OR
+                     lower(m.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(m.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY m.updatedAt DESC
+            """)
+    List<Manufacturer> findAllBySearch(@Param("search") String search);
 
     @Query(value = "SELECT * FROM manufacturers WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<Manufacturer> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);

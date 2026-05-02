@@ -175,10 +175,15 @@ public class BudgetSummaryController {
     @GetMapping("/actual-costs/review-activity")
     public ResponseEntity<PageResponseWithSummary<ActualCostBudgetRow, ActualCostReviewActivitySummary>> reviewActivity(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize) {
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) String search) {
         Instant weekAgo = Instant.now().minus(7, ChronoUnit.DAYS);
         List<ActualCost> recent = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(c -> c.getReviewedAt() != null && c.getReviewedAt().isAfter(weekAgo))
+                .filter(c -> search == null || search.isBlank() ||
+                        containsIgnoreCase(c.getNotes(), search) ||
+                        containsIgnoreCase(c.getReviewComment(), search) ||
+                        containsIgnoreCase(c.getStatus().name(), search))
                 .toList();
 
         ActualCostReviewActivitySummary summary = new ActualCostReviewActivitySummary(
@@ -255,5 +260,9 @@ public class BudgetSummaryController {
                 c.getReviewedById(),
                 c.getReviewComment()
         );
+    }
+
+    private boolean containsIgnoreCase(String value, String search) {
+        return value != null && value.toLowerCase().contains(search.toLowerCase());
     }
 }
