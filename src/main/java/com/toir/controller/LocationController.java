@@ -27,9 +27,9 @@ public class LocationController {
             @RequestParam(required = false) LocationType locationType,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize
+            @RequestParam(name = "size", defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(service.search(locationType, search, page, pageSize));
+        return ResponseEntity.ok(service.search(locationType, search, page, size));
     }
 
     @GetMapping("/{id}")

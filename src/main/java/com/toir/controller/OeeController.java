@@ -3,12 +3,14 @@ import com.toir.dto.oee.OeeRecordDto;
 import com.toir.dto.oee.OeeRecordRequest;
 import com.toir.dto.oee.OeeSummary;
 import com.toir.service.OeeService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,13 +27,15 @@ public class OeeController {
     }
 
     @GetMapping
-    public ResponseEntity<List<OeeRecordDto>> list(
+    public ResponseEntity<Page<OeeRecordDto>> list(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
-        if (from != null && to != null) return ResponseEntity.ok(service.listBetween(equipmentId, from, to));
-        if (equipmentId != null) return ResponseEntity.ok(service.listByEquipment(equipmentId));
-        return ResponseEntity.ok(List.of());
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        if (from != null && to != null) return ResponseEntity.ok(PaginationUtils.page(service.listBetween(equipmentId, from, to), page, size));
+        if (equipmentId != null) return ResponseEntity.ok(PaginationUtils.page(service.listByEquipment(equipmentId), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(List.of(), page, size));
     }
 
     @GetMapping("/{id}")

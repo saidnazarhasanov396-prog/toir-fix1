@@ -27,10 +27,10 @@ public class DefectListController {
     public ResponseEntity<Page<DefectListDto>> list(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search
     ) {
-        return ResponseEntity.ok(service.search(equipmentId, page, pageSize, search));
+        return ResponseEntity.ok(service.search(equipmentId, page, size, search));
     }
 
     @GetMapping("/{id}")

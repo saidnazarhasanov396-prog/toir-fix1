@@ -104,17 +104,17 @@ public class BudgetSummaryController {
     @GetMapping("/cost-categories")
     public ResponseEntity<Page<CostCategoryDto>> costCategories(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search
     ) {
-        return ResponseEntity.ok(costCategoryRepository.findAll(search, PageRequest.of(page, pageSize))
+        return ResponseEntity.ok(costCategoryRepository.findAll(search, PageRequest.of(page, size))
                 .map(CostCategoryDto::from));
     }
 
     @GetMapping("/actual-costs/register")
     public ResponseEntity<PageResponseWithSummary<ActualCostBudgetRow, ActualCostRegisterSummary>> actualCostRegister(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize) {
+            @RequestParam(name = "size", defaultValue = "20") int size) {
         List<ActualCost> items = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         double totalAmount = items.stream().mapToDouble(ActualCost::getAmount).sum();
         double approvedAmount = items.stream().filter(c -> c.getStatus() == ActualCostStatus.APPROVED)
@@ -142,7 +142,7 @@ public class BudgetSummaryController {
         return ResponseEntity.ok(PageResponseWithSummary.of(
                 items.stream().map(this::actualCostRow).toList(),
                 page,
-                pageSize,
+                size,
                 summary
         ));
     }
@@ -150,9 +150,9 @@ public class BudgetSummaryController {
     @GetMapping("/actual-costs/review-queue")
     public ResponseEntity<PageResponse<ActualCostBudgetRow>> reviewQueue(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize) {
+            @RequestParam(name = "size", defaultValue = "20") int size) {
         List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
-        return ResponseEntity.ok(PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, pageSize));
+        return ResponseEntity.ok(PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, size));
     }
 
     @GetMapping("/actual-costs/{id}/review-history")
@@ -175,7 +175,7 @@ public class BudgetSummaryController {
     @GetMapping("/actual-costs/review-activity")
     public ResponseEntity<PageResponseWithSummary<ActualCostBudgetRow, ActualCostReviewActivitySummary>> reviewActivity(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search) {
         Instant weekAgo = Instant.now().minus(7, ChronoUnit.DAYS);
         List<ActualCost> recent = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -200,7 +200,7 @@ public class BudgetSummaryController {
         return ResponseEntity.ok(PageResponseWithSummary.of(
                 recent.stream().map(this::actualCostRow).toList(),
                 page,
-                pageSize,
+                size,
                 summary
         ));
     }
@@ -208,7 +208,7 @@ public class BudgetSummaryController {
     @GetMapping("/actual-costs/handovers")
     public ResponseEntity<PageResponseWithSummary<ActualCostBudgetRow, ActualCostHandoverSummary>> handovers(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize) {
+            @RequestParam(name = "size", defaultValue = "20") int size) {
         ActualCostHandoverSummary summary = new ActualCostHandoverSummary(
                 0,
                 0,
@@ -219,25 +219,25 @@ public class BudgetSummaryController {
                 List.of()
         );
 
-        return ResponseEntity.ok(PageResponseWithSummary.of(List.of(), page, pageSize, summary));
+        return ResponseEntity.ok(PageResponseWithSummary.of(List.of(), page, size, summary));
     }
 
     @GetMapping("/actual-costs/approval-pack")
     public ResponseEntity<PageResponse<ActualCostBudgetRow>> approvalPack(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize) {
+            @RequestParam(name = "size", defaultValue = "20") int size) {
         List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
-        return ResponseEntity.ok(PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, pageSize));
+        return ResponseEntity.ok(PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, size));
     }
 
     @GetMapping("/actual-costs/review-history-pack")
     public ResponseEntity<PageResponse<ActualCostBudgetRow>> reviewHistoryPack(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize) {
+            @RequestParam(name = "size", defaultValue = "20") int size) {
         List<ActualCost> reviewed = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(c -> c.getReviewedAt() != null)
                 .toList();
-        return ResponseEntity.ok(PageResponse.of(reviewed.stream().map(this::actualCostRow).toList(), page, pageSize));
+        return ResponseEntity.ok(PageResponse.of(reviewed.stream().map(this::actualCostRow).toList(), page, size));
     }
 
     @GetMapping("/contractor-works/{id}/recommendation")

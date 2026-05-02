@@ -3,10 +3,12 @@ import com.toir.dto.certification.CertificationTypeDto;
 import com.toir.dto.certification.UserCertificationDto;
 import com.toir.dto.certification.UserCertificationRequest;
 import com.toir.service.CertificationService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,12 +25,12 @@ public class CertificationController {
     }
 
     @GetMapping("/certification-types")
-    public ResponseEntity<List<CertificationTypeDto>> listTypes(
+    public ResponseEntity<Page<CertificationTypeDto>> listTypes(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String search
-    ) {
-        return ResponseEntity.ok(service.findTypes(code,name,search));
+    , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findTypes(code,name,search), page, size));
     }
 
     @PostMapping("/certification-types")
@@ -48,10 +50,10 @@ public class CertificationController {
     }
 
     @GetMapping("/user-certifications")
-    public ResponseEntity<List<UserCertificationDto>> list(
+    public ResponseEntity<Page<UserCertificationDto>> list(
             @RequestParam(required = false) String search
-    ) {
-        return ResponseEntity.ok(service.findAll(search));
+    , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search), page, size));
     }
 
     @GetMapping("/user-certification/{id}")
@@ -60,8 +62,8 @@ public class CertificationController {
     }
 
     @GetMapping("/user-certifications/expiring")
-    public ResponseEntity<List<UserCertificationDto>> expiring(@RequestParam(defaultValue = "30") int withinDays) {
-        return ResponseEntity.ok(service.findExpiring(withinDays));
+    public ResponseEntity<Page<UserCertificationDto>> expiring(@RequestParam(defaultValue = "30") int withinDays, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findExpiring(withinDays), page, size));
     }
 
     @PostMapping("/user-certifications")

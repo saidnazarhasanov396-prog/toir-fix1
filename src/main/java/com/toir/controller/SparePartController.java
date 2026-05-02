@@ -25,10 +25,10 @@ public class SparePartController {
     @GetMapping
     public ResponseEntity<Page<SparePartDto>> list(
             @RequestParam(defaultValue = "0", required = false) Integer page,
-            @RequestParam(defaultValue = "20", required = false) Integer pageSize,
+            @RequestParam(name = "size", defaultValue = "20", required = false) Integer size,
             @RequestParam(required = false)String itemType,
             @RequestParam(required = false, defaultValue = "") String search
-            ) { return ResponseEntity.ok(service.findAll(pageSize,page,itemType,search)); }
+            ) { return ResponseEntity.ok(service.findAll(size,page,itemType,search)); }
 
     @GetMapping("/{id}")
     public ResponseEntity<SparePartDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }

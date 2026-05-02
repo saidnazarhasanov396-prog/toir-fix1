@@ -4,6 +4,7 @@ import com.toir.dto.hr.EmployeeRequest;
 import com.toir.dto.hr.TimesheetEntryDto;
 import com.toir.dto.hr.TimesheetEntryRequest;
 import com.toir.service.HrService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
@@ -29,10 +30,10 @@ public class HrController {
     @GetMapping("/employees")
     public ResponseEntity<Page<EmployeeDto>> listEmployees(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean activeOnly) {
-        return ResponseEntity.ok(service.listEmployees(page-1, pageSize, search, activeOnly));
+        return ResponseEntity.ok(service.listEmployees(page-1, size, search, activeOnly));
     }
 
     @GetMapping("/employees/{id}")
@@ -58,13 +59,13 @@ public class HrController {
     }
 
     @GetMapping("/timesheet")
-    public ResponseEntity<List<TimesheetEntryDto>> timesheet(
+    public ResponseEntity<Page<TimesheetEntryDto>> timesheet(
             @RequestParam(required = false) UUID employeeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return ResponseEntity.ok(employeeId != null
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(employeeId != null
                 ? service.timesheetFor(employeeId, from, to)
-                : service.timesheetRange(from, to));
+                : service.timesheetRange(from, to), page, size));
     }
 
     @PostMapping("/timesheet")

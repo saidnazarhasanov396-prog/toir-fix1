@@ -9,6 +9,7 @@ import com.toir.repository.DefectRepository;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.EquipmentRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Duration;
 import java.time.Instant;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -59,9 +61,9 @@ public class ParetoController {
     ) {}
 
     @GetMapping("/pareto/downtime-causes")
-    public ResponseEntity<List<ParetoItem>> downtimeCauses(
+    public ResponseEntity<Page<ParetoItem>> downtimeCauses(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
         List<DowntimeEvent> events = downtimeRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -76,13 +78,13 @@ public class ParetoController {
             String key = ev.getType() != null ? ev.getType().name() : "UNKNOWN";
             byType.merge(key, (double) minutes, Double::sum);
         }
-        return ResponseEntity.ok(pareto(byType));
+        return ResponseEntity.ok(PaginationUtils.page(pareto(byType), page, size));
     }
 
     @GetMapping("/pareto/defect-root-causes")
-    public ResponseEntity<List<ParetoItem>> defectRootCauses(
+    public ResponseEntity<Page<ParetoItem>> defectRootCauses(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
         List<Defect> defects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -95,14 +97,14 @@ public class ParetoController {
                     : (d.getFailureReason() != null && !d.getFailureReason().isBlank() ? d.getFailureReason() : "UNKNOWN");
             byCause.merge(key, 1.0, Double::sum);
         }
-        return ResponseEntity.ok(pareto(byCause));
+        return ResponseEntity.ok(PaginationUtils.page(pareto(byCause), page, size));
     }
 
     @GetMapping("/top-problem-equipment")
-    public ResponseEntity<List<TopEquipmentItem>> topProblemEquipment(
+    public ResponseEntity<Page<TopEquipmentItem>> topProblemEquipment(
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
 
@@ -144,12 +146,12 @@ public class ParetoController {
         }
 
         int safeLimit = Math.max(Math.min(limit, 100), 1);
-        return ResponseEntity.ok(all.stream()
+        return ResponseEntity.ok(PaginationUtils.page(all.stream()
                 .sorted(Comparator
                         .comparingInt(TopEquipmentItem::failures).reversed()
                         .thenComparingLong((TopEquipmentItem i) -> -i.totalDowntimeMinutes()))
                 .limit(safeLimit)
-                .toList());
+                .toList(), page, size));
     }
 
 

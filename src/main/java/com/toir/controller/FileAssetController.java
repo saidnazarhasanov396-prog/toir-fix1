@@ -7,6 +7,7 @@ import com.toir.repository.TechnicalDocumentRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.service.FileAssetService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.net.MalformedURLException;
 import java.nio.file.Path;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -39,22 +41,24 @@ public class FileAssetController {
     }
 
     @GetMapping
-    public ResponseEntity<List<FileAssetDto>> list(@RequestParam String entityType, @RequestParam String entityId) {
-        return ResponseEntity.ok(service.findByEntity(entityType, entityId));
+    public ResponseEntity<Page<FileAssetDto>> list(@RequestParam String entityType, @RequestParam String entityId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByEntity(entityType, entityId), page, size));
     }
 
     @GetMapping("/assets")
-    public ResponseEntity<List<FileAssetDto>> legacyAssets(@RequestParam(required = false) String entityType,
-                                           @RequestParam(required = false) String entityId) {
+    public ResponseEntity<Page<FileAssetDto>> legacyAssets(@RequestParam(required = false) String entityType,
+                                           @RequestParam(required = false) String entityId,
+                                           @RequestParam(defaultValue = "0") int page,
+                                           @RequestParam(defaultValue = "20") int size) {
         if (entityType != null && entityId != null) {
-            return ResponseEntity.ok(service.findByEntity(entityType, entityId));
+            return ResponseEntity.ok(PaginationUtils.page(service.findByEntity(entityType, entityId), page, size));
         }
-        return ResponseEntity.ok(repository.findAllByIsDeletedFalseOrderByCreatedAtDesc().stream().map(FileAssetDto::from).toList());
+        return ResponseEntity.ok(PaginationUtils.page(repository.findAllByIsDeletedFalseOrderByCreatedAtDesc().stream().map(FileAssetDto::from).toList(), page, size));
     }
 
     @GetMapping("/documents")
-    public ResponseEntity<List<TechnicalDocumentDto>> legacyDocuments() {
-        return ResponseEntity.ok(technicalDocumentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(TechnicalDocumentDto::from).toList());
+    public ResponseEntity<Page<TechnicalDocumentDto>> legacyDocuments(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(technicalDocumentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(TechnicalDocumentDto::from).toList(), page, size));
     }
 
     @PostMapping("/upload")

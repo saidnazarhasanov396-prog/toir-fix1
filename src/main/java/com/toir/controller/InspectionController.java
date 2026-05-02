@@ -9,10 +9,12 @@ import com.toir.enums.InspectionRoundStatus;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
 import com.toir.service.InspectionService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -67,12 +69,12 @@ public class InspectionController {
 
     // rounds
     @GetMapping("/inspection-rounds")
-    public ResponseEntity<List<InspectionRoundDto>> listRounds(
+    public ResponseEntity<Page<InspectionRoundDto>> listRounds(
              @RequestParam(required = false) UUID routeId,
              @RequestParam(required = false) UUID performedBy,
              @RequestParam(required = false) InspectionRoundStatus status
-    ) {
-        return ResponseEntity.ok(service.listRounds(routeId, performedBy,status));
+    , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.listRounds(routeId, performedBy,status), page, size));
     }
 
     @GetMapping("/inspection-rounds/{id}")

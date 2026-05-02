@@ -7,9 +7,11 @@ import com.toir.repository.RepairRequestRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.service.FileAssetService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -36,9 +38,11 @@ public class RepairRequestPhotosController {
     }
 
     @GetMapping
-    public ResponseEntity<List<FileAssetDto>> list(@PathVariable UUID requestId) {
+    public ResponseEntity<Page<FileAssetDto>> list(@PathVariable UUID requestId,
+                                                   @RequestParam(defaultValue = "0") int page,
+                                                   @RequestParam(defaultValue = "20") int size) {
         ensureExists(requestId);
-        return ResponseEntity.ok(fileAssetService.findByEntity(ENTITY_TYPE, requestId.toString()));
+        return ResponseEntity.ok(PaginationUtils.page(fileAssetService.findByEntity(ENTITY_TYPE, requestId.toString()), page, size));
     }
 
     @PostMapping

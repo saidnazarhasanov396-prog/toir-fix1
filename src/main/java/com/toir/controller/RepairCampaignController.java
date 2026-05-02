@@ -3,10 +3,12 @@ import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
 import com.toir.service.RepairCampaignService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,8 +25,8 @@ public class RepairCampaignController {
     }
 
     @GetMapping
-    public ResponseEntity<List<RepairCampaignDto>> list(@RequestParam(required = false) Integer year) {
-        return ResponseEntity.ok(year != null ? service.findByYear(year) : service.findAll());
+    public ResponseEntity<Page<RepairCampaignDto>> list(@RequestParam(required = false) Integer year, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(year != null ? service.findByYear(year) : service.findAll(), page, size));
     }
 
     @GetMapping("/{id}")

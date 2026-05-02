@@ -4,10 +4,12 @@ import com.toir.dto.webhook.WebhookTestResponse;
 import com.toir.entity.WebhookEventLog;
 import com.toir.entity.WebhookSubscription;
 import com.toir.service.WebhookService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,11 +26,13 @@ public class WebhookController {
     }
 
     @GetMapping
-    public ResponseEntity<List<WebhookDto>> list(
+    public ResponseEntity<Page<WebhookDto>> list(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) Boolean active
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(service.findAll(search,active));
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search, active), page, size));
     }
 
     @PostMapping
@@ -48,8 +52,8 @@ public class WebhookController {
     }
 
     @GetMapping("/{id}/events")
-    public ResponseEntity<List<WebhookEventLog>> events(@PathVariable UUID id) {
-        return ResponseEntity.ok(service.recentForSubscription(id));
+    public ResponseEntity<Page<WebhookEventLog>> events(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.recentForSubscription(id), page, size));
     }
 
     @PostMapping("/test")

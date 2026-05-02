@@ -1,10 +1,12 @@
 package com.toir.controller;
 import com.toir.dto.costcategory.CostCategoryDto;
 import com.toir.service.CostCategoryService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +20,7 @@ public class CostCategoryController {
 
     public CostCategoryController(CostCategoryService service) { this.service = service; }
 
-    @GetMapping public ResponseEntity<List<CostCategoryDto>> list() { return ResponseEntity.ok(service.findAll()); }
+    @GetMapping public ResponseEntity<Page<CostCategoryDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
 
     @PostMapping
     public ResponseEntity<CostCategoryDto> create(@Valid @RequestBody CostCategoryDto r) {

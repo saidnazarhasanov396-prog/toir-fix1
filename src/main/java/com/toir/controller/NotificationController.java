@@ -36,11 +36,11 @@ public class NotificationController {
     }
 
     @GetMapping
-    public ResponseEntity<List<NotificationDto>> list(@RequestParam(required = false) UUID recipientId,
-                                      @CurrentUser AuthenticatedUser user) {
+    public ResponseEntity<Page<NotificationDto>> list(@RequestParam(required = false) UUID recipientId,
+                                      @CurrentUser AuthenticatedUser user, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         UUID target = recipientId != null ? recipientId
                 : (user != null ? UUID.fromString(user.id()) : null);
-        return ResponseEntity.ok(target != null ? service.findForUser(target) : List.of());
+        return ResponseEntity.ok(PaginationUtils.page(target != null ? service.findForUser(target) : List.of(), page, size));
     }
 
     @GetMapping("/summary")
@@ -69,7 +69,7 @@ public class NotificationController {
     public ResponseEntity<PageResponseWithSummary<NotificationDto, FinancialReviewInboxSummary>> financialReviewInbox(
             @CurrentUser AuthenticatedUser user,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search) {
         List<NotificationDto> items = user != null
                 ? service.findForUser(UUID.fromString(user.id())).stream()
@@ -86,7 +86,7 @@ public class NotificationController {
         return ResponseEntity.ok(PageResponseWithSummary.of(
                 items,
                 page,
-                pageSize,
+                size,
                 new FinancialReviewInboxSummary(
                         items.size(),
                         items.size() - read,
@@ -101,9 +101,9 @@ public class NotificationController {
     @GetMapping("/sla-rules")
     public ResponseEntity<Page<SlaRuleDto>> slaRules(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int pageSize
+            @RequestParam(name = "size", defaultValue = "20") int size
     ) {
-        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        var pageable = PaginationUtils.pageRequest(page, size);
         List<SlaRuleDto> all = slaRuleService.findAll();
         int fromIndex = Math.min(PaginationUtils.offset(pageable), all.size());
         int toIndex = Math.min(fromIndex + pageable.getPageSize(), all.size());

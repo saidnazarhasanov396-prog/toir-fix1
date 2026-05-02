@@ -2,6 +2,7 @@ package com.toir.controller;
 import com.toir.dto.workexecution.ExecutionLogDto;
 import com.toir.dto.workexecution.WorkExecutionDto;
 import com.toir.service.WorkExecutionService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -24,14 +25,14 @@ public class WorkExecutionController {
     public ResponseEntity<Page<ExecutionLogDto>> executionLogs(
             @RequestParam(required = false) UUID workOrderId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int pageSize
+            @RequestParam(name = "size", defaultValue = "50") int size
     ) {
-        return ResponseEntity.ok(service.findExecutionLogs(workOrderId, page, pageSize));
+        return ResponseEntity.ok(service.findExecutionLogs(workOrderId, page, size));
     }
 
     @GetMapping("/work-orders/{workOrderId}/executions")
-    public ResponseEntity<List<WorkExecutionDto>> list(@PathVariable UUID workOrderId) {
-        return ResponseEntity.ok(service.findByWorkOrder(workOrderId));
+    public ResponseEntity<Page<WorkExecutionDto>> list(@PathVariable UUID workOrderId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByWorkOrder(workOrderId), page, size));
     }
 
     @PostMapping("/work-orders/{workOrderId}/executions")
