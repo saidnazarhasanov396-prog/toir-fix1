@@ -20,6 +20,8 @@ import com.toir.dto.common.PageResponse;
 import com.toir.dto.common.PageResponseWithSummary;
 import com.toir.dto.costcategory.CostCategoryDto;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,6 +43,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/v1/budgets")
 @Tag(name = "budgets-summary")
+@RequiredArgsConstructor
 public class BudgetSummaryController {
 
     private final MaintenanceBudgetRepository budgetRepository;
@@ -48,15 +51,7 @@ public class BudgetSummaryController {
     private final ActualCostRepository actualCostRepository;
     private final CostCategoryRepository costCategoryRepository;
 
-    public BudgetSummaryController(MaintenanceBudgetRepository budgetRepository,
-                                   BudgetLineRepository lineRepository,
-                                   ActualCostRepository actualCostRepository,
-                                   CostCategoryRepository costCategoryRepository) {
-        this.budgetRepository = budgetRepository;
-        this.lineRepository = lineRepository;
-        this.actualCostRepository = actualCostRepository;
-        this.costCategoryRepository = costCategoryRepository;
-    }
+
 
     @GetMapping("/summary")
     public BudgetSummaryResponse summary() {
@@ -112,9 +107,9 @@ public class BudgetSummaryController {
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String search
     ) {
-        return PageResponse.of(com.toir.util.UpdatedAtSorter.descending(costCategoryRepository.findAll(search)).stream()
+        return PageResponse.of(costCategoryRepository.findAll(search).stream()
                 .map(CostCategoryDto::from)
-                .toList(), page, pageSize);
+                .toList(),page,pageSize);
     }
 
     @GetMapping("/actual-costs/register")

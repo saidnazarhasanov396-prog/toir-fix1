@@ -5,6 +5,10 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -30,4 +34,9 @@ public interface CostCategoryRepository extends JpaRepository<CostCategory, UUID
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM cost_categories WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
+
+    @Query(value = "SELECT cr.* FROM cost_categories cr WHERE is_deleted = false order by cr.updated_at", nativeQuery = true)
+    List<CostCategory> findAll(
+            @Param("search") String search
+    );
 }
