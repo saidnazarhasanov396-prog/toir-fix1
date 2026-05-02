@@ -1,16 +1,14 @@
 package com.toir.controller;
-import com.toir.service.ReservationService;
-
 import com.toir.dto.reservation.ReservationDto;
 import com.toir.dto.reservation.ReservationRequest;
+import com.toir.service.ReservationService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/reservations")
@@ -22,8 +20,8 @@ public class ReservationController {
     public ReservationController(ReservationService service) { this.service = service; }
 
     @GetMapping
-    public List<ReservationDto> list(@RequestParam UUID workOrderId) {
-        return service.findByWorkOrder(workOrderId);
+    public ResponseEntity<List<ReservationDto>> list(@RequestParam UUID workOrderId) {
+        return ResponseEntity.ok(service.findByWorkOrder(workOrderId));
     }
 
     @PostMapping
@@ -32,8 +30,8 @@ public class ReservationController {
     }
 
     @PostMapping("/{id}/cancel")
-    public ReservationDto cancel(@PathVariable UUID id) { return service.cancel(id); }
+    public ResponseEntity<ReservationDto> cancel(@PathVariable UUID id) { return ResponseEntity.ok(service.cancel(id)); }
 
     @PostMapping("/{id}/fulfill")
-    public ReservationDto fulfill(@PathVariable UUID id) { return service.fulfill(id); }
+    public ResponseEntity<ReservationDto> fulfill(@PathVariable UUID id) { return ResponseEntity.ok(service.fulfill(id)); }
 }

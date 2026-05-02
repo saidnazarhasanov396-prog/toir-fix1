@@ -1,15 +1,13 @@
 package com.toir.controller;
-import com.toir.service.PlannedShutdownService;
-
 import com.toir.dto.plannedshutdown.PlannedShutdownDto;
+import com.toir.service.PlannedShutdownService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/planned-shutdowns")
@@ -21,8 +19,8 @@ public class PlannedShutdownController {
     public PlannedShutdownController(PlannedShutdownService service) { this.service = service; }
 
     @GetMapping
-    public List<PlannedShutdownDto> list(@RequestParam UUID departmentId) {
-        return service.findByDepartment(departmentId);
+    public ResponseEntity<List<PlannedShutdownDto>> list(@RequestParam UUID departmentId) {
+        return ResponseEntity.ok(service.findByDepartment(departmentId));
     }
 
     @PostMapping
@@ -31,5 +29,5 @@ public class PlannedShutdownController {
     }
 
     @PostMapping("/{id}/approve")
-    public PlannedShutdownDto approve(@PathVariable UUID id) { return service.approve(id); }
+    public ResponseEntity<PlannedShutdownDto> approve(@PathVariable UUID id) { return ResponseEntity.ok(service.approve(id)); }
 }

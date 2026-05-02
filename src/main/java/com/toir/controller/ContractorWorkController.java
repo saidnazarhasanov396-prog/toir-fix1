@@ -1,15 +1,13 @@
 package com.toir.controller;
-import com.toir.service.ContractorWorkService;
-
 import com.toir.dto.contractorwork.ContractorWorkDto;
+import com.toir.service.ContractorWorkService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/contractor-works")
@@ -21,8 +19,8 @@ public class ContractorWorkController {
     public ContractorWorkController(ContractorWorkService service) { this.service = service; }
 
     @GetMapping
-    public List<ContractorWorkDto> list(@RequestParam UUID contractorId) {
-        return service.findByContractor(contractorId);
+    public ResponseEntity<List<ContractorWorkDto>> list(@RequestParam UUID contractorId) {
+        return ResponseEntity.ok(service.findByContractor(contractorId));
     }
 
     @PostMapping
@@ -31,15 +29,15 @@ public class ContractorWorkController {
     }
 
     @PostMapping("/{id}/start")
-    public ContractorWorkDto start(@PathVariable UUID id) { return service.start(id); }
+    public ResponseEntity<ContractorWorkDto> start(@PathVariable UUID id) { return ResponseEntity.ok(service.start(id)); }
 
     @PostMapping("/{id}/complete")
-    public ContractorWorkDto complete(@PathVariable UUID id, @RequestParam String result, @RequestParam(required = false) Double cost) {
-        return service.complete(id, result, cost);
+    public ResponseEntity<ContractorWorkDto> complete(@PathVariable UUID id, @RequestParam String result, @RequestParam(required = false) Double cost) {
+        return ResponseEntity.ok(service.complete(id, result, cost));
     }
 
     @PostMapping("/{id}/accept")
-    public ContractorWorkDto accept(@PathVariable UUID id, @RequestParam UUID acceptedById, @RequestParam(required = false) String comment) {
-        return service.accept(id, acceptedById, comment);
+    public ResponseEntity<ContractorWorkDto> accept(@PathVariable UUID id, @RequestParam UUID acceptedById, @RequestParam(required = false) String comment) {
+        return ResponseEntity.ok(service.accept(id, acceptedById, comment));
     }
 }

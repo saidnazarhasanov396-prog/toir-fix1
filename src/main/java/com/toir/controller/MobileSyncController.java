@@ -2,8 +2,8 @@ package com.toir.controller;
 import com.toir.dto.mobilesync.MobileSyncRequest;
 import com.toir.dto.mobilesync.MobileSyncResult;
 import com.toir.service.MobileSyncService;
-
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,7 +21,7 @@ public class MobileSyncController {
     }
 
     @PostMapping
-    public MobileSyncResult sync(@RequestBody MobileSyncRequest request) {
-        return service.sync(request);
+    public ResponseEntity<MobileSyncResult> sync(@RequestBody MobileSyncRequest request) {
+        return ResponseEntity.ok(service.sync(request));
     }
 }

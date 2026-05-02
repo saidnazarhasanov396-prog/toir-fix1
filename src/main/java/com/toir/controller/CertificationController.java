@@ -1,17 +1,15 @@
 package com.toir.controller;
-import com.toir.service.CertificationService;
-
 import com.toir.dto.certification.CertificationTypeDto;
 import com.toir.dto.certification.UserCertificationDto;
 import com.toir.dto.certification.UserCertificationRequest;
+import com.toir.service.CertificationService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -25,12 +23,12 @@ public class CertificationController {
     }
 
     @GetMapping("/certification-types")
-    public List<CertificationTypeDto> listTypes(
+    public ResponseEntity<List<CertificationTypeDto>> listTypes(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String search
     ) {
-        return service.findTypes(code,name,search);
+        return ResponseEntity.ok(service.findTypes(code,name,search));
     }
 
     @PostMapping("/certification-types")
@@ -39,8 +37,8 @@ public class CertificationController {
     }
 
     @PutMapping("/certification-types/{id}")
-    public CertificationTypeDto updateType(@PathVariable UUID id, @Valid @RequestBody CertificationTypeDto r) {
-        return service.updateType(id, r);
+    public ResponseEntity<CertificationTypeDto> updateType(@PathVariable UUID id, @Valid @RequestBody CertificationTypeDto r) {
+        return ResponseEntity.ok(service.updateType(id, r));
     }
 
     @DeleteMapping("/certification-types/{id}")
@@ -50,20 +48,20 @@ public class CertificationController {
     }
 
     @GetMapping("/user-certifications")
-    public List<UserCertificationDto> list(
+    public ResponseEntity<List<UserCertificationDto>> list(
             @RequestParam(required = false) String search
     ) {
-        return service.findAll(search);
+        return ResponseEntity.ok(service.findAll(search));
     }
 
     @GetMapping("/user-certification/{id}")
-    public UserCertificationDto findOne(@PathVariable UUID id) {
-        return service.findOne(id);
+    public ResponseEntity<UserCertificationDto> findOne(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.findOne(id));
     }
 
     @GetMapping("/user-certifications/expiring")
-    public List<UserCertificationDto> expiring(@RequestParam(defaultValue = "30") int withinDays) {
-        return service.findExpiring(withinDays);
+    public ResponseEntity<List<UserCertificationDto>> expiring(@RequestParam(defaultValue = "30") int withinDays) {
+        return ResponseEntity.ok(service.findExpiring(withinDays));
     }
 
     @PostMapping("/user-certifications")
@@ -72,15 +70,15 @@ public class CertificationController {
     }
 
     @PostMapping("/user-certifications/{id}/suspend")
-    public UserCertificationDto suspend(@PathVariable UUID id, @RequestParam String reason) {
-        return service.suspend(id, reason);
+    public ResponseEntity<UserCertificationDto> suspend(@PathVariable UUID id, @RequestParam String reason) {
+        return ResponseEntity.ok(service.suspend(id, reason));
     }
 
     @PostMapping("/user-certifications/{id}/revoke")
-    public UserCertificationDto revoke(@PathVariable UUID id, @RequestParam String reason) {
-        return service.revoke(id, reason);
+    public ResponseEntity<UserCertificationDto> revoke(@PathVariable UUID id, @RequestParam String reason) {
+        return ResponseEntity.ok(service.revoke(id, reason));
     }
 
     @PostMapping("/user-certifications/recompute-expired")
-    public int recompute() { return service.markExpired(); }
+    public ResponseEntity<Integer> recompute() { return ResponseEntity.ok(service.markExpired()); }
 }

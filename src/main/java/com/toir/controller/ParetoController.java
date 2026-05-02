@@ -1,21 +1,15 @@
 package com.toir.controller;
 
 import com.toir.entity.Defect;
-import com.toir.entity.Equipment;
-import com.toir.repository.DefectRepository;
 import com.toir.entity.DowntimeEvent;
-import com.toir.repository.DowntimeEventRepository;
+import com.toir.entity.Equipment;
 import com.toir.entity.WorkOrder;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.repository.DefectRepository;
+import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.EquipmentRepository;
 import com.toir.repository.WorkOrderRepository;
-import com.toir.enums.WorkOrderStatus;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -24,6 +18,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/analytics")
@@ -59,7 +59,7 @@ public class ParetoController {
     ) {}
 
     @GetMapping("/pareto/downtime-causes")
-    public List<ParetoItem> downtimeCauses(
+    public ResponseEntity<List<ParetoItem>> downtimeCauses(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         Instant start = from != null ? from : Instant.EPOCH;
@@ -76,11 +76,11 @@ public class ParetoController {
             String key = ev.getType() != null ? ev.getType().name() : "UNKNOWN";
             byType.merge(key, (double) minutes, Double::sum);
         }
-        return pareto(byType);
+        return ResponseEntity.ok(pareto(byType));
     }
 
     @GetMapping("/pareto/defect-root-causes")
-    public List<ParetoItem> defectRootCauses(
+    public ResponseEntity<List<ParetoItem>> defectRootCauses(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         Instant start = from != null ? from : Instant.EPOCH;
@@ -95,11 +95,11 @@ public class ParetoController {
                     : (d.getFailureReason() != null && !d.getFailureReason().isBlank() ? d.getFailureReason() : "UNKNOWN");
             byCause.merge(key, 1.0, Double::sum);
         }
-        return pareto(byCause);
+        return ResponseEntity.ok(pareto(byCause));
     }
 
     @GetMapping("/top-problem-equipment")
-    public List<TopEquipmentItem> topProblemEquipment(
+    public ResponseEntity<List<TopEquipmentItem>> topProblemEquipment(
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
@@ -144,12 +144,12 @@ public class ParetoController {
         }
 
         int safeLimit = Math.max(Math.min(limit, 100), 1);
-        return all.stream()
+        return ResponseEntity.ok(all.stream()
                 .sorted(Comparator
                         .comparingInt(TopEquipmentItem::failures).reversed()
                         .thenComparingLong((TopEquipmentItem i) -> -i.totalDowntimeMinutes()))
                 .limit(safeLimit)
-                .toList();
+                .toList());
     }
 
 

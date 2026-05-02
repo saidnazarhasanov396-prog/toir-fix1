@@ -1,23 +1,21 @@
 package com.toir.controller;
-import com.toir.dto.meter.MeterTriggerMatch;
-import com.toir.enums.MeterType;
-import com.toir.service.MeterService;
-import com.toir.service.MeterTriggerService;
-
 import com.toir.dto.meter.EquipmentMeterDto;
 import com.toir.dto.meter.EquipmentMeterRequest;
 import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.meter.MeterReadingRequest;
+import com.toir.dto.meter.MeterTriggerMatch;
+import com.toir.enums.MeterType;
+import com.toir.service.MeterService;
+import com.toir.service.MeterTriggerService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/meters")
@@ -33,22 +31,22 @@ public class MeterController {
     }
 
     @GetMapping("/triggers")
-    public List<MeterTriggerMatch> triggers(@RequestParam UUID equipmentId) {
-        return triggerService.dueTriggers(equipmentId);
+    public ResponseEntity<List<MeterTriggerMatch>> triggers(@RequestParam UUID equipmentId) {
+        return ResponseEntity.ok(triggerService.dueTriggers(equipmentId));
     }
 
     @GetMapping
-    public List<EquipmentMeterDto> list(
+    public ResponseEntity<List<EquipmentMeterDto>> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) MeterType meterType
             ) {
-        return service.listAll(search,meterType);
+        return ResponseEntity.ok(service.listAll(search,meterType));
     }
 
 
     @GetMapping("/{id}")
-    public EquipmentMeterDto get(@PathVariable UUID id) {
-        return service.findMeter(id);
+    public ResponseEntity<EquipmentMeterDto> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.findMeter(id));
     }
 
     @PostMapping
@@ -57,14 +55,15 @@ public class MeterController {
     }
 
     @PutMapping("/{id}")
-    public EquipmentMeterDto update(@PathVariable UUID id, @Valid @RequestBody EquipmentMeterRequest request) {
-        return service.updateMeter(id, request);
+    public ResponseEntity<EquipmentMeterDto> update(@PathVariable UUID id, @Valid @RequestBody EquipmentMeterRequest request) {
+        return ResponseEntity.ok(service.updateMeter(id, request));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) {
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.deleteMeter(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/readings")
@@ -73,20 +72,21 @@ public class MeterController {
     }
 
     @GetMapping("/{id}/readings")
-    public List<MeterReadingDto> history(
+    public ResponseEntity<List<MeterReadingDto>> history(
             @PathVariable UUID id,
             @RequestParam(defaultValue = "100") int limit,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         if (from != null && to != null) {
-            return service.historyBetween(id, from, to);
+            return ResponseEntity.ok(service.historyBetween(id, from, to));
         }
-        return service.history(id, limit);
+        return ResponseEntity.ok(service.history(id, limit));
     }
 
     @DeleteMapping("/readings/{readingId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteReading(@PathVariable UUID readingId) {
+    public ResponseEntity<Void> deleteReading(@PathVariable UUID readingId) {
         service.deleteReading(readingId);
+        return ResponseEntity.noContent().build();
     }
 }

@@ -1,19 +1,17 @@
 package com.toir.controller;
-import com.toir.enums.ConditionParameter;
-import com.toir.service.ConditionReadingService;
-
-import com.toir.security.AuthenticatedUser;
-import com.toir.security.SecurityScope;
 import com.toir.dto.conditionreading.ConditionReadingDto;
 import com.toir.dto.conditionreading.ConditionReadingRequest;
+import com.toir.enums.ConditionParameter;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.SecurityScope;
+import com.toir.service.ConditionReadingService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -29,9 +27,9 @@ public class ConditionReadingController {
     }
 
     @GetMapping("/equipment/{equipmentId}/condition-readings")
-    public List<ConditionReadingDto> list(@PathVariable UUID equipmentId,
+    public ResponseEntity<List<ConditionReadingDto>> list(@PathVariable UUID equipmentId,
                                           @RequestParam(required = false) ConditionParameter parameter) {
-        return service.findForEquipment(equipmentId, parameter);
+        return ResponseEntity.ok(service.findForEquipment(equipmentId, parameter));
     }
 
     @PostMapping("/equipment/{equipmentId}/condition-readings")
@@ -49,7 +47,7 @@ public class ConditionReadingController {
     }
 
     @GetMapping("/condition-readings/alarms")
-    public List<ConditionReadingDto> alarms() {
-        return service.findAlarms();
+    public ResponseEntity<List<ConditionReadingDto>> alarms() {
+        return ResponseEntity.ok(service.findAlarms());
     }
 }

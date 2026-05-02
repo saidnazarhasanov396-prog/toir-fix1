@@ -3,17 +3,16 @@ import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.entity.RcmSnapshot;
 import com.toir.service.RcmAutoPlannerService;
 import com.toir.service.RcmService;
-
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/rcm")
@@ -29,23 +28,23 @@ public class RcmController {
     }
 
     @GetMapping("/risk-scores")
-    public List<EquipmentRiskScore> list(@RequestParam(defaultValue = "0") int top) {
-        return top > 0 ? service.topN(top) : service.computeAll();
+    public ResponseEntity<List<EquipmentRiskScore>> list(@RequestParam(defaultValue = "0") int top) {
+        return ResponseEntity.ok(top > 0 ? service.topN(top) : service.computeAll());
     }
 
     @PostMapping("/snapshot")
-    public List<RcmSnapshot> capture() {
-        return service.captureSnapshot();
+    public ResponseEntity<List<RcmSnapshot>> capture() {
+        return ResponseEntity.ok(service.captureSnapshot());
     }
 
     @GetMapping("/snapshot/{equipmentId}")
-    public List<RcmSnapshot> history(@PathVariable UUID equipmentId) {
-        return service.historyFor(equipmentId);
+    public ResponseEntity<List<RcmSnapshot>> history(@PathVariable UUID equipmentId) {
+        return ResponseEntity.ok(service.historyFor(equipmentId));
     }
 
     @PostMapping("/auto-plan")
-    public RcmAutoPlannerService.AutoPlanResult autoPlan(@RequestParam(defaultValue = "30") int riskThreshold,
+    public ResponseEntity<RcmAutoPlannerService.AutoPlanResult> autoPlan(@RequestParam(defaultValue = "30") int riskThreshold,
                                                          @RequestParam(required = false) UUID planId) {
-        return autoPlannerService.generate(riskThreshold, planId);
+        return ResponseEntity.ok(autoPlannerService.generate(riskThreshold, planId));
     }
 }

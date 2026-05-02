@@ -1,16 +1,14 @@
 package com.toir.controller;
-import com.toir.service.DowntimeEventService;
-
 import com.toir.dto.downtime.DowntimeEventDto;
+import com.toir.service.DowntimeEventService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/downtimes")
@@ -22,8 +20,8 @@ public class DowntimeEventController {
     public DowntimeEventController(DowntimeEventService service) { this.service = service; }
 
     @GetMapping
-    public List<DowntimeEventDto> list(@RequestParam UUID equipmentId) {
-        return service.findByEquipment(equipmentId);
+    public ResponseEntity<List<DowntimeEventDto>> list(@RequestParam UUID equipmentId) {
+        return ResponseEntity.ok(service.findByEquipment(equipmentId));
     }
 
     @PostMapping
@@ -32,7 +30,7 @@ public class DowntimeEventController {
     }
 
     @PostMapping("/{id}/close")
-    public DowntimeEventDto close(@PathVariable UUID id, @RequestParam(required = false) Instant endAt) {
-        return service.close(id, endAt);
+    public ResponseEntity<DowntimeEventDto> close(@PathVariable UUID id, @RequestParam(required = false) Instant endAt) {
+        return ResponseEntity.ok(service.close(id, endAt));
     }
 }

@@ -1,15 +1,13 @@
 package com.toir.controller;
-import com.toir.service.MaintenanceKPIService;
-
 import com.toir.dto.maintenancekpi.MaintenanceKPIDto;
+import com.toir.service.MaintenanceKPIService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/maintenance-kpis")
@@ -21,8 +19,8 @@ public class MaintenanceKPIController {
     public MaintenanceKPIController(MaintenanceKPIService service) { this.service = service; }
 
     @GetMapping
-    public List<MaintenanceKPIDto> list(@RequestParam UUID departmentId) {
-        return service.findByDepartment(departmentId);
+    public ResponseEntity<List<MaintenanceKPIDto>> list(@RequestParam UUID departmentId) {
+        return ResponseEntity.ok(service.findByDepartment(departmentId));
     }
 
     @PostMapping
@@ -32,5 +30,8 @@ public class MaintenanceKPIController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

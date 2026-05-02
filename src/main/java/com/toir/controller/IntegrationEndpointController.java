@@ -1,18 +1,18 @@
 package com.toir.controller;
+import com.toir.dto.integration.ConnectionTestResult;
+import com.toir.dto.integration.IntegrationEndpointDto;
+import com.toir.dto.integration.IntegrationSyncLogDto;
 import com.toir.dto.integration.RunDueSyncsResponse;
 import com.toir.enums.IntegrationSyncStatus;
-import com.toir.service.IntegrationEndpointService;
-
 import com.toir.security.RequiresAdmin;
-import com.toir.dto.integration.IntegrationEndpointDto;
+import com.toir.service.IntegrationEndpointService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/integrations")
@@ -29,29 +29,29 @@ public class IntegrationEndpointController {
         this.mesService = mesService;
     }
 
-    @GetMapping public List<IntegrationEndpointDto> list() { return service.findAll(); }
+    @GetMapping public ResponseEntity<List<IntegrationEndpointDto>> list() { return ResponseEntity.ok(service.findAll()); }
 
     @GetMapping("/logs")
-    public List<IntegrationEndpointDto> logs() {
-        return service.findAll().stream()
+    public ResponseEntity<List<IntegrationEndpointDto>> logs() {
+        return ResponseEntity.ok(service.findAll().stream()
                 .filter(e -> e.lastSyncAt() != null)
-                .toList();
+                .toList());
     }
 
     @PostMapping("/run-due-syncs")
-    public RunDueSyncsResponse runDueSyncs() {
+    public ResponseEntity<RunDueSyncsResponse> runDueSyncs() {
         List<IntegrationEndpointDto> endpoints = service.findAll().stream()
                 .filter(e -> Boolean.TRUE.equals(e.active()))
                 .toList();
         for (IntegrationEndpointDto e : endpoints) {
             service.recordSync(e.id(), IntegrationSyncStatus.SUCCESS);
         }
-        return new RunDueSyncsResponse(
+        return ResponseEntity.ok(new RunDueSyncsResponse(
                 endpoints.size(),
                 endpoints.stream()
                         .map(e -> new RunDueSyncsResponse.Result(e.id(), e.code(), "SUCCESS"))
                         .toList()
-        );
+        ));
     }
 
     @PostMapping
@@ -60,33 +60,36 @@ public class IntegrationEndpointController {
     }
 
     @PutMapping("/{id}")
-    public IntegrationEndpointDto update(@PathVariable UUID id, @Valid @RequestBody IntegrationEndpointDto r) {
-        return service.update(id, r);
+    public ResponseEntity<IntegrationEndpointDto> update(@PathVariable UUID id, @Valid @RequestBody IntegrationEndpointDto r) {
+        return ResponseEntity.ok(service.update(id, r));
     }
 
     @PostMapping("/{id}/sync")
-    public IntegrationEndpointDto recordSync(@PathVariable UUID id, @RequestParam IntegrationSyncStatus status) {
-        return service.recordSync(id, status);
+    public ResponseEntity<IntegrationEndpointDto> recordSync(@PathVariable UUID id, @RequestParam IntegrationSyncStatus status) {
+        return ResponseEntity.ok(service.recordSync(id, status));
     }
 
     @PostMapping("/{id}/test-connection")
-    public com.toir.dto.integration.ConnectionTestResult testConnection(@PathVariable UUID id) {
-        return mesService.testConnection(id);
+    public ResponseEntity<ConnectionTestResult> testConnection(@PathVariable UUID id) {
+        return ResponseEntity.ok(mesService.testConnection(id));
     }
 
     @PostMapping("/{id}/sync/{module}")
-    public com.toir.dto.integration.IntegrationSyncLogDto syncModule(
+    public ResponseEntity<IntegrationSyncLogDto> syncModule(
             @PathVariable UUID id, @PathVariable String module) {
-        return mesService.syncModule(id, module);
+        return ResponseEntity.ok(mesService.syncModule(id, module));
     }
 
     @GetMapping("/sync-logs")
-    public java.util.List<com.toir.dto.integration.IntegrationSyncLogDto> syncLogs(
+    public ResponseEntity<List<IntegrationSyncLogDto>> syncLogs(
             @RequestParam(required = false) UUID endpointId) {
-        return mesService.getLogs(endpointId);
+        return ResponseEntity.ok(mesService.getLogs(endpointId));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

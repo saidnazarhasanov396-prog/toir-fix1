@@ -1,16 +1,14 @@
 package com.toir.controller;
-import com.toir.service.SlaRuleService;
-
-import com.toir.security.RequiresAdmin;
 import com.toir.dto.sla.SlaRuleDto;
+import com.toir.security.RequiresAdmin;
+import com.toir.service.SlaRuleService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/sla-rules")
@@ -22,7 +20,7 @@ public class SlaRuleController {
 
     public SlaRuleController(SlaRuleService service) { this.service = service; }
 
-    @GetMapping public List<SlaRuleDto> list() { return service.findAll(); }
+    @GetMapping public ResponseEntity<List<SlaRuleDto>> list() { return ResponseEntity.ok(service.findAll()); }
 
     @PostMapping
     public ResponseEntity<SlaRuleDto> create(@Valid @RequestBody SlaRuleDto r) {
@@ -30,11 +28,14 @@ public class SlaRuleController {
     }
 
     @PutMapping("/{id}")
-    public SlaRuleDto update(@PathVariable UUID id, @Valid @RequestBody SlaRuleDto r) {
-        return service.update(id, r);
+    public ResponseEntity<SlaRuleDto> update(@PathVariable UUID id, @Valid @RequestBody SlaRuleDto r) {
+        return ResponseEntity.ok(service.update(id, r));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

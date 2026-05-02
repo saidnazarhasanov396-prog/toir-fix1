@@ -1,10 +1,12 @@
 package com.toir.controller;
 import com.toir.dto.equipmentlabel.EquipmentLabelResponse;
 import com.toir.entity.Equipment;
-import com.toir.repository.EquipmentRepository;
-
 import com.toir.exception.RestException;
+import com.toir.repository.EquipmentRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.UUID;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,10 +14,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/equipment")
@@ -29,22 +27,22 @@ public class EquipmentLabelController {
     }
 
     @GetMapping("/{id}/label")
-    public EquipmentLabelResponse label(@PathVariable UUID id) {
+    public ResponseEntity<EquipmentLabelResponse> label(@PathVariable UUID id) {
         Equipment eq = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
-        return buildPayload(eq);
+        return ResponseEntity.ok(buildPayload(eq));
     }
 
     @GetMapping("/by-code/{code}")
-    public EquipmentLabelResponse resolveByCode(@PathVariable String code) {
+    public ResponseEntity<EquipmentLabelResponse> resolveByCode(@PathVariable String code) {
         Equipment eq = repository.findByCodeAndIsDeletedFalse(code)
                 .or(() -> repository.findByInventoryNumberAndIsDeletedFalse(code))
                 .orElseThrow(() -> RestException.notFound("Equipment not found by code/inventory: " + code));
-        return buildPayload(eq);
+        return ResponseEntity.ok(buildPayload(eq));
     }
 
     @GetMapping("/resolve-scan")
-    public EquipmentLabelResponse resolveScan(@RequestParam String payload) {
+    public ResponseEntity<EquipmentLabelResponse> resolveScan(@RequestParam String payload) {
         String value = payload;
         if (payload != null && payload.startsWith("toir://equipment/")) {
             String rest = payload.substring("toir://equipment/".length());
@@ -58,7 +56,7 @@ public class EquipmentLabelController {
             UUID id = UUID.fromString(value);
             Equipment eq = repository.findByIdAndIsDeletedFalse(id)
                     .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
-            return buildPayload(eq);
+            return ResponseEntity.ok(buildPayload(eq));
         } catch (IllegalArgumentException ignored) {
             return resolveByCode(value);
         }

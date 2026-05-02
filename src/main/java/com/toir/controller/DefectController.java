@@ -1,23 +1,21 @@
 package com.toir.controller;
-import com.toir.entity.Defect;
-import com.toir.repository.DefectRepository;
-import com.toir.service.DefectService;
-
-import com.toir.exception.RestException;
-import com.toir.dto.defect.DefectResponse;
 import com.toir.dto.defect.DefectRequest;
+import com.toir.dto.defect.DefectResponse;
+import com.toir.entity.Defect;
 import com.toir.entity.KnowledgeArticle;
+import com.toir.exception.RestException;
+import com.toir.repository.DefectRepository;
 import com.toir.repository.KnowledgeArticleRepository;
+import com.toir.service.DefectService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/defects")
@@ -37,17 +35,17 @@ public class DefectController {
     }
 
     @GetMapping
-    public Page<DefectResponse> list(
+    public ResponseEntity<Page<DefectResponse>> list(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String search
     ) {
-        return service.search(equipmentId, page, size, search);
+        return ResponseEntity.ok(service.search(equipmentId, page, size, search));
     }
 
     @GetMapping("/{id}")
-    public DefectResponse get(@PathVariable UUID id) { return service.findById(id); }
+    public ResponseEntity<DefectResponse> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
     public ResponseEntity<DefectResponse> create(@Valid @RequestBody DefectRequest request) {
@@ -55,16 +53,19 @@ public class DefectController {
     }
 
     @PutMapping("/{id}")
-    public DefectResponse update(@PathVariable UUID id, @Valid @RequestBody DefectRequest request) {
-        return service.update(id, request);
+    public ResponseEntity<DefectResponse> update(@PathVariable UUID id, @Valid @RequestBody DefectRequest request) {
+        return ResponseEntity.ok(service.update(id, request));
     }
 
     @PostMapping("/{id}/resolve")
-    public DefectResponse resolve(@PathVariable UUID id) { return service.resolve(id); }
+    public ResponseEntity<DefectResponse> resolve(@PathVariable UUID id) { return ResponseEntity.ok(service.resolve(id)); }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 
     /**
      * Ð¡Ð¾Ð·Ð´Ð°Ñ‚ÑŒ ÑÑ‚Ð°Ñ‚ÑŒÑŽ Ð±Ð°Ð·Ñ‹ Ð·Ð½Ð°Ð½Ð¸Ð¹ (lesson learned) Ð½Ð° Ð¾ÑÐ½Ð¾Ð²Ð°Ð½Ð¸Ð¸ Ð´ÐµÑ„ÐµÐºÑ‚Ð°.
