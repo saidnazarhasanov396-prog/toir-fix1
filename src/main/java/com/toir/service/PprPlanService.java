@@ -12,11 +12,11 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 
 import com.toir.exception.RestException;
-import com.toir.dto.pprplanning.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,11 +40,8 @@ public class PprPlanService {
     }
 
     public PprPlanDto create(PprPlanRequest request) {
-        if (planRepository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Plan code already exists: " + request.code());
-        }
         PprPlan plan = new PprPlan();
-        plan.setCode(request.code());
+        plan.setCode(nextCode());
         plan.setName(request.name());
         plan.setYear(request.year());
         plan.setMonth(request.month());
@@ -59,10 +56,6 @@ public class PprPlanService {
         if (plan.getStatus() != PlanStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT plans can be edited");
         }
-        if (!plan.getCode().equals(request.code()) && planRepository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Plan code already exists: " + request.code());
-        }
-        plan.setCode(request.code());
         plan.setName(request.name());
         plan.setYear(request.year());
         plan.setMonth(request.month());
@@ -127,5 +120,21 @@ public class PprPlanService {
     private PprPlan getPlan(UUID id) {
         return planRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("PPR plan not found: " + id));
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "PPR-" + year + "-";
+        long sequence = planRepository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("PPR", year, sequence);
+        while (planRepository.existsByCodeAndIsDeletedFalse(code)) {
+            sequence++;
+            code = formatCode("PPR", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }
