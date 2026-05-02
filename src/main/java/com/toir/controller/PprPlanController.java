@@ -1,4 +1,5 @@
 package com.toir.controller;
+
 import com.toir.dto.pprplanning.PostponeTaskRequest;
 import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.dto.pprplanning.PprPlanRequest;
@@ -6,8 +7,6 @@ import com.toir.dto.pprplanning.PprTaskDto;
 import com.toir.dto.pprplanning.PprTaskRequest;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
-
-import com.toir.dto.pprplanning.*;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -31,10 +30,14 @@ public class PprPlanController {
     }
 
     @GetMapping
-    public List<PprPlanDto> list() { return service.findAll(); }
+    public ResponseEntity<List<PprPlanDto>> list() {
+        return ResponseEntity.ok(service.findAll());
+    }
 
     @GetMapping("/{id}")
-    public PprPlanDto get(@PathVariable UUID id) { return service.findById(id); }
+    public ResponseEntity<PprPlanDto> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.findById(id));
+    }
 
     @PostMapping
     public ResponseEntity<PprPlanDto> create(@Valid @RequestBody PprPlanRequest request) {
@@ -42,8 +45,8 @@ public class PprPlanController {
     }
 
     @PatchMapping("/{id}")
-    public PprPlanDto update(@PathVariable UUID id, @Valid @RequestBody PprPlanRequest request) {
-        return service.update(id, request);
+    public ResponseEntity<PprPlanDto> update(@PathVariable UUID id, @Valid @RequestBody PprPlanRequest request) {
+        return ResponseEntity.ok(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
@@ -53,17 +56,19 @@ public class PprPlanController {
     }
 
     @PostMapping("/{id}/approve")
-    public PprPlanDto approve(@PathVariable UUID id, @RequestParam UUID approverId) {
-        return service.approve(id, approverId);
+    public ResponseEntity<PprPlanDto> approve(@PathVariable UUID id, @RequestParam UUID approverId) {
+        return ResponseEntity.ok(service.approve(id, approverId));
     }
 
     @PostMapping("/{id}/generate")
-    public PprGeneratorService.GenerationResult generate(@PathVariable UUID id) {
-        return generatorService.generateForPlan(id);
+    public ResponseEntity<PprGeneratorService.GenerationResult> generate(@PathVariable UUID id) {
+        return ResponseEntity.ok(generatorService.generateForPlan(id));
     }
 
     @GetMapping("/{id}/tasks")
-    public List<PprTaskDto> tasks(@PathVariable UUID id) { return service.findTasksByPlan(id); }
+    public ResponseEntity<List<PprTaskDto>> tasks(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.findTasksByPlan(id));
+    }
 
     @PostMapping("/{id}/tasks")
     public ResponseEntity<PprTaskDto> addTask(@PathVariable UUID id, @Valid @RequestBody PprTaskRequest request) {
@@ -71,7 +76,7 @@ public class PprPlanController {
     }
 
     @PostMapping("/tasks/{taskId}/postpone")
-    public PprTaskDto postponeTask(@PathVariable UUID taskId, @Valid @RequestBody PostponeTaskRequest request) {
-        return service.postponeTask(taskId, request);
+    public ResponseEntity<PprTaskDto> postponeTask(@PathVariable UUID taskId, @Valid @RequestBody PostponeTaskRequest request) {
+        return ResponseEntity.ok(service.postponeTask(taskId, request));
     }
 }

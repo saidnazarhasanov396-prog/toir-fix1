@@ -8,7 +8,6 @@ import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
 public record PprPlanRequest(
-        @NotBlank String code,
         @NotBlank String name,
         @NotNull @Min(2000) Integer year,
         @NotNull @Min(1) @Max(12) Integer month,
