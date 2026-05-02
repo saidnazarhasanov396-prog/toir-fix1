@@ -1,4 +1,5 @@
 package com.toir.service;
+import com.toir.dto.webhook.WebhookDto;
 import com.toir.entity.WebhookEventLog;
 import com.toir.repository.WebhookEventLogRepository;
 import com.toir.entity.WebhookSubscription;
@@ -45,13 +46,14 @@ public class WebhookService {
             .build();
 
 
-    public List<WebhookSubscription> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    public List<WebhookDto> findAll(String search,Boolean active) {
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc(search,active).stream().map(WebhookDto::fromEntity).toList();
     }
 
-    public WebhookSubscription create(WebhookSubscription sub) {
+    public WebhookDto create(WebhookSubscription sub) {
         sub.setCode(webHookGenerateCode());
-        return repository.save(sub);
+        WebhookSubscription saved = repository.save(sub);
+        return WebhookDto.fromEntity(saved);
     }
 
     private String webHookGenerateCode() {
@@ -69,7 +71,7 @@ public class WebhookService {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 
-    public WebhookSubscription update(UUID id, WebhookSubscription patch) {
+    public WebhookDto update(UUID id, WebhookSubscription patch) {
         WebhookSubscription existing = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Webhook subscription not found: " + id));
         existing.setName(patch.getName());
@@ -77,7 +79,7 @@ public class WebhookService {
         existing.setSecret(patch.getSecret());
         existing.setEvents(patch.getEvents());
         existing.setActive(patch.isActive());
-        return existing;
+        return WebhookDto.fromEntity(existing);
     }
 
     public void delete(UUID id) {
