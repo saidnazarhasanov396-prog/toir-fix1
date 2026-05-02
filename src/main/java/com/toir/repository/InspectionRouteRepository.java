@@ -31,8 +31,20 @@ public interface InspectionRouteRepository extends JpaRepository<InspectionRoute
     @Query(value = "SELECT EXISTS(SELECT 1 FROM inspection_routes WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
-    @Query(value = "SELECT * FROM inspection_routes WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<InspectionRoute> findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("departmentId") UUID departmentId);
+    @Query(value = """
+            SELECT ir.* FROM inspection_routes ir 
+            WHERE  is_deleted = false 
+            AND (CAST(:departmentId as uuid) IS NULL OR ir.department_id = cast(:departmentId as uuid))
+            AND (CAST(:active as bool) = false OR ir.is_active = true)
+            AND (CAST(:search AS text) IS NULL OR :search = '' OR 
+                             LOWER(ir.code) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR 
+                             LOWER(ir.name) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')))
+            ORDER BY updated_at DESC""", nativeQuery = true)
+    List<InspectionRoute> findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+            @Param("departmentId") UUID departmentId,
+            @Param("activeOnly") Boolean active,
+            @Param("search")  String search
+    );
 
     @Query(value = "SELECT * FROM inspection_routes WHERE is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<InspectionRoute> findAllByActiveTrueAndIsDeletedFalse();

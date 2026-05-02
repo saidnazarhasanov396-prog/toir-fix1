@@ -38,12 +38,10 @@ public class InspectionService {
     // --- routes ---
 
     @Transactional(readOnly = true)
-    public List<InspectionRouteDto> findRoutes(UUID departmentId, Boolean activeOnly) {
-        List<InspectionRoute> list;
-        if (departmentId != null) list = routeRepo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(departmentId);
-        else if (Boolean.TRUE.equals(activeOnly)) list = routeRepo.findAllByActiveTrueAndIsDeletedFalse();
-        else list = routeRepo.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
-        return list.stream().map(InspectionRouteDto::from).toList();
+    public List<InspectionRouteDto> findRoutes(UUID departmentId, Boolean active,String search) {
+        List<InspectionRouteDto> list= routeRepo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(departmentId,active,search).
+                stream().map(InspectionRouteDto::from).toList();
+        return list;
     }
 
     @Transactional(readOnly = true)

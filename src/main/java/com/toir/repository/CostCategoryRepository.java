@@ -35,7 +35,15 @@ public interface CostCategoryRepository extends JpaRepository<CostCategory, UUID
     @Query(value = "SELECT EXISTS(SELECT 1 FROM cost_categories WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
-    @Query(value = "SELECT cr.* FROM cost_categories cr WHERE is_deleted = false order by cr.updated_at", nativeQuery = true)
+    @Query(value = """ 
+            SELECT cr.* FROM cost_categories cr  
+            WHERE is_deleted = false 
+            AND (CAST(:search AS text) IS NULL OR :search = '' OR
+                            LOWER(cr.name ) LIKE LOWER(CONCAT('%',CAST(:search AS text),'%')) OR 
+                            LOWER(cr.code ) LIKE LOWER(CONCAT('%',CAST(:search AS text),'%'))
+            ) 
+            order by cr.updated_at
+            """, nativeQuery = true)
     Page<CostCategory> findAll(
             @Param("search") String search,
             Pageable pageable

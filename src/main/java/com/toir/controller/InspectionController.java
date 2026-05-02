@@ -33,9 +33,12 @@ public class InspectionController {
 
     // routes
     @GetMapping("/inspection-routes")
-    public List<InspectionRouteDto> listRoutes(@RequestParam(required = false) UUID departmentId,
-                                               @RequestParam(required = false) Boolean activeOnly) {
-        return service.findRoutes(departmentId, activeOnly);
+    public List<InspectionRouteDto> listRoutes(
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(required = false) String search
+    ) {
+        return service.findRoutes(departmentId, active,search);
     }
 
     @GetMapping("/inspection-routes/{id}")
