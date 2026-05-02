@@ -18,6 +18,15 @@ public interface RootCauseRepository extends JpaRepository<RootCause, UUID> {
 
     @Query(value = "SELECT * FROM root_causes WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<RootCause> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query("""
+            SELECT rc FROM RootCause rc
+            WHERE rc.isDeleted = false
+                AND (cast(:search as string) IS NULL OR
+                     lower(rc.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(rc.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY rc.updatedAt DESC
+            """)
+    List<RootCause> findAllBySearch(@Param("search") String search);
 
     @Query(value = "SELECT * FROM root_causes WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<RootCause> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
@@ -30,4 +39,12 @@ public interface RootCauseRepository extends JpaRepository<RootCause, UUID> {
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM root_causes WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
+
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM root_causes
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
 }

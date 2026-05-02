@@ -7,7 +7,7 @@ import java.util.UUID;
 
 public record UnitOfMeasurementDto(
         UUID id,
-        @NotBlank String code,
+        String code,
         @NotBlank String name
 ) {
     public static UnitOfMeasurementDto from(UnitOfMeasurement u) {

@@ -21,7 +21,9 @@ public class CriticalityClassController {
     }
 
     @GetMapping
-    public ResponseEntity<List<CriticalityClassDto>> list() { return ResponseEntity.ok(service.findAll()); }
+    public ResponseEntity<List<CriticalityClassDto>> list(@RequestParam(required = false) String search) {
+        return ResponseEntity.ok(service.findAll(search));
+    }
 
     @GetMapping("/{id}")
     public ResponseEntity<CriticalityClassDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }

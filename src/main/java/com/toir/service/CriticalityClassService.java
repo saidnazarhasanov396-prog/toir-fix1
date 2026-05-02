@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,8 +21,8 @@ public class CriticalityClassService {
 
 
     @Transactional(readOnly = true)
-    public List<CriticalityClassDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(CriticalityClassDto::from).toList();
+    public List<CriticalityClassDto> findAll(String search) {
+        return repository.findAllBySearch(search).stream().map(CriticalityClassDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -30,10 +31,8 @@ public class CriticalityClassService {
     }
 
     public CriticalityClassDto create(CriticalityClassDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Criticality class code already exists: " + r.code());
-        }
         CriticalityClass e = new CriticalityClass();
+        e.setCode(nextCode());
         apply(e, r);
         return CriticalityClassDto.from(repository.save(e));
     }
@@ -54,7 +53,6 @@ public class CriticalityClassService {
     }
 
     private void apply(CriticalityClass e, CriticalityClassDto r) {
-        e.setCode(r.code());
         e.setName(r.name());
         e.setNameEn(r.nameEn());
         e.setNameUz(r.nameUz());
@@ -66,5 +64,21 @@ public class CriticalityClassService {
         e.setEnergyImpact(r.energyImpact());
         e.setFailureConsequence(r.failureConsequence());
         e.setRepairPriority(r.repairPriority());
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "CRIT-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("CRIT", year, sequence);
+        while (repository.existsByCodeAndIsDeletedFalse(code)) {
+            sequence++;
+            code = formatCode("CRIT", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }

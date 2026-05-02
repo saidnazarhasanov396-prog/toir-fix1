@@ -18,6 +18,15 @@ public interface MaterialRepository extends JpaRepository<Material, UUID> {
 
     @Query(value = "SELECT * FROM materials WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Material> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query("""
+            SELECT m FROM Material m
+            WHERE m.isDeleted = false
+                AND (cast(:search as string) IS NULL OR
+                     lower(m.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(m.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY m.updatedAt DESC
+            """)
+    List<Material> findAllBySearch(@Param("search") String search);
 
     @Query(value = "SELECT * FROM materials WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<Material> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
@@ -30,4 +39,12 @@ public interface MaterialRepository extends JpaRepository<Material, UUID> {
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM materials WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
+
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM materials
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
 }
