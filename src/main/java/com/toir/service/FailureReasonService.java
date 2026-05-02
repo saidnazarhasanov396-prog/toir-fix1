@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,17 +26,15 @@ public class FailureReasonService {
     }
 
     public FailureReasonDto create(FailureReasonDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Failure reason code already exists: " + r.code());
-        }
         FailureReason e = new FailureReason();
-        e.setCode(r.code()); e.setName(r.name()); e.setDescription(r.description());
+        e.setCode(nextCode());
+        e.setName(r.name()); e.setDescription(r.description());
         return FailureReasonDto.from(repository.save(e));
     }
 
     public FailureReasonDto update(UUID id, FailureReasonDto r) {
         FailureReason e = getOrThrow(id);
-        e.setCode(r.code()); e.setName(r.name()); e.setDescription(r.description());
+        e.setName(r.name()); e.setDescription(r.description());
         return FailureReasonDto.from(e);
     }
 
@@ -46,5 +45,21 @@ public class FailureReasonService {
     private FailureReason getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Failure reason not found: " + id));
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "FR-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("FR", year, sequence);
+        while (repository.existsByCodeAndIsDeletedFalse(code)) {
+            sequence++;
+            code = formatCode("FR", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }

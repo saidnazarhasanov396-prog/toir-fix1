@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,17 +26,15 @@ public class RootCauseService {
     }
 
     public RootCauseDto create(RootCauseDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Root cause code already exists: " + r.code());
-        }
         RootCause e = new RootCause();
-        e.setCode(r.code()); e.setName(r.name()); e.setDescription(r.description());
+        e.setCode(nextCode());
+        e.setName(r.name()); e.setDescription(r.description());
         return RootCauseDto.from(repository.save(e));
     }
 
     public RootCauseDto update(UUID id, RootCauseDto r) {
         RootCause e = getOrThrow(id);
-        e.setCode(r.code()); e.setName(r.name()); e.setDescription(r.description());
+        e.setName(r.name()); e.setDescription(r.description());
         return RootCauseDto.from(e);
     }
 
@@ -46,5 +45,21 @@ public class RootCauseService {
     private RootCause getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Root cause not found: " + id));
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "RC-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("RC", year, sequence);
+        while (repository.existsByCodeAndIsDeletedFalse(code)) {
+            sequence++;
+            code = formatCode("RC", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }

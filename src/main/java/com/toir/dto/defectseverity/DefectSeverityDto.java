@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public record DefectSeverityDto(
         UUID id,
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         @PositiveOrZero int weight
 ) {

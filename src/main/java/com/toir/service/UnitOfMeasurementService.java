@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,17 +26,15 @@ public class UnitOfMeasurementService {
     }
 
     public UnitOfMeasurementDto create(UnitOfMeasurementDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("UoM code already exists: " + r.code());
-        }
         UnitOfMeasurement e = new UnitOfMeasurement();
-        e.setCode(r.code()); e.setName(r.name());
+        e.setCode(nextCode());
+        e.setName(r.name());
         return UnitOfMeasurementDto.from(repository.save(e));
     }
 
     public UnitOfMeasurementDto update(UUID id, UnitOfMeasurementDto r) {
         UnitOfMeasurement e = getOrThrow(id);
-        e.setCode(r.code()); e.setName(r.name());
+        e.setName(r.name());
         return UnitOfMeasurementDto.from(e);
     }
 
@@ -46,5 +45,21 @@ public class UnitOfMeasurementService {
     private UnitOfMeasurement getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("UoM not found: " + id));
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "UOM-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("UOM", year, sequence);
+        while (repository.existsByCodeAndIsDeletedFalse(code)) {
+            sequence++;
+            code = formatCode("UOM", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }

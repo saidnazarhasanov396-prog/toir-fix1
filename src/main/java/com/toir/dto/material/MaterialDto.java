@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public record MaterialDto(
         UUID id,
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         InventoryItemKind kind,
         @NotBlank String unit,
