@@ -18,7 +18,7 @@ import java.util.UUID;
 public interface LocationRepository extends JpaRepository<Location, UUID> {
     java.util.Optional<Location> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<Location> findAllByIsDeletedFalse();
+    java.util.List<Location> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<Location> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -39,10 +39,10 @@ public interface LocationRepository extends JpaRepository<Location, UUID> {
             """, nativeQuery = true)
     long maxSequenceByCodePrefix(@Param("prefix") String prefix);
 
-    @Query(value = "SELECT * FROM locations WHERE parent_id = :parentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM locations WHERE parent_id = :parentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Location> findAllByParentIdAndIsDeletedFalse(@Param("parentId") UUID parentId);
 
-    @Query(value = "SELECT * FROM locations WHERE department_id = :departmentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM locations WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Location> findAllByDepartmentIdAndIsDeletedFalse(@Param("departmentId") UUID departmentId);
 
     @Query("select l from Location l where " +
@@ -53,7 +53,8 @@ public interface LocationRepository extends JpaRepository<Location, UUID> {
             "lower(l.name) like lower(concat('%', cast(:search as string), '%')) or " +
             "lower(l.nameEn) like lower(concat('%', cast(:search as string), '%')) or " +
             "lower(l.nameUz) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(l.description) like lower(concat('%', cast(:search as string), '%')))")
+            "lower(l.description) like lower(concat('%', cast(:search as string), '%'))) " +
+            "order by l.updatedAt desc")
     Page<Location> search(@Param("locationType") LocationType locationType,
                           @Param("search") String search,
                           Pageable pageable);

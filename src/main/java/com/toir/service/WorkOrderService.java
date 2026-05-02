@@ -45,7 +45,7 @@ public class WorkOrderService {
 
     @Transactional(readOnly = true)
     public List<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.search(status, departmentId, equipmentId)).stream()
+        return repository.search(status, departmentId, equipmentId).stream()
                 .map(this::toDto)
                 .toList();
     }

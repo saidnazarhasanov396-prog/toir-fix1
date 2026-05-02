@@ -26,12 +26,12 @@ public class LocationService {
 
     @Transactional(readOnly = true)
     public List<LocationDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(LocationDto::from).toList();
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(LocationDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public Page<LocationDto> search(LocationType locationType, String search, int page, int pageSize) {
-        var pageable = PaginationUtils.updatedAtDescPageRequest(page, pageSize);
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
         return repository.search(locationType, search, pageable).map(LocationDto::from);
     }
 

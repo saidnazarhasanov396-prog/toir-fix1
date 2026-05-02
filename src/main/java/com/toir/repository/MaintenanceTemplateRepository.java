@@ -17,7 +17,7 @@ import java.util.UUID;
 public interface MaintenanceTemplateRepository extends JpaRepository<MaintenanceTemplate, UUID> {
     java.util.Optional<MaintenanceTemplate> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<MaintenanceTemplate> findAllByIsDeletedFalse();
+    java.util.List<MaintenanceTemplate> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<MaintenanceTemplate> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -39,6 +39,7 @@ public interface MaintenanceTemplateRepository extends JpaRepository<Maintenance
             )
         )
         and ( :type is null or mt.maintenanceKind = :type)
+        order by mt.updatedAt desc
 """)
     List<MaintenanceTemplate> findAllByIsDeletedFalseAndMaintenanceKindAndSearch(String search, MaintenanceKind type);
 

@@ -24,7 +24,7 @@ public class MaintenanceRegulationService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceRegulationDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(MaintenanceRegulationDto::from).toList();
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(MaintenanceRegulationDto::from).toList();
     }
 
     @Transactional(readOnly = true)

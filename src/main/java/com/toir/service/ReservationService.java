@@ -26,7 +26,7 @@ public class ReservationService {
 
     @Transactional(readOnly = true)
     public List<ReservationDto> findByWorkOrder(UUID workOrderId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByWorkOrderIdAndIsDeletedFalse(workOrderId)).stream().map(ReservationDto::from).toList();
+        return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId).stream().map(ReservationDto::from).toList();
     }
 
     public ReservationDto reserve(ReservationRequest r) {

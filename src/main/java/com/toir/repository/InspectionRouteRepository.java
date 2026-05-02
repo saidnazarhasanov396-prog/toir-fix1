@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface InspectionRouteRepository extends JpaRepository<InspectionRoute, UUID> {
     java.util.Optional<InspectionRoute> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<InspectionRoute> findAllByIsDeletedFalse();
+    java.util.List<InspectionRoute> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<InspectionRoute> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -26,9 +26,9 @@ public interface InspectionRouteRepository extends JpaRepository<InspectionRoute
     @Query(value = "SELECT EXISTS(SELECT 1 FROM inspection_routes WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
-    @Query(value = "SELECT * FROM inspection_routes WHERE department_id = :departmentId AND is_deleted = false", nativeQuery = true)
-    List<InspectionRoute> findAllByDepartmentIdAndIsDeletedFalse(@Param("departmentId") UUID departmentId);
+    @Query(value = "SELECT * FROM inspection_routes WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<InspectionRoute> findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("departmentId") UUID departmentId);
 
-    @Query(value = "SELECT * FROM inspection_routes WHERE is_active = true AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM inspection_routes WHERE is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<InspectionRoute> findAllByActiveTrueAndIsDeletedFalse();
 }

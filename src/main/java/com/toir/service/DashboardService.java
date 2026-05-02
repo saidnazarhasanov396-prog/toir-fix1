@@ -92,30 +92,30 @@ public class DashboardService {
                 .count();
         long overduePpr = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE.name());
 
-        List<WorkOrder> allWorkOrders = workOrderRepository.findAllByIsDeletedFalse();
+        List<WorkOrder> allWorkOrders = workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         long repairsThisMonth = allWorkOrders.stream()
                 .filter(w -> w.getStatus() == WorkOrderStatus.CLOSED)
                 .filter(w -> w.getCompletedAt() != null && w.getCompletedAt().isAfter(monthAgo))
                 .count();
 
-        long activeReservations = reservationRepository.findAllByStatusAndIsDeletedFalse(ReservationStatus.ACTIVE).size();
+        long activeReservations = reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ReservationStatus.ACTIVE).size();
 
-        List<WarehouseStock> allStocks = warehouseStockRepository.findAllByIsDeletedFalse();
+        List<WarehouseStock> allStocks = warehouseStockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         List<WarehouseStock> lowStocks = allStocks.stream()
                 .filter(s -> s.getQuantity() < s.getMinQty())
                 .toList();
 
-        long materialIssuedThisMonth = com.toir.util.UpdatedAtSorter.descending(stockMovementRepository.findAllByIsDeletedFalse()).stream()
+        long materialIssuedThisMonth = stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(m -> m.getType() == StockMovementType.ISSUE)
                 .filter(m -> m.getOccurredAt().isAfter(monthAgo))
                 .mapToLong(m -> (long) m.getQuantity())
                 .sum();
 
-        long pendingActualCosts = actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING).size();
-        long contractorAwaitingReflection = com.toir.util.UpdatedAtSorter.descending(contractorWorkRepository.findAllByIsDeletedFalse()).stream()
+        long pendingActualCosts = actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING).size();
+        long contractorAwaitingReflection = contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(w -> w.getStatus() == ContractorWorkStatus.COMPLETED || w.getStatus() == ContractorWorkStatus.ACCEPTED)
                 .filter(w -> w.getCost() != null && w.getCost() > 0)
-                .filter(w -> com.toir.util.UpdatedAtSorter.descending(actualCostRepository.findAllByIsDeletedFalse()).stream()
+                .filter(w -> actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                         .noneMatch(ac -> w.getId().equals(ac.getContractorWorkId())))
                 .count();
 
@@ -123,7 +123,7 @@ public class DashboardService {
                 + conditionReadingRepository.findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("WARN").size();
         LocalDate today = LocalDate.now();
         LocalDate in30 = today.plusDays(30);
-        long expiringCertifications = com.toir.util.UpdatedAtSorter.descending(userCertificationRepository.findAllByExpiresAtBeforeAndIsDeletedFalse(in30)).stream()
+        long expiringCertifications = userCertificationRepository.findAllByExpiresAtBeforeAndIsDeletedFalse(in30).stream()
                 .filter(c -> "ACTIVE".equals(c.getStatus()) || "EXPIRED".equals(c.getStatus()))
                 .count();
         long dueCalibrations = calibrationRecordRepository.findAllByNextDueAtBeforeAndIsDeletedFalse(in30).size();
@@ -153,7 +153,7 @@ public class DashboardService {
         long completedRepairs = workOrderRepository.countByStatusAndIsDeletedFalse(WorkOrderStatus.CLOSED.name());
         PlanFact planFact = new PlanFact(plannedTasks, completedTasks, completedRepairs);
 
-        List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalse();
+        List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         double mtbfAvg = allMetrics.stream().map(ReliabilityMetric::getMtbfHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
         double mttrAvg = allMetrics.stream().map(ReliabilityMetric::getMttrHours)
@@ -163,19 +163,19 @@ public class DashboardService {
                 .filter(w -> w.getType() == WorkOrderType.EMERGENCY || w.getType() == WorkOrderType.DEFECT)
                 .count();
         double unplannedShare = totalWO > 0 ? (double) unplannedWO / totalWO * 100 : 0;
-        double downtimeTotalHours = com.toir.util.UpdatedAtSorter.descending(downtimeEventRepository.findAllByIsDeletedFalse()).stream()
+        double downtimeTotalHours = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .map(DowntimeEvent::getDurationMinutes)
                 .filter(Objects::nonNull)
                 .mapToInt(Integer::intValue).sum() / 60.0;
 
         // Reaction/resolution times from closed repair requests
-        List<com.toir.entity.RepairRequest> closedRequests = com.toir.util.UpdatedAtSorter.descending(repairRequestRepository.findAllByIsDeletedFalse()).stream()
+        List<com.toir.entity.RepairRequest> closedRequests = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(r -> r.getStatus() == RequestStatus.CLOSED && r.getActualCompletionAt() != null)
                 .toList();
         double avgResolutionHours = closedRequests.stream()
                 .mapToLong(r -> java.time.Duration.between(r.getDetectedAt(), r.getActualCompletionAt()).toMinutes())
                 .average().orElse(0) / 60.0;
-        double avgReactionHours = com.toir.util.UpdatedAtSorter.descending(repairRequestRepository.findAllByIsDeletedFalse()).stream()
+        double avgReactionHours = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(r -> r.getStatus() != RequestStatus.OPEN && r.getStatus() != RequestStatus.DRAFT)
                 .mapToLong(r -> java.time.Duration.between(r.getCreatedAt(), r.getUpdatedAt()).toMinutes())
                 .average().orElse(0) / 60.0;
@@ -188,16 +188,16 @@ public class DashboardService {
         Kpis kpis = new Kpis(mtbfAvg, mttrAvg, unplannedShare, downtimeTotalHours,
                 avgReactionHours, avgResolutionHours, pprCompletionRate, overdueWorkShare);
 
-        Map<UUID, Equipment> equipById = com.toir.util.UpdatedAtSorter.descending(equipmentRepository.findAllByIsDeletedFalse()).stream()
+        Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(Equipment::getId, e -> e));
-        Map<UUID, Department> deptById = com.toir.util.UpdatedAtSorter.descending(departmentRepository.findAllByIsDeletedFalse()).stream()
+        Map<UUID, Department> deptById = departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(Department::getId, d -> d));
-        Map<UUID, Warehouse> whById = com.toir.util.UpdatedAtSorter.descending(warehouseRepository.findAllByIsDeletedFalse()).stream()
+        Map<UUID, Warehouse> whById = warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(Warehouse::getId, w -> w));
-        Map<UUID, SparePart> partById = com.toir.util.UpdatedAtSorter.descending(sparePartRepository.findAllByIsDeletedFalse()).stream()
+        Map<UUID, SparePart> partById = sparePartRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(SparePart::getId, p -> p));
 
-        List<Defect> openDefectList = com.toir.util.UpdatedAtSorter.descending(defectRepository.findAllByIsDeletedFalse()).stream()
+        List<Defect> openDefectList = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> d.getStatus() == DefectStatus.OPEN
                         || d.getStatus() == DefectStatus.IN_PROGRESS
                         || d.getStatus() == DefectStatus.IN_ANALYSIS)
@@ -219,7 +219,7 @@ public class DashboardService {
                 .filter(Objects::nonNull)
                 .toList();
 
-        List<DowntimeByEquipment> downtimeByEq = com.toir.util.UpdatedAtSorter.descending(downtimeEventRepository.findAllByIsDeletedFalse()).stream()
+        List<DowntimeByEquipment> downtimeByEq = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> d.getDurationMinutes() != null)
                 .collect(Collectors.groupingBy(
                         DowntimeEvent::getEquipmentId,
@@ -236,7 +236,7 @@ public class DashboardService {
                 })
                 .toList();
 
-        List<LatestDowntime> latestDowntimes = com.toir.util.UpdatedAtSorter.descending(downtimeEventRepository.findAllByIsDeletedFalse()).stream()
+        List<LatestDowntime> latestDowntimes = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .sorted(Comparator.comparing(DowntimeEvent::getStartAt).reversed())
                 .limit(5)
                 .map(d -> {
@@ -251,7 +251,7 @@ public class DashboardService {
                 })
                 .toList();
 
-        List<LatestStockMovement> latestMovements = com.toir.util.UpdatedAtSorter.descending(stockMovementRepository.findAllByIsDeletedFalse()).stream()
+        List<LatestStockMovement> latestMovements = stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .sorted(Comparator.comparing(StockMovement::getOccurredAt).reversed())
                 .limit(5)
                 .map(m -> {
@@ -268,10 +268,10 @@ public class DashboardService {
                 })
                 .toList();
 
-        Map<UUID, Contractor> contractorById = com.toir.util.UpdatedAtSorter.descending(contractorRepository.findAllByIsDeletedFalse()).stream()
+        Map<UUID, Contractor> contractorById = contractorRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(Contractor::getId, c -> c));
 
-        List<ContractorLoad> contractorLoad = com.toir.util.UpdatedAtSorter.descending(contractorWorkRepository.findAllByIsDeletedFalse()).stream()
+        List<ContractorLoad> contractorLoad = contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(w -> w.getStatus() == ContractorWorkStatus.IN_PROGRESS
                         || w.getStatus() == ContractorWorkStatus.DRAFT)
                 .collect(Collectors.groupingBy(ContractorWork::getContractorId, Collectors.counting()))
@@ -300,7 +300,7 @@ public class DashboardService {
                 })
                 .toList();
 
-        List<RepeatedDefectsEquipment> repeatedDefects = com.toir.util.UpdatedAtSorter.descending(defectRepository.findAllByIsDeletedFalse()).stream()
+        List<RepeatedDefectsEquipment> repeatedDefects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> d.getRecurrenceCount() > 0)
                 .collect(Collectors.groupingBy(Defect::getEquipmentId, Collectors.counting()))
                 .entrySet().stream()

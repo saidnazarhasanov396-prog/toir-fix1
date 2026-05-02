@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface WarehouseRepository extends JpaRepository<Warehouse, UUID> {
     java.util.Optional<Warehouse> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<Warehouse> findAllByIsDeletedFalse();
+    java.util.List<Warehouse> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<Warehouse> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -41,7 +41,7 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, UUID> {
                     or lower(w.code) like lower(concat('%', :search, '%'))
                     or lower(w.name) like lower(concat('%', :search, '%'))
                   )
-            order by w.code asc
+            order by w.updatedAt desc
             """)
     java.util.List<Warehouse> search(@Param("search") String search,
                                       @Param("departmentId") java.util.UUID departmentId,

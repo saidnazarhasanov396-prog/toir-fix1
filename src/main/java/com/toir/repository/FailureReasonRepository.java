@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface FailureReasonRepository extends JpaRepository<FailureReason, UUID> {
     java.util.Optional<FailureReason> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<FailureReason> findAllByIsDeletedFalse();
+    java.util.List<FailureReason> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<FailureReason> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

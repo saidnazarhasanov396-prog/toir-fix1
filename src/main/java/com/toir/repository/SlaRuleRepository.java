@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface SlaRuleRepository extends JpaRepository<SlaRule, UUID> {
     java.util.Optional<SlaRule> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<SlaRule> findAllByIsDeletedFalse();
+    java.util.List<SlaRule> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<SlaRule> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -27,9 +27,9 @@ public interface SlaRuleRepository extends JpaRepository<SlaRule, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM sla_rules WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
-    @Query(value = "SELECT * FROM sla_rules WHERE is_active = true AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM sla_rules WHERE is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<SlaRule> findAllByActiveTrueAndIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM sla_rules WHERE entity_type = :entityType AND is_active = true AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM sla_rules WHERE entity_type = :entityType AND is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<SlaRule> findAllByEntityTypeAndActiveTrueAndIsDeletedFalse(@Param("entityType") SlaEntityType entityType);
 }

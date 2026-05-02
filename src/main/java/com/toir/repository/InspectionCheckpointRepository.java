@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface InspectionCheckpointRepository extends JpaRepository<InspectionCheckpoint, UUID> {
     java.util.Optional<InspectionCheckpoint> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<InspectionCheckpoint> findAllByIsDeletedFalse();
+    java.util.List<InspectionCheckpoint> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<InspectionCheckpoint> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

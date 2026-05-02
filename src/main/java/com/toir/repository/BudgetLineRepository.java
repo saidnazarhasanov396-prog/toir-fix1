@@ -12,7 +12,7 @@ import java.util.UUID;
 public interface BudgetLineRepository extends JpaRepository<BudgetLine, UUID> {
     java.util.Optional<BudgetLine> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<BudgetLine> findAllByIsDeletedFalse();
+    java.util.List<BudgetLine> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<BudgetLine> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

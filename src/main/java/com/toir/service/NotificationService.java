@@ -22,7 +22,7 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationDto> findForUser(UUID recipientId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByRecipientIdAndIsDeletedFalseOrderByCreatedAtDesc(recipientId)).stream()
+        return repository.findAllByRecipientIdAndIsDeletedFalseOrderByCreatedAtDesc(recipientId).stream()
                 .map(NotificationDto::from).toList();
     }
 

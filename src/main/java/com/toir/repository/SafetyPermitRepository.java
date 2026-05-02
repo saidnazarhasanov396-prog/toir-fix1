@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface SafetyPermitRepository extends JpaRepository<SafetyPermit, UUID> {
     java.util.Optional<SafetyPermit> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<SafetyPermit> findAllByIsDeletedFalse();
+    java.util.List<SafetyPermit> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<SafetyPermit> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

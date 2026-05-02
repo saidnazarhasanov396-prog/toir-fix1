@@ -21,7 +21,7 @@ public class CostCategoryService {
 
     @Transactional(readOnly = true)
     public List<CostCategoryDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(CostCategoryDto::from).toList();
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(CostCategoryDto::from).toList();
     }
 
     public CostCategoryDto create(CostCategoryDto r) {

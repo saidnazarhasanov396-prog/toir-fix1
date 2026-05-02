@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface EquipmentTypeRepository extends JpaRepository<EquipmentType, UUID> {
     java.util.Optional<EquipmentType> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<EquipmentType> findAllByIsDeletedFalse();
+    java.util.List<EquipmentType> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<EquipmentType> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -49,6 +49,7 @@ public interface EquipmentTypeRepository extends JpaRepository<EquipmentType, UU
         lower(e.nameUz) like :search
     )
     and (:category is null or e.category = :category)
+    order by e.updatedAt desc
 """)
     List<EquipmentType> findAllByIsDeletedFalseAndBySearchParam(String search, String category);
 }

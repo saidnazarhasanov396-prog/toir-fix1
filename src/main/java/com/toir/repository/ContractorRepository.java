@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface ContractorRepository extends JpaRepository<Contractor, UUID> {
     java.util.Optional<Contractor> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<Contractor> findAllByIsDeletedFalse();
+    java.util.List<Contractor> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<Contractor> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

@@ -18,7 +18,7 @@ import java.util.UUID;
 public interface DefectRepository extends JpaRepository<Defect, UUID> {
     java.util.Optional<Defect> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<Defect> findAllByIsDeletedFalse();
+    java.util.List<Defect> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<Defect> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -58,7 +58,7 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
     @Query(value = "SELECT COUNT(*) > 0 FROM defects WHERE code = :code AND is_deleted = false", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
-    @Query(value = "SELECT * FROM defects WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM defects WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Defect> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
     @Query(value = "SELECT COUNT(*) FROM defects WHERE status = :status AND is_deleted = false", nativeQuery = true)

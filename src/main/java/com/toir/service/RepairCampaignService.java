@@ -27,12 +27,12 @@ public class RepairCampaignService {
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(RepairCampaignDto::from).toList();
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(RepairCampaignDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findByYear(int year) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByYearAndIsDeletedFalseOrderByStartDateAsc(year)).stream()
+        return repository.findAllByYearAndIsDeletedFalseOrderByStartDateAsc(year).stream()
                 .map(RepairCampaignDto::from).toList();
     }
 

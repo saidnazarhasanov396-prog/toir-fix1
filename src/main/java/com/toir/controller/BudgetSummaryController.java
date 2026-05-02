@@ -60,16 +60,16 @@ public class BudgetSummaryController {
 
     @GetMapping("/summary")
     public BudgetSummaryResponse summary() {
-        List<MaintenanceBudget> budgets = com.toir.util.UpdatedAtSorter.descending(budgetRepository.findAllByIsDeletedFalse());
+        List<MaintenanceBudget> budgets = budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         double totalPlanned = budgets.stream().mapToDouble(MaintenanceBudget::getTotalPlanned).sum();
         double totalActual = budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum();
         double variance = totalPlanned - totalActual;
         double executionPercent = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
 
-        Map<UUID, CostCategory> catById = com.toir.util.UpdatedAtSorter.descending(costCategoryRepository.findAllByIsDeletedFalse()).stream()
+        Map<UUID, CostCategory> catById = costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(CostCategory::getId, c -> c));
 
-        List<BudgetSummaryResponse.CategoryRow> byCategory = com.toir.util.UpdatedAtSorter.descending(lineRepository.findAllByIsDeletedFalse()).stream()
+        List<BudgetSummaryResponse.CategoryRow> byCategory = lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.groupingBy(BudgetLine::getCostCategoryId))
                 .entrySet().stream()
                 .map(entry -> {
@@ -110,7 +110,7 @@ public class BudgetSummaryController {
     public PageResponse<CostCategoryDto> costCategories(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        return PageResponse.of(com.toir.util.UpdatedAtSorter.descending(costCategoryRepository.findAllByIsDeletedFalse()).stream()
+        return PageResponse.of(costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .map(CostCategoryDto::from)
                 .toList(), page, pageSize);
     }
@@ -119,7 +119,7 @@ public class BudgetSummaryController {
     public PageResponseWithSummary<ActualCostBudgetRow, ActualCostRegisterSummary> actualCostRegister(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        List<ActualCost> items = com.toir.util.UpdatedAtSorter.descending(actualCostRepository.findAllByIsDeletedFalse());
+        List<ActualCost> items = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         double totalAmount = items.stream().mapToDouble(ActualCost::getAmount).sum();
         double approvedAmount = items.stream().filter(c -> c.getStatus() == ActualCostStatus.APPROVED)
                 .mapToDouble(ActualCost::getAmount).sum();
@@ -155,7 +155,7 @@ public class BudgetSummaryController {
     public PageResponse<ActualCostBudgetRow> reviewQueue(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        List<ActualCost> pending = com.toir.util.UpdatedAtSorter.descending(actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING));
+        List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
         return PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, pageSize);
     }
 
@@ -181,7 +181,7 @@ public class BudgetSummaryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         Instant weekAgo = Instant.now().minus(7, ChronoUnit.DAYS);
-        List<ActualCost> recent = com.toir.util.UpdatedAtSorter.descending(actualCostRepository.findAllByIsDeletedFalse()).stream()
+        List<ActualCost> recent = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(c -> c.getReviewedAt() != null && c.getReviewedAt().isAfter(weekAgo))
                 .toList();
 
@@ -225,7 +225,7 @@ public class BudgetSummaryController {
     public PageResponse<ActualCostBudgetRow> approvalPack(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        List<ActualCost> pending = com.toir.util.UpdatedAtSorter.descending(actualCostRepository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING));
+        List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
         return PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, pageSize);
     }
 
@@ -233,7 +233,7 @@ public class BudgetSummaryController {
     public PageResponse<ActualCostBudgetRow> reviewHistoryPack(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        List<ActualCost> reviewed = com.toir.util.UpdatedAtSorter.descending(actualCostRepository.findAllByIsDeletedFalse()).stream()
+        List<ActualCost> reviewed = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(c -> c.getReviewedAt() != null)
                 .toList();
         return PageResponse.of(reviewed.stream().map(this::actualCostRow).toList(), page, pageSize);

@@ -29,7 +29,7 @@ public class DefectService {
 
     @Transactional(readOnly = true)
     public List<DefectResponse> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream()
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .map(DefectDto::from)
                 .map(this::toResponse)
                 .toList();
@@ -53,7 +53,7 @@ public class DefectService {
 
     @Transactional(readOnly = true)
     public List<DefectResponse> findByEquipment(UUID equipmentId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).stream()
+        return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream()
                 .map(DefectDto::from)
                 .map(this::toResponse)
                 .toList();

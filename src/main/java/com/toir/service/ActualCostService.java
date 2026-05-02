@@ -22,12 +22,12 @@ public class ActualCostService {
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByStatusAndIsDeletedFalse(ActualCostStatus.PENDING)).stream().map(ActualCostDto::from).toList();
+        return repository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING).stream().map(ActualCostDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findByWorkOrder(UUID workOrderId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByWorkOrderIdAndIsDeletedFalse(workOrderId)).stream().map(ActualCostDto::from).toList();
+        return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId).stream().map(ActualCostDto::from).toList();
     }
 
     @Transactional

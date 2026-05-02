@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
     java.util.Optional<SparePart> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<SparePart> findAllByIsDeletedFalse();
+    java.util.List<SparePart> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<SparePart> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -36,6 +36,7 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
             or lower(sp.sku) like :searchPattern
             or lower(sp.specification) like :searchPattern)
         and sp.isDeleted = false
+        order by sp.updatedAt desc
 """)
     Page<SparePart> findAllByFilter(@Param("itemType") InventoryItemKind itemType,
                                     @Param("searchPattern") String searchPattern,

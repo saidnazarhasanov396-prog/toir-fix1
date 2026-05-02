@@ -21,6 +21,7 @@ public interface UnitOfMeasurementRepository extends JpaRepository<UnitOfMeasure
             AND (cast(:search as string) IS NULL OR
                  lower(u.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
                  lower(u.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY u.updatedAt DESC
             """)
     List<UnitOfMeasurement> findAllByIsDeletedFalse(
             @Param("search") String search

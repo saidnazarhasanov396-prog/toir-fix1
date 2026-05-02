@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface IntegrationEndpointRepository extends JpaRepository<IntegrationEndpoint, UUID> {
     java.util.Optional<IntegrationEndpoint> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<IntegrationEndpoint> findAllByIsDeletedFalse();
+    java.util.List<IntegrationEndpoint> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<IntegrationEndpoint> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

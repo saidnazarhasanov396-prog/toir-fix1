@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface RepairCampaignRepository extends JpaRepository<RepairCampaign, UUID> {
     java.util.Optional<RepairCampaign> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<RepairCampaign> findAllByIsDeletedFalse();
+    java.util.List<RepairCampaign> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<RepairCampaign> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -26,9 +26,9 @@ public interface RepairCampaignRepository extends JpaRepository<RepairCampaign, 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM repair_campaigns WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
-    @Query(value = "SELECT * FROM repair_campaigns WHERE year = :year AND is_deleted = false ORDER BY start_date ASC", nativeQuery = true)
+    @Query(value = "SELECT * FROM repair_campaigns WHERE year = :year AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<RepairCampaign> findAllByYearAndIsDeletedFalseOrderByStartDateAsc(@Param("year") int year);
 
-    @Query(value = "SELECT * FROM repair_campaigns WHERE department_id = :departmentId AND year = :year AND is_deleted = false ORDER BY start_date ASC", nativeQuery = true)
+    @Query(value = "SELECT * FROM repair_campaigns WHERE department_id = :departmentId AND year = :year AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<RepairCampaign> findAllByDepartmentIdAndYearAndIsDeletedFalseOrderByStartDateAsc(@Param("departmentId") UUID departmentId, @Param("year") int year);
 }

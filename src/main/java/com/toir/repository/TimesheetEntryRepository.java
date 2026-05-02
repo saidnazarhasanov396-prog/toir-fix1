@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface TimesheetEntryRepository extends JpaRepository<TimesheetEntry, UUID> {
     java.util.Optional<TimesheetEntry> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<TimesheetEntry> findAllByIsDeletedFalse();
+    java.util.List<TimesheetEntry> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<TimesheetEntry> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -24,13 +24,13 @@ public interface TimesheetEntryRepository extends JpaRepository<TimesheetEntry, 
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM hr_timesheet_entries WHERE employee_id = :employeeId AND work_date BETWEEN :from AND :to AND is_deleted = false ORDER BY work_date ASC", nativeQuery = true)
+    @Query(value = "SELECT * FROM hr_timesheet_entries WHERE employee_id = :employeeId AND work_date BETWEEN :from AND :to AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<TimesheetEntry> findAllByEmployeeIdAndWorkDateBetweenAndIsDeletedFalseOrderByWorkDateAsc(
             @Param("employeeId") UUID employeeId, @Param("from") LocalDate from, @Param("to") LocalDate to);
 
-    @Query(value = "SELECT * FROM hr_timesheet_entries WHERE work_date BETWEEN :from AND :to AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM hr_timesheet_entries WHERE work_date BETWEEN :from AND :to AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<TimesheetEntry> findAllByWorkDateBetweenAndIsDeletedFalse(@Param("from") LocalDate from, @Param("to") LocalDate to);
 
-    @Query(value = "SELECT * FROM hr_timesheet_entries WHERE work_order_id = :workOrderId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM hr_timesheet_entries WHERE work_order_id = :workOrderId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<TimesheetEntry> findAllByWorkOrderIdAndIsDeletedFalse(@Param("workOrderId") UUID workOrderId);
 }

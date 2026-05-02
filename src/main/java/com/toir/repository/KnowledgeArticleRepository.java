@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface KnowledgeArticleRepository extends JpaRepository<KnowledgeArticle, UUID> {
     java.util.Optional<KnowledgeArticle> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<KnowledgeArticle> findAllByIsDeletedFalse();
+    java.util.List<KnowledgeArticle> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<KnowledgeArticle> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -26,12 +26,12 @@ public interface KnowledgeArticleRepository extends JpaRepository<KnowledgeArtic
     @Query(value = "SELECT EXISTS(SELECT 1 FROM knowledge_articles WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
-    @Query(value = "SELECT * FROM knowledge_articles WHERE equipment_type_id = :equipmentTypeId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM knowledge_articles WHERE equipment_type_id = :equipmentTypeId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<KnowledgeArticle> findAllByEquipmentTypeIdAndIsDeletedFalse(@Param("equipmentTypeId") UUID equipmentTypeId);
 
-    @Query(value = "SELECT * FROM knowledge_articles WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM knowledge_articles WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<KnowledgeArticle> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
-    @Query(value = "SELECT * FROM knowledge_articles WHERE kind = :kind AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM knowledge_articles WHERE kind = :kind AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<KnowledgeArticle> findAllByKindAndIsDeletedFalse(@Param("kind") String kind);
 }

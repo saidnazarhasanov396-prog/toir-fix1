@@ -18,7 +18,7 @@ import java.util.UUID;
 public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
     java.util.Optional<Employee> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<Employee> findAllByIsDeletedFalse();
+    java.util.List<Employee> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<Employee> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -32,13 +32,13 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM hr_employees WHERE personnel_number = :personnelNumber AND is_deleted = false)", nativeQuery = true)
     boolean existsByPersonnelNumberAndIsDeletedFalse(@Param("personnelNumber") String personnelNumber);
 
-    @Query(value = "SELECT * FROM hr_employees WHERE is_active = true AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM hr_employees WHERE is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Employee> findAllByActiveTrueAndIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM hr_employees WHERE department_id = :departmentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM hr_employees WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Employee> findAllByDepartmentIdAndIsDeletedFalse(@Param("departmentId") UUID departmentId);
 
-    @Query(value = "SELECT * FROM hr_employees WHERE brigade_id = :brigadeId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM hr_employees WHERE brigade_id = :brigadeId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Employee> findAllByBrigadeIdAndIsDeletedFalse(@Param("brigadeId") UUID brigadeId);
 
     @Query("select e from Employee e where " +
@@ -61,6 +61,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
             "  (lower(e.middleName) like lower(concat('%', :part1, '%')) and lower(e.firstName) like lower(concat('%', :part2, '%'))) or " +
             "  (lower(e.lastName) like lower(concat('%', :part1, '%')) and lower(e.middleName) like lower(concat('%', :part2, '%'))) or " +
             "  (lower(e.middleName) like lower(concat('%', :part1, '%')) and lower(e.lastName) like lower(concat('%', :part2, '%')))" +
-            "))")
+            ")) " +
+            "order by e.updatedAt desc")
     Page<Employee> searchEmployees(@Param("search") String search, @Param("part1") String part1, @Param("part2") String part2, @Param("activeOnly") Boolean activeOnly, Pageable pageable);
 }

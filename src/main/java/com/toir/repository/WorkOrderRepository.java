@@ -18,7 +18,7 @@ import java.util.UUID;
 public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     java.util.Optional<WorkOrder> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<WorkOrder> findAllByIsDeletedFalse();
+    java.util.List<WorkOrder> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<WorkOrder> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

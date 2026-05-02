@@ -21,7 +21,7 @@ public class DefectSeverityService {
 
     @Transactional(readOnly = true)
     public List<DefectSeverityDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(DefectSeverityDto::from).toList();
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(DefectSeverityDto::from).toList();
     }
 
     public DefectSeverityDto create(DefectSeverityDto r) {

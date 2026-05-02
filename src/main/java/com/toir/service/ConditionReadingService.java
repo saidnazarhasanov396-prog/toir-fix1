@@ -37,14 +37,14 @@ public class ConditionReadingService {
         List<ConditionReading> list = parameter != null
                 ? repo.findAllByEquipmentIdAndParameterAndIsDeletedFalseOrderByRecordedAtDesc(equipmentId, parameter)
                 : repo.findAllByEquipmentIdAndIsDeletedFalseOrderByRecordedAtDesc(equipmentId);
-        return com.toir.util.UpdatedAtSorter.descending(list).stream().map(ConditionReadingDto::from).toList();
+        return list.stream().map(ConditionReadingDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ConditionReadingDto> findAlarms() {
         List<ConditionReading> warn = repo.findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("WARN");
         List<ConditionReading> alarm = repo.findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc("ALARM");
-        return com.toir.util.UpdatedAtSorter.descending(java.util.stream.Stream.concat(alarm.stream(), warn.stream()).toList()).stream()
+        return java.util.stream.Stream.concat(alarm.stream(), warn.stream()).toList().stream()
                 .map(ConditionReadingDto::from).toList();
     }
 

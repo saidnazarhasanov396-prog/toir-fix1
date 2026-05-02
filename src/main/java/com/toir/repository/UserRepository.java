@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface UserRepository extends JpaRepository<User, UUID> {
     java.util.Optional<User> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<User> findAllByIsDeletedFalse();
+    java.util.List<User> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<User> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

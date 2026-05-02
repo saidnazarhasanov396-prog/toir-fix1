@@ -31,10 +31,10 @@ public class DefectDictionariesController {
     @GetMapping
     public DefectDictionariesResponse dictionaries() {
         return new DefectDictionariesResponse(
-                com.toir.util.UpdatedAtSorter.descending(categoryRepository.findAllByIsDeletedFalse()).stream().map(DefectCategoryDto::from).toList(),
-                com.toir.util.UpdatedAtSorter.descending(severityRepository.findAllByIsDeletedFalse()).stream().map(DefectSeverityDto::from).toList(),
-                com.toir.util.UpdatedAtSorter.descending(failureReasonRepository.findAllByIsDeletedFalse()).stream().map(FailureReasonDto::from).toList(),
-                com.toir.util.UpdatedAtSorter.descending(rootCauseRepository.findAllByIsDeletedFalse()).stream().map(RootCauseDto::from).toList()
+                categoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(DefectCategoryDto::from).toList(),
+                severityRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(DefectSeverityDto::from).toList(),
+                failureReasonRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(FailureReasonDto::from).toList(),
+                rootCauseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(RootCauseDto::from).toList()
         );
     }
 }

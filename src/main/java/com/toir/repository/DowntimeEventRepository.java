@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface DowntimeEventRepository extends JpaRepository<DowntimeEvent, UUID> {
     java.util.Optional<DowntimeEvent> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<DowntimeEvent> findAllByIsDeletedFalse();
+    java.util.List<DowntimeEvent> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<DowntimeEvent> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -23,9 +23,9 @@ public interface DowntimeEventRepository extends JpaRepository<DowntimeEvent, UU
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM downtime_events WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY start_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM downtime_events WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<DowntimeEvent> findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(@Param("equipmentId") UUID equipmentId);
 
-    @Query(value = "SELECT * FROM downtime_events WHERE department_id = :departmentId AND is_deleted = false ORDER BY start_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM downtime_events WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<DowntimeEvent> findAllByDepartmentIdAndIsDeletedFalseOrderByStartAtDesc(@Param("departmentId") UUID departmentId);
 }

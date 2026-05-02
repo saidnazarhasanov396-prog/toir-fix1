@@ -27,7 +27,7 @@ public class MaintenanceBudgetService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceBudgetDto> findByYear(int year) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByYearAndIsDeletedFalse(year)).stream().map(MaintenanceBudgetDto::from).toList();
+        return repository.findAllByYearAndIsDeletedFalse(year).stream().map(MaintenanceBudgetDto::from).toList();
     }
 
     @Transactional(readOnly = true)

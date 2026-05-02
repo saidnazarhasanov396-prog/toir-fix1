@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest, UUID> {
     java.util.Optional<ApprovalRequest> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<ApprovalRequest> findAllByIsDeletedFalse();
+    java.util.List<ApprovalRequest> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<ApprovalRequest> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -24,7 +24,7 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM approval_requests WHERE document_type = :documentType AND document_id = cast(:documentId as uuid) AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM approval_requests WHERE document_type = :documentType AND document_id = cast(:documentId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ApprovalRequest> findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse(@Param("documentType") String documentType, @Param("documentId") UUID documentId);
 
     @Query(value = "SELECT * FROM approval_requests WHERE status = cast(:status as varchar) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)

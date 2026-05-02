@@ -20,7 +20,7 @@ public class ReliabilityMetricService {
 
     @Transactional(readOnly = true)
     public List<ReliabilityMetricDto> findByEquipment(UUID equipmentId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(equipmentId)).stream()
+        return repository.findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(equipmentId).stream()
                 .map(ReliabilityMetricDto::from).toList();
     }
 

@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface TechnicalDocumentRepository extends JpaRepository<TechnicalDocument, UUID> {
     java.util.Optional<TechnicalDocument> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<TechnicalDocument> findAllByIsDeletedFalse();
+    java.util.List<TechnicalDocument> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<TechnicalDocument> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -23,6 +23,6 @@ public interface TechnicalDocumentRepository extends JpaRepository<TechnicalDocu
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM technical_documents WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM technical_documents WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<TechnicalDocument> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 }

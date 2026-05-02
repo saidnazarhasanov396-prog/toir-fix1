@@ -39,10 +39,10 @@ public class ProcurementRequestService {
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId) {
         List<ProcurementRequest> list;
-        if (status != null) list = repo.findAllByStatusAndIsDeletedFalse(status);
-        else if (departmentId != null) list = repo.findAllByDepartmentIdAndIsDeletedFalse(departmentId);
-        else list = repo.findAllByIsDeletedFalse();
-        return com.toir.util.UpdatedAtSorter.descending(list).stream().map(ProcurementRequestDto::from).toList();
+        if (status != null) list = repo.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(status);
+        else if (departmentId != null) list = repo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(departmentId);
+        else list = repo.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        return list.stream().map(ProcurementRequestDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -144,7 +144,7 @@ public class ProcurementRequestService {
 
     /** Сгенерировать заявку(и) на закупку из low-stock позиций (по складу). */
     public List<ProcurementRequestDto> generateFromLowStock(UUID warehouseId) {
-        List<WarehouseStock> stocks = com.toir.util.UpdatedAtSorter.descending(stockRepository.findAllByIsDeletedFalse()).stream()
+        List<WarehouseStock> stocks = stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(s -> warehouseId == null || s.getWarehouseId().equals(warehouseId))
                 .filter(s -> s.getAvailable() < s.getMinQty())
                 .toList();

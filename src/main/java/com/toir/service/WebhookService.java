@@ -46,7 +46,7 @@ public class WebhookService {
 
 
     public List<WebhookSubscription> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse());
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
     }
 
     public WebhookSubscription create(WebhookSubscription sub) {
@@ -140,7 +140,7 @@ public class WebhookService {
     }
 
     public List<WebhookEventLog> recentForSubscription(UUID subscriptionId) {
-        return com.toir.util.UpdatedAtSorter.descending(eventLogRepository.findTop50BySubscriptionIdAndIsDeletedFalseOrderByFiredAtDesc(subscriptionId));
+        return eventLogRepository.findTop50BySubscriptionIdAndIsDeletedFalseOrderByFiredAtDesc(subscriptionId);
     }
 
     private String sign(String body, String secret) {

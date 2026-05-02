@@ -30,14 +30,14 @@ public class MeterService {
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listByEquipment(UUID equipmentId) {
-        return com.toir.util.UpdatedAtSorter.descending(meterRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).stream()
+        return meterRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream()
                 .map(this::enrichWithEquipmentName)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listAll() {
-        return com.toir.util.UpdatedAtSorter.descending(meterRepository.findAllByIsDeletedFalse()).stream()
+        return meterRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .map(this::enrichWithEquipmentName)
                 .toList();
     }
@@ -118,16 +118,16 @@ public class MeterService {
     public List<MeterReadingDto> history(UUID meterId, int limit) {
         getMeterOrThrow(meterId);
         int safeLimit = Math.min(Math.max(limit, 1), 1000);
-        return com.toir.util.UpdatedAtSorter.descending(readingRepository
+        return readingRepository
                         .findAllByMeterIdAndIsDeletedFalseOrderByReadAtDesc(meterId, PaginationUtils.pageRequest(0, safeLimit))
-                        .getContent())
+                        .getContent()
                 .stream().map(MeterReadingDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<MeterReadingDto> historyBetween(UUID meterId, Instant from, Instant to) {
         getMeterOrThrow(meterId);
-        return com.toir.util.UpdatedAtSorter.descending(readingRepository.findAllByMeterIdAndReadAtBetweenAndIsDeletedFalseOrderByReadAtAsc(meterId, from, to))
+        return readingRepository.findAllByMeterIdAndReadAtBetweenAndIsDeletedFalseOrderByReadAtAsc(meterId, from, to)
                 .stream().map(MeterReadingDto::from).toList();
     }
 

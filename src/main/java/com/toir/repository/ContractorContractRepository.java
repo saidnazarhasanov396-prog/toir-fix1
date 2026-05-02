@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface ContractorContractRepository extends JpaRepository<ContractorContract, UUID> {
     java.util.Optional<ContractorContract> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<ContractorContract> findAllByIsDeletedFalse();
+    java.util.List<ContractorContract> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<ContractorContract> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -26,6 +26,6 @@ public interface ContractorContractRepository extends JpaRepository<ContractorCo
     @Query(value = "SELECT EXISTS(SELECT 1 FROM contractor_contracts WHERE number = :number AND is_deleted = false)", nativeQuery = true)
     boolean existsByNumberAndIsDeletedFalse(@Param("number") String number);
 
-    @Query(value = "SELECT * FROM contractor_contracts WHERE contractor_id = :contractorId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM contractor_contracts WHERE contractor_id = :contractorId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ContractorContract> findAllByContractorIdAndIsDeletedFalse(@Param("contractorId") UUID contractorId);
 }

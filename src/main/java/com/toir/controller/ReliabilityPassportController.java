@@ -61,8 +61,8 @@ public class ReliabilityPassportController {
         Equipment eq = equipmentRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
 
-        List<Defect> defects = com.toir.util.UpdatedAtSorter.descending(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(id));
-        List<DowntimeEvent> downtimes = com.toir.util.UpdatedAtSorter.descending(downtimeRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(id));
+        List<Defect> defects = defectRepository.findAllByEquipmentIdAndIsDeletedFalse(id);
+        List<DowntimeEvent> downtimes = downtimeRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(id);
 
         int openDefects = (int) defects.stream().filter(d -> d.getStatus() != DefectStatus.CLOSED).count();
 

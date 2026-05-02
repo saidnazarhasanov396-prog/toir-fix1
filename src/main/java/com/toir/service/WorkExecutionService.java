@@ -29,7 +29,7 @@ public class WorkExecutionService {
 
     @Transactional(readOnly = true)
     public List<WorkExecutionDto> findByWorkOrder(UUID workOrderId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByStartedAtAsc(workOrderId)).stream()
+        return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByStartedAtAsc(workOrderId).stream()
                 .map(WorkExecutionDto::from).toList();
     }
 

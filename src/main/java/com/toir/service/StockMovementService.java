@@ -28,7 +28,7 @@ public class StockMovementService {
 
     @Transactional(readOnly = true)
     public List<StockMovementDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(StockMovementDto::from).toList();
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(StockMovementDto::from).toList();
     }
 
     public StockMovementDto create(StockMovementRequest request) {

@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface DepartmentRepository extends JpaRepository<Department, UUID> {
     java.util.Optional<Department> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<Department> findAllByIsDeletedFalse();
+    java.util.List<Department> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<Department> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -27,7 +27,7 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID> {
     @Query(value = "SELECT COUNT(*) > 0 FROM departments WHERE code = :code AND is_deleted = false", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
-    @Query(value = "SELECT * FROM departments WHERE parent_id = :parentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM departments WHERE parent_id = :parentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Department> findAllByParentIdAndIsDeletedFalse(@Param("parentId") UUID parentId);
 
     @Query("""
@@ -43,7 +43,7 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID> {
                     or lower(d.nameUz) like lower(concat('%', :search, '%'))
                     or lower(d.description) like lower(concat('%', :search, '%'))
                   )
-            order by d.createdAt desc
+            order by d.updatedAt desc
             """)
 
     List<Department> findAllByIsDeletedFalseAndByType(DepartmentType type, String search);

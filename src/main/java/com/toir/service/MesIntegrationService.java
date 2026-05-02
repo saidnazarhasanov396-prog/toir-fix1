@@ -134,10 +134,10 @@ public class MesIntegrationService {
     @Transactional(readOnly = true)
     public List<IntegrationSyncLogDto> getLogs(UUID endpointId) {
         if (endpointId != null) {
-            return com.toir.util.UpdatedAtSorter.descending(syncLogRepository.findTop50ByEndpointIdAndIsDeletedFalseOrderByStartedAtDesc(endpointId)).stream()
+            return syncLogRepository.findTop50ByEndpointIdAndIsDeletedFalseOrderByStartedAtDesc(endpointId).stream()
                     .map(IntegrationSyncLogDto::from).toList();
         }
-        return com.toir.util.UpdatedAtSorter.descending(syncLogRepository.findTop100ByIsDeletedFalseOrderByStartedAtDesc()).stream()
+        return syncLogRepository.findTop100ByIsDeletedFalseOrderByStartedAtDesc().stream()
                 .map(IntegrationSyncLogDto::from).toList();
     }
 
