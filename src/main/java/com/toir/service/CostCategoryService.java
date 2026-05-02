@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,17 +26,15 @@ public class CostCategoryService {
     }
 
     public CostCategoryDto create(CostCategoryDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Cost category code already exists: " + r.code());
-        }
         CostCategory e = new CostCategory();
-        e.setCode(r.code()); e.setName(r.name()); e.setDescription(r.description());
+        e.setCode(nextCode());
+        e.setName(r.name()); e.setDescription(r.description());
         return CostCategoryDto.from(repository.save(e));
     }
 
     public CostCategoryDto update(UUID id, CostCategoryDto r) {
         CostCategory e = getOrThrow(id);
-        e.setCode(r.code()); e.setName(r.name()); e.setDescription(r.description());
+        e.setName(r.name()); e.setDescription(r.description());
         return CostCategoryDto.from(e);
     }
 
@@ -46,5 +45,21 @@ public class CostCategoryService {
     CostCategory getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Cost category not found: " + id));
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "COST-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("COST", year, sequence);
+        while (repository.existsByCodeAndIsDeletedFalse(code)) {
+            sequence++;
+            code = formatCode("COST", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }

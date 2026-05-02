@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,10 +26,8 @@ public class MaterialService {
     }
 
     public MaterialDto create(MaterialDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Material code already exists: " + r.code());
-        }
         Material m = new Material();
+        m.setCode(nextCode());
         apply(m, r);
         return MaterialDto.from(repository.save(m));
     }
@@ -49,11 +48,26 @@ public class MaterialService {
     }
 
     private void apply(Material m, MaterialDto r) {
-        m.setCode(r.code());
         m.setName(r.name());
         if (r.kind() != null) m.setKind(r.kind());
         m.setUnit(r.unit());
         m.setSpecification(r.specification());
         m.setMinStock(r.minStock());
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "MAT-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("MAT", year, sequence);
+        while (repository.existsByCodeAndIsDeletedFalse(code)) {
+            sequence++;
+            code = formatCode("MAT", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }
