@@ -1,30 +1,34 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.MeterReading;
-
+import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface MeterReadingRepository extends JpaRepository<MeterReading, UUID> {
-    java.util.Optional<MeterReading> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM meter_readings WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<MeterReading> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<MeterReading> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM meter_readings WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<MeterReading> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<MeterReading> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM meter_readings WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<MeterReading> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM meter_readings WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM meter_readings WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT * FROM meter_readings WHERE meter_id = :meterId AND is_deleted = false ORDER BY updated_at DESC",

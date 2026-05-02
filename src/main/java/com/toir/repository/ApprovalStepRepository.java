@@ -1,27 +1,32 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
-import com.toir.enums.ApprovalDecision;
 import com.toir.entity.ApprovalStep;
-
+import com.toir.enums.ApprovalDecision;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface ApprovalStepRepository extends JpaRepository<ApprovalStep, UUID> {
-    java.util.Optional<ApprovalStep> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM approval_steps WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<ApprovalStep> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<ApprovalStep> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM approval_steps WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<ApprovalStep> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<ApprovalStep> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM approval_steps WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<ApprovalStep> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM approval_steps WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM approval_steps WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT * FROM approval_steps WHERE request_id = :requestId AND is_deleted = false ORDER BY step_number ASC", nativeQuery = true)

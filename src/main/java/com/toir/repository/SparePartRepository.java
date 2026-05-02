@@ -1,27 +1,33 @@
 package com.toir.repository;
 
+import com.toir.entity.SparePart;
 import com.toir.enums.InventoryItemKind;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Repository;
-import com.toir.entity.SparePart;
-
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
-    java.util.Optional<SparePart> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM spare_parts WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<SparePart> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<SparePart> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM spare_parts WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<SparePart> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<SparePart> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM spare_parts WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<SparePart> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM spare_parts WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM spare_parts WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT COUNT(*) > 0 FROM spare_parts WHERE code = :code AND is_deleted = false", nativeQuery = true)

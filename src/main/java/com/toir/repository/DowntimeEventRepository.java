@@ -1,26 +1,31 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.DowntimeEvent;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface DowntimeEventRepository extends JpaRepository<DowntimeEvent, UUID> {
-    java.util.Optional<DowntimeEvent> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM downtime_events WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<DowntimeEvent> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<DowntimeEvent> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM downtime_events WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<DowntimeEvent> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<DowntimeEvent> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM downtime_events WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<DowntimeEvent> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM downtime_events WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM downtime_events WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT * FROM downtime_events WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)

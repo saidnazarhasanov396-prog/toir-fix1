@@ -1,26 +1,31 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.EquipmentType;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface EquipmentTypeRepository extends JpaRepository<EquipmentType, UUID> {
-    java.util.Optional<EquipmentType> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM equipment_types WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<EquipmentType> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<EquipmentType> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM equipment_types WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<EquipmentType> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<EquipmentType> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM equipment_types WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<EquipmentType> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM equipment_types WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM equipment_types WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM equipment_types WHERE code = :code AND is_deleted = false)", nativeQuery = true)

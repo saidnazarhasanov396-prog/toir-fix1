@@ -1,28 +1,33 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.MaintenanceRegulation;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface MaintenanceRegulationRepository extends JpaRepository<MaintenanceRegulation, UUID> {
-    java.util.Optional<MaintenanceRegulation> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM maintenance_regulations WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<MaintenanceRegulation> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<MaintenanceRegulation> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM maintenance_regulations WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<MaintenanceRegulation> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<MaintenanceRegulation> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM maintenance_regulations WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<MaintenanceRegulation> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM maintenance_regulations WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM maintenance_regulations WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(nativeQuery = true, value = """

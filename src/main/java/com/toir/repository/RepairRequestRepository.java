@@ -1,30 +1,35 @@
 package com.toir.repository;
 
-import com.toir.enums.PriorityLevel;
-import org.springframework.stereotype.Repository;
 import com.toir.entity.RepairRequest;
+import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface RepairRequestRepository extends JpaRepository<RepairRequest, UUID> {
-    java.util.Optional<RepairRequest> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM repair_requests WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<RepairRequest> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<RepairRequest> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM repair_requests WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<RepairRequest> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<RepairRequest> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM repair_requests WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<RepairRequest> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM repair_requests WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM repair_requests WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT COUNT(*) > 0 FROM repair_requests WHERE number = :number AND is_deleted = false", nativeQuery = true)
