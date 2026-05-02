@@ -1,27 +1,32 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
-import com.toir.enums.SlaEntityType;
 import com.toir.entity.SlaRule;
-
+import com.toir.enums.SlaEntityType;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface SlaRuleRepository extends JpaRepository<SlaRule, UUID> {
-    java.util.Optional<SlaRule> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM sla_rules WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<SlaRule> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<SlaRule> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM sla_rules WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<SlaRule> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<SlaRule> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM sla_rules WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<SlaRule> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM sla_rules WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM sla_rules WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM sla_rules WHERE code = :code AND is_deleted = false)", nativeQuery = true)

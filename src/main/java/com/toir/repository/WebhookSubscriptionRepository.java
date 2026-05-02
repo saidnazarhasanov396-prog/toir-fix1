@@ -1,26 +1,31 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.WebhookSubscription;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface WebhookSubscriptionRepository extends JpaRepository<WebhookSubscription, UUID> {
-    java.util.Optional<WebhookSubscription> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM webhook_subscriptions WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<WebhookSubscription> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<WebhookSubscription> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM webhook_subscriptions WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<WebhookSubscription> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<WebhookSubscription> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM webhook_subscriptions WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<WebhookSubscription> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM webhook_subscriptions WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM webhook_subscriptions WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM webhook_subscriptions WHERE code = :code AND is_deleted = false)", nativeQuery = true)

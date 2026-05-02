@@ -1,30 +1,40 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.EscalationEvent;
 import com.toir.enums.EscalationStatus;
-
-import org.springframework.data.jpa.repository.JpaRepository;
-
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface EscalationEventRepository extends JpaRepository<EscalationEvent, UUID> {
-    java.util.Optional<EscalationEvent> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM escalation_events WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<EscalationEvent> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<EscalationEvent> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM escalation_events WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<EscalationEvent> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<EscalationEvent> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM escalation_events WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<EscalationEvent> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM escalation_events WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM escalation_events WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
-    List<EscalationEvent> findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(EscalationStatus status);
+    @Query(value = "SELECT * FROM escalation_events WHERE status = cast(:status as varchar) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<EscalationEvent> findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("status") EscalationStatus status);
 
-    List<EscalationEvent> findAllByEntityTypeAndEntityIdAndIsDeletedFalse(String entityType, String entityId);
+    @Query(value = "SELECT * FROM escalation_events WHERE entity_type = cast(:entityType as varchar) AND entity_id = cast(:entityId as varchar) AND is_deleted = false", nativeQuery = true)
+    List<EscalationEvent> findAllByEntityTypeAndEntityIdAndIsDeletedFalse(@Param("entityType") String entityType, @Param("entityId") String entityId);
 
-    long countByStatusAndIsDeletedFalse(EscalationStatus status);
+    @Query(value = "SELECT COUNT(*) FROM escalation_events WHERE status = cast(:status as varchar) AND is_deleted = false", nativeQuery = true)
+    long countByStatusAndIsDeletedFalse(@Param("status") EscalationStatus status);
 }

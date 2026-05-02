@@ -1,29 +1,34 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.DefectList;
 import com.toir.enums.DefectListStatus;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
-    java.util.Optional<DefectList> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM defect_lists WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<DefectList> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<DefectList> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM defect_lists WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<DefectList> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<DefectList> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM defect_lists WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<DefectList> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_lists WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM defect_lists WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
 

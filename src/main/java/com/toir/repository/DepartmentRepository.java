@@ -1,27 +1,32 @@
 package com.toir.repository;
 
-import com.toir.enums.DepartmentType;
-import org.springframework.stereotype.Repository;
 import com.toir.entity.Department;
-
+import com.toir.enums.DepartmentType;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface DepartmentRepository extends JpaRepository<Department, UUID> {
-    java.util.Optional<Department> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM departments WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<Department> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<Department> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM departments WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<Department> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<Department> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM departments WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<Department> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM departments WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM departments WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT COUNT(*) > 0 FROM departments WHERE code = :code AND is_deleted = false", nativeQuery = true)
@@ -45,6 +50,5 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID> {
                   )
             order by d.updatedAt desc
             """)
-
     List<Department> findAllByIsDeletedFalseAndByType(DepartmentType type, String search);
 }

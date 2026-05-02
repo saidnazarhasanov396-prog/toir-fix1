@@ -1,26 +1,31 @@
 package com.toir.repository;
 
-import org.springframework.stereotype.Repository;
 import com.toir.entity.Brigade;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.UUID;
+import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface BrigadeRepository extends JpaRepository<Brigade, UUID> {
-    java.util.Optional<Brigade> findByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT * FROM brigades WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<Brigade> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    java.util.List<Brigade> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM brigades WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<Brigade> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    java.util.List<Brigade> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
+    @Query(value = "SELECT * FROM brigades WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<Brigade> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    boolean existsByIdAndIsDeletedFalse(java.util.UUID id);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM brigades WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT COUNT(*) FROM brigades WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM brigades WHERE code = :code AND is_deleted = false)", nativeQuery = true)

@@ -4,21 +4,22 @@ import com.toir.entity.Equipment;
 import com.toir.entity.VehicleDetails;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
 public interface VehicleDetailsRepository extends JpaRepository<VehicleDetails, UUID> {
-    Optional<VehicleDetails> findByEquipmentIdAndIsDeletedFalse(UUID equipmentId);
+    @Query(value = "SELECT * FROM vehicle_details WHERE equipment_id = cast(:equipmentId as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<VehicleDetails> findByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
-    List<VehicleDetails> findAllByEquipmentIdInAndIsDeletedFalse(Collection<UUID> equipmentIds);
+    @Query(value = "SELECT * FROM vehicle_details WHERE equipment_id IN (:equipmentIds) AND is_deleted = false", nativeQuery = true)
+    List<VehicleDetails> findAllByEquipmentIdInAndIsDeletedFalse(@Param("equipmentIds") Collection<UUID> equipmentIds);
 
     @Query("""
             select e from Equipment e
@@ -48,11 +49,15 @@ public interface VehicleDetailsRepository extends JpaRepository<VehicleDetails, 
                                            @Param("search") String search,
                                            Pageable pageable);
 
-    Optional<VehicleDetails> findByPlateNumberAndIsDeletedFalse(String plateNumber);
+    @Query(value = "SELECT * FROM vehicle_details WHERE plate_number = cast(:plateNumber as varchar) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<VehicleDetails> findByPlateNumberAndIsDeletedFalse(@Param("plateNumber") String plateNumber);
 
-    Optional<VehicleDetails> findByVinAndIsDeletedFalse(String vin);
+    @Query(value = "SELECT * FROM vehicle_details WHERE vin = cast(:vin as varchar) AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<VehicleDetails> findByVinAndIsDeletedFalse(@Param("vin") String vin);
 
-    boolean existsByPlateNumberAndIsDeletedFalse(String plateNumber);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM vehicle_details WHERE plate_number = cast(:plateNumber as varchar) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByPlateNumberAndIsDeletedFalse(@Param("plateNumber") String plateNumber);
 
-    boolean existsByVinAndIsDeletedFalse(String vin);
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM vehicle_details WHERE vin = cast(:vin as varchar) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByVinAndIsDeletedFalse(@Param("vin") String vin);
 }
