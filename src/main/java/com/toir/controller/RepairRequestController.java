@@ -1,20 +1,18 @@
 package com.toir.controller;
-import com.toir.enums.PriorityLevel;
-import com.toir.enums.RequestStatus;
-import com.toir.service.RepairRequestService;
-
-import com.toir.security.SecurityScope;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
+import com.toir.enums.PriorityLevel;
+import com.toir.enums.RequestStatus;
+import com.toir.security.SecurityScope;
+import com.toir.service.RepairRequestService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/repair-requests")
@@ -30,7 +28,7 @@ public class RepairRequestController {
     }
 
     @GetMapping
-    public Page<RepairRequestDto> list(
+    public ResponseEntity<Page<RepairRequestDto>> list(
             @RequestParam(required = false) RequestStatus status,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
@@ -39,11 +37,11 @@ public class RepairRequestController {
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String search
     ) {
-        return service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId,priority, page, pageSize, search);
+        return ResponseEntity.ok(service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId,priority, page, pageSize, search));
     }
 
     @GetMapping("/{id}")
-    public RepairRequestDto get(@PathVariable UUID id) { return service.findById(id); }
+    public ResponseEntity<RepairRequestDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
     public ResponseEntity<RepairRequestDto> create(@Valid @RequestBody RepairRequestRequest request) {
@@ -51,27 +49,27 @@ public class RepairRequestController {
     }
 
     @PostMapping("/{id}/status")
-    public RepairRequestDto changeStatus(@PathVariable UUID id, @RequestParam RequestStatus status) {
-        return service.changeStatus(id, status);
+    public ResponseEntity<RepairRequestDto> changeStatus(@PathVariable UUID id, @RequestParam RequestStatus status) {
+        return ResponseEntity.ok(service.changeStatus(id, status));
     }
 
     @PostMapping("/{id}/close")
-    public RepairRequestDto close(@PathVariable UUID id, @Valid @RequestBody CloseRequestRequest request) {
-        return service.close(id, request);
+    public ResponseEntity<RepairRequestDto> close(@PathVariable UUID id, @Valid @RequestBody CloseRequestRequest request) {
+        return ResponseEntity.ok(service.close(id, request));
     }
 
     @PostMapping("/{id}/assign")
-    public RepairRequestDto assign(@PathVariable UUID id, @RequestParam UUID assigneeId) {
-        return service.assign(id, assigneeId);
+    public ResponseEntity<RepairRequestDto> assign(@PathVariable UUID id, @RequestParam UUID assigneeId) {
+        return ResponseEntity.ok(service.assign(id, assigneeId));
     }
 
     @PostMapping("/{id}/reject")
-    public RepairRequestDto reject(@PathVariable UUID id, @RequestParam String reason) {
-        return service.reject(id, reason);
+    public ResponseEntity<RepairRequestDto> reject(@PathVariable UUID id, @RequestParam String reason) {
+        return ResponseEntity.ok(service.reject(id, reason));
     }
 
     @PostMapping("/{id}/request-clarification")
-    public RepairRequestDto requestClarification(@PathVariable UUID id, @RequestParam String comment) {
-        return service.requestClarification(id, comment);
+    public ResponseEntity<RepairRequestDto> requestClarification(@PathVariable UUID id, @RequestParam String comment) {
+        return ResponseEntity.ok(service.requestClarification(id, comment));
     }
 }

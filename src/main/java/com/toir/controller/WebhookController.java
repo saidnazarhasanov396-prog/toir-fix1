@@ -1,17 +1,15 @@
 package com.toir.controller;
 import com.toir.dto.webhook.WebhookTestResponse;
 import com.toir.entity.WebhookEventLog;
-import com.toir.service.WebhookService;
 import com.toir.entity.WebhookSubscription;
-
+import com.toir.service.WebhookService;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/webhooks")
@@ -25,8 +23,8 @@ public class WebhookController {
     }
 
     @GetMapping
-    public List<WebhookSubscription> list() {
-        return service.findAll();
+    public ResponseEntity<List<WebhookSubscription>> list() {
+        return ResponseEntity.ok(service.findAll());
     }
 
     @PostMapping
@@ -35,8 +33,8 @@ public class WebhookController {
     }
 
     @PutMapping("/{id}")
-    public WebhookSubscription update(@PathVariable UUID id, @RequestBody WebhookSubscription patch) {
-        return service.update(id, patch);
+    public ResponseEntity<WebhookSubscription> update(@PathVariable UUID id, @RequestBody WebhookSubscription patch) {
+        return ResponseEntity.ok(service.update(id, patch));
     }
 
     @DeleteMapping("/{id}")
@@ -46,14 +44,14 @@ public class WebhookController {
     }
 
     @GetMapping("/{id}/events")
-    public List<WebhookEventLog> events(@PathVariable UUID id) {
-        return service.recentForSubscription(id);
+    public ResponseEntity<List<WebhookEventLog>> events(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.recentForSubscription(id));
     }
 
     @PostMapping("/test")
-    public WebhookTestResponse test(@RequestParam String eventCode,
+    public ResponseEntity<WebhookTestResponse> test(@RequestParam String eventCode,
                                     @RequestBody(required = false) Object payload) {
         int delivered = service.publish(eventCode, payload != null ? payload : Map.of("test", true));
-        return new WebhookTestResponse(delivered);
+        return ResponseEntity.ok(new WebhookTestResponse(delivered));
     }
 }

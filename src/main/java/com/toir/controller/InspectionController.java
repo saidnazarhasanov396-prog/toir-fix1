@@ -1,22 +1,20 @@
 package com.toir.controller;
+import com.toir.dto.inspection.*;
 import com.toir.dto.inspection.InspectionRoundDto;
 import com.toir.dto.inspection.InspectionRoundResultDto;
 import com.toir.dto.inspection.InspectionRoundResultRequest;
 import com.toir.dto.inspection.InspectionRouteDto;
 import com.toir.dto.inspection.InspectionRouteRequest;
-import com.toir.service.InspectionService;
-
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
-import com.toir.dto.inspection.*;
+import com.toir.service.InspectionService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -33,13 +31,13 @@ public class InspectionController {
 
     // routes
     @GetMapping("/inspection-routes")
-    public List<InspectionRouteDto> listRoutes(@RequestParam(required = false) UUID departmentId,
+    public ResponseEntity<List<InspectionRouteDto>> listRoutes(@RequestParam(required = false) UUID departmentId,
                                                @RequestParam(required = false) Boolean activeOnly) {
-        return service.findRoutes(departmentId, activeOnly);
+        return ResponseEntity.ok(service.findRoutes(departmentId, activeOnly));
     }
 
     @GetMapping("/inspection-routes/{id}")
-    public InspectionRouteDto getRoute(@PathVariable UUID id) { return service.getRoute(id); }
+    public ResponseEntity<InspectionRouteDto> getRoute(@PathVariable UUID id) { return ResponseEntity.ok(service.getRoute(id)); }
 
     @PostMapping("/inspection-routes")
     public ResponseEntity<InspectionRouteDto> createRoute(@Valid @RequestBody InspectionRouteRequest r) {
@@ -47,8 +45,8 @@ public class InspectionController {
     }
 
     @PutMapping("/inspection-routes/{id}")
-    public InspectionRouteDto updateRoute(@PathVariable UUID id, @Valid @RequestBody InspectionRouteRequest r) {
-        return service.updateRoute(id, r);
+    public ResponseEntity<InspectionRouteDto> updateRoute(@PathVariable UUID id, @Valid @RequestBody InspectionRouteRequest r) {
+        return ResponseEntity.ok(service.updateRoute(id, r));
     }
 
     @DeleteMapping("/inspection-routes/{id}")
@@ -58,20 +56,20 @@ public class InspectionController {
     }
 
     @PostMapping("/inspection-routes/{id}/checkpoints")
-    public InspectionRouteDto addCheckpoint(@PathVariable UUID id,
+    public ResponseEntity<InspectionRouteDto> addCheckpoint(@PathVariable UUID id,
                                             @Valid @RequestBody InspectionRouteRequest.CheckpointRequest cp) {
-        return service.addCheckpoint(id, cp);
+        return ResponseEntity.ok(service.addCheckpoint(id, cp));
     }
 
     // rounds
     @GetMapping("/inspection-rounds")
-    public List<InspectionRoundDto> listRounds(@RequestParam(required = false) UUID routeId,
+    public ResponseEntity<List<InspectionRoundDto>> listRounds(@RequestParam(required = false) UUID routeId,
                                                @RequestParam(required = false) UUID performedBy) {
-        return service.listRounds(routeId, performedBy);
+        return ResponseEntity.ok(service.listRounds(routeId, performedBy));
     }
 
     @GetMapping("/inspection-rounds/{id}")
-    public InspectionRoundDto getRound(@PathVariable UUID id) { return service.getRound(id); }
+    public ResponseEntity<InspectionRoundDto> getRound(@PathVariable UUID id) { return ResponseEntity.ok(service.getRound(id)); }
 
     @PostMapping("/inspection-routes/{routeId}/start")
     public ResponseEntity<InspectionRoundDto> startRound(@PathVariable UUID routeId) {
@@ -81,18 +79,18 @@ public class InspectionController {
     }
 
     @PostMapping("/inspection-rounds/{id}/results")
-    public InspectionRoundResultDto addResult(@PathVariable UUID id,
+    public ResponseEntity<InspectionRoundResultDto> addResult(@PathVariable UUID id,
                                               @Valid @RequestBody InspectionRoundResultRequest r) {
-        return service.recordResult(id, r);
+        return ResponseEntity.ok(service.recordResult(id, r));
     }
 
     @PostMapping("/inspection-rounds/{id}/complete")
-    public InspectionRoundDto complete(@PathVariable UUID id, @RequestParam(required = false) String notes) {
-        return service.completeRound(id, notes);
+    public ResponseEntity<InspectionRoundDto> complete(@PathVariable UUID id, @RequestParam(required = false) String notes) {
+        return ResponseEntity.ok(service.completeRound(id, notes));
     }
 
     @PostMapping("/inspection-rounds/{id}/cancel")
-    public InspectionRoundDto cancel(@PathVariable UUID id, @RequestParam String reason) {
-        return service.cancelRound(id, reason);
+    public ResponseEntity<InspectionRoundDto> cancel(@PathVariable UUID id, @RequestParam String reason) {
+        return ResponseEntity.ok(service.cancelRound(id, reason));
     }
 }

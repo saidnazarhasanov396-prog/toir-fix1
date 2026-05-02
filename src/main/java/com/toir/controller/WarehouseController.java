@@ -1,17 +1,15 @@
 package com.toir.controller;
-import com.toir.service.WarehouseService;
-
 import com.toir.dto.warehouse.WarehouseDto;
 import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.dto.warehouse.WarehouseStockDto;
+import com.toir.service.WarehouseService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/warehouses")
@@ -25,7 +23,7 @@ public class WarehouseController {
     }
 
     @GetMapping
-    public List<WarehouseDto> list(@RequestParam(required = false) String search,
+    public ResponseEntity<List<WarehouseDto>> list(@RequestParam(required = false) String search,
                                    @RequestParam(required = false) UUID departmentId,
                                    @RequestParam(name = "department_id", required = false) UUID departmentIdAlias,
                                    @RequestParam(required = false) UUID locationId,
@@ -34,20 +32,20 @@ public class WarehouseController {
                                    @RequestParam(name = "responsible_id", required = false) UUID responsibleIdAlias,
                                    @RequestParam(required = false) Boolean active,
                                    @RequestParam(name = "is_active", required = false) Boolean activeAlias) {
-        return service.findAll(
+        return ResponseEntity.ok(service.findAll(
                 search,
                 firstNonNull(departmentId, departmentIdAlias),
                 firstNonNull(locationId, locationIdAlias),
                 firstNonNull(responsibleId, responsibleIdAlias),
                 firstNonNull(active, activeAlias)
-        );
+        ));
     }
 
     @GetMapping("/{id}")
-    public WarehouseDto get(@PathVariable UUID id) { return service.findById(id); }
+    public ResponseEntity<WarehouseDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @GetMapping("/{id}/stocks")
-    public List<WarehouseStockDto> stocks(@PathVariable UUID id) { return service.findStocks(id); }
+    public ResponseEntity<List<WarehouseStockDto>> stocks(@PathVariable UUID id) { return ResponseEntity.ok(service.findStocks(id)); }
 
     @PostMapping
     public ResponseEntity<WarehouseDto> create(@Valid @RequestBody WarehouseRequest request) {
@@ -55,13 +53,16 @@ public class WarehouseController {
     }
 
     @PutMapping("/{id}")
-    public WarehouseDto update(@PathVariable UUID id, @Valid @RequestBody WarehouseRequest request) {
-        return service.update(id, request);
+    public ResponseEntity<WarehouseDto> update(@PathVariable UUID id, @Valid @RequestBody WarehouseRequest request) {
+        return ResponseEntity.ok(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 
     private <T> T firstNonNull(T primary, T alias) {
         return primary != null ? primary : alias;

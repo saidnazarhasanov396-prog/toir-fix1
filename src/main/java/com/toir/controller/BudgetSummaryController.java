@@ -1,14 +1,4 @@
 package com.toir.controller;
-import com.toir.entity.BudgetLine;
-import com.toir.entity.MaintenanceBudget;
-import com.toir.repository.BudgetLineRepository;
-import com.toir.repository.MaintenanceBudgetRepository;
-
-import com.toir.entity.ActualCost;
-import com.toir.repository.ActualCostRepository;
-import com.toir.enums.ActualCostStatus;
-import com.toir.entity.CostCategory;
-import com.toir.repository.CostCategoryRepository;
 import com.toir.dto.budget.ActualCostBudgetRow;
 import com.toir.dto.budget.ActualCostHandoverSummary;
 import com.toir.dto.budget.ActualCostRegisterSummary;
@@ -19,7 +9,22 @@ import com.toir.dto.budget.ContractorWorkRecommendationResponse;
 import com.toir.dto.common.PageResponse;
 import com.toir.dto.common.PageResponseWithSummary;
 import com.toir.dto.costcategory.CostCategoryDto;
+import com.toir.entity.ActualCost;
+import com.toir.entity.BudgetLine;
+import com.toir.entity.CostCategory;
+import com.toir.entity.MaintenanceBudget;
+import com.toir.enums.ActualCostStatus;
+import com.toir.repository.ActualCostRepository;
+import com.toir.repository.BudgetLineRepository;
+import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.MaintenanceBudgetRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,13 +34,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Real implementations for the {@code /budgets/*} analytical endpoints that
@@ -56,7 +54,7 @@ public class BudgetSummaryController {
 
 
     @GetMapping("/summary")
-    public BudgetSummaryResponse summary() {
+    public ResponseEntity<BudgetSummaryResponse> summary() {
         List<MaintenanceBudget> budgets = budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         double totalPlanned = budgets.stream().mapToDouble(MaintenanceBudget::getTotalPlanned).sum();
         double totalActual = budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum();
@@ -73,18 +71,18 @@ public class BudgetSummaryController {
                     CostCategory cat = catById.get(entry.getKey());
                     double planned = entry.getValue().stream().mapToDouble(BudgetLine::getPlannedAmount).sum();
                     double actual = entry.getValue().stream().mapToDouble(BudgetLine::getActualAmount).sum();
-                    return new BudgetSummaryResponse.CategoryRow(
+                    return ResponseEntity.ok(new BudgetSummaryResponse.CategoryRow(
                             cat != null
                                     ? new BudgetSummaryResponse.CategoryRef(cat.getId(), cat.getCode(), cat.getName())
                                     : new BudgetSummaryResponse.CategoryRef(entry.getKey(), "—", "—"),
                             planned,
                             actual,
                             planned - actual
-                    );
+                    ));
                 })
                 .toList();
 
-        return new BudgetSummaryResponse(
+        return ResponseEntity.ok(new BudgetSummaryResponse(
                 budgets.stream()
                         .map(b -> new BudgetSummaryResponse.Item(
                                 b.getId(),
@@ -100,7 +98,7 @@ public class BudgetSummaryController {
                 variance,
                 executionPercent,
                 byCategory
-        );
+        ));
     }
 
     @GetMapping("/cost-categories")
@@ -114,7 +112,7 @@ public class BudgetSummaryController {
     }
 
     @GetMapping("/actual-costs/register")
-    public PageResponseWithSummary<ActualCostBudgetRow, ActualCostRegisterSummary> actualCostRegister(
+    public ResponseEntity<PageResponseWithSummary<ActualCostBudgetRow, ActualCostRegisterSummary>> actualCostRegister(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         List<ActualCost> items = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
@@ -141,25 +139,25 @@ public class BudgetSummaryController {
                 rejectedCount
         );
 
-        return PageResponseWithSummary.of(
+        return ResponseEntity.ok(PageResponseWithSummary.of(
                 items.stream().map(this::actualCostRow).toList(),
                 page,
                 pageSize,
                 summary
-        );
+        ));
     }
 
     @GetMapping("/actual-costs/review-queue")
-    public PageResponse<ActualCostBudgetRow> reviewQueue(
+    public ResponseEntity<PageResponse<ActualCostBudgetRow>> reviewQueue(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
-        return PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, pageSize);
+        return ResponseEntity.ok(PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, pageSize));
     }
 
     @GetMapping("/actual-costs/{id}/review-history")
-    public ActualCostReviewHistoryResponse reviewHistory(@PathVariable UUID id) {
-        return actualCostRepository.findByIdAndIsDeletedFalse(id)
+    public ResponseEntity<ActualCostReviewHistoryResponse> reviewHistory(@PathVariable UUID id) {
+        return ResponseEntity.ok(actualCostRepository.findByIdAndIsDeletedFalse(id)
                 .map(c -> new ActualCostReviewHistoryResponse(
                         id.toString(),
                         c.getReviewedAt() != null
@@ -171,11 +169,11 @@ public class BudgetSummaryController {
                                 ))
                                 : List.of()
                 ))
-                .orElse(new ActualCostReviewHistoryResponse(id.toString(), List.of()));
+                .orElse(new ActualCostReviewHistoryResponse(id.toString(), List.of())));
     }
 
     @GetMapping("/actual-costs/review-activity")
-    public PageResponseWithSummary<ActualCostBudgetRow, ActualCostReviewActivitySummary> reviewActivity(
+    public ResponseEntity<PageResponseWithSummary<ActualCostBudgetRow, ActualCostReviewActivitySummary>> reviewActivity(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         Instant weekAgo = Instant.now().minus(7, ChronoUnit.DAYS);
@@ -194,16 +192,16 @@ public class BudgetSummaryController {
                 recent.stream().map(ActualCost::getId).distinct().count()
         );
 
-        return PageResponseWithSummary.of(
+        return ResponseEntity.ok(PageResponseWithSummary.of(
                 recent.stream().map(this::actualCostRow).toList(),
                 page,
                 pageSize,
                 summary
-        );
+        ));
     }
 
     @GetMapping("/actual-costs/handovers")
-    public PageResponseWithSummary<ActualCostBudgetRow, ActualCostHandoverSummary> handovers(
+    public ResponseEntity<PageResponseWithSummary<ActualCostBudgetRow, ActualCostHandoverSummary>> handovers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         ActualCostHandoverSummary summary = new ActualCostHandoverSummary(
@@ -216,30 +214,30 @@ public class BudgetSummaryController {
                 List.of()
         );
 
-        return PageResponseWithSummary.of(List.of(), page, pageSize, summary);
+        return ResponseEntity.ok(PageResponseWithSummary.of(List.of(), page, pageSize, summary));
     }
 
     @GetMapping("/actual-costs/approval-pack")
-    public PageResponse<ActualCostBudgetRow> approvalPack(
+    public ResponseEntity<PageResponse<ActualCostBudgetRow>> approvalPack(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
-        return PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, pageSize);
+        return ResponseEntity.ok(PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, pageSize));
     }
 
     @GetMapping("/actual-costs/review-history-pack")
-    public PageResponse<ActualCostBudgetRow> reviewHistoryPack(
+    public ResponseEntity<PageResponse<ActualCostBudgetRow>> reviewHistoryPack(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         List<ActualCost> reviewed = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(c -> c.getReviewedAt() != null)
                 .toList();
-        return PageResponse.of(reviewed.stream().map(this::actualCostRow).toList(), page, pageSize);
+        return ResponseEntity.ok(PageResponse.of(reviewed.stream().map(this::actualCostRow).toList(), page, pageSize));
     }
 
     @GetMapping("/contractor-works/{id}/recommendation")
-    public ContractorWorkRecommendationResponse contractorWorkRecommendation(@PathVariable UUID id) {
-        return new ContractorWorkRecommendationResponse(id.toString(), 0, List.of());
+    public ResponseEntity<ContractorWorkRecommendationResponse> contractorWorkRecommendation(@PathVariable UUID id) {
+        return ResponseEntity.ok(new ContractorWorkRecommendationResponse(id.toString(), 0, List.of()));
     }
 
     private ActualCostBudgetRow actualCostRow(ActualCost c) {

@@ -1,19 +1,14 @@
 package com.toir.controller;
 
-import com.toir.exception.RestException;
 import com.toir.entity.Defect;
-import com.toir.repository.DefectRepository;
-import com.toir.enums.DefectStatus;
 import com.toir.entity.DowntimeEvent;
-import com.toir.repository.DowntimeEventRepository;
 import com.toir.entity.Equipment;
+import com.toir.enums.DefectStatus;
+import com.toir.exception.RestException;
+import com.toir.repository.DefectRepository;
+import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.EquipmentRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
@@ -21,6 +16,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/equipment")
@@ -57,7 +57,7 @@ public class ReliabilityPassportController {
     ) {}
 
     @GetMapping("/{id}/reliability-passport")
-    public ReliabilityPassport passport(@PathVariable UUID id) {
+    public ResponseEntity<ReliabilityPassport> passport(@PathVariable UUID id) {
         Equipment eq = equipmentRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
 
@@ -103,9 +103,9 @@ public class ReliabilityPassportController {
         long downtimeLastYearMinutes = downtimes.stream()
                 .filter(ev -> ev.getStartAt().isAfter(horizon))
                 .mapToLong(ev -> {
-                    if (ev.getDurationMinutes() != null) return ev.getDurationMinutes();
-                    if (ev.getEndAt() != null) return Duration.between(ev.getStartAt(), ev.getEndAt()).toMinutes();
-                    return 0L;
+                    if (ev.getDurationMinutes() != null) return ResponseEntity.ok(ev.getDurationMinutes());
+                    if (ev.getEndAt() != null) return ResponseEntity.ok(Duration.between(ev.getStartAt(), ev.getEndAt()).toMinutes());
+                    return ResponseEntity.ok(0L);
                 }).sum();
         double availabilityPct = periodHours > 0
                 ? Math.max(0, 100.0 - (downtimeLastYearMinutes / 60.0) / periodHours * 100.0)
@@ -124,12 +124,12 @@ public class ReliabilityPassportController {
                 .limit(10)
                 .toList();
 
-        return new ReliabilityPassport(
+        return ResponseEntity.ok(new ReliabilityPassport(
                 eq.getId(), eq.getCode(), eq.getName(),
                 defects.size(), openDefects,
                 downtimes.size(), totalDowntimeMinutes,
                 mtbfHours, mttrHours, availabilityPct,
                 topCauses, Instant.now()
-        );
+        ));
     }
 }

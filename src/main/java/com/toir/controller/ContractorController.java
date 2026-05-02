@@ -1,16 +1,14 @@
 package com.toir.controller;
-import com.toir.service.ContractorService;
-
 import com.toir.dto.contractor.ContractorDto;
 import com.toir.dto.contractor.ContractorRequest;
+import com.toir.service.ContractorService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/contractors")
@@ -24,10 +22,10 @@ public class ContractorController {
     }
 
     @GetMapping
-    public List<ContractorDto> list() { return service.findAll(); }
+    public ResponseEntity<List<ContractorDto>> list() { return ResponseEntity.ok(service.findAll()); }
 
     @GetMapping("/{id}")
-    public ContractorDto get(@PathVariable UUID id) { return service.findById(id); }
+    public ResponseEntity<ContractorDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
     public ResponseEntity<ContractorDto> create(@Valid @RequestBody ContractorRequest request) {
@@ -35,11 +33,14 @@ public class ContractorController {
     }
 
     @PutMapping("/{id}")
-    public ContractorDto update(@PathVariable UUID id, @Valid @RequestBody ContractorRequest request) {
-        return service.update(id, request);
+    public ResponseEntity<ContractorDto> update(@PathVariable UUID id, @Valid @RequestBody ContractorRequest request) {
+        return ResponseEntity.ok(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -1,21 +1,19 @@
 package com.toir.controller;
-import com.toir.service.HrService;
-
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeRequest;
 import com.toir.dto.hr.TimesheetEntryDto;
 import com.toir.dto.hr.TimesheetEntryRequest;
+import com.toir.service.HrService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDate;
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/hr")
@@ -29,17 +27,17 @@ public class HrController {
     }
 
     @GetMapping("/employees")
-    public Page<EmployeeDto> listEmployees(
+    public ResponseEntity<Page<EmployeeDto>> listEmployees(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean activeOnly) {
-        return service.listEmployees(page-1, pageSize, search, activeOnly);
+        return ResponseEntity.ok(service.listEmployees(page-1, pageSize, search, activeOnly));
     }
 
     @GetMapping("/employees/{id}")
-    public EmployeeDto getEmployee(@PathVariable UUID id) {
-        return service.getEmployee(id);
+    public ResponseEntity<EmployeeDto> getEmployee(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.getEmployee(id));
     }
 
     @PostMapping("/employees")
@@ -48,24 +46,25 @@ public class HrController {
     }
 
     @PutMapping("/employees/{id}")
-    public EmployeeDto updateEmployee(@PathVariable UUID id, @Valid @RequestBody EmployeeRequest request) {
-        return service.updateEmployee(id, request);
+    public ResponseEntity<EmployeeDto> updateEmployee(@PathVariable UUID id, @Valid @RequestBody EmployeeRequest request) {
+        return ResponseEntity.ok(service.updateEmployee(id, request));
     }
 
     @DeleteMapping("/employees/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteEmployee(@PathVariable UUID id) {
+    public ResponseEntity<Void> deleteEmployee(@PathVariable UUID id) {
         service.deleteEmployee(id);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/timesheet")
-    public List<TimesheetEntryDto> timesheet(
+    public ResponseEntity<List<TimesheetEntryDto>> timesheet(
             @RequestParam(required = false) UUID employeeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return employeeId != null
+        return ResponseEntity.ok(employeeId != null
                 ? service.timesheetFor(employeeId, from, to)
-                : service.timesheetRange(from, to);
+                : service.timesheetRange(from, to));
     }
 
     @PostMapping("/timesheet")
@@ -74,18 +73,19 @@ public class HrController {
     }
 
     @PutMapping("/timesheet/{id}")
-    public TimesheetEntryDto updateTimesheet(@PathVariable UUID id, @Valid @RequestBody TimesheetEntryRequest request) {
-        return service.updateTimesheet(id, request);
+    public ResponseEntity<TimesheetEntryDto> updateTimesheet(@PathVariable UUID id, @Valid @RequestBody TimesheetEntryRequest request) {
+        return ResponseEntity.ok(service.updateTimesheet(id, request));
     }
 
     @PostMapping("/timesheet/{id}/approve")
-    public TimesheetEntryDto approveTimesheet(@PathVariable UUID id) {
-        return service.approveTimesheet(id);
+    public ResponseEntity<TimesheetEntryDto> approveTimesheet(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.approveTimesheet(id));
     }
 
     @DeleteMapping("/timesheet/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteTimesheet(@PathVariable UUID id) {
+    public ResponseEntity<Void> deleteTimesheet(@PathVariable UUID id) {
         service.deleteTimesheet(id);
+        return ResponseEntity.noContent().build();
     }
 }

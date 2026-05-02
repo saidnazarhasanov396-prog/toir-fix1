@@ -1,15 +1,13 @@
 package com.toir.controller;
-import com.toir.service.CostCategoryService;
-
 import com.toir.dto.costcategory.CostCategoryDto;
+import com.toir.service.CostCategoryService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/cost-categories")
@@ -20,7 +18,7 @@ public class CostCategoryController {
 
     public CostCategoryController(CostCategoryService service) { this.service = service; }
 
-    @GetMapping public List<CostCategoryDto> list() { return service.findAll(); }
+    @GetMapping public ResponseEntity<List<CostCategoryDto>> list() { return ResponseEntity.ok(service.findAll()); }
 
     @PostMapping
     public ResponseEntity<CostCategoryDto> create(@Valid @RequestBody CostCategoryDto r) {
@@ -28,11 +26,14 @@ public class CostCategoryController {
     }
 
     @PutMapping("/{id}")
-    public CostCategoryDto update(@PathVariable UUID id, @Valid @RequestBody CostCategoryDto r) {
-        return service.update(id, r);
+    public ResponseEntity<CostCategoryDto> update(@PathVariable UUID id, @Valid @RequestBody CostCategoryDto r) {
+        return ResponseEntity.ok(service.update(id, r));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

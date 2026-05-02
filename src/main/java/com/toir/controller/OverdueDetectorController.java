@@ -1,7 +1,7 @@
 package com.toir.controller;
 import com.toir.service.OverdueDetectorService;
-
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,7 +18,7 @@ public class OverdueDetectorController {
     }
 
     @PostMapping("/evaluate")
-    public OverdueDetectorService.EvaluationResult evaluate() {
-        return service.evaluate();
+    public ResponseEntity<OverdueDetectorService.EvaluationResult> evaluate() {
+        return ResponseEntity.ok(service.evaluate());
     }
 }

@@ -1,17 +1,15 @@
 package com.toir.controller;
-import com.toir.service.ApprovalService;
-
 import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
+import com.toir.service.ApprovalService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/approvals")
@@ -25,26 +23,26 @@ public class ApprovalController {
     }
 
     @GetMapping
-    public List<ApprovalRequestDto> list(
+    public ResponseEntity<List<ApprovalRequestDto>> list(
             @RequestParam(required = false) String documentType,
             @RequestParam(required = false) UUID documentId,
             @RequestParam(required = false) UUID requesterId,
             @RequestParam(required = false, defaultValue = "false") boolean pendingOnly) {
         if (documentType != null && documentId != null) {
-            return service.listByDocument(documentType, documentId);
+            return ResponseEntity.ok(service.listByDocument(documentType, documentId));
         }
         if (requesterId != null) {
-            return service.byRequester(requesterId);
+            return ResponseEntity.ok(service.byRequester(requesterId));
         }
         if (pendingOnly) {
-            return service.pending();
+            return ResponseEntity.ok(service.pending());
         }
-        return service.pending();
+        return ResponseEntity.ok(service.pending());
     }
 
     @GetMapping("/{id}")
-    public ApprovalRequestDto get(@PathVariable UUID id) {
-        return service.findById(id);
+    public ResponseEntity<ApprovalRequestDto> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.findById(id));
     }
 
     @PostMapping
@@ -53,17 +51,17 @@ public class ApprovalController {
     }
 
     @PostMapping("/{id}/approve")
-    public ApprovalRequestDto approve(@PathVariable UUID id, @Valid @RequestBody DecisionRequest decision) {
-        return service.approve(id, decision);
+    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id, @Valid @RequestBody DecisionRequest decision) {
+        return ResponseEntity.ok(service.approve(id, decision));
     }
 
     @PostMapping("/{id}/reject")
-    public ApprovalRequestDto reject(@PathVariable UUID id, @Valid @RequestBody DecisionRequest decision) {
-        return service.reject(id, decision);
+    public ResponseEntity<ApprovalRequestDto> reject(@PathVariable UUID id, @Valid @RequestBody DecisionRequest decision) {
+        return ResponseEntity.ok(service.reject(id, decision));
     }
 
     @PostMapping("/{id}/cancel")
-    public ApprovalRequestDto cancel(@PathVariable UUID id) {
-        return service.cancel(id);
+    public ResponseEntity<ApprovalRequestDto> cancel(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.cancel(id));
     }
 }

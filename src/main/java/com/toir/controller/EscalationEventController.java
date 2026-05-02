@@ -1,15 +1,13 @@
 package com.toir.controller;
-import com.toir.service.EscalationEventService;
-
 import com.toir.dto.escalation.EscalationEventDto;
+import com.toir.service.EscalationEventService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/escalations")
@@ -21,8 +19,8 @@ public class EscalationEventController {
     public EscalationEventController(EscalationEventService service) { this.service = service; }
 
     @GetMapping
-    public List<EscalationEventDto> list(@RequestParam(required = false) Boolean openOnly) {
-        return Boolean.TRUE.equals(openOnly) ? service.findOpen() : service.findAll();
+    public ResponseEntity<List<EscalationEventDto>> list(@RequestParam(required = false) Boolean openOnly) {
+        return ResponseEntity.ok(Boolean.TRUE.equals(openOnly) ? service.findOpen() : service.findAll());
     }
 
     @PostMapping
@@ -31,12 +29,12 @@ public class EscalationEventController {
     }
 
     @PostMapping("/{id}/acknowledge")
-    public EscalationEventDto acknowledge(@PathVariable UUID id, @RequestParam UUID userId, @RequestParam(required = false) String notes) {
-        return service.acknowledge(id, userId, notes);
+    public ResponseEntity<EscalationEventDto> acknowledge(@PathVariable UUID id, @RequestParam UUID userId, @RequestParam(required = false) String notes) {
+        return ResponseEntity.ok(service.acknowledge(id, userId, notes));
     }
 
     @PostMapping("/{id}/resolve")
-    public EscalationEventDto resolve(@PathVariable UUID id, @RequestParam UUID userId, @RequestParam(required = false) String notes) {
-        return service.resolve(id, userId, notes);
+    public ResponseEntity<EscalationEventDto> resolve(@PathVariable UUID id, @RequestParam UUID userId, @RequestParam(required = false) String notes) {
+        return ResponseEntity.ok(service.resolve(id, userId, notes));
     }
 }

@@ -1,14 +1,12 @@
 package com.toir.controller;
-import com.toir.service.SafetyPermitService;
-
 import com.toir.dto.safetypermit.SafetyPermitDto;
+import com.toir.service.SafetyPermitService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -20,7 +18,7 @@ public class SafetyPermitController {
     public SafetyPermitController(SafetyPermitService service) { this.service = service; }
 
     @GetMapping("/work-orders/{workOrderId}/safety-permit")
-    public SafetyPermitDto get(@PathVariable UUID workOrderId) { return service.findByWorkOrder(workOrderId); }
+    public ResponseEntity<SafetyPermitDto> get(@PathVariable UUID workOrderId) { return ResponseEntity.ok(service.findByWorkOrder(workOrderId)); }
 
     @PostMapping("/work-orders/{workOrderId}/safety-permit")
     public ResponseEntity<SafetyPermitDto> create(@PathVariable UUID workOrderId, @Valid @RequestBody SafetyPermitDto r) {
@@ -28,8 +26,8 @@ public class SafetyPermitController {
     }
 
     @PostMapping("/safety-permits/{id}/issue")
-    public SafetyPermitDto issue(@PathVariable UUID id) { return service.issue(id); }
+    public ResponseEntity<SafetyPermitDto> issue(@PathVariable UUID id) { return ResponseEntity.ok(service.issue(id)); }
 
     @PostMapping("/safety-permits/{id}/close")
-    public SafetyPermitDto close(@PathVariable UUID id) { return service.close(id); }
+    public ResponseEntity<SafetyPermitDto> close(@PathVariable UUID id) { return ResponseEntity.ok(service.close(id)); }
 }

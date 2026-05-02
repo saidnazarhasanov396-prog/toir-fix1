@@ -1,16 +1,14 @@
 package com.toir.controller;
-import com.toir.service.EquipmentSparePartService;
-
 import com.toir.dto.equipmentsparepart.EquipmentSparePartDto;
 import com.toir.dto.equipmentsparepart.EquipmentSparePartRequest;
+import com.toir.service.EquipmentSparePartService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -24,8 +22,8 @@ public class EquipmentSparePartController {
     }
 
     @GetMapping("/equipment/{equipmentId}/spare-parts")
-    public List<EquipmentSparePartDto> listForEquipment(@PathVariable UUID equipmentId) {
-        return service.listForEquipment(equipmentId);
+    public ResponseEntity<List<EquipmentSparePartDto>> listForEquipment(@PathVariable UUID equipmentId) {
+        return ResponseEntity.ok(service.listForEquipment(equipmentId));
     }
 
     @PostMapping("/equipment/{equipmentId}/spare-parts")
@@ -35,8 +33,8 @@ public class EquipmentSparePartController {
     }
 
     @PutMapping("/equipment-spare-parts/{id}")
-    public EquipmentSparePartDto update(@PathVariable UUID id, @Valid @RequestBody EquipmentSparePartRequest r) {
-        return service.update(id, r);
+    public ResponseEntity<EquipmentSparePartDto> update(@PathVariable UUID id, @Valid @RequestBody EquipmentSparePartRequest r) {
+        return ResponseEntity.ok(service.update(id, r));
     }
 
     @DeleteMapping("/equipment-spare-parts/{id}")
@@ -46,7 +44,7 @@ public class EquipmentSparePartController {
     }
 
     @GetMapping("/spare-parts/{sparePartId}/equipment")
-    public List<EquipmentSparePartDto> listForSparePart(@PathVariable UUID sparePartId) {
-        return service.listForSparePart(sparePartId);
+    public ResponseEntity<List<EquipmentSparePartDto>> listForSparePart(@PathVariable UUID sparePartId) {
+        return ResponseEntity.ok(service.listForSparePart(sparePartId));
     }
 }

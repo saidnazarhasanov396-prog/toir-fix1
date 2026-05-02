@@ -1,17 +1,15 @@
 package com.toir.controller;
-import com.toir.service.RepairCampaignService;
-
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
+import com.toir.service.RepairCampaignService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/repair-campaigns")
@@ -25,12 +23,12 @@ public class RepairCampaignController {
     }
 
     @GetMapping
-    public List<RepairCampaignDto> list(@RequestParam(required = false) Integer year) {
-        return year != null ? service.findByYear(year) : service.findAll();
+    public ResponseEntity<List<RepairCampaignDto>> list(@RequestParam(required = false) Integer year) {
+        return ResponseEntity.ok(year != null ? service.findByYear(year) : service.findAll());
     }
 
     @GetMapping("/{id}")
-    public RepairCampaignDto get(@PathVariable UUID id) { return service.findById(id); }
+    public ResponseEntity<RepairCampaignDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
     public ResponseEntity<RepairCampaignDto> create(@Valid @RequestBody RepairCampaignRequest r) {
@@ -38,13 +36,13 @@ public class RepairCampaignController {
     }
 
     @PostMapping("/{id}/approve")
-    public RepairCampaignDto approve(@PathVariable UUID id) { return service.approve(id); }
+    public ResponseEntity<RepairCampaignDto> approve(@PathVariable UUID id) { return ResponseEntity.ok(service.approve(id)); }
 
     @PostMapping("/{id}/start")
-    public RepairCampaignDto start(@PathVariable UUID id) { return service.start(id); }
+    public ResponseEntity<RepairCampaignDto> start(@PathVariable UUID id) { return ResponseEntity.ok(service.start(id)); }
 
     @PostMapping("/{id}/close")
-    public RepairCampaignDto close(@PathVariable UUID id) { return service.close(id); }
+    public ResponseEntity<RepairCampaignDto> close(@PathVariable UUID id) { return ResponseEntity.ok(service.close(id)); }
 
     @PostMapping("/{id}/stages")
     public ResponseEntity<RepairCampaignStageDto> addStage(@PathVariable UUID id, @Valid @RequestBody RepairCampaignStageDto r) {
@@ -52,7 +50,7 @@ public class RepairCampaignController {
     }
 
     @PostMapping("/stages/{stageId}/complete")
-    public RepairCampaignStageDto completeStage(@PathVariable UUID stageId, @RequestParam double actualCost) {
-        return service.completeStage(stageId, actualCost);
+    public ResponseEntity<RepairCampaignStageDto> completeStage(@PathVariable UUID stageId, @RequestParam double actualCost) {
+        return ResponseEntity.ok(service.completeStage(stageId, actualCost));
     }
 }

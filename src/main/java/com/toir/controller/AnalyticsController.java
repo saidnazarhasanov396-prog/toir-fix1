@@ -1,20 +1,19 @@
 package com.toir.controller;
-import com.toir.service.AnalyticsService;
-
 import com.toir.dto.analytics.AnalyticsOverview;
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.dto.analytics.FailureParetoResponse;
 import com.toir.dto.analytics.RcaEquipmentResponse;
 import com.toir.dto.analytics.RcaOverviewResponse;
 import com.toir.entity.ReliabilityMetric;
+import com.toir.service.AnalyticsService;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/analytics")
@@ -28,32 +27,32 @@ public class AnalyticsController {
     }
 
     @GetMapping("/overview")
-    public AnalyticsOverview overview() {
-        return service.overview();
+    public ResponseEntity<AnalyticsOverview> overview() {
+        return ResponseEntity.ok(service.overview());
     }
 
     @GetMapping("/pareto/failures")
-    public FailureParetoResponse paretoFailures() {
-        return service.failurePareto();
+    public ResponseEntity<FailureParetoResponse> paretoFailures() {
+        return ResponseEntity.ok(service.failurePareto());
     }
 
     @GetMapping("/rca/overview")
-    public RcaOverviewResponse rcaOverview() {
-        return service.rcaOverview();
+    public ResponseEntity<RcaOverviewResponse> rcaOverview() {
+        return ResponseEntity.ok(service.rcaOverview());
     }
 
     @GetMapping("/rca/equipment/{equipmentId}")
-    public RcaEquipmentResponse rcaEquipment(@PathVariable UUID equipmentId) {
-        return service.rcaEquipment(equipmentId);
+    public ResponseEntity<RcaEquipmentResponse> rcaEquipment(@PathVariable UUID equipmentId) {
+        return ResponseEntity.ok(service.rcaEquipment(equipmentId));
     }
 
     @GetMapping("/equipment/{equipmentId}")
-    public EquipmentAnalyticsResponse equipmentAnalytics(@PathVariable UUID equipmentId) {
-        return service.equipmentAnalytics(equipmentId);
+    public ResponseEntity<EquipmentAnalyticsResponse> equipmentAnalytics(@PathVariable UUID equipmentId) {
+        return ResponseEntity.ok(service.equipmentAnalytics(equipmentId));
     }
 
     @GetMapping("/reliability")
-    public List<ReliabilityMetric> reliabilityList() {
-        return service.reliabilityList();
+    public ResponseEntity<List<ReliabilityMetric>> reliabilityList() {
+        return ResponseEntity.ok(service.reliabilityList());
     }
 }

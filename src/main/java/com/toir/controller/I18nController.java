@@ -2,13 +2,13 @@ package com.toir.controller;
 
 import com.toir.dto.i18n.I18nBundleResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * Серверные i18n-словари для enum-значений и кодов статусов. Используется
@@ -22,8 +22,8 @@ public class I18nController {
     private static final Map<String, Map<String, Map<String, String>>> BUNDLES = build();
 
     @GetMapping("/{lang}")
-    public I18nBundleResponse bundle(@PathVariable String lang) {
-        return I18nBundleResponse.from(BUNDLES.getOrDefault(lang, BUNDLES.get("en")));
+    public ResponseEntity<I18nBundleResponse> bundle(@PathVariable String lang) {
+        return ResponseEntity.ok(I18nBundleResponse.from(BUNDLES.getOrDefault(lang, BUNDLES.get("en"))));
     }
 
     private static Map<String, Map<String, Map<String, String>>> build() {

@@ -1,15 +1,13 @@
 package com.toir.controller;
-import com.toir.service.ServiceClassService;
-
 import com.toir.dto.serviceclass.ServiceClassDto;
+import com.toir.service.ServiceClassService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/service-classes")
@@ -20,8 +18,8 @@ public class ServiceClassController {
 
     public ServiceClassController(ServiceClassService service) { this.service = service; }
 
-    @GetMapping public List<ServiceClassDto> list() { return service.findAll(); }
-    @GetMapping("/{id}") public ServiceClassDto get(@PathVariable UUID id) { return service.findById(id); }
+    @GetMapping public ResponseEntity<List<ServiceClassDto>> list() { return ResponseEntity.ok(service.findAll()); }
+    @GetMapping("/{id}") public ResponseEntity<ServiceClassDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
     public ResponseEntity<ServiceClassDto> create(@Valid @RequestBody ServiceClassDto r) {
@@ -29,11 +27,14 @@ public class ServiceClassController {
     }
 
     @PutMapping("/{id}")
-    public ServiceClassDto update(@PathVariable UUID id, @Valid @RequestBody ServiceClassDto r) {
-        return service.update(id, r);
+    public ResponseEntity<ServiceClassDto> update(@PathVariable UUID id, @Valid @RequestBody ServiceClassDto r) {
+        return ResponseEntity.ok(service.update(id, r));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) { service.delete(id); }
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

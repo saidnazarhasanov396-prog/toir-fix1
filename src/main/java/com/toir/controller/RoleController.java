@@ -1,17 +1,15 @@
 package com.toir.controller;
-import com.toir.service.RoleService;
-
-import com.toir.security.RequiresAdmin;
 import com.toir.dto.role.RoleDto;
 import com.toir.dto.role.RoleRequest;
+import com.toir.security.RequiresAdmin;
+import com.toir.service.RoleService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/roles")
@@ -26,13 +24,13 @@ public class RoleController {
     }
 
     @GetMapping
-    public List<RoleDto> list() {
-        return service.findAll();
+    public ResponseEntity<List<RoleDto>> list() {
+        return ResponseEntity.ok(service.findAll());
     }
 
     @GetMapping("/{id}")
-    public RoleDto get(@PathVariable UUID id) {
-        return service.findById(id);
+    public ResponseEntity<RoleDto> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.findById(id));
     }
 
     @PostMapping
@@ -41,13 +39,14 @@ public class RoleController {
     }
 
     @PutMapping("/{id}")
-    public RoleDto update(@PathVariable UUID id, @Valid @RequestBody RoleRequest request) {
-        return service.update(id, request);
+    public ResponseEntity<RoleDto> update(@PathVariable UUID id, @Valid @RequestBody RoleRequest request) {
+        return ResponseEntity.ok(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) {
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }
