@@ -35,7 +35,7 @@ public class DefectListService {
 
     @Transactional(readOnly = true)
     public Page<DefectListDto> search(UUID equipmentId, int page, int pageSize, String search) {
-        var pageable = PaginationUtils.updatedAtDescPageRequest(page, pageSize);
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
         return repository.searchPaginated(
                 equipmentId,
                 search,

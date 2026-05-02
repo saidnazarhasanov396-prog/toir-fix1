@@ -35,7 +35,7 @@ public class WorkExecutionService {
 
     @Transactional(readOnly = true)
     public Page<ExecutionLogDto> findExecutionLogs(UUID workOrderId, int page, int pageSize) {
-        var result = repository.findExecutionLogs(workOrderId, PaginationUtils.updatedAtDescPageRequest(page, pageSize));
+        var result = repository.findExecutionLogs(workOrderId, PaginationUtils.pageRequest(page, pageSize));
         return result.map(ExecutionLogDto::from);
     }
 

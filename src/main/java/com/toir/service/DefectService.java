@@ -37,7 +37,7 @@ public class DefectService {
 
     @Transactional(readOnly = true)
     public Page<DefectResponse> search(UUID equipmentId, int page, int size, String search) {
-        var pageable = PaginationUtils.updatedAtDescPageRequest(page, size);
+        var pageable = PaginationUtils.pageRequest(page, size);
         return repository.searchPaginated(
                 equipmentId,
                 search,

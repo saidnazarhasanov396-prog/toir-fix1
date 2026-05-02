@@ -119,7 +119,7 @@ public class MeterService {
         getMeterOrThrow(meterId);
         int safeLimit = Math.min(Math.max(limit, 1), 1000);
         return com.toir.util.UpdatedAtSorter.descending(readingRepository
-                        .findAllByMeterIdAndIsDeletedFalseOrderByReadAtDesc(meterId, PaginationUtils.updatedAtDescPageRequest(0, safeLimit))
+                        .findAllByMeterIdAndIsDeletedFalseOrderByReadAtDesc(meterId, PaginationUtils.pageRequest(0, safeLimit))
                         .getContent())
                 .stream().map(MeterReadingDto::from).toList();
     }

@@ -52,7 +52,7 @@ public class WorkOrderService {
 
     @Transactional(readOnly = true)
     public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
-        var pageable = PaginationUtils.updatedAtDescPageRequest(page, pageSize);
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
         return repository.searchPaginated(
                 status,
                 departmentId,
@@ -68,7 +68,7 @@ public class WorkOrderService {
                 departmentId,
                 equipmentId,
                 search,
-                PaginationUtils.updatedAtDescPageRequest(page, pageSize)
+                PaginationUtils.pageRequest(page, pageSize)
         ).map(this::toDto);
     }
 

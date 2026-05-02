@@ -20,6 +20,8 @@ public final class PaginationUtils {
         return PageRequest.of(Math.max(page, 0), clampPageSize(pageSize));
     }
 
+    // Use only for JPQL/derived queries. Native SQL queries with their own ORDER BY
+    // must use pageRequest(), otherwise Spring appends Java property names to SQL.
     public static PageRequest updatedAtDescPageRequest(int page, int pageSize) {
         return PageRequest.of(
                 Math.max(page, 0),

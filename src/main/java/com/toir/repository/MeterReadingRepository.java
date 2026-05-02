@@ -27,7 +27,7 @@ public interface MeterReadingRepository extends JpaRepository<MeterReading, UUID
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM meter_readings WHERE meter_id = :meterId AND is_deleted = false ORDER BY read_at DESC",
+    @Query(value = "SELECT * FROM meter_readings WHERE meter_id = :meterId AND is_deleted = false ORDER BY updated_at DESC",
             countQuery = "SELECT COUNT(*) FROM meter_readings WHERE meter_id = :meterId AND is_deleted = false",
             nativeQuery = true)
     Page<MeterReading> findAllByMeterIdAndIsDeletedFalseOrderByReadAtDesc(@Param("meterId") UUID meterId, Pageable pageable);
