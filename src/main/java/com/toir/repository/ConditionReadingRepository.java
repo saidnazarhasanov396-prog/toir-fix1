@@ -41,4 +41,14 @@ public interface ConditionReadingRepository extends JpaRepository<ConditionReadi
 
     @Query(value = "SELECT * FROM condition_readings WHERE severity = :severity AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ConditionReading> findAllBySeverityAndIsDeletedFalseOrderByRecordedAtDesc(@Param("severity") String severity);
+
+    @Query(value = """
+            SELECT COUNT(cr.*) FROM condition_readings cr
+            JOIN equipment e ON cr.equipment_id = e.id
+            WHERE cr.severity IN (:severities)
+            AND cr.is_deleted = false
+            AND e.is_deleted = false
+            AND (:departmentId IS NULL OR e.department_id = :departmentId)
+            """, nativeQuery = true)
+    long countBySeveritiesAndDepartment(@Param("severities") List<String> severities, @Param("departmentId") UUID departmentId);
 }
