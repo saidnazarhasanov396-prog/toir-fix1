@@ -1,4 +1,5 @@
 package com.toir.entity;
+import com.toir.enums.InspectionRoundStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -6,6 +7,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import static com.toir.enums.InspectionRoundStatus.IN_PROGRESS;
 
 /**
  * Фактический проход по маршруту обхода — экземпляр выполнения InspectionRoute.
@@ -34,7 +37,9 @@ public class InspectionRound extends BaseEntity {
 
     /** IN_PROGRESS / COMPLETED / CANCELLED. */
     @Column(nullable = false)
-    private String status = "IN_PROGRESS";
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    private InspectionRoundStatus status = IN_PROGRESS;
 
     @Column(name = "findings_count", nullable = false)
     private int findingsCount = 0;

@@ -35,7 +35,7 @@ public interface InspectionRouteRepository extends JpaRepository<InspectionRoute
             SELECT ir.* FROM inspection_routes ir 
             WHERE  is_deleted = false 
             AND (CAST(:departmentId as uuid) IS NULL OR ir.department_id = cast(:departmentId as uuid))
-            AND (CAST(:activeOnly as bool) = false OR ir.is_active = activeOnly)
+            AND (CAST(:activeOnly as bool) IS NULL OR ir.is_active = :activeOnly)
             AND (CAST(:search AS text) IS NULL OR :search = '' OR 
                              LOWER(ir.code) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR 
                              LOWER(ir.name) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')))
