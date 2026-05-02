@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface CostCategoryRepository extends JpaRepository<CostCategory, UUID> {
     java.util.Optional<CostCategory> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<CostCategory> findAllByIsDeletedFalse();
+    java.util.List<CostCategory> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     @Query("""
      SELECT cc FROM CostCategory cc

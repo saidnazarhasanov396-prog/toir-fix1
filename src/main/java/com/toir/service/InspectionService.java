@@ -40,10 +40,10 @@ public class InspectionService {
     @Transactional(readOnly = true)
     public List<InspectionRouteDto> findRoutes(UUID departmentId, Boolean activeOnly) {
         List<InspectionRoute> list;
-        if (departmentId != null) list = routeRepo.findAllByDepartmentIdAndIsDeletedFalse(departmentId);
+        if (departmentId != null) list = routeRepo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(departmentId);
         else if (Boolean.TRUE.equals(activeOnly)) list = routeRepo.findAllByActiveTrueAndIsDeletedFalse();
-        else list = routeRepo.findAllByIsDeletedFalse();
-        return com.toir.util.UpdatedAtSorter.descending(list).stream().map(InspectionRouteDto::from).toList();
+        else list = routeRepo.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        return list.stream().map(InspectionRouteDto::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -93,8 +93,8 @@ public class InspectionService {
         List<InspectionRound> list;
         if (routeId != null) list = roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(routeId);
         else if (performedBy != null) list = roundRepo.findAllByPerformedByAndIsDeletedFalseOrderByStartedAtDesc(performedBy);
-        else list = roundRepo.findAllByIsDeletedFalse();
-        return com.toir.util.UpdatedAtSorter.descending(list).stream().map(InspectionRoundDto::from).toList();
+        else list = roundRepo.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        return list.stream().map(InspectionRoundDto::from).toList();
     }
 
     @Transactional(readOnly = true)

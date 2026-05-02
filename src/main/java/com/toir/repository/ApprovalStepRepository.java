@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface ApprovalStepRepository extends JpaRepository<ApprovalStep, UUID> {
     java.util.Optional<ApprovalStep> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<ApprovalStep> findAllByIsDeletedFalse();
+    java.util.List<ApprovalStep> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<ApprovalStep> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -27,6 +27,6 @@ public interface ApprovalStepRepository extends JpaRepository<ApprovalStep, UUID
     @Query(value = "SELECT * FROM approval_steps WHERE request_id = :requestId AND is_deleted = false ORDER BY step_number ASC", nativeQuery = true)
     List<ApprovalStep> findAllByRequestIdAndIsDeletedFalseOrderByStepNumberAsc(@Param("requestId") UUID requestId);
 
-    @Query(value = "SELECT * FROM approval_steps WHERE approver_id = :approverId AND decision = :decision AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM approval_steps WHERE approver_id = :approverId AND decision = :decision AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ApprovalStep> findAllByApproverIdAndDecisionAndIsDeletedFalse(@Param("approverId") UUID approverId, @Param("decision") ApprovalDecision decision);
 }

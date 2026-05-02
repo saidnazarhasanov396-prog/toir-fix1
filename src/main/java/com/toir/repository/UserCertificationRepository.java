@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface UserCertificationRepository extends JpaRepository<UserCertification, UUID> {
     java.util.Optional<UserCertification> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<UserCertification> findAllByIsDeletedFalse();
+    java.util.List<UserCertification> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     @Query("""
             SELECT uc FROM UserCertification uc
@@ -24,6 +24,7 @@ public interface UserCertificationRepository extends JpaRepository<UserCertifica
                 AND (CAST(:search AS string) IS NULL OR CAST(:search AS string) = '' OR
                     LOWER(uc.typeCode) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR
                     LOWER(uc.certificateNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))
+                ORDER BY uc.updatedAt DESC
     """)
     java.util.List<UserCertification> findUserCertifications(
             @Param("search") String search
@@ -35,12 +36,12 @@ public interface UserCertificationRepository extends JpaRepository<UserCertifica
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM user_certifications WHERE user_id = :userId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM user_certifications WHERE user_id = :userId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<UserCertification> findAllByUserIdAndIsDeletedFalse(@Param("userId") UUID userId);
 
-    @Query(value = "SELECT * FROM user_certifications WHERE status = :status AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM user_certifications WHERE status = :status AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<UserCertification> findAllByStatusAndIsDeletedFalse(@Param("status") String status);
 
-    @Query(value = "SELECT * FROM user_certifications WHERE expires_at < :date AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM user_certifications WHERE expires_at < :date AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<UserCertification> findAllByExpiresAtBeforeAndIsDeletedFalse(@Param("date") LocalDate date);
 }

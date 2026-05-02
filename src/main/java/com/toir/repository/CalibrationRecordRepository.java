@@ -18,7 +18,7 @@ import java.util.UUID;
 public interface CalibrationRecordRepository extends JpaRepository<CalibrationRecord, UUID> {
     Optional<CalibrationRecord> findByIdAndIsDeletedFalse(UUID id);
 
-    List<CalibrationRecord> findAllByIsDeletedFalse();
+    List<CalibrationRecord> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     @Query("""
             SELECT cr FROM CalibrationRecord cr
@@ -26,6 +26,7 @@ public interface CalibrationRecordRepository extends JpaRepository<CalibrationRe
                         AND (CAST(:param AS string) IS NULL OR CAST(:param AS string) = '' OR
                             LOWER(cr.certificateNumber) LIKE LOWER(CONCAT('%', CAST(:param AS string), '%')) OR
                             LOWER(cr.performedBy) LIKE LOWER(CONCAT('%', CAST(:param AS string), '%')))
+                        ORDER BY cr.updatedAt DESC
             """)
     List<CalibrationRecord> findAll(
             @Param("param") String search
@@ -37,12 +38,12 @@ public interface CalibrationRecordRepository extends JpaRepository<CalibrationRe
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM calibration_records WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY performed_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM calibration_records WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<CalibrationRecord> findAllByEquipmentIdAndIsDeletedFalseOrderByPerformedAtDesc(@Param("equipmentId") UUID equipmentId);
 
-    @Query(value = "SELECT * FROM calibration_records WHERE next_due_at < :date AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM calibration_records WHERE next_due_at < :date AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<CalibrationRecord> findAllByNextDueAtBeforeAndIsDeletedFalse(@Param("date") LocalDate date);
 
-    @Query(value = "SELECT * FROM calibration_records WHERE result = :result AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM calibration_records WHERE result = :result AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<CalibrationRecord> findAllByResultAndIsDeletedFalse(@Param("result") String result);
 }

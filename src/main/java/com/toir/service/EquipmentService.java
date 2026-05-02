@@ -45,7 +45,7 @@ public class EquipmentService {
 
     @Transactional(readOnly = true)
     public Page<EquipmentDto> search(UUID departmentId, UUID equipmentTypeId, EquipmentStatus status, EquipmentCategory category, String search, int page, int pageSize) {
-        Page<Equipment> items = repository.search(departmentId, equipmentTypeId, status, category, search, PaginationUtils.updatedAtDescPageRequest(page, pageSize));
+        Page<Equipment> items = repository.search(departmentId, equipmentTypeId, status, category, search, PaginationUtils.pageRequest(page, pageSize));
         return enrich(items);
     }
 

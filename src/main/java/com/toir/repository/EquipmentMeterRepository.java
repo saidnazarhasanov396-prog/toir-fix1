@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface EquipmentMeterRepository extends JpaRepository<EquipmentMeter, UUID> {
     java.util.Optional<EquipmentMeter> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<EquipmentMeter> findAllByIsDeletedFalse();
+    java.util.List<EquipmentMeter> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<EquipmentMeter> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -23,9 +23,9 @@ public interface EquipmentMeterRepository extends JpaRepository<EquipmentMeter, 
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM equipment_meters WHERE equipment_id = :equipmentId AND is_active = true AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM equipment_meters WHERE equipment_id = :equipmentId AND is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<EquipmentMeter> findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
-    @Query(value = "SELECT * FROM equipment_meters WHERE equipment_id = :equipmentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM equipment_meters WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<EquipmentMeter> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 }

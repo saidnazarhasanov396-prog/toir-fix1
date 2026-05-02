@@ -101,7 +101,7 @@ public class RcmAutoPlannerService {
         LocalDateTime now = LocalDateTime.now();
         List<PprPlan> plans = planRepository.findAllByYearAndMonthAndIsDeletedFalse(now.getYear(), now.getMonthValue());
         if (plans.isEmpty()) {
-            List<PprPlan> any = planRepository.findAllByIsDeletedFalse();
+            List<PprPlan> any = planRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
             if (any.isEmpty()) throw RestException.badRequest("No PprPlan exists — create one first");
             return any.get(0);
         }

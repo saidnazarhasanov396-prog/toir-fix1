@@ -24,7 +24,7 @@ public class EquipmentTypeService {
     @Transactional(readOnly = true)
     public List<EquipmentTypeDto> findAll(String search, String category) {
         search = search == null ? null : "%" + search.toLowerCase() + "%";
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalseAndBySearchParam(search, category))
+        return repository.findAllByIsDeletedFalseAndBySearchParam(search, category)
                 .stream()
                 .map(EquipmentTypeDto::from)
                 .toList();

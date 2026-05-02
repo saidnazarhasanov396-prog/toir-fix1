@@ -66,20 +66,20 @@ public class AnalyticsService {
 
         Totals totals = new Totals(openRequests, emergencyRequests, closedWorkOrders, activeDefects);
 
-        List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalse();
+        List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         double mtbfAvg = allMetrics.stream().map(ReliabilityMetric::getMtbfHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
         double mttrAvg = allMetrics.stream().map(ReliabilityMetric::getMttrHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
 
-        List<WorkOrder> allWorkOrders = workOrderRepository.findAllByIsDeletedFalse();
+        List<WorkOrder> allWorkOrders = workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         long totalWO = allWorkOrders.size();
         long unplannedWO = allWorkOrders.stream()
                 .filter(w -> w.getType() == WorkOrderType.EMERGENCY || w.getType() == WorkOrderType.DEFECT)
                 .count();
         double unplannedShare = totalWO > 0 ? (double) unplannedWO / totalWO * 100 : 0;
 
-        List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAllByIsDeletedFalse();
+        List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         double downtimeHoursTotal = allDowntimes.stream()
                 .map(DowntimeEvent::getDurationMinutes)
                 .filter(Objects::nonNull)
@@ -88,14 +88,14 @@ public class AnalyticsService {
 
         // Reaction = detectedAt → first status transition to IN_PROGRESS (approx: createdAt→now for IN_PROGRESS)
         // Resolution = detectedAt → actualCompletionAt
-        List<com.toir.entity.RepairRequest> closedRequests = com.toir.util.UpdatedAtSorter.descending(repairRequestRepository.findAllByIsDeletedFalse()).stream()
+        List<com.toir.entity.RepairRequest> closedRequests = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(r -> r.getStatus() == RequestStatus.CLOSED && r.getActualCompletionAt() != null)
                 .toList();
         double avgResolutionHours = closedRequests.stream()
                 .mapToLong(r -> java.time.Duration.between(r.getDetectedAt(), r.getActualCompletionAt()).toMinutes())
                 .average().orElse(0) / 60.0;
         // reaction — use createdAt→updatedAt as proxy for non-CLOSED (analyst view approximates)
-        double avgReactionHours = com.toir.util.UpdatedAtSorter.descending(repairRequestRepository.findAllByIsDeletedFalse()).stream()
+        double avgReactionHours = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(r -> r.getStatus() != RequestStatus.OPEN && r.getStatus() != RequestStatus.DRAFT)
                 .mapToLong(r -> java.time.Duration.between(r.getCreatedAt(), r.getUpdatedAt()).toMinutes())
                 .average().orElse(0) / 60.0;
@@ -110,7 +110,7 @@ public class AnalyticsService {
         Kpis kpis = new Kpis(mtbfAvg, mttrAvg, unplannedShare, downtimeHoursTotal,
                 avgReactionHours, avgResolutionHours, pprCompletionRate, overdueWorkShare);
 
-        List<Defect> allDefects = defectRepository.findAllByIsDeletedFalse();
+        List<Defect> allDefects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         List<FailureReasonRow> topFailureReasons = allDefects.stream()
                 .filter(d -> d.getFailureReason() != null && !d.getFailureReason().isBlank())
                 .collect(Collectors.groupingBy(Defect::getFailureReason, Collectors.counting()))
@@ -120,7 +120,7 @@ public class AnalyticsService {
                 .map(e -> new FailureReasonRow(e.getKey(), e.getValue()))
                 .toList();
 
-        Map<UUID, Department> deptById = com.toir.util.UpdatedAtSorter.descending(departmentRepository.findAllByIsDeletedFalse()).stream()
+        Map<UUID, Department> deptById = departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(Department::getId, d -> d));
 
         List<DowntimeByDepartmentRow> downtimeByDept = allDowntimes.stream()
@@ -140,7 +140,7 @@ public class AnalyticsService {
                 })
                 .toList();
 
-        Map<UUID, Equipment> equipById = com.toir.util.UpdatedAtSorter.descending(equipmentRepository.findAllByIsDeletedFalse()).stream()
+        Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(Equipment::getId, e -> e));
 
         List<ReliabilitySnapshotRow> reliabilitySnapshot = allMetrics.stream()
@@ -209,7 +209,7 @@ public class AnalyticsService {
     }
 
     public FailureParetoResponse failurePareto() {
-        List<FailureReasonRow> items = com.toir.util.UpdatedAtSorter.descending(defectRepository.findAllByIsDeletedFalse()).stream()
+        List<FailureReasonRow> items = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> d.getFailureReason() != null && !d.getFailureReason().isBlank())
                 .collect(Collectors.groupingBy(Defect::getFailureReason, Collectors.counting()))
                 .entrySet().stream()
@@ -220,7 +220,7 @@ public class AnalyticsService {
     }
 
     public RcaOverviewResponse rcaOverview() {
-        List<Defect> all = defectRepository.findAllByIsDeletedFalse();
+        List<Defect> all = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         List<RcaOverviewResponse.CountRow> topRoot = all.stream()
                 .filter(d -> d.getRootCause() != null && !d.getRootCause().isBlank())
                 .collect(Collectors.groupingBy(Defect::getRootCause, Collectors.counting()))
@@ -265,10 +265,10 @@ public class AnalyticsService {
     }
 
     public EquipmentAnalyticsResponse equipmentAnalytics(UUID equipmentId) {
-        List<ReliabilityMetric> metrics = com.toir.util.UpdatedAtSorter.descending(reliabilityMetricRepository
-                .findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(equipmentId));
-        List<DowntimeEvent> downtimes = com.toir.util.UpdatedAtSorter.descending(downtimeEventRepository
-                .findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId));
+        List<ReliabilityMetric> metrics = reliabilityMetricRepository
+                .findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(equipmentId);
+        List<DowntimeEvent> downtimes = downtimeEventRepository
+                .findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId);
 
         ReliabilityMetric latest = metrics.isEmpty() ? null : metrics.get(0);
         long downtimeMinutes = downtimes.stream()
@@ -295,6 +295,6 @@ public class AnalyticsService {
     }
 
     public List<ReliabilityMetric> reliabilityList() {
-        return com.toir.util.UpdatedAtSorter.descending(reliabilityMetricRepository.findAllByIsDeletedFalse());
+        return reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
     }
 }

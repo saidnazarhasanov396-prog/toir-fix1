@@ -26,19 +26,19 @@ public class ApprovalService {
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> listByDocument(String documentType, UUID documentId) {
-        return com.toir.util.UpdatedAtSorter.descending(requestRepository.findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse(documentType, documentId)).stream()
+        return requestRepository.findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse(documentType, documentId).stream()
                 .map(ApprovalRequestDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> pending() {
-        return com.toir.util.UpdatedAtSorter.descending(requestRepository.findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalStatus.PENDING)).stream()
+        return requestRepository.findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalStatus.PENDING).stream()
                 .map(ApprovalRequestDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> byRequester(UUID requesterId) {
-        return com.toir.util.UpdatedAtSorter.descending(requestRepository.findAllByRequesterIdAndIsDeletedFalseOrderByCreatedAtDesc(requesterId)).stream()
+        return requestRepository.findAllByRequesterIdAndIsDeletedFalseOrderByCreatedAtDesc(requesterId).stream()
                 .map(ApprovalRequestDto::from).toList();
     }
 

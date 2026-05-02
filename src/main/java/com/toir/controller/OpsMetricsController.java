@@ -91,11 +91,11 @@ public class OpsMetricsController {
                 Instant.now().toString(),
                 new OpsMetricsResponse.Counts(
                         equipmentRepository.countByIsDeletedFalse(),
-                        com.toir.util.UpdatedAtSorter.descending(defectRepository.findAllByIsDeletedFalse()).stream()
+                        defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                                 .filter(d -> d.getStatus() != DefectStatus.CLOSED).count(),
                         repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN.name())
                                 + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS.name()),
-                        com.toir.util.UpdatedAtSorter.descending(workOrderRepository.findAllByIsDeletedFalse()).stream()
+                        workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                                 .filter(w -> w.getStatus() != WorkOrderStatus.CLOSED
                                         && w.getStatus() != WorkOrderStatus.CANCELLED).count(),
                         pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.PLANNED.name()),

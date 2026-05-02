@@ -47,5 +47,5 @@ public interface DefectCategoryRepository extends JpaRepository<DefectCategory, 
             """, nativeQuery = true)
     long maxSequenceByCodePrefix(@Param("prefix") String prefix);
 
-    java.util.List<DefectCategory> findAllByIsDeletedFalse();
+    java.util.List<DefectCategory> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 }

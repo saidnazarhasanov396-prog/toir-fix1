@@ -28,7 +28,7 @@ public class MaintenanceTemplateService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceTemplateDto> findAll(String search, MaintenanceKind type) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalseAndMaintenanceKindAndSearch(sparePartService.toSearchPattern(search), type)).stream()
+        return repository.findAllByIsDeletedFalseAndMaintenanceKindAndSearch(sparePartService.toSearchPattern(search), type).stream()
                 .map(MaintenanceTemplateDto::from)
                 .toList();
     }

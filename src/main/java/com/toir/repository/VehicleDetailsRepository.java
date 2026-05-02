@@ -40,6 +40,7 @@ public interface VehicleDetailsRepository extends JpaRepository<VehicleDetails, 
                 lower(vd.vin) like lower(concat('%', cast(:search as string), '%')) or
                 lower(vd.brand) like lower(concat('%', cast(:search as string), '%')) or
                 lower(vd.model) like lower(concat('%', cast(:search as string), '%')))
+            order by e.updatedAt desc
             """)
     Page<Equipment> searchVehicleEquipment(@Param("departmentId") UUID departmentId,
                                            @Param("status") EquipmentStatus status,

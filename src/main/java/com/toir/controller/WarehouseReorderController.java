@@ -40,7 +40,7 @@ public class WarehouseReorderController {
     public List<ReorderSuggestion> suggestions(@RequestParam(required = false) UUID warehouseId) {
         List<WarehouseStock> stocks = warehouseId != null
                 ? stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId)
-                : stockRepository.findAllByIsDeletedFalse();
+                : stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
         List<ReorderSuggestion> result = new ArrayList<>();
         for (WarehouseStock s : stocks) {

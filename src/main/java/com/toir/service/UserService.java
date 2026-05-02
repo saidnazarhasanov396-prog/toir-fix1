@@ -34,7 +34,7 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public List<UserDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(userRepository.findAllWithRolesAndIsDeletedFalse()).stream()
+        return userRepository.findAllWithRolesAndIsDeletedFalse().stream()
                 .map(UserDto::from)
                 .toList();
     }

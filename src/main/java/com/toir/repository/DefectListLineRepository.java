@@ -12,7 +12,7 @@ import java.util.UUID;
 public interface DefectListLineRepository extends JpaRepository<DefectListLine, UUID> {
     java.util.Optional<DefectListLine> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<DefectListLine> findAllByIsDeletedFalse();
+    java.util.List<DefectListLine> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<DefectListLine> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

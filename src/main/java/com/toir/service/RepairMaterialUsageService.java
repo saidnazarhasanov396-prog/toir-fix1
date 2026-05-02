@@ -23,7 +23,7 @@ public class RepairMaterialUsageService {
 
     @Transactional(readOnly = true)
     public List<RepairMaterialUsageDto> findByWorkOrder(UUID workOrderId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByWorkOrderIdAndIsDeletedFalse(workOrderId)).stream().map(RepairMaterialUsageDto::from).toList();
+        return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId).stream().map(RepairMaterialUsageDto::from).toList();
     }
 
     public RepairMaterialUsageDto register(UUID workOrderId, RepairMaterialUsageDto r) {

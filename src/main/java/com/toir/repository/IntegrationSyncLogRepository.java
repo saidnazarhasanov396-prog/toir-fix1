@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface IntegrationSyncLogRepository extends JpaRepository<IntegrationSyncLog, UUID> {
     java.util.Optional<IntegrationSyncLog> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<IntegrationSyncLog> findAllByIsDeletedFalse();
+    java.util.List<IntegrationSyncLog> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<IntegrationSyncLog> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -23,9 +23,9 @@ public interface IntegrationSyncLogRepository extends JpaRepository<IntegrationS
 
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM integration_sync_logs WHERE endpoint_id = :endpointId AND is_deleted = false ORDER BY started_at DESC LIMIT 50", nativeQuery = true)
+    @Query(value = "SELECT * FROM integration_sync_logs WHERE endpoint_id = :endpointId AND is_deleted = false ORDER BY updated_at DESC LIMIT 50", nativeQuery = true)
     List<IntegrationSyncLog> findTop50ByEndpointIdAndIsDeletedFalseOrderByStartedAtDesc(@Param("endpointId") UUID endpointId);
 
-    @Query(value = "SELECT * FROM integration_sync_logs WHERE is_deleted = false ORDER BY started_at DESC LIMIT 100", nativeQuery = true)
+    @Query(value = "SELECT * FROM integration_sync_logs WHERE is_deleted = false ORDER BY updated_at DESC LIMIT 100", nativeQuery = true)
     List<IntegrationSyncLog> findTop100ByIsDeletedFalseOrderByStartedAtDesc();
 }

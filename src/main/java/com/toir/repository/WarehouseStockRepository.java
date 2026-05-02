@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, UUID> {
     java.util.Optional<WarehouseStock> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<WarehouseStock> findAllByIsDeletedFalse();
+    java.util.List<WarehouseStock> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<WarehouseStock> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -27,11 +27,11 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
     @Query(value = "SELECT * FROM warehouse_stocks WHERE warehouse_id = :warehouseId AND spare_part_id = :sparePartId AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<WarehouseStock> findByWarehouseIdAndSparePartIdAndIsDeletedFalse(@Param("warehouseId") UUID warehouseId, @Param("sparePartId") UUID sparePartId);
 
-    @Query("SELECT DISTINCT ws FROM WarehouseStock ws LEFT JOIN FETCH ws.sparePart WHERE ws.warehouseId = :warehouseId AND ws.isDeleted = false")
+    @Query("SELECT DISTINCT ws FROM WarehouseStock ws LEFT JOIN FETCH ws.sparePart WHERE ws.warehouseId = :warehouseId AND ws.isDeleted = false ORDER BY ws.updatedAt DESC")
     List<WarehouseStock> findAllByWarehouseIdAndIsDeletedFalse(@Param("warehouseId") UUID warehouseId);
 
-    @Query(value = "SELECT * FROM warehouse_stocks WHERE spare_part_id = :sparePartId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM warehouse_stocks WHERE spare_part_id = :sparePartId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<WarehouseStock> findAllBySparePartIdAndIsDeletedFalse(@Param("sparePartId") UUID sparePartId);
 
-    List<WarehouseStock> findAllBySparePartIdInAndIsDeletedFalse(java.util.Collection<UUID> sparePartIds);
+    List<WarehouseStock> findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(java.util.Collection<UUID> sparePartIds);
 }

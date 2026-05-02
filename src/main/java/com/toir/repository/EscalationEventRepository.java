@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface EscalationEventRepository extends JpaRepository<EscalationEvent, UUID> {
     java.util.Optional<EscalationEvent> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<EscalationEvent> findAllByIsDeletedFalse();
+    java.util.List<EscalationEvent> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<EscalationEvent> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -22,7 +22,7 @@ public interface EscalationEventRepository extends JpaRepository<EscalationEvent
 
     long countByIsDeletedFalse();
 
-    List<EscalationEvent> findAllByStatusAndIsDeletedFalseOrderByRaisedAtDesc(EscalationStatus status);
+    List<EscalationEvent> findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(EscalationStatus status);
 
     List<EscalationEvent> findAllByEntityTypeAndEntityIdAndIsDeletedFalse(String entityType, String entityId);
 

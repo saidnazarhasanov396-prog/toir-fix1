@@ -17,7 +17,7 @@ import java.util.UUID;
 public interface MaintenanceRegulationRepository extends JpaRepository<MaintenanceRegulation, UUID> {
     java.util.Optional<MaintenanceRegulation> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<MaintenanceRegulation> findAllByIsDeletedFalse();
+    java.util.List<MaintenanceRegulation> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<MaintenanceRegulation> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -44,6 +44,6 @@ public interface MaintenanceRegulationRepository extends JpaRepository<Maintenan
     @Query(value = "SELECT EXISTS(SELECT 1 FROM maintenance_regulations WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
-    @Query(value = "SELECT * FROM maintenance_regulations WHERE equipment_type_id = :equipmentTypeId AND is_active = true AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM maintenance_regulations WHERE equipment_type_id = :equipmentTypeId AND is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<MaintenanceRegulation> findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(@Param("equipmentTypeId") UUID equipmentTypeId);
 }

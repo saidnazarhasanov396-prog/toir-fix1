@@ -22,7 +22,7 @@ public class EquipmentKPIService {
 
     @Transactional(readOnly = true)
     public List<EquipmentKPIDto> findByEquipment(UUID equipmentId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByEquipmentIdAndIsDeletedFalseOrderByPeriodStartDesc(equipmentId)).stream()
+        return repository.findAllByEquipmentIdAndIsDeletedFalseOrderByPeriodStartDesc(equipmentId).stream()
                 .map(EquipmentKPIDto::from).toList();
     }
 

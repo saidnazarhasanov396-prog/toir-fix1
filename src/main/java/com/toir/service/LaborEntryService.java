@@ -21,7 +21,7 @@ public class LaborEntryService {
 
     @Transactional(readOnly = true)
     public List<LaborEntryDto> findByWorkOrder(UUID workOrderId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrderId)).stream()
+        return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrderId).stream()
                 .map(LaborEntryDto::from).toList();
     }
 

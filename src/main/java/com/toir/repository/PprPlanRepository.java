@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
     java.util.Optional<PprPlan> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<PprPlan> findAllByIsDeletedFalse();
+    java.util.List<PprPlan> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<PprPlan> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
@@ -26,9 +26,9 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
     @Query(value = "SELECT COUNT(*) > 0 FROM ppr_plans WHERE code = :code AND is_deleted = false", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
-    @Query(value = "SELECT * FROM ppr_plans WHERE year = :year AND month = :month AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM ppr_plans WHERE year = :year AND month = :month AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<PprPlan> findAllByYearAndMonthAndIsDeletedFalse(@Param("year") int year, @Param("month") int month);
 
-    @Query(value = "SELECT * FROM ppr_plans WHERE department_id = :departmentId AND is_deleted = false", nativeQuery = true)
+    @Query(value = "SELECT * FROM ppr_plans WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<PprPlan> findAllByDepartmentIdAndIsDeletedFalse(@Param("departmentId") UUID departmentId);
 }

@@ -22,6 +22,7 @@ public interface CertificationTypeRepository extends JpaRepository<Certification
             AND (:code IS NULL OR ct.code = :code)
             AND (:name IS NULL OR ct.name = :name)
             AND (:search IS NULL OR u.fullName = :search)
+            ORDER BY ct.updatedAt DESC
             """)
     java.util.List<CertificationType> findAllByIsDeletedFalse(
             @Param("code") String code,

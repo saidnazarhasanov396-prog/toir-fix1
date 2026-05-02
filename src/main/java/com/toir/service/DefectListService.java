@@ -30,12 +30,12 @@ public class DefectListService {
 
     @Transactional(readOnly = true)
     public List<DefectListDto> findAll() {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByIsDeletedFalse()).stream().map(DefectListDto::from).toList();
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(DefectListDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public Page<DefectListDto> search(UUID equipmentId, int page, int pageSize, String search) {
-        var pageable = PaginationUtils.updatedAtDescPageRequest(page, pageSize);
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
         return repository.searchPaginated(
                 equipmentId,
                 search,
@@ -50,7 +50,7 @@ public class DefectListService {
 
     @Transactional(readOnly = true)
     public List<DefectListDto> findByEquipment(UUID equipmentId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).stream().map(DefectListDto::from).toList();
+        return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(DefectListDto::from).toList();
     }
 
     public DefectListDto create(DefectListRequest request) {

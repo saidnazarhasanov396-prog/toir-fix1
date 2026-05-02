@@ -4,7 +4,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 
 import java.util.List;
 
@@ -20,16 +19,8 @@ public final class PaginationUtils {
         return PageRequest.of(Math.max(page, 0), clampPageSize(pageSize));
     }
 
-    public static PageRequest updatedAtDescPageRequest(int page, int pageSize) {
-        return PageRequest.of(
-                Math.max(page, 0),
-                clampPageSize(pageSize),
-                Sort.by(Sort.Direction.DESC, "updatedAt")
-        );
-    }
-
     public static <T> Page<T> page(List<T> content, int page, int pageSize, long total) {
-        return new PageImpl<>(content != null ? content : List.of(), updatedAtDescPageRequest(page, pageSize), total);
+        return new PageImpl<>(content != null ? content : List.of(), pageRequest(page, pageSize), total);
     }
 
     public static int offset(Pageable pageable) {

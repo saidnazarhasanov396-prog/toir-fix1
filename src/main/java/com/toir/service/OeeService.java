@@ -25,7 +25,7 @@ public class OeeService {
 
     @Transactional(readOnly = true)
     public List<OeeRecordDto> listByEquipment(UUID equipmentId) {
-        return com.toir.util.UpdatedAtSorter.descending(repository.findAllByEquipmentIdAndIsDeletedFalseOrderByShiftStartDesc(equipmentId)).stream()
+        return repository.findAllByEquipmentIdAndIsDeletedFalseOrderByShiftStartDesc(equipmentId).stream()
                 .map(OeeRecordDto::from).toList();
     }
 
@@ -34,7 +34,7 @@ public class OeeService {
         List<OeeRecord> records = equipmentId != null
                 ? repository.findAllByEquipmentIdAndShiftStartBetweenAndIsDeletedFalseOrderByShiftStartAsc(equipmentId, from, to)
                 : repository.findAllByShiftStartBetweenAndIsDeletedFalse(from, to);
-        return com.toir.util.UpdatedAtSorter.descending(records).stream().map(OeeRecordDto::from).toList();
+        return records.stream().map(OeeRecordDto::from).toList();
     }
 
     @Transactional(readOnly = true)

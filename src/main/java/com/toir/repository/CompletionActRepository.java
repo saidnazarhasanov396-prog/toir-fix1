@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface CompletionActRepository extends JpaRepository<CompletionAct, UUID> {
     java.util.Optional<CompletionAct> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<CompletionAct> findAllByIsDeletedFalse();
+    java.util.List<CompletionAct> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<CompletionAct> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

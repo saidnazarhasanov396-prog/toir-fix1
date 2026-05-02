@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface CriticalityClassRepository extends JpaRepository<CriticalityClass, UUID> {
     java.util.Optional<CriticalityClass> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<CriticalityClass> findAllByIsDeletedFalse();
+    java.util.List<CriticalityClass> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<CriticalityClass> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 

@@ -70,7 +70,7 @@ public class OverdueDetectorService {
         java.util.UUID adminId = userRepository.findByUsernameAndIsDeletedFalse("admin").map(User::getId).orElse(null);
 
         // 1) PPR tasks overdue
-        for (PprTask task : pprTaskRepository.findAllByIsDeletedFalse()) {
+        for (PprTask task : pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (task.getDueDate() == null) continue;
             if (task.getStatus() == PprTaskStatus.COMPLETED
                     || task.getStatus() == PprTaskStatus.CANCELLED
@@ -92,7 +92,7 @@ public class OverdueDetectorService {
         }
 
         // 2) Repair requests past targetCompletionAt
-        for (RepairRequest r : repairRequestRepository.findAllByIsDeletedFalse()) {
+        for (RepairRequest r : repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (r.getStatus() == RequestStatus.CLOSED || r.getStatus() == RequestStatus.CANCELLED) continue;
             if (r.getTargetCompletionAt() == null) continue;
             if (r.getTargetCompletionAt().isBefore(now)) {
@@ -114,7 +114,7 @@ public class OverdueDetectorService {
         }
 
         // 3) Work orders past endPlannedAt
-        for (WorkOrder w : workOrderRepository.findAllByIsDeletedFalse()) {
+        for (WorkOrder w : workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (w.getStatus() == WorkOrderStatus.CLOSED || w.getStatus() == WorkOrderStatus.CANCELLED) continue;
             if (w.getEndPlannedAt() == null) continue;
             if (w.getEndPlannedAt().isBefore(now)) {
@@ -134,7 +134,7 @@ public class OverdueDetectorService {
         }
 
         // 4) Calibration records past nextDueAt
-        for (CalibrationRecord c : calibrationRecordRepository.findAllByIsDeletedFalse()) {
+        for (CalibrationRecord c : calibrationRecordRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (c.getNextDueAt() == null) continue;
             if (!c.getNextDueAt().isBefore(today)) continue;
             // Only alert once per record: use last calibration per equipment as reference
@@ -154,7 +154,7 @@ public class OverdueDetectorService {
         }
 
         // 5) User certifications past expiresAt → auto-EXPIRED
-        for (UserCertification uc : userCertificationRepository.findAllByIsDeletedFalse()) {
+        for (UserCertification uc : userCertificationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (uc.getExpiresAt() == null) continue;
             if (!"ACTIVE".equals(uc.getStatus())) continue;
             if (!uc.getExpiresAt().isBefore(today)) continue;
@@ -179,7 +179,7 @@ public class OverdueDetectorService {
     private int createNotification(java.util.UUID recipientId, String title, String message,
                                    NotificationSeverity severity, String entityType, String entityId) {
         // idempotent: skip if we already have an open notification for the same entity
-        boolean exists = com.toir.util.UpdatedAtSorter.descending(notificationRepository.findAllByIsDeletedFalse()).stream()
+        boolean exists = notificationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .anyMatch(n -> entityType.equals(n.getEntityType())
                         && entityId.equals(n.getEntityId())
                         && (n.getStatus() == NotificationStatus.PENDING || n.getStatus() == NotificationStatus.SENT));

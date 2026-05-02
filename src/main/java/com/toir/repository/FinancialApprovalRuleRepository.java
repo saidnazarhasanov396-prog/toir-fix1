@@ -15,7 +15,7 @@ import java.util.UUID;
 public interface FinancialApprovalRuleRepository extends JpaRepository<FinancialApprovalRule, UUID> {
     java.util.Optional<FinancialApprovalRule> findByIdAndIsDeletedFalse(java.util.UUID id);
 
-    java.util.List<FinancialApprovalRule> findAllByIsDeletedFalse();
+    java.util.List<FinancialApprovalRule> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     java.util.List<FinancialApprovalRule> findAllByIdInAndIsDeletedFalse(java.util.Collection<java.util.UUID> ids);
 
