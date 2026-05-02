@@ -21,7 +21,9 @@ public class ManufacturerController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ManufacturerDto>> list() { return ResponseEntity.ok(service.findAll()); }
+    public ResponseEntity<List<ManufacturerDto>> list(@RequestParam(required = false) String search) {
+        return ResponseEntity.ok(service.findAll(search));
+    }
 
     @GetMapping("/{id}")
     public ResponseEntity<ManufacturerDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }

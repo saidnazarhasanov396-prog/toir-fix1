@@ -18,7 +18,9 @@ public class DefectSeverityController {
 
     public DefectSeverityController(DefectSeverityService service) { this.service = service; }
 
-    @GetMapping public ResponseEntity<List<DefectSeverityDto>> list() { return ResponseEntity.ok(service.findAll()); }
+    @GetMapping public ResponseEntity<List<DefectSeverityDto>> list(@RequestParam(required = false) String search) {
+        return ResponseEntity.ok(service.findAll(search));
+    }
 
     @PostMapping
     public ResponseEntity<DefectSeverityDto> create(@Valid @RequestBody DefectSeverityDto r) {

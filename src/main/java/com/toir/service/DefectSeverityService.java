@@ -21,8 +21,8 @@ public class DefectSeverityService {
 
 
     @Transactional(readOnly = true)
-    public List<DefectSeverityDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(DefectSeverityDto::from).toList();
+    public List<DefectSeverityDto> findAll(String search) {
+        return repository.findAllBySearch(search).stream().map(DefectSeverityDto::from).toList();
     }
 
     public DefectSeverityDto create(DefectSeverityDto r) {

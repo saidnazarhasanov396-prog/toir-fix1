@@ -21,8 +21,8 @@ public class ServiceClassService {
 
 
     @Transactional(readOnly = true)
-    public List<ServiceClassDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(ServiceClassDto::from).toList();
+    public List<ServiceClassDto> findAll(String search) {
+        return repository.findAllBySearch(search).stream().map(ServiceClassDto::from).toList();
     }
 
     @Transactional(readOnly = true)

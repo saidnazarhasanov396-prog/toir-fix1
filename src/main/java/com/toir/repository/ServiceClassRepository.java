@@ -18,6 +18,15 @@ public interface ServiceClassRepository extends JpaRepository<ServiceClass, UUID
 
     @Query(value = "SELECT * FROM service_classes WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ServiceClass> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query("""
+            SELECT sc FROM ServiceClass sc
+            WHERE sc.isDeleted = false
+                AND (cast(:search as string) IS NULL OR
+                     lower(sc.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(sc.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY sc.updatedAt DESC
+            """)
+    List<ServiceClass> findAllBySearch(@Param("search") String search);
 
     @Query(value = "SELECT * FROM service_classes WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<ServiceClass> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);

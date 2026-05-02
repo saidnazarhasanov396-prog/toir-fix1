@@ -18,7 +18,9 @@ public class ServiceClassController {
 
     public ServiceClassController(ServiceClassService service) { this.service = service; }
 
-    @GetMapping public ResponseEntity<List<ServiceClassDto>> list() { return ResponseEntity.ok(service.findAll()); }
+    @GetMapping public ResponseEntity<List<ServiceClassDto>> list(@RequestParam(required = false) String search) {
+        return ResponseEntity.ok(service.findAll(search));
+    }
     @GetMapping("/{id}") public ResponseEntity<ServiceClassDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping

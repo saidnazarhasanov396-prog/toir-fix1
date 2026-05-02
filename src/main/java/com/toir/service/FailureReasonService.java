@@ -21,8 +21,8 @@ public class FailureReasonService {
 
 
     @Transactional(readOnly = true)
-    public List<FailureReasonDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(FailureReasonDto::from).toList();
+    public List<FailureReasonDto> findAll(String search) {
+        return repository.findAllBySearch(search).stream().map(FailureReasonDto::from).toList();
     }
 
     public FailureReasonDto create(FailureReasonDto r) {

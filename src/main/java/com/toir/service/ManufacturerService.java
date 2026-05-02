@@ -20,8 +20,8 @@ public class ManufacturerService {
     private final ManufacturerRepository repository;
 
     @Transactional(readOnly = true)
-    public List<ManufacturerDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(ManufacturerDto::from).toList();
+    public List<ManufacturerDto> findAll(String search) {
+        return repository.findAllBySearch(search).stream().map(ManufacturerDto::from).toList();
     }
 
     @Transactional(readOnly = true)

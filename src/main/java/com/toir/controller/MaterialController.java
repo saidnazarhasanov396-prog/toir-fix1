@@ -18,7 +18,9 @@ public class MaterialController {
 
     public MaterialController(MaterialService service) { this.service = service; }
 
-    @GetMapping public ResponseEntity<List<MaterialDto>> list() { return ResponseEntity.ok(service.findAll()); }
+    @GetMapping public ResponseEntity<List<MaterialDto>> list(@RequestParam(required = false) String search) {
+        return ResponseEntity.ok(service.findAll(search));
+    }
 
     @PostMapping
     public ResponseEntity<MaterialDto> create(@Valid @RequestBody MaterialDto r) {
