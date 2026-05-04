@@ -52,7 +52,7 @@ public class EquipmentService {
 
     @Transactional(readOnly = true)
     public EquipmentDto findById(UUID id) {
-        return enrich(List.of(getOrThrow(id))).get(0);
+        return enrich(List.of(getOrThrow(id))).getFirst();
     }
 
     @Transactional
@@ -64,14 +64,14 @@ public class EquipmentService {
         entity.setCode(nextCode());
         apply(entity, request);
         Equipment saved = repository.save(entity);
-        return enrich(List.of(saved)).get(0);
+        return enrich(List.of(saved)).getFirst();
     }
 
     @Transactional
     public EquipmentDto update(UUID id, EquipmentRequest request) {
         Equipment entity = getOrThrow(id);
-        apply(entity, request);
-        return enrich(List.of(entity)).get(0);
+        applyForUpdate(entity, request);
+        return enrich(List.of(entity)).getFirst();
     }
 
     @Transactional
@@ -193,5 +193,25 @@ public class EquipmentService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private void applyForUpdate(Equipment entity, EquipmentRequest request) {
+        entity.setName(request.name() != null ? request.name() : entity.getName());
+        entity.setInventoryNumber(request.inventoryNumber()  != null ? request.inventoryNumber() : entity.getInventoryNumber());
+        entity.setTechnicalNumber(request.technicalNumber() != null ? request.technicalNumber() : entity.getTechnicalNumber());
+        entity.setSerialNumber(request.serialNumber()  != null ? request.serialNumber() : entity.getSerialNumber());
+        entity.setModel(request.model() != null ? request.model() : entity.getModel());
+        entity.setEquipmentTypeId(request.equipmentTypeId() != null ? request.equipmentTypeId() : entity.getEquipmentTypeId());
+        entity.setDepartmentId(request.departmentId() != null ? request.departmentId() : entity.getDepartmentId());
+        entity.setLocationId(request.locationId() != null ? request.locationId() : entity.getLocationId());
+        entity.setParentId(request.parentId() != null ? request.parentId() : entity.getParentId());
+        entity.setCriticalityClassId(request.criticalityClassId()  != null ? request.criticalityClassId() : entity.getCriticalityClassId());
+        entity.setResponsibleId(request.responsibleId() != null ? request.responsibleId() : entity.getResponsibleId());
+        entity.setManufacturer(request.manufacturer() != null ? request.manufacturer() : entity.getManufacturer());
+        if (request.status() != null) entity.setStatus(request.status());
+        entity.setCategory(request.category() != null ? request.category() : entity.getCategory());
+        entity.setCommissionedAt(request.commissionedAt() != null ? request.commissionedAt() : entity.getCommissionedAt());
+        entity.setWarrantyUntil(request.warrantyUntil() != null ? request.warrantyUntil() : entity.getWarrantyUntil());
+        entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
     }
 }
