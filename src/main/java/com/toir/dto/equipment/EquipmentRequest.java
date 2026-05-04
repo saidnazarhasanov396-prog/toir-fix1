@@ -9,7 +9,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 public record EquipmentRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         @NotBlank String inventoryNumber,
         String technicalNumber,
