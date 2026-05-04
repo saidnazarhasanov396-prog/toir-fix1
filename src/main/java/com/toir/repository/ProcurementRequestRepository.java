@@ -1,6 +1,6 @@
 package com.toir.repository;
 
-import com.toir.entity.ProcurementRequest;
+import com.toir.entity.projects.ProcurementRequest;
 import com.toir.enums.ProcurementRequestStatus;
 import java.util.Collection;
 import java.util.List;

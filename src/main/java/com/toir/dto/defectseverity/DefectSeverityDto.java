@@ -1,6 +1,6 @@
 package com.toir.dto.defectseverity;
 
-import com.toir.entity.DefectSeverity;
+import com.toir.entity.defects.DefectSeverity;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 

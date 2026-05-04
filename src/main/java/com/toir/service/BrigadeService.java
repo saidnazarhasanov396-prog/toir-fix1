@@ -1,8 +1,8 @@
 package com.toir.service;
-import com.toir.entity.Brigade;
-import com.toir.entity.BrigadeMember;
-import com.toir.repository.BrigadeMemberRepository;
-import com.toir.repository.BrigadeRepository;
+import com.toir.entity.users.Brigade;
+import com.toir.entity.users.BrigadeMember;
+import com.toir.repository.projects.BrigadeMemberRepository;
+import com.toir.repository.projects.BrigadeRepository;
 
 import com.toir.dto.brigade.BrigadeDto;
 import com.toir.dto.brigade.BrigadeMemberDto;

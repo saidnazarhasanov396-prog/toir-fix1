@@ -1,6 +1,6 @@
 package com.toir.dto.actualcost;
 
-import com.toir.entity.ActualCost;
+import com.toir.entity.projects.ActualCost;
 import com.toir.enums.ActualCostStatus;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;

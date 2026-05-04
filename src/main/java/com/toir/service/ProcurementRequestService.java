@@ -1,6 +1,6 @@
 package com.toir.service;
-import com.toir.entity.ProcurementRequest;
-import com.toir.entity.ProcurementRequestLine;
+import com.toir.entity.projects.ProcurementRequest;
+import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.repository.ProcurementRequestRepository;
 
@@ -10,7 +10,7 @@ import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.entity.SparePart;
 import com.toir.repository.SparePartRepository;
-import com.toir.entity.WarehouseStock;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

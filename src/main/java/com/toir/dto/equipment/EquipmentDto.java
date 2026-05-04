@@ -1,6 +1,6 @@
 package com.toir.dto.equipment;
 
-import com.toir.entity.Equipment;
+import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 

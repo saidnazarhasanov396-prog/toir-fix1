@@ -1,6 +1,6 @@
 package com.toir.dto.meter;
 
-import com.toir.entity.MeterReading;
+import com.toir.entity.equipment.MeterReading;
 import com.toir.enums.MeterSource;
 
 import java.time.Instant;

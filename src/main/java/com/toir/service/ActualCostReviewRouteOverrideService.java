@@ -1,6 +1,6 @@
 package com.toir.service;
-import com.toir.entity.ActualCostReviewRouteOverride;
-import com.toir.repository.ActualCostReviewRouteOverrideRepository;
+import com.toir.entity.projects.ActualCostReviewRouteOverride;
+import com.toir.repository.actualCost.ActualCostReviewRouteOverrideRepository;
 
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
 import com.toir.exception.RestException;

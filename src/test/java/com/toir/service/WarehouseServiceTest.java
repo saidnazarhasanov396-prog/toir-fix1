@@ -1,9 +1,9 @@
 package com.toir.service;
 
 import com.toir.dto.warehouse.WarehouseDto;
-import com.toir.entity.Warehouse;
-import com.toir.repository.DepartmentRepository;
-import com.toir.repository.EmployeeRepository;
+import com.toir.entity.warehouse.Warehouse;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;

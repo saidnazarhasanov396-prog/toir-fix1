@@ -1,6 +1,6 @@
 package com.toir.service;
 import com.toir.entity.WorkExecution;
-import com.toir.entity.WorkOrder;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.WorkExecutionRepository;
 

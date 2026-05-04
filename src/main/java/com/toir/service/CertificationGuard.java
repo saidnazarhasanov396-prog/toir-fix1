@@ -1,6 +1,5 @@
 package com.toir.service;
-import com.toir.repository.UserCertificationRepository;
-import com.toir.entity.User;
+import com.toir.repository.users.UserCertificationRepository;
 
 import com.toir.exception.RestException;
 import lombok.RequiredArgsConstructor;

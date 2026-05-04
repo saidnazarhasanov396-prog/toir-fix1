@@ -1,6 +1,6 @@
 package com.toir.dto.role;
 
-import com.toir.entity.Role;
+import com.toir.entity.users.Role;
 
 import java.util.List;
 import java.util.UUID;

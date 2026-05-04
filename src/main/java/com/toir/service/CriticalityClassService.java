@@ -1,5 +1,5 @@
 package com.toir.service;
-import com.toir.entity.CriticalityClass;
+import com.toir.entity.equipment.CriticalityClass;
 import com.toir.repository.CriticalityClassRepository;
 
 import com.toir.exception.RestException;

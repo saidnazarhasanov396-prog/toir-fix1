@@ -1,14 +1,13 @@
 package com.toir.service;
-import com.toir.entity.EquipmentMeter;
-import com.toir.repository.EquipmentMeterRepository;
+import com.toir.entity.equipment.EquipmentMeter;
+import com.toir.repository.equipment.EquipmentMeterRepository;
 
 import com.toir.dto.meter.MeterTriggerMatch;
 
-import com.toir.entity.MaintenanceRegulation;
-import com.toir.repository.MaintenanceRegulationRepository;
+import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;

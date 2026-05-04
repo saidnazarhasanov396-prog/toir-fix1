@@ -8,11 +8,11 @@ import com.toir.repository.PprTaskRepository;
 
 import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
-import com.toir.entity.Equipment;
-import com.toir.repository.EquipmentRepository;
+import com.toir.entity.equipment.Equipment;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.enums.EquipmentStatus;
-import com.toir.entity.MaintenanceRegulation;
-import com.toir.repository.MaintenanceRegulationRepository;
+import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.enums.PeriodicityUnit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

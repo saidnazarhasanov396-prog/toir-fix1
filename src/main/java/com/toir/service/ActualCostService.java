@@ -1,7 +1,7 @@
 package com.toir.service;
-import com.toir.entity.ActualCost;
+import com.toir.entity.projects.ActualCost;
 import com.toir.enums.ActualCostStatus;
-import com.toir.repository.ActualCostRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
 
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.exception.RestException;

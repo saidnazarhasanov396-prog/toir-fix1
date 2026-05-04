@@ -1,6 +1,6 @@
 package com.toir.repository;
 
-import com.toir.entity.WorkOrder;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
 import java.util.Collection;
 import java.util.List;

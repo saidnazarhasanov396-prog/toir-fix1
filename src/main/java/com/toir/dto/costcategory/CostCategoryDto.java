@@ -1,6 +1,6 @@
 package com.toir.dto.costcategory;
 
-import com.toir.entity.CostCategory;
+import com.toir.entity.projects.CostCategory;
 import jakarta.validation.constraints.NotBlank;
 
 import java.util.UUID;

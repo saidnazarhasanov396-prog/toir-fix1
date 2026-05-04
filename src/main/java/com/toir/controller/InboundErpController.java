@@ -5,7 +5,7 @@ import com.toir.entity.SparePart;
 import com.toir.enums.DepartmentType;
 import com.toir.enums.InventoryItemKind;
 import com.toir.exception.RestException;
-import com.toir.repository.DepartmentRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.SparePartRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;

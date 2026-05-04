@@ -1,6 +1,6 @@
 package com.toir.dto.financialapprovalrule;
 
-import com.toir.entity.FinancialApprovalRule;
+import com.toir.entity.projects.FinancialApprovalRule;
 import jakarta.validation.constraints.NotBlank;
 
 import java.util.UUID;

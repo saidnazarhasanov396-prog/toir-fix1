@@ -1,6 +1,6 @@
 package com.toir.dto.equipmentpassport;
 
-import com.toir.entity.EquipmentPassport;
+import com.toir.entity.equipment.EquipmentPassport;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;

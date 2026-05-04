@@ -1,6 +1,6 @@
 package com.toir.dto.warehouse;
 
-import com.toir.entity.WarehouseStock;
+import com.toir.entity.warehouse.WarehouseStock;
 
 import java.time.Instant;
 import java.util.List;

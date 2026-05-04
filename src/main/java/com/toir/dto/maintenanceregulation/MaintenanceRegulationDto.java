@@ -1,7 +1,7 @@
 package com.toir.dto.maintenanceregulation;
 
 import com.toir.enums.MaintenanceKind;
-import com.toir.entity.MaintenanceRegulation;
+import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 

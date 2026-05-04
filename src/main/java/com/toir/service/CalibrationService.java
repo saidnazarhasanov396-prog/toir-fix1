@@ -1,13 +1,12 @@
 package com.toir.service;
-import com.toir.entity.CalibrationRecord;
+import com.toir.entity.equipment.CalibrationRecord;
 import com.toir.repository.CalibrationRecordRepository;
 
 import com.toir.dto.calibration.CalibrationRecordDto;
 import com.toir.dto.calibration.CalibrationRecordRequest;
 import com.toir.exception.RestException;
-import com.toir.repository.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

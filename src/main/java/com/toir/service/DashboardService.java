@@ -2,6 +2,15 @@ package com.toir.service;
 import com.toir.dto.dashboard.DashboardOverview;
 
 import com.toir.entity.*;
+import com.toir.entity.contractors.Contractor;
+import com.toir.entity.contractors.ContractorWork;
+import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.User;
+import com.toir.entity.warehouse.Warehouse;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.*;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.ContractorWorkStatus;
@@ -13,6 +22,15 @@ import com.toir.enums.ReservationStatus;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
+import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
+import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserCertificationRepository;
+import com.toir.repository.users.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -68,7 +86,7 @@ public class DashboardService {
         Map<UUID, User> userById = userRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(User::getId, u -> u));
 
-        List<com.toir.entity.RepairRequest> allRequests = repairRequestRepository.search(null, departmentId, null);
+        List<RepairRequest> allRequests = repairRequestRepository.search(null, departmentId, null);
         
         long openRequests = allRequests.stream()
                 .filter(r -> r.getStatus() == RequestStatus.OPEN || r.getStatus() == RequestStatus.IN_PROGRESS)
@@ -214,7 +232,7 @@ public class DashboardService {
                 .mapToInt(Integer::intValue).sum() / 60.0;
 
         // Reaction/resolution times from closed repair requests
-        List<com.toir.entity.RepairRequest> closedRequests = allRequests.stream()
+        List<RepairRequest> closedRequests = allRequests.stream()
                 .filter(r -> r.getStatus() == RequestStatus.CLOSED && r.getActualCompletionAt() != null)
                 .toList();
         double avgResolutionHours = closedRequests.stream()
