@@ -1,9 +1,13 @@
 package com.toir.service;
 import com.toir.entity.FinancialApprovalRule;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.FinancialApprovalRuleRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.financialapprovalrule.FinancialApprovalRuleDto;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +21,8 @@ import java.util.UUID;
 public class FinancialApprovalRuleService {
 
     private final FinancialApprovalRuleRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -30,18 +36,24 @@ public class FinancialApprovalRuleService {
         }
         FinancialApprovalRule rule = new FinancialApprovalRule();
         apply(rule, r);
-        return FinancialApprovalRuleDto.from(repository.save(rule));
+        FinancialApprovalRule saved = repository.save(rule);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return FinancialApprovalRuleDto.from(saved);
     }
 
     public FinancialApprovalRuleDto update(UUID id, FinancialApprovalRuleDto r) {
         FinancialApprovalRule rule = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(rule);
         apply(rule, r);
+        audit(AuditAction.UPDATE, rule.getId(), oldJson, rule);
         return FinancialApprovalRuleDto.from(rule);
     }
 
     public void delete(UUID id) { var entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
-        repository.save(entity); }
+        FinancialApprovalRule saved = repository.save(entity);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null); }
 
     private FinancialApprovalRule getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -60,5 +72,20 @@ public class FinancialApprovalRuleService {
         if (r.priority() != null) rule.setPriority(r.priority());
         rule.setNotes(r.notes());
         if (r.isActive() != null) rule.setActive(r.isActive());
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, FinancialApprovalRule current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log("financial_approval_rule", id != null ? id.toString() : null, action,
+                AuditModule.FINANCIAL_APPROVAL_RULE, auditMessage(action), oldJson, newJson);
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Правило финансового согласования создано";
+            case UPDATE -> "Правило финансового согласования обновлено";
+            case DELETE -> "Правило финансового согласования удалено";
+            default -> "Действие выполнено над правилом финансового согласования";
+        };
     }
 }
