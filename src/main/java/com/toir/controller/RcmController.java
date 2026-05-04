@@ -7,6 +7,8 @@ import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,15 +21,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/rcm")
 @Tag(name = "rcm")
+@RequiredArgsConstructor
 public class RcmController {
 
     private final RcmService service;
     private final RcmAutoPlannerService autoPlannerService;
-
-    public RcmController(RcmService service, RcmAutoPlannerService autoPlannerService) {
-        this.service = service;
-        this.autoPlannerService = autoPlannerService;
-    }
 
     @GetMapping("/risk-scores")
     public ResponseEntity<Page<EquipmentRiskScore>> list(@RequestParam(defaultValue = "0") int top, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {

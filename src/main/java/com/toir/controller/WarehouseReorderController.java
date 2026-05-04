@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,13 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/warehouses/reorder")
 @Tag(name = "warehouse-reorder")
+@RequiredArgsConstructor
 public class WarehouseReorderController {
 
     private final WarehouseStockRepository stockRepository;
-
-    public WarehouseReorderController(WarehouseStockRepository stockRepository) {
-        this.stockRepository = stockRepository;
-    }
 
     public record ReorderSuggestion(
             UUID stockId,

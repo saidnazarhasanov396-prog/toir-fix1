@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,13 +19,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/brigades")
 @Tag(name = "brigades")
+@RequiredArgsConstructor
 public class BrigadeController {
 
     private final BrigadeService service;
-
-    public BrigadeController(BrigadeService service) {
-        this.service = service;
-    }
 
     @GetMapping
     public ResponseEntity<Page<BrigadeDto>> list(

@@ -9,6 +9,8 @@ import com.toir.service.WorkOrderService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,15 +19,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/work-orders")
 @Tag(name = "work-orders")
+@RequiredArgsConstructor
 public class WorkOrderController {
 
     private final WorkOrderService service;
     private final SecurityScope securityScope;
-
-    public WorkOrderController(WorkOrderService service, SecurityScope securityScope) {
-        this.service = service;
-        this.securityScope = securityScope;
-    }
 
     @GetMapping
     public ResponseEntity<Page<WorkOrderDto>> list(

@@ -8,6 +8,8 @@ import com.toir.service.equipment.EquipmentService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,15 +18,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/equipment")
 @Tag(name = "equipment")
+@RequiredArgsConstructor
 public class EquipmentController {
 
     private final EquipmentService service;
     private final SecurityScope securityScope;
-
-    public EquipmentController(EquipmentService service, SecurityScope securityScope) {
-        this.service = service;
-        this.securityScope = securityScope;
-    }
 
     @GetMapping
     public ResponseEntity<Page<EquipmentDto>> list(

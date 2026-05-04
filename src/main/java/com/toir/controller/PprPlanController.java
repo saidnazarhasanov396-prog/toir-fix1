@@ -10,6 +10,7 @@ import com.toir.service.PprPlanService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,15 +22,11 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/ppr-plans")
 @Tag(name = "ppr-plans")
+@RequiredArgsConstructor
 public class PprPlanController {
 
     private final PprPlanService service;
     private final PprGeneratorService generatorService;
-
-    public PprPlanController(PprPlanService service, PprGeneratorService generatorService) {
-        this.service = service;
-        this.generatorService = generatorService;
-    }
 
     @GetMapping
     public ResponseEntity<Page<PprPlanDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {

@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,12 +15,11 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/materials")
+@RequiredArgsConstructor
 @Tag(name = "materials")
 public class MaterialController {
 
     private final MaterialService service;
-
-    public MaterialController(MaterialService service) { this.service = service; }
 
     @GetMapping public ResponseEntity<Page<MaterialDto>> list(@RequestParam(required = false) String search,
                                                               @RequestParam(defaultValue = "0") int page,

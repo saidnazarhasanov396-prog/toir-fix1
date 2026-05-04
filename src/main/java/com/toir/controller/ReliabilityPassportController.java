@@ -16,6 +16,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,19 +27,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/equipment")
 @Tag(name = "equipment-reliability-passport")
+@RequiredArgsConstructor
 public class ReliabilityPassportController {
 
     private final EquipmentRepository equipmentRepository;
     private final DefectRepository defectRepository;
     private final DowntimeEventRepository downtimeRepository;
-
-    public ReliabilityPassportController(EquipmentRepository equipmentRepository,
-                                         DefectRepository defectRepository,
-                                         DowntimeEventRepository downtimeRepository) {
-        this.equipmentRepository = equipmentRepository;
-        this.defectRepository = defectRepository;
-        this.downtimeRepository = downtimeRepository;
-    }
 
     public record TopCause(String cause, int count) {}
 

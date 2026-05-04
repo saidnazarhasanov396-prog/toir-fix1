@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,13 +20,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/equipment")
 @Tag(name = "equipment-label")
+@RequiredArgsConstructor
 public class EquipmentLabelController {
 
     private final EquipmentRepository repository;
-
-    public EquipmentLabelController(EquipmentRepository repository) {
-        this.repository = repository;
-    }
 
     @GetMapping("/{id}/label")
     public ResponseEntity<EquipmentLabelResponse> label(@PathVariable UUID id) {

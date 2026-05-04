@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,13 +16,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/budgets/actual-costs/review-route-overrides")
 @Tag(name = "actual-cost-route-overrides")
+@RequiredArgsConstructor
 public class ActualCostReviewRouteOverrideController {
 
     private final ActualCostReviewRouteOverrideService service;
-
-    public ActualCostReviewRouteOverrideController(ActualCostReviewRouteOverrideService service) {
-        this.service = service;
-    }
 
     @GetMapping
     public ResponseEntity<Page<ActualCostReviewRouteOverrideDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findActive(), page, size)); }

@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,13 +17,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "calibration")
+@RequiredArgsConstructor
 public class CalibrationController {
 
     private final CalibrationService service;
-
-    public CalibrationController(CalibrationService service) {
-        this.service = service;
-    }
 
     @GetMapping("/calibration-records")
     public ResponseEntity<Page<CalibrationRecordDto>> list(

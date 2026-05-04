@@ -10,6 +10,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,15 +20,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "condition-readings")
+@RequiredArgsConstructor
 public class ConditionReadingController {
 
     private final ConditionReadingService service;
     private final SecurityScope securityScope;
-
-    public ConditionReadingController(ConditionReadingService service, SecurityScope securityScope) {
-        this.service = service;
-        this.securityScope = securityScope;
-    }
 
     @GetMapping("/equipment/{equipmentId}/condition-readings")
     public ResponseEntity<Page<ConditionReadingDto>> list(@PathVariable UUID equipmentId,

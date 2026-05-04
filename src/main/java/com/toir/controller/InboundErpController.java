@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -24,16 +26,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/integrations/inbound")
 @Tag(name = "inbound-integrations")
 @Transactional
+@RequiredArgsConstructor
 public class InboundErpController {
 
     private final SparePartRepository sparePartRepository;
     private final DepartmentRepository departmentRepository;
-
-    public InboundErpController(SparePartRepository sparePartRepository,
-                                DepartmentRepository departmentRepository) {
-        this.sparePartRepository = sparePartRepository;
-        this.departmentRepository = departmentRepository;
-    }
 
     @PostMapping("/spare-parts")
     public ResponseEntity<UpsertResult> upsertSpareParts(@Valid @RequestBody List<SparePartImport> items) {

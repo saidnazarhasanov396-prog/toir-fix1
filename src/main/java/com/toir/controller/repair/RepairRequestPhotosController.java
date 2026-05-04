@@ -9,6 +9,8 @@ import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/v1/repair-requests/{requestId}/photos")
 @Tag(name = "repair-request-photos")
+@RequiredArgsConstructor
 public class RepairRequestPhotosController {
 
     private static final String ENTITY_TYPE = "RepairRequest";
@@ -29,11 +32,6 @@ public class RepairRequestPhotosController {
     private final FileAssetService fileAssetService;
     private final RepairRequestRepository repairRequestRepository;
 
-    public RepairRequestPhotosController(FileAssetService fileAssetService,
-                                         RepairRequestRepository repairRequestRepository) {
-        this.fileAssetService = fileAssetService;
-        this.repairRequestRepository = repairRequestRepository;
-    }
 
     @GetMapping
     public ResponseEntity<Page<FileAssetDto>> list(@PathVariable UUID requestId,

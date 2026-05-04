@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,11 +17,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "work-executions")
+@RequiredArgsConstructor
 public class WorkExecutionController {
 
     private final WorkExecutionService service;
-
-    public WorkExecutionController(WorkExecutionService service) { this.service = service; }
 
     @GetMapping("/execution-logs")
     public ResponseEntity<Page<ExecutionLogDto>> executionLogs(

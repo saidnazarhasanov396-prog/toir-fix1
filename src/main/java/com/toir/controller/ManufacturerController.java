@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,13 +16,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/manufacturers")
 @Tag(name = "manufacturers")
+@RequiredArgsConstructor
 public class ManufacturerController {
 
     private final ManufacturerService service;
-
-    public ManufacturerController(ManufacturerService service) {
-        this.service = service;
-    }
 
     @GetMapping
     public ResponseEntity<Page<ManufacturerDto>> list(@RequestParam(required = false) String search,
