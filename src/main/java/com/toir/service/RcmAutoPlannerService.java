@@ -3,10 +3,10 @@ import com.toir.dto.rcm.EquipmentRiskScore;
 
 import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
-import com.toir.entity.Equipment;
-import com.toir.repository.EquipmentRepository;
-import com.toir.entity.MaintenanceRegulation;
-import com.toir.repository.MaintenanceRegulationRepository;
+import com.toir.entity.equipment.Equipment;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.entity.PprPlan;
 import com.toir.repository.PprPlanRepository;
 import com.toir.entity.PprTask;

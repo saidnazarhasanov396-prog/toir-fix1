@@ -1,11 +1,13 @@
 package com.toir.service;
-import com.toir.entity.Warehouse;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.repository.*;
 
 import com.toir.exception.RestException;
 import com.toir.dto.warehouse.WarehouseDto;
 import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.dto.warehouse.WarehouseStockDto;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.users.EmployeeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

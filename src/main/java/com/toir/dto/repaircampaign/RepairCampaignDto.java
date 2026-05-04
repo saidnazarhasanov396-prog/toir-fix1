@@ -1,6 +1,6 @@
 package com.toir.dto.repaircampaign;
 
-import com.toir.entity.RepairCampaign;
+import com.toir.entity.repair.RepairCampaign;
 import com.toir.enums.RepairCampaignStatus;
 
 import java.time.LocalDate;

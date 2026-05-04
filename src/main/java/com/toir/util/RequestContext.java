@@ -1,5 +1,4 @@
 package com.toir.util;
-import com.toir.entity.User;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Component;

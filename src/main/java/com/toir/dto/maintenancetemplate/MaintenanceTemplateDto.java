@@ -1,7 +1,7 @@
 package com.toir.dto.maintenancetemplate;
 
 import com.toir.enums.MaintenanceKind;
-import com.toir.entity.MaintenanceTemplate;
+import com.toir.entity.maintenance.MaintenanceTemplate;
 
 import java.util.List;
 import java.util.UUID;

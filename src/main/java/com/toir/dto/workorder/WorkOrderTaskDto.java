@@ -1,7 +1,7 @@
 package com.toir.dto.workorder;
 
 import com.toir.enums.TaskExecutionStatus;
-import com.toir.entity.WorkOrderTask;
+import com.toir.entity.maintenance.WorkOrderTask;
 
 import java.time.Instant;
 import java.util.UUID;

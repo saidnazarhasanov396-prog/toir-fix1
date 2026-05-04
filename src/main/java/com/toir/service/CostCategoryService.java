@@ -1,5 +1,5 @@
 package com.toir.service;
-import com.toir.entity.CostCategory;
+import com.toir.entity.projects.CostCategory;
 import com.toir.repository.CostCategoryRepository;
 
 import com.toir.exception.RestException;

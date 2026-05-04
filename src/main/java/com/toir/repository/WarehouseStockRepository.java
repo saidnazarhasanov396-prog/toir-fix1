@@ -1,6 +1,6 @@
 package com.toir.repository;
 
-import com.toir.entity.WarehouseStock;
+import com.toir.entity.warehouse.WarehouseStock;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;

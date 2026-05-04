@@ -1,6 +1,6 @@
 package com.toir.dto.actualcostrouteoverride;
 
-import com.toir.entity.ActualCostReviewRouteOverride;
+import com.toir.entity.projects.ActualCostReviewRouteOverride;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

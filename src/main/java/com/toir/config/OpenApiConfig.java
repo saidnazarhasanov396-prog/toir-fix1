@@ -1,8 +1,8 @@
 package com.toir.config;
 
-import com.toir.entity.Role;
-import com.toir.entity.User;
-import com.toir.repository.UserRepository;
+import com.toir.entity.users.Role;
+import com.toir.entity.users.User;
+import com.toir.repository.users.UserRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.JwtService;
 import io.swagger.v3.oas.models.Components;

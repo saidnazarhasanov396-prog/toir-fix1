@@ -1,7 +1,7 @@
 package com.toir.dto.user;
 
-import com.toir.entity.Role;
-import com.toir.entity.User;
+import com.toir.entity.users.Role;
+import com.toir.entity.users.User;
 import com.toir.enums.UserStatus;
 
 import java.time.Instant;

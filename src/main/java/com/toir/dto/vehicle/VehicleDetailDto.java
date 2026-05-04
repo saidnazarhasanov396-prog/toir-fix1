@@ -1,7 +1,7 @@
 package com.toir.dto.vehicle;
 
 import com.toir.dto.equipment.EquipmentDto;
-import com.toir.entity.VehicleDetails;
+import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.VehicleType;
 
 import java.time.LocalDate;

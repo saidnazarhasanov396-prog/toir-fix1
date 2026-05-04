@@ -1,7 +1,7 @@
 package com.toir.dto.budget;
 
 import com.toir.enums.BudgetStatus;
-import com.toir.entity.MaintenanceBudget;
+import com.toir.entity.projects.MaintenanceBudget;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 

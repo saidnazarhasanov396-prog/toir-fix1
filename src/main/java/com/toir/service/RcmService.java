@@ -3,13 +3,13 @@ import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.entity.RcmSnapshot;
 import com.toir.repository.RcmSnapshotRepository;
 
-import com.toir.entity.CriticalityClass;
+import com.toir.entity.equipment.CriticalityClass;
 import com.toir.repository.CriticalityClassRepository;
-import com.toir.entity.Defect;
-import com.toir.repository.DefectRepository;
+import com.toir.entity.defects.Defect;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.enums.DefectStatus;
-import com.toir.entity.Equipment;
-import com.toir.repository.EquipmentRepository;
+import com.toir.entity.equipment.Equipment;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.entity.ReliabilityMetric;
 import com.toir.repository.ReliabilityMetricRepository;
 import lombok.RequiredArgsConstructor;

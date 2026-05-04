@@ -1,6 +1,6 @@
 package com.toir.dto.maintenancekpi;
 
-import com.toir.entity.MaintenanceKPI;
+import com.toir.entity.maintenance.MaintenanceKPI;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;

@@ -1,6 +1,6 @@
 package com.toir.service;
-import com.toir.entity.FinancialApprovalRule;
-import com.toir.repository.FinancialApprovalRuleRepository;
+import com.toir.entity.projects.FinancialApprovalRule;
+import com.toir.repository.projects.FinancialApprovalRuleRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.financialapprovalrule.FinancialApprovalRuleDto;

@@ -1,6 +1,6 @@
 package com.toir.dto.procurement;
 
-import com.toir.entity.ProcurementRequest;
+import com.toir.entity.projects.ProcurementRequest;
 import com.toir.enums.ProcurementRequestStatus;
 
 import java.time.Instant;

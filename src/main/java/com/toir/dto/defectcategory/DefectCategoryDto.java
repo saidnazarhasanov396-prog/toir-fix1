@@ -1,6 +1,6 @@
 package com.toir.dto.defectcategory;
 
-import com.toir.entity.DefectCategory;
+import com.toir.entity.defects.DefectCategory;
 import jakarta.validation.constraints.NotBlank;
 
 import java.util.UUID;

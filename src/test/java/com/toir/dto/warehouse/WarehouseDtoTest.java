@@ -1,11 +1,11 @@
 package com.toir.dto.warehouse;
 
 import com.toir.entity.Department;
-import com.toir.entity.Employee;
+import com.toir.entity.users.Employee;
 import com.toir.entity.Location;
-import com.toir.entity.Warehouse;
-import com.toir.repository.DepartmentRepository;
-import com.toir.repository.EmployeeRepository;
+import com.toir.entity.warehouse.Warehouse;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.LocationRepository;
 import org.junit.jupiter.api.Test;
 

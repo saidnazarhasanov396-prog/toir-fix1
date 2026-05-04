@@ -1,6 +1,6 @@
 package com.toir.dto.defectlist;
 
-import com.toir.entity.DefectListLine;
+import com.toir.entity.defects.DefectListLine;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 

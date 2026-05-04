@@ -1,6 +1,6 @@
 package com.toir.dto.contractor;
 
-import com.toir.entity.Contractor;
+import com.toir.entity.contractors.Contractor;
 import com.toir.enums.ContractorStatus;
 
 import java.util.UUID;

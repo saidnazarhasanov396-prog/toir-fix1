@@ -1,13 +1,13 @@
 package com.toir.controller;
 
-import com.toir.entity.Defect;
+import com.toir.entity.defects.Defect;
 import com.toir.entity.DowntimeEvent;
-import com.toir.entity.Equipment;
+import com.toir.entity.equipment.Equipment;
 import com.toir.enums.DefectStatus;
 import com.toir.exception.RestException;
-import com.toir.repository.DefectRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.DowntimeEventRepository;
-import com.toir.repository.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Duration;
 import java.time.Instant;

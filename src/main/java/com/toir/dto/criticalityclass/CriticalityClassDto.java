@@ -1,7 +1,7 @@
 package com.toir.dto.criticalityclass;
 
 import com.toir.enums.CriticalityLevel;
-import com.toir.entity.CriticalityClass;
+import com.toir.entity.equipment.CriticalityClass;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

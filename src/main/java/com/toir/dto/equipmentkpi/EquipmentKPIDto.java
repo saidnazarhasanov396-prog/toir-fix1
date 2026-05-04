@@ -1,6 +1,6 @@
 package com.toir.dto.equipmentkpi;
 
-import com.toir.entity.EquipmentKPI;
+import com.toir.entity.equipment.EquipmentKPI;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;

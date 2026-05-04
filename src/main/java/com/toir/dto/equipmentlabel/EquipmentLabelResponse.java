@@ -1,6 +1,6 @@
 package com.toir.dto.equipmentlabel;
 
-import com.toir.entity.Equipment;
+import com.toir.entity.equipment.Equipment;
 
 import java.util.UUID;
 

@@ -1,10 +1,10 @@
 package com.toir.service;
-import com.toir.entity.Equipment;
-import com.toir.entity.EquipmentMeter;
-import com.toir.entity.MeterReading;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentMeter;
+import com.toir.entity.equipment.MeterReading;
 import com.toir.enums.MeterType;
-import com.toir.repository.EquipmentMeterRepository;
-import com.toir.repository.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentMeterRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.MeterReadingRepository;
 
 import com.toir.exception.RestException;

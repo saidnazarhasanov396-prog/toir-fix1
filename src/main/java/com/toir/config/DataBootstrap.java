@@ -1,9 +1,9 @@
 package com.toir.config;
 
-import com.toir.entity.Role;
-import com.toir.repository.RoleRepository;
-import com.toir.entity.User;
-import com.toir.repository.UserRepository;
+import com.toir.entity.users.Role;
+import com.toir.repository.users.RoleRepository;
+import com.toir.entity.users.User;
+import com.toir.repository.users.UserRepository;
 import com.toir.enums.UserStatus;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
