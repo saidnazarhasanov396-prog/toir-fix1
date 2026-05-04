@@ -1,8 +1,12 @@
 package com.toir.service.maintanance;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 
 import com.toir.exception.RestException;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
@@ -20,6 +24,8 @@ import java.util.UUID;
 public class MaintenanceRegulationService {
 
     private final MaintenanceRegulationRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -56,19 +62,25 @@ public class MaintenanceRegulationService {
         }
         MaintenanceRegulation entity = new MaintenanceRegulation();
         apply(entity, request);
-        return MaintenanceRegulationDto.from(repository.save(entity));
+        MaintenanceRegulation saved = repository.save(entity);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return MaintenanceRegulationDto.from(saved);
     }
 
     public MaintenanceRegulationDto update(UUID id, MaintenanceRegulationRequest request) {
         MaintenanceRegulation entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         apply(entity, request);
+        audit(AuditAction.UPDATE, entity.getId(), oldJson, entity);
         return MaintenanceRegulationDto.from(entity);
     }
 
     public void delete(UUID id) {
         var entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
-        repository.save(entity);
+        MaintenanceRegulation saved = repository.save(entity);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
     }
 
     private MaintenanceRegulation getOrThrow(UUID id) {
@@ -90,5 +102,20 @@ public class MaintenanceRegulationService {
         entity.setRequiresShutdown(request.requiresShutdown());
         entity.setTriggerMeterType(request.triggerMeterType());
         entity.setTriggerMeterInterval(request.triggerMeterInterval());
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, MaintenanceRegulation current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log("maintenance_regulation", id != null ? id.toString() : null, action,
+                AuditModule.MAINTENANCE_REGULATION, auditMessage(action), oldJson, newJson);
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Регламент обслуживания создан";
+            case UPDATE -> "Регламент обслуживания обновлен";
+            case DELETE -> "Регламент обслуживания удален";
+            default -> "Действие выполнено над регламентом обслуживания";
+        };
     }
 }

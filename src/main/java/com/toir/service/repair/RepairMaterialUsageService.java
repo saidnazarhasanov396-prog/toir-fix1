@@ -1,11 +1,15 @@
 package com.toir.service.repair;
 import com.toir.entity.repair.RepairMaterialUsage;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +23,8 @@ public class RepairMaterialUsageService {
 
     private final RepairMaterialUsageRepository repository;
     private final WarehouseStockRepository stockRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -41,6 +47,30 @@ public class RepairMaterialUsageService {
         usage.setSparePartId(r.sparePartId());
         usage.setQuantity(r.quantity());
         usage.setUnitCost(r.unitCost());
-        return RepairMaterialUsageDto.from(repository.save(usage));
+        RepairMaterialUsage saved = repository.save(usage);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return RepairMaterialUsageDto.from(saved);
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, RepairMaterialUsage current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "repair_material_usage",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.REPAIR_MATERIAL_USAGE,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Использование материала в ремонте создано";
+            case UPDATE -> "Использование материала в ремонте обновлено";
+            case DELETE -> "Использование материала в ремонте удалено";
+            default -> "Действие выполнено над использованием материала в ремонте";
+        };
     }
 }

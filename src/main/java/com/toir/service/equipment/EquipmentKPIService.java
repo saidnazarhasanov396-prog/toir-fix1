@@ -1,9 +1,13 @@
 package com.toir.service.equipment;
 import com.toir.entity.equipment.EquipmentKPI;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.equipment.EquipmentKPIRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.equipmentkpi.EquipmentKPIDto;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +21,8 @@ import java.util.UUID;
 public class EquipmentKPIService {
 
     private final EquipmentKPIRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -51,13 +57,39 @@ public class EquipmentKPIService {
             double total = r.operatingHours() + r.downtimeHours();
             if (total > 0) k.setAvailability(r.operatingHours() / total);
         }
-        return EquipmentKPIDto.from(repository.save(k));
+        EquipmentKPI saved = repository.save(k);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return EquipmentKPIDto.from(saved);
     }
 
     public void delete(UUID id) {
         EquipmentKPI k = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment KPI not found: " + id));
+        String oldJson = auditSerializationService.toJson(k);
         k.setDeleted(true);
-        repository.save(k);
+        EquipmentKPI saved = repository.save(k);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, EquipmentKPI current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "equipment_kpi",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.EQUIPMENT_KPI,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "KPI оборудования создан";
+            case UPDATE -> "KPI оборудования обновлен";
+            case DELETE -> "KPI оборудования удален";
+            default -> "Действие выполнено над KPI оборудования";
+        };
     }
 }

@@ -1,9 +1,13 @@
 package com.toir.service;
 import com.toir.entity.equipment.CriticalityClass;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.CriticalityClassRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.criticalityclass.CriticalityClassDto;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +22,8 @@ import java.util.UUID;
 public class CriticalityClassService {
 
     private final CriticalityClassRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -34,18 +40,24 @@ public class CriticalityClassService {
         CriticalityClass e = new CriticalityClass();
         e.setCode(nextCode());
         apply(e, r);
-        return CriticalityClassDto.from(repository.save(e));
+        CriticalityClass saved = repository.save(e);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return CriticalityClassDto.from(saved);
     }
 
     public CriticalityClassDto update(UUID id, CriticalityClassDto r) {
         CriticalityClass e = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(e);
         apply(e, r);
+        audit(AuditAction.UPDATE, e.getId(), oldJson, e);
         return CriticalityClassDto.from(e);
     }
 
     public void delete(UUID id) { var entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
-        repository.save(entity); }
+        CriticalityClass saved = repository.save(entity);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null); }
 
     private CriticalityClass getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -80,5 +92,27 @@ public class CriticalityClassService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, CriticalityClass current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "criticality_class",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.CRITICALITY_CLASS,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Класс критичности создан";
+            case UPDATE -> "Класс критичности обновлен";
+            case DELETE -> "Класс критичности удален";
+            default -> "Действие выполнено над классом критичности";
+        };
     }
 }

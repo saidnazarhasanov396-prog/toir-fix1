@@ -1,9 +1,13 @@
 package com.toir.service;
 import com.toir.entity.FileAsset;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.FileAssetRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.file.FileAssetDto;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -22,11 +26,17 @@ import java.util.UUID;
 public class FileAssetService {
 
     private final FileAssetRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
     private final Path storageRoot;
 
     public FileAssetService(FileAssetRepository repository,
+                            AuditBuilderService auditBuilderService,
+                            AuditSerializationService auditSerializationService,
                             @Value("${app.files.storage-path:uploads}") String storagePath) {
         this.repository = repository;
+        this.auditBuilderService = auditBuilderService;
+        this.auditSerializationService = auditSerializationService;
         this.storageRoot = Paths.get(storagePath).toAbsolutePath();
         try {
             Files.createDirectories(this.storageRoot);
@@ -61,17 +71,43 @@ public class FileAssetService {
         asset.setEntityType(entityType);
         asset.setEntityId(entityId);
         asset.setUploadedById(uploadedById);
-        return FileAssetDto.from(repository.save(asset));
+        FileAsset saved = repository.save(asset);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return FileAssetDto.from(saved);
     }
 
     public void delete(UUID id) {
         FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("File not found: " + id));
+        String oldJson = auditSerializationService.toJson(asset);
         try {
             Files.deleteIfExists(Paths.get(asset.getStoragePath()));
         } catch (IOException ignored) {
         }
         asset.setDeleted(true);
-        repository.save(asset);
+        FileAsset saved = repository.save(asset);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, FileAsset current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "file_asset",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.FILE_ASSET,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Файл загружен";
+            case UPDATE -> "Файл обновлен";
+            case DELETE -> "Файл удален";
+            default -> "Действие выполнено над файлом";
+        };
     }
 }

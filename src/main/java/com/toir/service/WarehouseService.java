@@ -1,5 +1,7 @@
 package com.toir.service;
 import com.toir.entity.warehouse.Warehouse;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.*;
 
 import com.toir.exception.RestException;
@@ -8,6 +10,8 @@ import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.dto.warehouse.WarehouseStockDto;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +30,8 @@ public class WarehouseService {
     private final DepartmentRepository departmentRepository;
     private final LocationRepository locationRepository;
     private final EmployeeRepository employeeRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
 
@@ -55,21 +61,26 @@ public class WarehouseService {
         entity.setCode(nextCode());
         apply(entity, request);
         Warehouse saved = repository.save(entity);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
         return WarehouseDto.fromWithStocks(saved, List.of(), departmentRepository, locationRepository, employeeRepository);
     }
 
     public WarehouseDto update(UUID id, WarehouseRequest request) {
         Warehouse entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         apply(entity, request);
         Warehouse updated = repository.save(entity);
+        audit(AuditAction.UPDATE, updated.getId(), oldJson, updated);
         return WarehouseDto.fromWithStocks(updated, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(id),
                 departmentRepository, locationRepository, employeeRepository);
     }
 
     public void delete(UUID id) {
         var entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
-        repository.save(entity);
+        Warehouse saved = repository.save(entity);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
     }
 
     Warehouse getOrThrow(UUID id) {
@@ -106,5 +117,27 @@ public class WarehouseService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, Warehouse current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "warehouse",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.WAREHOUSE,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Склад создан";
+            case UPDATE -> "Склад обновлен";
+            case DELETE -> "Склад удален";
+            default -> "Действие выполнено над складом";
+        };
     }
 }

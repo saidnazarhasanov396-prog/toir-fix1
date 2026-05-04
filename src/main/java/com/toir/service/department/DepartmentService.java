@@ -1,11 +1,15 @@
 package com.toir.service.department;
 import com.toir.entity.Department;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.DepartmentType;
 import com.toir.repository.department.DepartmentRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.department.DepartmentDto;
 import com.toir.dto.department.DepartmentRequest;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +23,8 @@ import java.util.UUID;
 public class DepartmentService {
 
     private final DepartmentRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<DepartmentDto> findAll(DepartmentType type, String search) {
@@ -38,12 +44,16 @@ public class DepartmentService {
         }
         Department entity = new Department();
         apply(entity, request);
-        return DepartmentDto.from(repository.save(entity));
+        Department saved = repository.save(entity);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return DepartmentDto.from(saved);
     }
 
     public DepartmentDto update(UUID id, DepartmentRequest request) {
         Department entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         apply(entity, request);
+        audit(AuditAction.UPDATE, entity.getId(), oldJson, entity);
         return DepartmentDto.from(entity);
     }
 
@@ -52,8 +62,10 @@ public class DepartmentService {
         if (!repository.findAllByParentIdAndIsDeletedFalse(id).isEmpty()) {
             throw RestException.conflict("Department has children");
         }
+        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
-        repository.save(entity);
+        Department saved = repository.save(entity);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
     }
 
     private Department getOrThrow(UUID id) {
@@ -67,5 +79,27 @@ public class DepartmentService {
         entity.setType(request.type());
         entity.setParentId(request.parentId());
         entity.setDescription(request.description());
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, Department current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "department",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.DEPARTMENT,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Подразделение создано";
+            case UPDATE -> "Подразделение обновлено";
+            case DELETE -> "Подразделение удалено";
+            default -> "Действие выполнено над подразделением";
+        };
     }
 }

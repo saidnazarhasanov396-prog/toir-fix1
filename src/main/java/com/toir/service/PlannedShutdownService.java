@@ -1,11 +1,15 @@
 package com.toir.service;
 import com.toir.entity.PlannedShutdown;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.PlannedShutdownRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.plannedshutdown.PlannedShutdownDto;
 import lombok.RequiredArgsConstructor;
 import com.toir.enums.PlanStatus;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +22,8 @@ import java.util.UUID;
 public class PlannedShutdownService {
 
     private final PlannedShutdownRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -36,13 +42,39 @@ public class PlannedShutdownService {
         s.setStartAt(r.startAt());
         s.setEndAt(r.endAt());
         s.setReason(r.reason());
-        return PlannedShutdownDto.from(repository.save(s));
+        PlannedShutdown saved = repository.save(s);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return PlannedShutdownDto.from(saved);
     }
 
     public PlannedShutdownDto approve(UUID id) {
         PlannedShutdown s = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Planned shutdown not found: " + id));
+        String oldJson = auditSerializationService.toJson(s);
         s.setStatus(PlanStatus.APPROVED);
+        audit(AuditAction.UPDATE, s.getId(), oldJson, s);
         return PlannedShutdownDto.from(s);
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, PlannedShutdown current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "planned_shutdown",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.PLANNED_SHUTDOWN,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Плановая остановка создана";
+            case UPDATE -> "Плановая остановка обновлена";
+            case DELETE -> "Плановая остановка удалена";
+            default -> "Действие выполнено над плановой остановкой";
+        };
     }
 }

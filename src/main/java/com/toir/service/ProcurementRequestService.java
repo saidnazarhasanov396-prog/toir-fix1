@@ -1,6 +1,8 @@
 package com.toir.service;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.equipment.ProcurementRequestLine;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.repository.ProcurementRequestRepository;
 
@@ -12,6 +14,8 @@ import com.toir.entity.SparePart;
 import com.toir.repository.SparePartRepository;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +37,8 @@ public class ProcurementRequestService {
     private final ProcurementRequestRepository repo;
     private final SparePartRepository sparePartRepository;
     private final WarehouseStockRepository stockRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
 
@@ -66,7 +72,9 @@ public class ProcurementRequestService {
             }
         }
         recalcTotal(p);
-        return ProcurementRequestDto.from(repo.save(p));
+        ProcurementRequest saved = repo.save(p);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return ProcurementRequestDto.from(saved);
     }
 
     public ProcurementRequestDto addLine(UUID id, ProcurementLineRequest line) {
@@ -74,8 +82,10 @@ public class ProcurementRequestService {
         if (p.getStatus() != ProcurementRequestStatus.DRAFT) {
             throw RestException.badRequest("Can only add lines to DRAFT requests");
         }
+        String oldJson = auditSerializationService.toJson(p);
         p.getLines().add(buildLine(p, line));
         recalcTotal(p);
+        audit(AuditAction.UPDATE, p.getId(), oldJson, p);
         return ProcurementRequestDto.from(p);
     }
 
@@ -87,8 +97,10 @@ public class ProcurementRequestService {
         if (p.getLines().isEmpty()) {
             throw RestException.badRequest("Cannot submit procurement request with no lines");
         }
+        String oldJson = auditSerializationService.toJson(p);
         p.setStatus(ProcurementRequestStatus.SUBMITTED);
         p.setSubmittedAt(Instant.now());
+        audit(AuditAction.UPDATE, p.getId(), oldJson, p);
         return ProcurementRequestDto.from(p);
     }
 
@@ -97,8 +109,10 @@ public class ProcurementRequestService {
         if (p.getStatus() != ProcurementRequestStatus.SUBMITTED) {
             throw RestException.badRequest("Only SUBMITTED can be approved");
         }
+        String oldJson = auditSerializationService.toJson(p);
         p.setStatus(ProcurementRequestStatus.APPROVED);
         p.setApprovedAt(Instant.now());
+        audit(AuditAction.UPDATE, p.getId(), oldJson, p);
         return ProcurementRequestDto.from(p);
     }
 
@@ -108,8 +122,10 @@ public class ProcurementRequestService {
                 || p.getStatus() == ProcurementRequestStatus.CANCELLED) {
             throw RestException.badRequest("Cannot reject completed procurement request");
         }
+        String oldJson = auditSerializationService.toJson(p);
         p.setStatus(ProcurementRequestStatus.REJECTED);
         p.setRejectionReason(reason);
+        audit(AuditAction.UPDATE, p.getId(), oldJson, p);
         return ProcurementRequestDto.from(p);
     }
 
@@ -118,8 +134,10 @@ public class ProcurementRequestService {
         if (p.getStatus() != ProcurementRequestStatus.APPROVED) {
             throw RestException.badRequest("Only APPROVED can be marked ORDERED");
         }
+        String oldJson = auditSerializationService.toJson(p);
         p.setStatus(ProcurementRequestStatus.ORDERED);
         p.setOrderedAt(Instant.now());
+        audit(AuditAction.UPDATE, p.getId(), oldJson, p);
         return ProcurementRequestDto.from(p);
     }
 
@@ -128,8 +146,10 @@ public class ProcurementRequestService {
         if (p.getStatus() != ProcurementRequestStatus.ORDERED) {
             throw RestException.badRequest("Only ORDERED can be marked RECEIVED");
         }
+        String oldJson = auditSerializationService.toJson(p);
         p.setStatus(ProcurementRequestStatus.RECEIVED);
         p.setReceivedAt(Instant.now());
+        audit(AuditAction.UPDATE, p.getId(), oldJson, p);
         return ProcurementRequestDto.from(p);
     }
 
@@ -138,7 +158,9 @@ public class ProcurementRequestService {
         if (p.getStatus() == ProcurementRequestStatus.RECEIVED) {
             throw RestException.badRequest("Cannot cancel received procurement request");
         }
+        String oldJson = auditSerializationService.toJson(p);
         p.setStatus(ProcurementRequestStatus.CANCELLED);
+        audit(AuditAction.UPDATE, p.getId(), oldJson, p);
         return ProcurementRequestDto.from(p);
     }
 
@@ -182,7 +204,9 @@ public class ProcurementRequestService {
         for (ProcurementRequest p : byWarehouse.values()) {
             if (p.getLines().isEmpty()) continue;
             recalcTotal(p);
-            result.add(ProcurementRequestDto.from(repo.save(p)));
+            ProcurementRequest saved = repo.save(p);
+            audit(AuditAction.CREATE, saved.getId(), null, saved);
+            result.add(ProcurementRequestDto.from(saved));
         }
         return result;
     }
@@ -220,5 +244,27 @@ public class ProcurementRequestService {
             count++;
         } while (repo.existsByNumberAndIsDeletedFalse(number));
         return number;
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, ProcurementRequest current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "procurement_request",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.PROCUREMENT_REQUEST,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Заявка на закупку создана";
+            case UPDATE -> "Заявка на закупку обновлена";
+            case DELETE -> "Заявка на закупку удалена";
+            default -> "Действие выполнено над заявкой на закупку";
+        };
     }
 }

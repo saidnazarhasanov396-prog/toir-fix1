@@ -1,9 +1,13 @@
 package com.toir.service;
 import com.toir.entity.Material;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.MaterialRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.material.MaterialDto;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +22,8 @@ import java.util.UUID;
 public class MaterialService {
 
     private final MaterialRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -29,18 +35,24 @@ public class MaterialService {
         Material m = new Material();
         m.setCode(nextCode());
         apply(m, r);
-        return MaterialDto.from(repository.save(m));
+        Material saved = repository.save(m);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return MaterialDto.from(saved);
     }
 
     public MaterialDto update(UUID id, MaterialDto r) {
         Material m = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(m);
         apply(m, r);
+        audit(AuditAction.UPDATE, m.getId(), oldJson, m);
         return MaterialDto.from(m);
     }
 
     public void delete(UUID id) { var entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
-        repository.save(entity); }
+        Material saved = repository.save(entity);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null); }
 
     private Material getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -69,5 +81,27 @@ public class MaterialService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, Material current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "material",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.MATERIAL,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Материал создан";
+            case UPDATE -> "Материал обновлен";
+            case DELETE -> "Материал удален";
+            default -> "Действие выполнено над материалом";
+        };
     }
 }

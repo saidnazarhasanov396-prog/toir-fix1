@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,11 +19,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/maintenance-templates")
 @Tag(name = "maintenance-templates")
+@RequiredArgsConstructor
 public class MaintenanceTemplateController {
 
     private final MaintenanceTemplateService service;
-
-    public MaintenanceTemplateController(MaintenanceTemplateService service) { this.service = service; }
 
     @GetMapping public ResponseEntity<Page<MaintenanceTemplateDto>> list(
             @RequestParam(required = false) String search,

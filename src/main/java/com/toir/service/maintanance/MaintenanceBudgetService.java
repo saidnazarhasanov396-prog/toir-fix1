@@ -1,5 +1,7 @@
 package com.toir.service.maintanance;
 import com.toir.entity.projects.BudgetLine;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.BudgetStatus;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -8,6 +10,8 @@ import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.exception.RestException;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +26,8 @@ public class MaintenanceBudgetService {
 
     private final MaintenanceBudgetRepository repository;
     private final BudgetLineRepository lineRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
 
@@ -40,7 +46,9 @@ public class MaintenanceBudgetService {
         b.setYear(r.year());
         b.setMonth(r.month());
         b.setDepartmentId(r.departmentId());
-        return MaintenanceBudgetDto.from(repository.save(b));
+        MaintenanceBudget saved = repository.save(b);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return MaintenanceBudgetDto.from(saved);
     }
 
     public MaintenanceBudgetDto approve(UUID id) {
@@ -48,7 +56,9 @@ public class MaintenanceBudgetService {
         if (b.getStatus() != BudgetStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT budgets can be approved");
         }
+        String oldJson = auditSerializationService.toJson(b);
         b.setStatus(BudgetStatus.APPROVED);
+        audit(AuditAction.UPDATE, b.getId(), oldJson, b);
         return MaintenanceBudgetDto.from(b);
     }
 
@@ -57,6 +67,7 @@ public class MaintenanceBudgetService {
         if (b.getStatus() == BudgetStatus.LOCKED || b.getStatus() == BudgetStatus.CLOSED) {
             throw RestException.badRequest("Cannot add lines to locked/closed budget");
         }
+        String oldJson = auditSerializationService.toJson(b);
         BudgetLine line = new BudgetLine();
         line.setBudget(b);
         line.setCostCategoryId(r.costCategoryId());
@@ -64,11 +75,35 @@ public class MaintenanceBudgetService {
         line.setPlannedAmount(r.plannedAmount());
         b.setTotalPlanned(b.getTotalPlanned() + r.plannedAmount());
         b.getLines().add(line);
-        return BudgetLineDto.from(lineRepository.save(line));
+        BudgetLine saved = lineRepository.save(line);
+        audit(AuditAction.UPDATE, b.getId(), oldJson, b);
+        return BudgetLineDto.from(saved);
     }
 
     private MaintenanceBudget getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Budget not found: " + id));
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, MaintenanceBudget current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "maintenance_budget",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.MAINTENANCE_BUDGET,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Бюджет обслуживания создан";
+            case UPDATE -> "Бюджет обслуживания обновлен";
+            case DELETE -> "Бюджет обслуживания удален";
+            default -> "Действие выполнено над бюджетом обслуживания";
+        };
     }
 }

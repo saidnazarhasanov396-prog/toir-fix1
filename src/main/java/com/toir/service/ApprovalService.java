@@ -1,4 +1,6 @@
 package com.toir.service;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.ApprovalDecision;
 import com.toir.entity.ApprovalRequest;
 import com.toir.enums.ApprovalStatus;
@@ -9,6 +11,8 @@ import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
 import com.toir.exception.RestException;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +27,8 @@ import java.util.UUID;
 public class ApprovalService {
 
     private final ApprovalRequestRepository requestRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> listByDocument(String documentType, UUID documentId) {
@@ -68,7 +74,9 @@ public class ApprovalService {
             step.setDecision(ApprovalDecision.PENDING);
             request.getSteps().add(step);
         }
-        return ApprovalRequestDto.from(requestRepository.save(request));
+        ApprovalRequest saved = requestRepository.save(request);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return ApprovalRequestDto.from(saved);
     }
 
     @Transactional
@@ -87,8 +95,10 @@ public class ApprovalService {
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
         }
+        String oldJson = auditSerializationService.toJson(request);
         request.setStatus(ApprovalStatus.CANCELLED);
         request.setCompletedAt(Instant.now());
+        audit(AuditAction.UPDATE, request.getId(), oldJson, request);
         return ApprovalRequestDto.from(request);
     }
 
@@ -97,6 +107,7 @@ public class ApprovalService {
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
         }
+        String oldJson = auditSerializationService.toJson(request);
         ApprovalStep current = request.getSteps().stream()
                 .filter(s -> s.getStepNumber() == request.getCurrentStep())
                 .findFirst()
@@ -121,11 +132,34 @@ public class ApprovalService {
                 request.setCompletedAt(Instant.now());
             }
         }
+        audit(AuditAction.UPDATE, request.getId(), oldJson, request);
         return ApprovalRequestDto.from(request);
     }
 
     private ApprovalRequest getOrThrow(UUID id) {
         return requestRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Approval request not found: " + id));
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, ApprovalRequest current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "approval_request",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.APPROVAL_REQUEST,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Заявка на согласование создана";
+            case UPDATE -> "Заявка на согласование обновлена";
+            case DELETE -> "Заявка на согласование удалена";
+            default -> "Действие выполнено над заявкой на согласование";
+        };
     }
 }

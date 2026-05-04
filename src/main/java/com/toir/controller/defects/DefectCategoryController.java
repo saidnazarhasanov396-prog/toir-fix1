@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,11 +16,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/defect-categories")
 @Tag(name = "defect-categories")
+@RequiredArgsConstructor
 public class DefectCategoryController {
 
     private final DefectCategoryService service;
-
-    public DefectCategoryController(DefectCategoryService service) { this.service = service; }
 
     @GetMapping public ResponseEntity<Page<DefectCategoryDto>> list(
             @RequestParam(required = false) String search

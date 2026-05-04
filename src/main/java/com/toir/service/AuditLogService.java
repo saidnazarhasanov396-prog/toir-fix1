@@ -5,13 +5,15 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.toir.dto.audit.AuditLogResponseDto;
 import com.toir.dto.user.UserDto;
+import com.toir.entity.users.User;
 import com.toir.enums.AuditAction;
 import com.toir.entity.AuditLog;
 import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.AuditLogRepository;
 
-import com.toir.service.users.UserService;
+
+import com.toir.repository.users.UserRepository;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -31,7 +33,7 @@ public class AuditLogService {
 
     private final AuditLogRepository repository;
     private final ObjectMapper objectMapper;
-    private final UserService userService;
+    private final UserRepository userRepository;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(UUID userId, AuditModule module, String entityType, String entityId,
@@ -81,7 +83,7 @@ public class AuditLogService {
                 }
             });
         }
-        UserDto user = resolveUser(log.getUserId());
+        UserDto user = UserDto.from(resolveUser(log.getUserId()));
 
         return new AuditLogResponseDto(
                 log.getId(),
@@ -102,12 +104,12 @@ public class AuditLogService {
         );
     }
 
-    private UserDto resolveUser(UUID userId) {
+    private User resolveUser(UUID userId) {
         if (userId == null) {
             return null;
         }
         try {
-            return userService.findById(userId);
+            return userRepository.findById(userId).orElse(null);
         } catch (RestException ignored) {
             return null;
         }
