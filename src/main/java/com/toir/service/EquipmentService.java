@@ -21,6 +21,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -56,13 +57,11 @@ public class EquipmentService {
 
     @Transactional
     public EquipmentDto create(EquipmentRequest request) {
-        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Equipment code already exists: " + request.code());
-        }
         if (repository.existsByInventoryNumberAndIsDeletedFalse(request.inventoryNumber())) {
             throw RestException.conflict("Inventory number already exists: " + request.inventoryNumber());
         }
         Equipment entity = new Equipment();
+        entity.setCode(nextCode());
         apply(entity, request);
         Equipment saved = repository.save(entity);
         return enrich(List.of(saved)).get(0);
@@ -161,7 +160,6 @@ public class EquipmentService {
     }
 
     private void apply(Equipment entity, EquipmentRequest request) {
-        entity.setCode(request.code());
         entity.setName(request.name());
         entity.setInventoryNumber(request.inventoryNumber());
         entity.setTechnicalNumber(request.technicalNumber());
@@ -179,5 +177,21 @@ public class EquipmentService {
         entity.setCommissionedAt(request.commissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil());
         entity.setDescription(request.description());
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "EQ-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("EQ", year, sequence);
+        while (repository.existsByCodeAndIsDeletedFalse(code)) {
+            sequence++;
+            code = formatCode("EQ", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }
