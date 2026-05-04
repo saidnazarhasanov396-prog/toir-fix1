@@ -196,7 +196,6 @@ public class EquipmentService {
     }
 
     private void applyForUpdate(Equipment entity, EquipmentRequest request) {
-        entity.setCode(request.code() != null ? request.code() : entity.getCode());
         entity.setName(request.name() != null ? request.name() : entity.getName());
         entity.setInventoryNumber(request.inventoryNumber()  != null ? request.inventoryNumber() : entity.getInventoryNumber());
         entity.setTechnicalNumber(request.technicalNumber() != null ? request.technicalNumber() : entity.getTechnicalNumber());
