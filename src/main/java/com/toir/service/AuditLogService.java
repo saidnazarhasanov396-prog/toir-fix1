@@ -18,7 +18,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.UUID;
 
 @Service
@@ -52,6 +54,7 @@ public class AuditLogService {
         entry.setDiffJson(diffJson);
         entry.setPreviousSnapshot(previousSnapshot);
         entry.setCurrentSnapshot(currentSnapshot);
+        entry.setCreatedAt(Instant.now().atZone(ZoneId.of("Asia/Tashkent")).toInstant());
         repository.save(entry);
     }
 
