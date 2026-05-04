@@ -4,17 +4,18 @@ import com.toir.service.equipment.EquipmentPassportService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/equipment/{equipmentId}/passport")
 @Tag(name = "equipment-passport")
+@RequiredArgsConstructor
 public class EquipmentPassportController {
 
     private final EquipmentPassportService service;
-
-    public EquipmentPassportController(EquipmentPassportService service) { this.service = service; }
 
     @GetMapping
     public ResponseEntity<EquipmentPassportDto> get(@PathVariable UUID equipmentId) {

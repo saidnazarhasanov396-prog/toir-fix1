@@ -13,6 +13,8 @@ import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -22,15 +24,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/meters")
 @Tag(name = "meters")
+@RequiredArgsConstructor
 public class MeterController {
 
     private final MeterService service;
     private final MeterTriggerService triggerService;
-
-    public MeterController(MeterService service, MeterTriggerService triggerService) {
-        this.service = service;
-        this.triggerService = triggerService;
-    }
 
     @GetMapping("/triggers")
     public ResponseEntity<Page<MeterTriggerMatch>> triggers(@RequestParam UUID equipmentId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {

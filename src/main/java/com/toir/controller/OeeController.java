@@ -9,6 +9,8 @@ import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -18,13 +20,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/oee")
 @Tag(name = "oee")
+@RequiredArgsConstructor
 public class OeeController {
 
     private final OeeService service;
-
-    public OeeController(OeeService service) {
-        this.service = service;
-    }
 
     @GetMapping
     public ResponseEntity<Page<OeeRecordDto>> list(

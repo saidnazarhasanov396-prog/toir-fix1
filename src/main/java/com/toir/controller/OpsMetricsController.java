@@ -23,6 +23,8 @@ import com.toir.repository.WebhookEventLogRepository;
 import com.toir.repository.WorkOrderRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/ops")
 @Tag(name = "ops")
+@RequiredArgsConstructor
 public class OpsMetricsController {
 
     private final EquipmentRepository equipmentRepository;
@@ -53,37 +56,6 @@ public class OpsMetricsController {
     private final NotificationRepository notificationRepository;
     private final WebhookEventLogRepository webhookEventLogRepository;
 
-    public OpsMetricsController(EquipmentRepository equipmentRepository,
-                                DefectRepository defectRepository,
-                                RepairRequestRepository repairRequestRepository,
-                                WorkOrderRepository workOrderRepository,
-                                PprTaskRepository pprTaskRepository,
-                                ProcurementRequestRepository procurementRequestRepository,
-                                BrigadeRepository brigadeRepository,
-                                ConditionReadingRepository conditionReadingRepository,
-                                UserCertificationRepository userCertificationRepository,
-                                CalibrationRecordRepository calibrationRecordRepository,
-                                InspectionRouteRepository inspectionRouteRepository,
-                                InspectionRoundRepository inspectionRoundRepository,
-                                RcmSnapshotRepository rcmSnapshotRepository,
-                                NotificationRepository notificationRepository,
-                                WebhookEventLogRepository webhookEventLogRepository) {
-        this.equipmentRepository = equipmentRepository;
-        this.defectRepository = defectRepository;
-        this.repairRequestRepository = repairRequestRepository;
-        this.workOrderRepository = workOrderRepository;
-        this.pprTaskRepository = pprTaskRepository;
-        this.procurementRequestRepository = procurementRequestRepository;
-        this.brigadeRepository = brigadeRepository;
-        this.conditionReadingRepository = conditionReadingRepository;
-        this.userCertificationRepository = userCertificationRepository;
-        this.calibrationRecordRepository = calibrationRecordRepository;
-        this.inspectionRouteRepository = inspectionRouteRepository;
-        this.inspectionRoundRepository = inspectionRoundRepository;
-        this.rcmSnapshotRepository = rcmSnapshotRepository;
-        this.notificationRepository = notificationRepository;
-        this.webhookEventLogRepository = webhookEventLogRepository;
-    }
 
     @GetMapping("/metrics")
     public ResponseEntity<OpsMetricsResponse> metrics() {

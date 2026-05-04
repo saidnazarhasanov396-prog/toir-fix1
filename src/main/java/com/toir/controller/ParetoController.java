@@ -18,6 +18,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -29,21 +31,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/analytics")
 @Tag(name = "analytics-pareto")
+@RequiredArgsConstructor
 public class ParetoController {
 
     private final DefectRepository defectRepository;
     private final DowntimeEventRepository downtimeRepository;
     private final WorkOrderRepository workOrderRepository;
     private final EquipmentRepository equipmentRepository;
-
-    public ParetoController(DefectRepository defectRepository,
-                            DowntimeEventRepository downtimeRepository,
-                            WorkOrderRepository workOrderRepository, EquipmentRepository equipmentRepository) {
-        this.defectRepository = defectRepository;
-        this.downtimeRepository = downtimeRepository;
-        this.workOrderRepository = workOrderRepository;
-        this.equipmentRepository = equipmentRepository;
-    }
 
     public record ParetoItem(
             String key,

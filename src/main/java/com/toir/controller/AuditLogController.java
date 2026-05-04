@@ -6,6 +6,8 @@ import com.toir.service.AuditLogService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.hibernate.tool.schema.Action;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -18,13 +20,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/audit-log")
 @Tag(name = "audit-log")
 @RequiresAdmin
+@RequiredArgsConstructor
 public class AuditLogController {
 
     private final AuditLogService service;
-
-    public AuditLogController(AuditLogService service) {
-        this.service = service;
-    }
 
     @GetMapping
     public ResponseEntity<Page<AuditLogResponseDto>> list(
