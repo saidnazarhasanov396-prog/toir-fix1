@@ -1,7 +1,7 @@
 package com.toir.dto.contractorcontract;
 
 import com.toir.enums.ContractStatus;
-import com.toir.entity.ContractorContract;
+import com.toir.entity.contractors.ContractorContract;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

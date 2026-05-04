@@ -1,9 +1,9 @@
 package com.toir.dto.warehouse;
 
-import com.toir.entity.Warehouse;
-import com.toir.entity.WarehouseStock;
-import com.toir.repository.DepartmentRepository;
-import com.toir.repository.EmployeeRepository;
+import com.toir.entity.warehouse.Warehouse;
+import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.LocationRepository;
 
 import java.util.List;

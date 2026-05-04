@@ -1,6 +1,6 @@
 package com.toir.dto.brigade;
 
-import com.toir.entity.BrigadeMember;
+import com.toir.entity.users.BrigadeMember;
 
 import java.util.List;
 import java.util.UUID;

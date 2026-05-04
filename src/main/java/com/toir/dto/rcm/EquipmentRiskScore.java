@@ -1,5 +1,4 @@
 package com.toir.dto.rcm;
-import com.toir.entity.CriticalityClass;
 
 import java.util.UUID;
 

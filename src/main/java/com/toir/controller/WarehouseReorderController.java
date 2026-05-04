@@ -1,5 +1,5 @@
 package com.toir.controller;
-import com.toir.entity.WarehouseStock;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;

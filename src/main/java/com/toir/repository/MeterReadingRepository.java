@@ -1,6 +1,6 @@
 package com.toir.repository;
 
-import com.toir.entity.MeterReading;
+import com.toir.entity.equipment.MeterReading;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;

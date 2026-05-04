@@ -1,7 +1,6 @@
 package com.toir.dto.workorder;
 
 import com.toir.enums.PriorityLevel;
-import com.toir.entity.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 

@@ -8,7 +8,7 @@ import com.toir.repository.SparePartRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.sparepart.SparePartDto;
 import com.toir.dto.sparepart.SparePartRequest;
-import com.toir.entity.WarehouseStock;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;

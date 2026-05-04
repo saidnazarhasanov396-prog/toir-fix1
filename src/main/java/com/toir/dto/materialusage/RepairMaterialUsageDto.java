@@ -1,6 +1,6 @@
 package com.toir.dto.materialusage;
 
-import com.toir.entity.RepairMaterialUsage;
+import com.toir.entity.repair.RepairMaterialUsage;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 

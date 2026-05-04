@@ -1,13 +1,12 @@
 package com.toir.controller;
 
-import com.toir.entity.Defect;
+import com.toir.entity.defects.Defect;
 import com.toir.entity.DowntimeEvent;
-import com.toir.entity.Equipment;
-import com.toir.entity.WorkOrder;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
-import com.toir.repository.DefectRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.DowntimeEventRepository;
-import com.toir.repository.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;

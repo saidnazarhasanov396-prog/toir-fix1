@@ -6,7 +6,7 @@ import com.toir.enums.ReservationStatus;
 import com.toir.exception.RestException;
 import com.toir.dto.reservation.ReservationDto;
 import com.toir.dto.reservation.ReservationRequest;
-import com.toir.entity.WarehouseStock;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

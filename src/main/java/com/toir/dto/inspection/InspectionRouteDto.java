@@ -1,7 +1,6 @@
 package com.toir.dto.inspection;
-import com.toir.dto.inspection.InspectionCheckpointDto;
 
-import com.toir.entity.InspectionRoute;
+import com.toir.entity.inspection.InspectionRoute;
 
 import java.util.List;
 import java.util.UUID;

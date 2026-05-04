@@ -1,6 +1,6 @@
 package com.toir.dto.inspection;
 
-import com.toir.entity.InspectionRoundResult;
+import com.toir.entity.inspection.InspectionRoundResult;
 
 import java.util.List;
 import java.util.UUID;

@@ -258,7 +258,7 @@ Create `/Users/tenzorsoft/Desktop/Work/toir/toir-backend/src/test/java/com/toir/
 ```java
 package com.toir.dto.equipment;
 
-import com.toir.entity.Equipment;
+import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import org.junit.jupiter.api.Test;
@@ -271,7 +271,7 @@ class EquipmentDtoTest {
 
     @Test
     void fromIncludesEquipmentCategory() {
-        Equipment equipment = new Equipment();
+        Equipment equipment = new com.toir.entity.equipment.Equipment();
         equipment.setId(UUID.randomUUID());
         equipment.setCode("VH-001");
         equipment.setName("Fleet Truck 001");
@@ -534,14 +534,14 @@ package com.toir.service;
 
 import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleDetailDto;
-import com.toir.entity.Equipment;
-import com.toir.entity.VehicleDetails;
+import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.VehicleType;
 import com.toir.exception.RestException;
-import com.toir.repository.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.VehicleDetailsRepository;
+import com.toir.service.equipment.EquipmentService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -550,7 +550,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -619,8 +618,8 @@ class VehicleServiceTest {
             equipment.setId(UUID.randomUUID());
             return equipment;
         });
-        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> {
-            VehicleDetails details = invocation.getArgument(0);
+        when(vehicleDetailsRepository.save(any(com.toir.entity.equipment.VehicleDetails.class))).thenAnswer(invocation -> {
+            com.toir.entity.equipment.VehicleDetails details = invocation.getArgument(0);
             details.setId(UUID.randomUUID());
             return details;
         });
@@ -772,7 +771,7 @@ Create `/Users/tenzorsoft/Desktop/Work/toir/toir-backend/src/main/java/com/toir/
 ```java
 package com.toir.repository;
 
-import com.toir.entity.VehicleDetails;
+import com.toir.entity.equipment.VehicleDetails;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Collection;
@@ -780,10 +779,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface VehicleDetailsRepository extends JpaRepository<VehicleDetails, UUID> {
+public interface VehicleDetailsRepository extends JpaRepository<com.toir.entity.equipment.VehicleDetails, UUID> {
     Optional<VehicleDetails> findByEquipmentIdAndIsDeletedFalse(UUID equipmentId);
 
-    List<VehicleDetails> findAllByEquipmentIdInAndIsDeletedFalse(Collection<UUID> equipmentIds);
+    List<com.toir.entity.equipment.VehicleDetails> findAllByEquipmentIdInAndIsDeletedFalse(Collection<UUID> equipmentIds);
 
     boolean existsByPlateNumberAndIsDeletedFalse(String plateNumber);
 
@@ -902,7 +901,6 @@ Create `/Users/tenzorsoft/Desktop/Work/toir/toir-backend/src/main/java/com/toir/
 package com.toir.dto.vehicle;
 
 import com.toir.dto.equipment.EquipmentDto;
-import com.toir.entity.VehicleDetails;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.VehicleType;
 
@@ -928,7 +926,7 @@ public record VehicleSummaryDto(
         LocalDate insuranceExpiryDate,
         LocalDate technicalInspectionExpiryDate
 ) {
-    public static VehicleSummaryDto from(EquipmentDto equipment, VehicleDetails details) {
+    public static VehicleSummaryDto from(EquipmentDto equipment, com.toir.entity.equipment.VehicleDetails details) {
         return new VehicleSummaryDto(
                 equipment.id(),
                 equipment.code(),
@@ -958,7 +956,6 @@ Create `/Users/tenzorsoft/Desktop/Work/toir/toir-backend/src/main/java/com/toir/
 package com.toir.dto.vehicle;
 
 import com.toir.dto.equipment.EquipmentDto;
-import com.toir.entity.VehicleDetails;
 import com.toir.enums.VehicleType;
 
 import java.time.LocalDate;
@@ -994,7 +991,7 @@ public record VehicleDetailDto(
     ) {
     }
 
-    public static VehicleDetailDto from(EquipmentDto equipment, VehicleDetails details) {
+    public static VehicleDetailDto from(EquipmentDto equipment, com.toir.entity.equipment.VehicleDetails details) {
         return new VehicleDetailDto(
                 equipment,
                 new Details(
@@ -1038,13 +1035,14 @@ import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleSummaryDto;
-import com.toir.entity.Equipment;
-import com.toir.entity.VehicleDetails;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.exception.RestException;
-import com.toir.repository.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.VehicleDetailsRepository;
+import com.toir.service.equipment.EquipmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -1108,7 +1106,7 @@ public class VehicleService {
         applyEquipment(equipment, request);
         Equipment savedEquipment = equipmentRepository.save(equipment);
 
-        VehicleDetails details = new VehicleDetails();
+        VehicleDetails details = new com.toir.entity.equipment.VehicleDetails();
         details.setEquipmentId(savedEquipment.getId());
         applyDetails(details, request);
         VehicleDetails savedDetails = vehicleDetailsRepository.save(details);

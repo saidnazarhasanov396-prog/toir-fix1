@@ -1,6 +1,6 @@
 package com.toir.dto.defect;
 
-import com.toir.entity.Defect;
+import com.toir.entity.defects.Defect;
 import com.toir.enums.DefectStatus;
 
 import java.time.Instant;

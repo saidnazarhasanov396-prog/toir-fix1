@@ -1,5 +1,4 @@
 package com.toir.service;
-import com.toir.entity.RepairRequest;
 
 import com.toir.dto.analytics.AnalyticsOverview;
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
@@ -7,28 +6,28 @@ import com.toir.dto.analytics.FailureParetoResponse;
 import com.toir.dto.analytics.RcaEquipmentResponse;
 import com.toir.dto.analytics.RcaOverviewResponse;
 import com.toir.dto.analytics.AnalyticsOverview.*;
-import com.toir.entity.Defect;
-import com.toir.repository.DefectRepository;
+import com.toir.entity.defects.Defect;
+import com.toir.entity.repair.RepairRequest;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.enums.DefectStatus;
 import com.toir.entity.Department;
-import com.toir.repository.DepartmentRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.entity.DowntimeEvent;
 import com.toir.repository.DowntimeEventRepository;
-import com.toir.entity.Equipment;
-import com.toir.repository.EquipmentRepository;
+import com.toir.entity.equipment.Equipment;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.enums.PprTaskStatus;
 import com.toir.entity.ReliabilityMetric;
 import com.toir.repository.ReliabilityMetricRepository;
-import com.toir.repository.RepairRequestRepository;
+import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.enums.RequestStatus;
-import com.toir.entity.WorkOrder;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
@@ -88,7 +87,7 @@ public class AnalyticsService {
 
         // Reaction = detectedAt → first status transition to IN_PROGRESS (approx: createdAt→now for IN_PROGRESS)
         // Resolution = detectedAt → actualCompletionAt
-        List<com.toir.entity.RepairRequest> closedRequests = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+        List<RepairRequest> closedRequests = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(r -> r.getStatus() == RequestStatus.CLOSED && r.getActualCompletionAt() != null)
                 .toList();
         double avgResolutionHours = closedRequests.stream()

@@ -1,6 +1,6 @@
 package com.toir.dto.maintenancetemplate;
 
-import com.toir.entity.MaintenanceOperation;
+import com.toir.entity.maintenance.MaintenanceOperation;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;

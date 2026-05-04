@@ -1,0 +1,39 @@
+package com.toir.controller.equipment;
+import com.toir.dto.equipmentkpi.EquipmentKPIDto;
+import com.toir.service.equipment.EquipmentKPIService;
+import com.toir.util.PaginationUtils;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+
+import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/v1/equipment-kpis")
+@Tag(name = "equipment-kpis")
+public class EquipmentKPIController {
+
+    private final EquipmentKPIService service;
+
+    public EquipmentKPIController(EquipmentKPIService service) { this.service = service; }
+
+    @GetMapping
+    public ResponseEntity<Page<EquipmentKPIDto>> list(@RequestParam UUID equipmentId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByEquipment(equipmentId), page, size));
+    }
+
+    @PostMapping
+    public ResponseEntity<EquipmentKPIDto> record(@Valid @RequestBody EquipmentKPIDto r) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.record(r));
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+}

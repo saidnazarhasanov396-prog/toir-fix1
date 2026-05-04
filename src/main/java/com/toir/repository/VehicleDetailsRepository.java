@@ -1,7 +1,7 @@
 package com.toir.repository;
 
-import com.toir.entity.Equipment;
-import com.toir.entity.VehicleDetails;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import java.util.Collection;

@@ -1,8 +1,8 @@
 package com.toir.service;
 import com.toir.entity.CertificationType;
-import com.toir.entity.UserCertification;
+import com.toir.entity.users.UserCertification;
 import com.toir.repository.CertificationTypeRepository;
-import com.toir.repository.UserCertificationRepository;
+import com.toir.repository.users.UserCertificationRepository;
 
 import com.toir.dto.certification.CertificationTypeDto;
 import com.toir.dto.certification.UserCertificationDto;

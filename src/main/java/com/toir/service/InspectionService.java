@@ -1,16 +1,16 @@
 package com.toir.service;
-import com.toir.entity.InspectionCheckpoint;
-import com.toir.entity.InspectionRound;
-import com.toir.entity.InspectionRoundResult;
-import com.toir.entity.InspectionRoute;
+import com.toir.entity.inspection.InspectionCheckpoint;
+import com.toir.entity.inspection.InspectionRound;
+import com.toir.entity.inspection.InspectionRoundResult;
+import com.toir.entity.inspection.InspectionRoute;
 import com.toir.enums.InspectionRoundStatus;
-import com.toir.repository.InspectionCheckpointRepository;
-import com.toir.repository.InspectionRoundRepository;
-import com.toir.repository.InspectionRouteRepository;
+import com.toir.repository.inspection.InspectionCheckpointRepository;
+import com.toir.repository.inspection.InspectionRoundRepository;
+import com.toir.repository.inspection.InspectionRouteRepository;
 
 import com.toir.exception.RestException;
-import com.toir.entity.Defect;
-import com.toir.repository.DefectRepository;
+import com.toir.entity.defects.Defect;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.enums.DefectStatus;
 import com.toir.dto.inspection.InspectionRoundDto;
 import com.toir.dto.inspection.InspectionRoundResultDto;

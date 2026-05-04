@@ -1,6 +1,6 @@
 package com.toir.dto.procurement;
 
-import com.toir.entity.ProcurementRequestLine;
+import com.toir.entity.equipment.ProcurementRequestLine;
 
 import java.util.UUID;
 

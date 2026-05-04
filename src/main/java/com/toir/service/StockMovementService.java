@@ -5,7 +5,7 @@ import com.toir.repository.StockMovementRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementRequest;
-import com.toir.entity.WarehouseStock;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.entity.SparePart;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.SparePartRepository;
@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.UUID;
 
 @Service
 @Transactional

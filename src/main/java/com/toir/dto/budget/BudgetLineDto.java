@@ -1,6 +1,6 @@
 package com.toir.dto.budget;
 
-import com.toir.entity.BudgetLine;
+import com.toir.entity.projects.BudgetLine;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 

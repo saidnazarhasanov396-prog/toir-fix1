@@ -1,5 +1,5 @@
 package com.toir.service;
-import com.toir.entity.WorkOrder;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
 
@@ -25,10 +25,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import com.toir.entity.Equipment;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.Department;
-import com.toir.repository.EquipmentRepository;
-import com.toir.repository.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.department.DepartmentRepository;
 
 @Service
 @Transactional

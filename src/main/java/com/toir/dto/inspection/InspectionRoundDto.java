@@ -1,7 +1,6 @@
 package com.toir.dto.inspection;
-import com.toir.dto.inspection.InspectionRoundResultDto;
 
-import com.toir.entity.InspectionRound;
+import com.toir.entity.inspection.InspectionRound;
 import com.toir.enums.InspectionRoundStatus;
 
 import java.time.Instant;

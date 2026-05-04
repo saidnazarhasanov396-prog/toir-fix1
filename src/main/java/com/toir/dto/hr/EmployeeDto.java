@@ -1,6 +1,6 @@
 package com.toir.dto.hr;
 
-import com.toir.entity.Employee;
+import com.toir.entity.users.Employee;
 
 import java.time.LocalDate;
 import java.util.UUID;

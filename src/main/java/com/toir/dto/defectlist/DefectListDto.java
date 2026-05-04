@@ -1,6 +1,6 @@
 package com.toir.dto.defectlist;
 
-import com.toir.entity.DefectList;
+import com.toir.entity.defects.DefectList;
 import com.toir.enums.DefectListStatus;
 
 import java.util.List;

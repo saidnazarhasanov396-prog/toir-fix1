@@ -1,6 +1,6 @@
 package com.toir.repository;
 
-import com.toir.entity.CalibrationRecord;
+import com.toir.entity.equipment.CalibrationRecord;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;

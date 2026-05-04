@@ -1,6 +1,6 @@
 package com.toir.dto.calibration;
 
-import com.toir.entity.CalibrationRecord;
+import com.toir.entity.equipment.CalibrationRecord;
 
 import java.time.LocalDate;
 import java.util.UUID;

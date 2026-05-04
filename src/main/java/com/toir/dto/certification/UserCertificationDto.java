@@ -1,6 +1,6 @@
 package com.toir.dto.certification;
 
-import com.toir.entity.UserCertification;
+import com.toir.entity.users.UserCertification;
 
 import java.time.LocalDate;
 import java.util.UUID;
