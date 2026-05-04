@@ -130,7 +130,7 @@ public class EquipmentService {
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
     }
 
-    Page<EquipmentDto> enrich(Page<Equipment> items) {
+    public Page<EquipmentDto> enrich(Page<Equipment> items) {
         if (items.isEmpty()) return items.map(EquipmentDto::from);
 
         Map<UUID, EquipmentDto> enrichedById = enrich(items.getContent()).stream()
