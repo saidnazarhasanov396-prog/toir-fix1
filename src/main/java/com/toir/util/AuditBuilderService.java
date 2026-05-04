@@ -1,6 +1,7 @@
 package com.toir.util;
 
 import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
 import com.toir.service.AuditLogService;
@@ -21,7 +22,7 @@ public class AuditBuilderService {
             String entityType,
             String resourceId,
             AuditAction action,
-            String module,
+            AuditModule module,
             String description,
             Object oldObj,
             Object newObj
