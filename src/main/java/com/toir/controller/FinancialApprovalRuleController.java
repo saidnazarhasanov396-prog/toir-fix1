@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,11 +18,10 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/budgets/approval-rules")
 @Tag(name = "financial-approval-rules")
 @RequiresAdmin
+@RequiredArgsConstructor
 public class FinancialApprovalRuleController {
 
     private final FinancialApprovalRuleService service;
-
-    public FinancialApprovalRuleController(FinancialApprovalRuleService service) { this.service = service; }
 
     @GetMapping
     public ResponseEntity<Page<FinancialApprovalRuleDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }

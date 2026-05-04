@@ -20,6 +20,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +37,7 @@ import java.util.function.Function;
 @RestController
 @RequestMapping("/api/v1/reports")
 @Tag(name = "reports")
+@RequiredArgsConstructor
 public class ReportsController {
 
     private final EquipmentRepository equipmentRepository;
@@ -48,25 +50,6 @@ public class ReportsController {
     private final UserCertificationRepository userCertificationRepository;
     private final RcmService rcmService;
 
-    public ReportsController(EquipmentRepository equipmentRepository,
-                             RepairRequestRepository repairRequestRepository,
-                             DefectRepository defectRepository,
-                             WorkOrderRepository workOrderRepository,
-                             DowntimeEventRepository downtimeEventRepository,
-                             ActualCostRepository actualCostRepository,
-                             CalibrationRecordRepository calibrationRecordRepository,
-                             UserCertificationRepository userCertificationRepository,
-                             RcmService rcmService) {
-        this.equipmentRepository = equipmentRepository;
-        this.repairRequestRepository = repairRequestRepository;
-        this.defectRepository = defectRepository;
-        this.workOrderRepository = workOrderRepository;
-        this.downtimeEventRepository = downtimeEventRepository;
-        this.actualCostRepository = actualCostRepository;
-        this.calibrationRecordRepository = calibrationRecordRepository;
-        this.userCertificationRepository = userCertificationRepository;
-        this.rcmService = rcmService;
-    }
 
     @GetMapping(value = "/rcm-risk.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<String> rcmRiskCsv() {

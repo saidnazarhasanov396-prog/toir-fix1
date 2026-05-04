@@ -6,6 +6,8 @@ import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,13 +22,10 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/knowledge")
 @Tag(name = "knowledge")
 @Transactional
+@RequiredArgsConstructor
 public class KnowledgeController {
 
     private final KnowledgeArticleRepository repo;
-
-    public KnowledgeController(KnowledgeArticleRepository repo) {
-        this.repo = repo;
-    }
 
     @GetMapping
     public ResponseEntity<Page<KnowledgeArticle>> list(

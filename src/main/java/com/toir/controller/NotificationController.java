@@ -17,6 +17,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,15 +27,12 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/notifications")
 @Tag(name = "notifications")
+@RequiredArgsConstructor
 public class NotificationController {
 
     private final NotificationService service;
     private final SlaRuleService slaRuleService;
 
-    public NotificationController(NotificationService service, SlaRuleService slaRuleService) {
-        this.service = service;
-        this.slaRuleService = slaRuleService;
-    }
 
     @GetMapping
     public ResponseEntity<Page<NotificationDto>> list(@RequestParam(required = false) UUID recipientId,

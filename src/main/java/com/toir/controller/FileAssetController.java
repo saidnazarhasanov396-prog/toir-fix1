@@ -13,6 +13,8 @@ import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.Page;
@@ -26,19 +28,12 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/v1/files")
 @Tag(name = "files")
+@RequiredArgsConstructor
 public class FileAssetController {
 
     private final FileAssetService service;
     private final FileAssetRepository repository;
     private final TechnicalDocumentRepository technicalDocumentRepository;
-
-    public FileAssetController(FileAssetService service,
-                               FileAssetRepository repository,
-                               TechnicalDocumentRepository technicalDocumentRepository) {
-        this.service = service;
-        this.repository = repository;
-        this.technicalDocumentRepository = technicalDocumentRepository;
-    }
 
     @GetMapping
     public ResponseEntity<Page<FileAssetDto>> list(@RequestParam String entityType, @RequestParam String entityId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {

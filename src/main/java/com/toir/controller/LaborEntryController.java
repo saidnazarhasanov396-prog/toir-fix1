@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,11 +16,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "labor-entries")
+@RequiredArgsConstructor
 public class LaborEntryController {
 
     private final LaborEntryService service;
-
-    public LaborEntryController(LaborEntryService service) { this.service = service; }
 
     @GetMapping("/work-orders/{workOrderId}/labor")
     public ResponseEntity<Page<LaborEntryDto>> list(@PathVariable UUID workOrderId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {

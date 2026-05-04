@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,11 +17,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/budgets")
 @Tag(name = "budgets")
+@RequiredArgsConstructor
 public class MaintenanceBudgetController {
 
     private final MaintenanceBudgetService service;
-
-    public MaintenanceBudgetController(MaintenanceBudgetService service) { this.service = service; }
 
     @GetMapping
     public ResponseEntity<Page<MaintenanceBudgetDto>> list(@RequestParam int year, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findByYear(year), page, size)); }

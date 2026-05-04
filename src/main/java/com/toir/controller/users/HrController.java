@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -18,13 +20,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/hr")
 @Tag(name = "hr")
+@RequiredArgsConstructor
 public class HrController {
 
     private final HrService service;
-
-    public HrController(HrService service) {
-        this.service = service;
-    }
 
     @GetMapping("/employees")
     public ResponseEntity<Page<EmployeeDto>> listEmployees(
