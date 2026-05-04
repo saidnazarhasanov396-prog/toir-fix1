@@ -8,6 +8,7 @@ import com.toir.dto.user.UserDto;
 import com.toir.enums.AuditAction;
 import com.toir.entity.AuditLog;
 import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
 import com.toir.repository.AuditLogRepository;
 
 import com.toir.util.PaginationUtils;
@@ -17,7 +18,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.UUID;
 
 @Service
@@ -51,6 +54,7 @@ public class AuditLogService {
         entry.setDiffJson(diffJson);
         entry.setPreviousSnapshot(previousSnapshot);
         entry.setCurrentSnapshot(currentSnapshot);
+        entry.setCreatedAt(Instant.now().atZone(ZoneId.of("Asia/Tashkent")).toInstant());
         repository.save(entry);
     }
 
@@ -76,7 +80,7 @@ public class AuditLogService {
                 }
             });
         }
-        UserDto user = userService.findById(log.getUserId());
+        UserDto user = resolveUser(log.getUserId());
 
         return new AuditLogResponseDto(
                 log.getId(),
@@ -95,6 +99,17 @@ public class AuditLogService {
                 newNode,
                 log.getDiffJson()
         );
+    }
+
+    private UserDto resolveUser(UUID userId) {
+        if (userId == null) {
+            return null;
+        }
+        try {
+            return userService.findById(userId);
+        } catch (RestException ignored) {
+            return null;
+        }
     }
 
     private JsonNode readJson(String raw) {
