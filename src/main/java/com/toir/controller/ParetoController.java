@@ -1,22 +1,10 @@
 package com.toir.controller;
 
 import com.toir.entity.defects.Defect;
-import com.toir.entity.DowntimeEvent;
-import com.toir.entity.maintenance.WorkOrder;
-import com.toir.enums.WorkOrderStatus;
-import com.toir.repository.defects.DefectRepository;
-import com.toir.repository.DowntimeEventRepository;
-import com.toir.repository.equipment.EquipmentRepository;
-import com.toir.repository.WorkOrderRepository;
-import com.toir.util.PaginationUtils;
+import com.toir.service.ParetoService;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -34,10 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class ParetoController {
 
-    private final DefectRepository defectRepository;
-    private final DowntimeEventRepository downtimeRepository;
-    private final WorkOrderRepository workOrderRepository;
-    private final EquipmentRepository equipmentRepository;
+    private final ParetoService paretoService;
 
     public record ParetoItem(
             String key,
@@ -57,40 +42,14 @@ public class ParetoController {
     public ResponseEntity<Page<ParetoItem>> downtimeCauses(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        Instant start = from != null ? from : Instant.EPOCH;
-        Instant end = to != null ? to : Instant.now();
-        List<DowntimeEvent> events = downtimeRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(e -> !e.getStartAt().isBefore(start) && !e.getStartAt().isAfter(end))
-                .toList();
-        Map<String, Double> byType = new HashMap<>();
-        for (DowntimeEvent ev : events) {
-            long minutes;
-            if (ev.getDurationMinutes() != null) minutes = ev.getDurationMinutes();
-            else if (ev.getEndAt() != null) minutes = Duration.between(ev.getStartAt(), ev.getEndAt()).toMinutes();
-            else continue;
-            String key = ev.getType() != null ? ev.getType().name() : "UNKNOWN";
-            byType.merge(key, (double) minutes, Double::sum);
-        }
-        return ResponseEntity.ok(PaginationUtils.page(pareto(byType), page, size));
+        return ResponseEntity.ok(paretoService.downtimeCauses(from, to, page, size));
     }
 
     @GetMapping("/pareto/defect-root-causes")
     public ResponseEntity<Page<ParetoItem>> defectRootCauses(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        Instant start = from != null ? from : Instant.EPOCH;
-        Instant end = to != null ? to : Instant.now();
-        List<Defect> defects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(d -> !d.getDetectedAt().isBefore(start) && !d.getDetectedAt().isAfter(end))
-                .toList();
-        Map<String, Double> byCause = new HashMap<>();
-        for (Defect d : defects) {
-            String key = d.getRootCause() != null && !d.getRootCause().isBlank()
-                    ? d.getRootCause()
-                    : (d.getFailureReason() != null && !d.getFailureReason().isBlank() ? d.getFailureReason() : "UNKNOWN");
-            byCause.merge(key, 1.0, Double::sum);
-        }
-        return ResponseEntity.ok(PaginationUtils.page(pareto(byCause), page, size));
+        return ResponseEntity.ok(paretoService.defectRootCauses(from, to, page, size));
     }
 
     @GetMapping("/top-problem-equipment")
@@ -98,69 +57,6 @@ public class ParetoController {
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        Instant start = from != null ? from : Instant.EPOCH;
-        Instant end = to != null ? to : Instant.now();
-
-        Map<UUID, int[]> failuresByEq = new HashMap<>();
-        for (Defect d : defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
-            if (d.getDetectedAt().isBefore(start) || d.getDetectedAt().isAfter(end)) continue;
-            failuresByEq.computeIfAbsent(d.getEquipmentId(), k -> new int[]{0})[0]++;
-        }
-
-        Map<UUID, Long> downtimeByEq = new HashMap<>();
-        for (DowntimeEvent ev : downtimeRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
-            if (ev.getStartAt().isBefore(start) || ev.getStartAt().isAfter(end)) continue;
-            long minutes;
-            if (ev.getDurationMinutes() != null) minutes = ev.getDurationMinutes();
-            else if (ev.getEndAt() != null) minutes = Duration.between(ev.getStartAt(), ev.getEndAt()).toMinutes();
-            else continue;
-            downtimeByEq.merge(ev.getEquipmentId(), minutes, Long::sum);
-        }
-
-        Map<UUID, Integer> openWorkOrdersByEq = new HashMap<>();
-        for (WorkOrder wo : workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
-            if (wo.getStatus() == WorkOrderStatus.COMPLETED || wo.getStatus() == WorkOrderStatus.CANCELLED) continue;
-            if (wo.getEquipmentId() == null) continue;
-            openWorkOrdersByEq.merge(wo.getEquipmentId(), 1, Integer::sum);
-        }
-
-        List<TopEquipmentItem> all = new ArrayList<>();
-        java.util.Set<UUID> keys = new java.util.HashSet<>();
-        keys.addAll(failuresByEq.keySet());
-        keys.addAll(downtimeByEq.keySet());
-        keys.addAll(openWorkOrdersByEq.keySet());
-        for (UUID eqId : keys) {
-            equipmentRepository.findById(eqId).ifPresent(eq -> {
-                int failures = failuresByEq.getOrDefault(eqId, new int[]{0})[0];
-                long downtime = downtimeByEq.getOrDefault(eqId, 0L);
-                int openWo = openWorkOrdersByEq.getOrDefault(eqId, 0);
-                all.add(new TopEquipmentItem(eqId, eq.getName(), failures, downtime, openWo));
-            });
-        }
-
-        int safeLimit = Math.max(Math.min(limit, 100), 1);
-        return ResponseEntity.ok(PaginationUtils.page(all.stream()
-                .sorted(Comparator
-                        .comparingInt(TopEquipmentItem::failures).reversed()
-                        .thenComparingLong((TopEquipmentItem i) -> -i.totalDowntimeMinutes()))
-                .limit(safeLimit)
-                .toList(), page, size));
-    }
-
-
-
-    private List<ParetoItem> pareto(Map<String, Double> raw) {
-        double total = raw.values().stream().mapToDouble(Double::doubleValue).sum();
-        List<Map.Entry<String, Double>> sorted = raw.entrySet().stream()
-                .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
-                .toList();
-        List<ParetoItem> result = new ArrayList<>();
-        double cumulative = 0;
-        for (Map.Entry<String, Double> e : sorted) {
-            cumulative += e.getValue();
-            double pct = total > 0 ? (cumulative / total) * 100.0 : 0;
-            result.add(new ParetoItem(e.getKey(), e.getValue(), pct));
-        }
-        return result;
+        return ResponseEntity.ok(paretoService.topProblemEquipment(limit, from, to, page, size));
     }
 }
