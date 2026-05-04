@@ -1,12 +1,12 @@
-package com.toir.service;
-import com.toir.entity.EquipmentType;
+package com.toir.service.equipment;
+import com.toir.entity.equipment.EquipmentType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.EquipmentTypeRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.equipmenttype.EquipmentTypeDto;
 import com.toir.dto.equipmenttype.EquipmentTypeRequest;
+import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;

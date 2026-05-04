@@ -1,5 +1,7 @@
 package com.toir.service.equipment;
 import com.toir.entity.equipment.EquipmentSparePart;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.equipment.EquipmentSparePartRepository;
 
 import com.toir.exception.RestException;
@@ -8,6 +10,8 @@ import com.toir.dto.equipmentsparepart.EquipmentSparePartDto;
 import com.toir.dto.equipmentsparepart.EquipmentSparePartRequest;
 import com.toir.entity.SparePart;
 import com.toir.repository.SparePartRepository;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +27,8 @@ public class EquipmentSparePartService {
     private final EquipmentSparePartRepository repo;
     private final EquipmentRepository equipmentRepository;
     private final SparePartRepository sparePartRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<EquipmentSparePartDto> listForEquipment(UUID equipmentId) {
@@ -54,12 +60,15 @@ public class EquipmentSparePartService {
         esp.setConsumptionRatePerYear(r.consumptionRatePerYear());
         esp.setCriticality(r.criticality());
         esp.setNotes(r.notes());
-        return enrich(repo.save(esp));
+        EquipmentSparePart saved = repo.save(esp);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return enrich(saved);
     }
 
     public EquipmentSparePartDto update(UUID id, EquipmentSparePartRequest r) {
         EquipmentSparePart esp = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment spare part link not found: " + id));
+        String oldJson = auditSerializationService.toJson(esp);
         if (!esp.getSparePartId().equals(r.sparePartId())) {
             sparePartRepository.findByIdAndIsDeletedFalse(r.sparePartId())
                     .orElseThrow(() -> RestException.notFound("Spare part not found: " + r.sparePartId()));
@@ -70,19 +79,44 @@ public class EquipmentSparePartService {
         esp.setConsumptionRatePerYear(r.consumptionRatePerYear());
         esp.setCriticality(r.criticality());
         esp.setNotes(r.notes());
+        audit(AuditAction.UPDATE, esp.getId(), oldJson, esp);
         return enrich(esp);
     }
 
     public void remove(UUID id) {
         EquipmentSparePart esp = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment spare part link not found: " + id));
+        String oldJson = auditSerializationService.toJson(esp);
         esp.setDeleted(true);
-        repo.save(esp);
+        EquipmentSparePart saved = repo.save(esp);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
     }
 
     private EquipmentSparePartDto enrich(EquipmentSparePart esp) {
         return sparePartRepository.findByIdAndIsDeletedFalse(esp.getSparePartId())
                 .map(sp -> EquipmentSparePartDto.from(esp, sp.getCode(), sp.getName(), sp.getUnit()))
                 .orElseGet(() -> EquipmentSparePartDto.from(esp));
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, EquipmentSparePart current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "equipment_spare_part",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.EQUIPMENT_SPARE_PART,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Запчасть оборудования добавлена";
+            case UPDATE -> "Запчасть оборудования обновлена";
+            case DELETE -> "Запчасть оборудования удалена";
+            default -> "Действие выполнено над запчастью оборудования";
+        };
     }
 }

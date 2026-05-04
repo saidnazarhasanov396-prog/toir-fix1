@@ -1,6 +1,8 @@
 package com.toir.service;
 import com.toir.dto.rcm.EquipmentRiskScore;
 
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.entity.equipment.Equipment;
@@ -12,6 +14,8 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.entity.PprTask;
 import com.toir.repository.PprTaskRepository;
 import com.toir.enums.PprTaskStatus;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +41,8 @@ public class RcmAutoPlannerService {
     private final MaintenanceRegulationRepository regulationRepository;
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
 
@@ -80,7 +86,8 @@ public class RcmAutoPlannerService {
             task.setStatus(PprTaskStatus.PLANNED);
             task.setPriority(priorityFor(s));
             task.setPlannedLaborHours(reg.getNormativeLaborHours());
-            taskRepository.save(task);
+            PprTask saved = taskRepository.save(task);
+            auditTask(AuditAction.CREATE, saved.getId(), null, saved);
             matched++;
             created.add(code);
         }
@@ -106,6 +113,28 @@ public class RcmAutoPlannerService {
             return any.get(0);
         }
         return plans.get(0);
+    }
+
+    private void auditTask(AuditAction action, UUID id, String oldJson, PprTask current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "ppr_task",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.PPR_TASK,
+                auditTaskMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditTaskMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Задача ППР создана";
+            case UPDATE -> "Задача ППР обновлена";
+            case DELETE -> "Задача ППР удалена";
+            default -> "Действие выполнено над задачей ППР";
+        };
     }
 
     public record AutoPlanResult(int candidates, int tasksCreated, int skipped, List<String> createdCodes) {}

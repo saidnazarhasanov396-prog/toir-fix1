@@ -1,11 +1,15 @@
 package com.toir.service;
 import com.toir.entity.WorkExecution;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.WorkExecutionRepository;
 
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import com.toir.dto.workexecution.ExecutionLogDto;
 import com.toir.dto.workexecution.WorkExecutionDto;
@@ -25,6 +29,8 @@ public class WorkExecutionService {
 
     private final WorkExecutionRepository repository;
     private final WorkOrderRepository workOrderRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -57,17 +63,43 @@ public class WorkExecutionService {
         e.setPerformerId(r.performerId());
         e.setStartedAt(startedAt);
         e.setNotes(r.notes());
-        return WorkExecutionDto.from(repository.save(e));
+        WorkExecution saved = repository.save(e);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return WorkExecutionDto.from(saved);
     }
 
     @Transactional
     public WorkExecutionDto end(UUID id, WorkExecutionDto r) {
         WorkExecution e = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Execution not found: " + id));
+        String oldJson = auditSerializationService.toJson(e);
         e.setEndedAt(r.endedAt() != null ? r.endedAt() : Instant.now());
         e.setResult(r.result());
         if (r.notes() != null) e.setNotes(r.notes());
+        audit(AuditAction.UPDATE, e.getId(), oldJson, e);
         return WorkExecutionDto.from(e);
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, WorkExecution current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "work_execution",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.WORK_EXECUTION,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Выполнение работы начато";
+            case UPDATE -> "Выполнение работы обновлено";
+            case DELETE -> "Выполнение работы удалено";
+            default -> "Действие выполнено над выполнением работы";
+        };
     }
 
 }

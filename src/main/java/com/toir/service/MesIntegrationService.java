@@ -4,10 +4,14 @@ import com.toir.dto.integration.ConnectionTestResult;
 import com.toir.dto.integration.IntegrationSyncLogDto;
 import com.toir.entity.IntegrationEndpoint;
 import com.toir.entity.IntegrationSyncLog;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.IntegrationSyncStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.IntegrationEndpointRepository;
 import com.toir.repository.IntegrationSyncLogRepository;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +31,8 @@ public class MesIntegrationService {
 
     private final IntegrationEndpointRepository endpointRepository;
     private final IntegrationSyncLogRepository syncLogRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     public ConnectionTestResult testConnection(UUID endpointId) {
@@ -76,7 +82,10 @@ public class MesIntegrationService {
         log.setDirection("BIDIRECTIONAL");
         log.setStartedAt(Instant.now());
         log.setStatus(IntegrationSyncStatus.RUNNING);
-        syncLogRepository.save(log);
+        IntegrationSyncLog savedLog = syncLogRepository.save(log);
+        auditSyncLog(AuditAction.CREATE, savedLog.getId(), null, savedLog);
+        String oldLogJson = auditSerializationService.toJson(savedLog);
+        String oldEndpointJson = auditSerializationService.toJson(ep);
 
         try {
             String fullUrl = ep.getFullUrl();
@@ -127,6 +136,8 @@ public class MesIntegrationService {
             ep.setLastSyncStatus(IntegrationSyncStatus.FAILED);
             ep.setLastError(e.getMessage());
         }
+        auditSyncLog(AuditAction.UPDATE, log.getId(), oldLogJson, log);
+        auditEndpoint(AuditAction.UPDATE, ep.getId(), oldEndpointJson, ep);
 
         return IntegrationSyncLogDto.from(log);
     }
@@ -145,5 +156,49 @@ public class MesIntegrationService {
         if (jsonBody == null) return 0;
         long count = jsonBody.chars().filter(c -> c == '{').count();
         return (int) Math.max(count - 1, 0);
+    }
+
+    private void auditSyncLog(AuditAction action, UUID id, String oldJson, IntegrationSyncLog current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "integration_sync_log",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.INTEGRATION_SYNC_LOG,
+                auditSyncLogMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private void auditEndpoint(AuditAction action, UUID id, String oldJson, IntegrationEndpoint current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "integration_endpoint",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.INTEGRATION_ENDPOINT,
+                auditEndpointMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditSyncLogMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Лог синхронизации интеграции создан";
+            case UPDATE -> "Лог синхронизации интеграции обновлен";
+            case DELETE -> "Лог синхронизации интеграции удален";
+            default -> "Действие выполнено над логом синхронизации интеграции";
+        };
+    }
+
+    private String auditEndpointMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Интеграционная точка создана";
+            case UPDATE -> "Интеграционная точка обновлена";
+            case DELETE -> "Интеграционная точка удалена";
+            default -> "Действие выполнено над интеграционной точкой";
+        };
     }
 }

@@ -1,12 +1,12 @@
-package com.toir.service;
-import com.toir.entity.User;
+package com.toir.service.users;
+import com.toir.entity.users.User;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.UserRepository;
+import com.toir.repository.users.UserRepository;
 
 import com.toir.exception.RestException;
-import com.toir.entity.Role;
-import com.toir.repository.RoleRepository;
+import com.toir.entity.users.Role;
+import com.toir.repository.users.RoleRepository;
 import com.toir.dto.user.CreateUserRequest;
 import com.toir.dto.user.CreateRoleUserRequest;
 import com.toir.dto.user.UpdateUserRequest;

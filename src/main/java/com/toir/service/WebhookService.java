@@ -7,7 +7,11 @@ import com.toir.repository.WebhookSubscriptionRepository;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +45,8 @@ public class WebhookService {
     private final WebhookSubscriptionRepository repository;
     private final WebhookEventLogRepository eventLogRepository;
     private final ObjectMapper objectMapper;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(3))
             .build();
@@ -53,6 +59,7 @@ public class WebhookService {
     public WebhookDto create(WebhookSubscription sub) {
         sub.setCode(webHookGenerateCode());
         WebhookSubscription saved = repository.save(sub);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
         return WebhookDto.fromEntity(saved);
     }
 
@@ -74,18 +81,22 @@ public class WebhookService {
     public WebhookDto update(UUID id, WebhookSubscription patch) {
         WebhookSubscription existing = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Webhook subscription not found: " + id));
+        String oldJson = auditSerializationService.toJson(existing);
         existing.setName(patch.getName());
         existing.setTargetUrl(patch.getTargetUrl());
         existing.setSecret(patch.getSecret());
         existing.setEvents(patch.getEvents());
         existing.setActive(patch.isActive());
+        audit(AuditAction.UPDATE, existing.getId(), oldJson, existing);
         return WebhookDto.fromEntity(existing);
     }
 
     public void delete(UUID id) {
         var entity = repository.findByIdAndIsDeletedFalse(id).orElseThrow();
+        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
-        repository.save(entity);
+        WebhookSubscription saved = repository.save(entity);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
     }
 
     /** Публикует событие всем активным подписчикам. Исключения в сети не бросаем — пишем в лог. */
@@ -154,5 +165,27 @@ public class WebhookService {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, WebhookSubscription current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "webhook",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.WEBHOOK,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Webhook-подписка создана";
+            case UPDATE -> "Webhook-подписка обновлена";
+            case DELETE -> "Webhook-подписка удалена";
+            default -> "Действие выполнено над webhook-подпиской";
+        };
     }
 }

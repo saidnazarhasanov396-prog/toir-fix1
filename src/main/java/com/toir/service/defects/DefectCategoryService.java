@@ -1,8 +1,8 @@
-package com.toir.service;
-import com.toir.entity.DefectCategory;
+package com.toir.service.defects;
+import com.toir.entity.defects.DefectCategory;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.DefectCategoryRepository;
+import com.toir.repository.defects.DefectCategoryRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.defectcategory.DefectCategoryDto;

@@ -1,5 +1,5 @@
 package com.toir.service;
-import com.toir.entity.CostCategory;
+import com.toir.entity.projects.CostCategory;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.repository.CostCategoryRepository;

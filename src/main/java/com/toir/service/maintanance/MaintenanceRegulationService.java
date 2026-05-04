@@ -1,8 +1,8 @@
-package com.toir.service;
-import com.toir.entity.MaintenanceRegulation;
+package com.toir.service.maintanance;
+import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.MaintenanceRegulationRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 
 import com.toir.exception.RestException;
 import com.toir.util.AuditBuilderService;

@@ -1,8 +1,8 @@
-package com.toir.service;
-import com.toir.entity.Contractor;
+package com.toir.service.contactor;
+import com.toir.entity.contractors.Contractor;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.ContractorRepository;
+import com.toir.repository.contarctor.ContractorRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.contractor.ContractorDto;

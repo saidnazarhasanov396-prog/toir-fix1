@@ -1,15 +1,19 @@
-package com.toir.service;
+package com.toir.service.repair;
 import com.toir.entity.*;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.User;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
-import com.toir.repository.DepartmentRepository;
-import com.toir.repository.EquipmentRepository;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.LocationRepository;
-import com.toir.repository.RepairRequestRepository;
-import com.toir.repository.UserRepository;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserRepository;
 
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.service.AuditLogService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;

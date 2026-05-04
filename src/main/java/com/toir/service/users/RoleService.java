@@ -1,12 +1,12 @@
-package com.toir.service;
-import com.toir.entity.Role;
+package com.toir.service.users;
+import com.toir.entity.users.Role;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.RoleRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.role.RoleDto;
 import com.toir.dto.role.RoleRequest;
+import com.toir.repository.users.RoleRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;

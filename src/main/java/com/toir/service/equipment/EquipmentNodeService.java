@@ -1,9 +1,13 @@
 package com.toir.service.equipment;
 import com.toir.entity.equipment.EquipmentNode;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.equipmentnode.EquipmentNodeDto;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +21,8 @@ import java.util.UUID;
 public class EquipmentNodeService {
 
     private final EquipmentNodeRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<EquipmentNodeDto> findByEquipment(UUID equipmentId) {
@@ -35,16 +41,20 @@ public class EquipmentNodeService {
         e.setNodeType(r.nodeType());
         e.setSerialNumber(r.serialNumber());
         e.setDescription(r.description());
-        return EquipmentNodeDto.from(repository.save(e));
+        EquipmentNode saved = repository.save(e);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return EquipmentNodeDto.from(saved);
     }
 
     public EquipmentNodeDto update(UUID id, EquipmentNodeDto r) {
         EquipmentNode e = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(e);
         e.setParentId(r.parentId());
         e.setName(r.name());
         e.setNodeType(r.nodeType());
         e.setSerialNumber(r.serialNumber());
         e.setDescription(r.description());
+        audit(AuditAction.UPDATE, e.getId(), oldJson, e);
         return EquipmentNodeDto.from(e);
     }
 
@@ -53,12 +63,36 @@ public class EquipmentNodeService {
             throw RestException.conflict("Node has children");
         }
         var entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
-        repository.save(entity);
+        EquipmentNode saved = repository.save(entity);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
     }
 
     private EquipmentNode getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment node not found: " + id));
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, EquipmentNode current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "equipment_node",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.EQUIPMENT_NODE,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Узел оборудования создан";
+            case UPDATE -> "Узел оборудования обновлен";
+            case DELETE -> "Узел оборудования удален";
+            default -> "Действие выполнено над узлом оборудования";
+        };
     }
 }

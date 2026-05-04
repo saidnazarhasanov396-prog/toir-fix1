@@ -1,16 +1,17 @@
-package com.toir.service;
-import com.toir.entity.MaintenanceOperation;
-import com.toir.entity.MaintenanceTemplate;
+package com.toir.service.maintanance;
+import com.toir.entity.maintenance.MaintenanceOperation;
+import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.MaintenanceKind;
-import com.toir.repository.MaintenanceOperationRepository;
-import com.toir.repository.MaintenanceTemplateRepository;
+import com.toir.repository.maintenance.MaintenanceOperationRepository;
+import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.maintenancetemplate.MaintenanceOperationDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
+import com.toir.service.SparePartService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;

@@ -1,4 +1,6 @@
 package com.toir.service;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.PlanStatus;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
@@ -14,6 +16,8 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.enums.PeriodicityUnit;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +37,8 @@ public class PprGeneratorService {
     private final PprTaskRepository taskRepository;
     private final MaintenanceRegulationRepository regulationRepository;
     private final EquipmentRepository equipmentRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
     @Transactional
     public GenerationResult generateForPlan(UUID planId) {
@@ -41,6 +47,7 @@ public class PprGeneratorService {
         if (plan.getStatus() == PlanStatus.CLOSED || plan.getStatus() == PlanStatus.CANCELLED) {
             throw RestException.badRequest("Cannot generate tasks for closed/cancelled plan");
         }
+        String oldPlanJson = auditSerializationService.toJson(plan);
 
         YearMonth planMonth = YearMonth.of(plan.getYear(), plan.getMonth());
         LocalDate monthStart = planMonth.atDay(1);
@@ -104,13 +111,15 @@ public class PprGeneratorService {
                 task.setStatus(PprTaskStatus.PLANNED);
 
                 plan.getTasks().add(task);
-                taskRepository.save(task);
+                PprTask saved = taskRepository.save(task);
+                auditTask(AuditAction.CREATE, saved.getId(), null, saved);
                 created++;
             }
         }
 
         if (created > 0 && plan.getStatus() == PlanStatus.DRAFT) {
             plan.setStatus(PlanStatus.GENERATED);
+            auditPlan(AuditAction.UPDATE, plan.getId(), oldPlanJson, plan);
         }
 
         return new GenerationResult(plan.getId(), created, skipped);
@@ -125,6 +134,50 @@ public class PprGeneratorService {
             case QUARTER -> (month - 1) % (3 * value) == 0;
             case YEAR -> month == 1;
             case HOUR -> true; // hour-based — run every month, operator decides
+        };
+    }
+
+    private void auditTask(AuditAction action, UUID id, String oldJson, PprTask current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "ppr_task",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.PPR_TASK,
+                auditTaskMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private void auditPlan(AuditAction action, UUID id, String oldJson, PprPlan current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "ppr_plan",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.PPR_PLAN,
+                auditPlanMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditTaskMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Задача ППР создана";
+            case UPDATE -> "Задача ППР обновлена";
+            case DELETE -> "Задача ППР удалена";
+            default -> "Действие выполнено над задачей ППР";
+        };
+    }
+
+    private String auditPlanMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "План ППР создан";
+            case UPDATE -> "План ППР обновлен";
+            case DELETE -> "План ППР удален";
+            default -> "Действие выполнено над планом ППР";
         };
     }
 

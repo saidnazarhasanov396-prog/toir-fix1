@@ -1,6 +1,8 @@
 package com.toir.service;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.BrigadeMember;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.projects.BrigadeRepository;
 
@@ -9,6 +11,8 @@ import com.toir.dto.brigade.BrigadeMemberDto;
 import com.toir.dto.brigade.BrigadeMemberRequest;
 import com.toir.dto.brigade.BrigadeRequest;
 import com.toir.exception.RestException;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +29,8 @@ public class BrigadeService {
     private final BrigadeMemberRepository memberRepo;
     private final CertificationGuard certificationGuard;
     private final SparePartService sparePartService;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -50,11 +56,14 @@ public class BrigadeService {
         b.setForemanId(r.foremanId());
         b.setSpecialization(r.specialization());
         if (r.active() != null) b.setActive(r.active());
-        return BrigadeDto.from(brigadeRepo.save(b));
+        Brigade saved = brigadeRepo.save(b);
+        auditBrigade(AuditAction.CREATE, saved.getId(), null, saved);
+        return BrigadeDto.from(saved);
     }
 
     public BrigadeDto update(UUID id, BrigadeRequest r) {
         Brigade b = load(id);
+        String oldJson = auditSerializationService.toJson(b);
         if (!b.getCode().equals(r.code()) && brigadeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Brigade code already exists: " + r.code());
         }
@@ -64,13 +73,16 @@ public class BrigadeService {
         b.setForemanId(r.foremanId());
         b.setSpecialization(r.specialization());
         if (r.active() != null) b.setActive(r.active());
+        auditBrigade(AuditAction.UPDATE, b.getId(), oldJson, b);
         return BrigadeDto.from(b);
     }
 
     public void delete(UUID id) {
         Brigade b = load(id);
+        String oldJson = auditSerializationService.toJson(b);
         b.setDeleted(true);
-        brigadeRepo.save(b);
+        Brigade saved = brigadeRepo.save(b);
+        auditBrigade(AuditAction.DELETE, saved.getId(), oldJson, null);
     }
 
     public BrigadeMemberDto addMember(UUID brigadeId, BrigadeMemberRequest r) {
@@ -86,7 +98,9 @@ public class BrigadeService {
         m.setGrade(r.grade());
         m.setQualifications(r.qualifications());
         if (r.active() != null) m.setActive(r.active());
-        return BrigadeMemberDto.from(memberRepo.save(m));
+        BrigadeMember saved = memberRepo.save(m);
+        auditMember(AuditAction.CREATE, saved.getId(), null, saved);
+        return BrigadeMemberDto.from(saved);
     }
 
     public void removeMember(UUID brigadeId, UUID memberId) {
@@ -95,8 +109,10 @@ public class BrigadeService {
         if (m.getBrigade() == null || !m.getBrigade().getId().equals(brigadeId)) {
             throw RestException.badRequest("Member does not belong to this brigade");
         }
+        String oldJson = auditSerializationService.toJson(m);
         m.setDeleted(true);
-        memberRepo.save(m);
+        BrigadeMember saved = memberRepo.save(m);
+        auditMember(AuditAction.DELETE, saved.getId(), oldJson, null);
     }
 
     @Transactional(readOnly = true)
@@ -108,5 +124,49 @@ public class BrigadeService {
     private Brigade load(UUID id) {
         return brigadeRepo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Brigade not found: " + id));
+    }
+
+    private void auditBrigade(AuditAction action, UUID id, String oldJson, Brigade current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "brigade",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.BRIGADE,
+                auditBrigadeMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private void auditMember(AuditAction action, UUID id, String oldJson, BrigadeMember current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "brigade_member",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.BRIGADE_MEMBER,
+                auditMemberMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditBrigadeMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Бригада создана";
+            case UPDATE -> "Бригада обновлена";
+            case DELETE -> "Бригада удалена";
+            default -> "Действие выполнено над бригадой";
+        };
+    }
+
+    private String auditMemberMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Участник бригады добавлен";
+            case UPDATE -> "Участник бригады обновлен";
+            case DELETE -> "Участник бригады удален";
+            default -> "Действие выполнено над участником бригады";
+        };
     }
 }
