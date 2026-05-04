@@ -70,13 +70,13 @@ public class EquipmentService {
         apply(entity, request);
         Equipment saved = repository.save(entity);
 
-        String newJson = auditSerializationService.toJson(entity);
+        String newJson = auditSerializationService.toJson(saved);
         auditBuilderService.log(
                 "equipment",
                 saved.getId().toString(),
                 com.toir.enums.AuditAction.CREATE,
                 com.toir.enums.AuditModule.EQUIPMENT,
-                "Equipment created: Code=%s, Name=%s".formatted(saved.getCode(), saved.getName()),
+                "Оборудование создано: код=%s, наименование=%s".formatted(saved.getCode(), saved.getName()),
                 null,
                 newJson
         );
@@ -98,7 +98,7 @@ public class EquipmentService {
                 saved.getId().toString(),
                 AuditAction.UPDATE,
                 com.toir.enums.AuditModule.EQUIPMENT,
-                "Equipment updated: Code=%s, Name=%s".formatted(saved.getCode(), saved.getName()),
+                "Оборудование обновлено: код=%s, наименование=%s".formatted(saved.getCode(), saved.getName()),
                 oldJson,
                 newJson);
         return enrich(List.of(entity)).getFirst();
@@ -118,9 +118,9 @@ public class EquipmentService {
         auditBuilderService.log(
                 "equipment",
                 saved.getId().toString(),
-                AuditAction.UPDATE,
+                AuditAction.DELETE,
                 com.toir.enums.AuditModule.EQUIPMENT,
-                "Equipment updated: Code=%s, Name=%s".formatted(saved.getCode(), saved.getName()),
+                "Оборудование удалено: код=%s, наименование=%s".formatted(saved.getCode(), saved.getName()),
                 oldJson,
                 null);
     }
