@@ -4,6 +4,7 @@ import com.toir.enums.AuditAction;
 import com.toir.dto.auth.LoginRequest;
 import com.toir.dto.auth.LoginResponse;
 import com.toir.dto.auth.RegisterRequest;
+import com.toir.enums.AuditModule;
 import com.toir.util.RequestContext;
 import com.toir.exception.RestException;
 import com.toir.security.AuthenticatedUser;
@@ -90,7 +91,7 @@ public class AuthService {
 
         auditLogService.record(
                 user.getId(),
-                "auth",
+                AuditModule.USERS,
                 "User",
                 user.getId().toString(),
                 AuditAction.LOGIN,
@@ -126,7 +127,7 @@ public class AuthService {
 
         auditLogService.record(
                 user.getId(),
-                "auth",
+                AuditModule.USERS,
                 "User",
                 user.getId().toString(),
                 AuditAction.CREATE,

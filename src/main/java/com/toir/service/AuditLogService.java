@@ -7,6 +7,7 @@ import com.toir.dto.audit.AuditLogResponseDto;
 import com.toir.dto.user.UserDto;
 import com.toir.enums.AuditAction;
 import com.toir.entity.AuditLog;
+import com.toir.enums.AuditModule;
 import com.toir.repository.AuditLogRepository;
 
 import com.toir.util.PaginationUtils;
@@ -29,13 +30,13 @@ public class AuditLogService {
     private final UserService userService;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void record(UUID userId, String module, String entityType, String entityId,
+    public void record(UUID userId, AuditModule module, String entityType, String entityId,
                        AuditAction action, String message, String ip, String userAgent) {
         recordDetailed(userId, module, entityType, entityId, action, message, ip, userAgent, null, null, null);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void recordDetailed(UUID userId, String module, String entityType, String entityId,
+    public void recordDetailed(UUID userId, AuditModule module, String entityType, String entityId,
                                AuditAction action, String message, String ip, String userAgent,
                                String diffJson, String previousSnapshot, String currentSnapshot) {
         AuditLog entry = new AuditLog();

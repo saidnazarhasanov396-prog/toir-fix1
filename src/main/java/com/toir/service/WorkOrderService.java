@@ -165,11 +165,11 @@ public class WorkOrderService {
     }
 
     private void audit(AuditAction action, UUID entityId, String message) {
-        UUID userId = securityScope.currentUser() != null
-                ? UUID.fromString(securityScope.currentUser().id())
-                : null;
-        auditLogService.record(userId, MODULE, ENTITY, entityId.toString(), action, message,
-                requestContext.getIpAddress(), requestContext.getUserAgent());
+//        UUID userId = securityScope.currentUser() != null
+//                ? UUID.fromString(securityScope.currentUser().id())
+//                : null;
+//        auditLogService.record(userId, MODULE, ENTITY, entityId.toString(), action, message,
+//                requestContext.getIpAddress(), requestContext.getUserAgent());
     }
 
     private WorkOrderDto toDto(WorkOrder entity) {

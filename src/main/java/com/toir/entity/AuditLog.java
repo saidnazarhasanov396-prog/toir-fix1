@@ -1,6 +1,7 @@
 package com.toir.entity;
 
 import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -26,7 +27,8 @@ public class AuditLog {
     private UUID userId;
 
     @Column(nullable = false)
-    private String module;
+    @Enumerated(EnumType.STRING)
+    private AuditModule module;
 
     @Column(name = "entity_type")
     private String entityType;

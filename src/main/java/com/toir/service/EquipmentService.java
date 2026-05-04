@@ -2,6 +2,7 @@ package com.toir.service;
 import com.toir.entity.Department;
 import com.toir.entity.Equipment;
 import com.toir.entity.EquipmentPassport;
+import com.toir.enums.AuditAction;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.entity.EquipmentType;
@@ -15,6 +16,8 @@ import com.toir.repository.LocationRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentRequest;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -42,6 +45,8 @@ public class EquipmentService {
     private final LocationRepository locationRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentPassportRepository passportRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -64,13 +69,38 @@ public class EquipmentService {
         entity.setCode(nextCode());
         apply(entity, request);
         Equipment saved = repository.save(entity);
+
+        String newJson = auditSerializationService.toJson(entity);
+        auditBuilderService.log(
+                "equipment",
+                saved.getId().toString(),
+                com.toir.enums.AuditAction.CREATE,
+                com.toir.enums.AuditModule.EQUIPMENT,
+                "Equipment created: Code=%s, Name=%s".formatted(saved.getCode(), saved.getName()),
+                null,
+                newJson
+        );
         return enrich(List.of(saved)).getFirst();
     }
 
     @Transactional
     public EquipmentDto update(UUID id, EquipmentRequest request) {
         Equipment entity = getOrThrow(id);
+
+        String oldJson = auditSerializationService.toJson(entity);
+
         applyForUpdate(entity, request);
+
+        Equipment saved = repository.save(entity);
+        String newJson = auditSerializationService.toJson(saved);
+        auditBuilderService.log(
+                "equipment",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                com.toir.enums.AuditModule.EQUIPMENT,
+                "Equipment updated: Code=%s, Name=%s".formatted(saved.getCode(), saved.getName()),
+                oldJson,
+                newJson);
         return enrich(List.of(entity)).getFirst();
     }
 
@@ -80,8 +110,19 @@ public class EquipmentService {
         if (!repository.findAllByParentIdAndIsDeletedFalse(id).isEmpty()) {
             throw RestException.conflict("Equipment has child nodes");
         }
+        String oldJson = auditSerializationService.toJson(entity);
+
         entity.setDeleted(true);
-        repository.save(entity);
+        Equipment saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "equipment",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                com.toir.enums.AuditModule.EQUIPMENT,
+                "Equipment updated: Code=%s, Name=%s".formatted(saved.getCode(), saved.getName()),
+                oldJson,
+                null);
     }
 
     Equipment getOrThrow(UUID id) {
