@@ -6,11 +6,15 @@ import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleSummaryDto;
 import com.toir.entity.Equipment;
 import com.toir.entity.VehicleDetails;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.EquipmentRepository;
 import com.toir.repository.VehicleDetailsRepository;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +39,8 @@ public class VehicleService {
     private final EquipmentRepository equipmentRepository;
     private final VehicleDetailsRepository vehicleDetailsRepository;
     private final EquipmentService equipmentService;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, String search, int page, int pageSize) {
@@ -84,6 +90,7 @@ public class VehicleService {
         details.setEquipmentId(savedEquipment.getId());
         applyDetails(details, request);
         VehicleDetails savedDetails = vehicleDetailsRepository.save(details);
+        audit(AuditAction.CREATE, savedEquipment.getId(), null, savedEquipment, savedDetails);
 
         return VehicleDetailDto.from(equipmentService.findById(savedEquipment.getId()), savedDetails);
     }
@@ -99,8 +106,13 @@ public class VehicleService {
                 .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
 
         validateUniqueUpdate(equipmentId, equipment, details, request);
+        String oldJson = auditSerializationService.toJson(Map.of(
+                "equipment", equipment,
+                "vehicleDetails", details
+        ));
         applyEquipment(equipment, request);
         applyDetails(details, request);
+        audit(AuditAction.UPDATE, equipment.getId(), oldJson, equipment, details);
         return VehicleDetailDto.from(equipmentService.findById(equipmentId), details);
     }
 
@@ -110,8 +122,13 @@ public class VehicleService {
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
         VehicleDetails details = vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
+        String oldJson = auditSerializationService.toJson(Map.of(
+                "equipment", equipment,
+                "vehicleDetails", details
+        ));
         details.setDeleted(true);
         equipment.setDeleted(true);
+        audit(AuditAction.DELETE, equipment.getId(), oldJson, null, null);
     }
 
     private void validateUniqueCreate(VehicleRequest request) {
@@ -214,6 +231,33 @@ public class VehicleService {
 
     private static String normalizeBlankToNull(String value) {
         return hasText(value) ? value : null;
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, Equipment equipment, VehicleDetails details) {
+        String newJson = equipment == null || details == null
+                ? null
+                : auditSerializationService.toJson(Map.of(
+                        "equipment", equipment,
+                        "vehicleDetails", details
+                ));
+        auditBuilderService.log(
+                "vehicle",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.VEHICLE,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Транспорт создан";
+            case UPDATE -> "Транспорт обновлен";
+            case DELETE -> "Транспорт удален";
+            default -> "Действие выполнено над транспортом";
+        };
     }
 
     private static final class FixedTotalPage<T> implements Page<T> {

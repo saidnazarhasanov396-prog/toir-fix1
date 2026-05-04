@@ -9,6 +9,9 @@ import com.toir.repository.RepairRequestRepository;
 import com.toir.repository.UserRepository;
 
 import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import com.toir.util.RequestContext;
 import com.toir.exception.RestException;
@@ -41,6 +44,8 @@ public class RepairRequestService {
     private final AuditLogService auditLogService;
     private final RequestContext requestContext;
     private final SecurityScope securityScope;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -197,10 +202,17 @@ public class RepairRequestService {
     }
 
     private void audit(AuditAction action, UUID entityId, String message) {
-//        UUID userId = securityScope.currentUser() != null
-//                ? UUID.fromString(securityScope.currentUser().id())
-//                : null;
-//        auditLogService.record(userId, MODULE, ENTITY, entityId.toString(), action, message,
-//                requestContext.getIpAddress(), requestContext.getUserAgent());
+        RepairRequest current = entityId == null
+                ? null
+                : repository.findByIdAndIsDeletedFalse(entityId).orElse(null);
+        auditBuilderService.log(
+                "repair_request",
+                entityId != null ? entityId.toString() : null,
+                action,
+                AuditModule.REPAIR_REQUEST,
+                message,
+                null,
+                current == null ? null : auditSerializationService.toJson(current)
+        );
     }
 }

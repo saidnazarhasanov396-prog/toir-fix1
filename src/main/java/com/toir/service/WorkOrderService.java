@@ -4,6 +4,9 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
 
 import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import com.toir.util.RequestContext;
 import com.toir.exception.RestException;
@@ -41,6 +44,8 @@ public class WorkOrderService {
     private final AuditLogService auditLogService;
     private final RequestContext requestContext;
     private final SecurityScope securityScope;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -165,11 +170,18 @@ public class WorkOrderService {
     }
 
     private void audit(AuditAction action, UUID entityId, String message) {
-//        UUID userId = securityScope.currentUser() != null
-//                ? UUID.fromString(securityScope.currentUser().id())
-//                : null;
-//        auditLogService.record(userId, MODULE, ENTITY, entityId.toString(), action, message,
-//                requestContext.getIpAddress(), requestContext.getUserAgent());
+        WorkOrder current = entityId == null
+                ? null
+                : repository.findByIdAndIsDeletedFalse(entityId).orElse(null);
+        auditBuilderService.log(
+                "work_order",
+                entityId != null ? entityId.toString() : null,
+                action,
+                AuditModule.WORK_ORDER,
+                message,
+                null,
+                current == null ? null : auditSerializationService.toJson(current)
+        );
     }
 
     private WorkOrderDto toDto(WorkOrder entity) {

@@ -1,10 +1,14 @@
 package com.toir.service;
 import com.toir.entity.Contractor;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.ContractorRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.contractor.ContractorDto;
 import com.toir.dto.contractor.ContractorRequest;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +22,8 @@ import java.util.UUID;
 public class ContractorService {
 
     private final ContractorRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<ContractorDto> findAll(String search) {
@@ -35,19 +41,25 @@ public class ContractorService {
         }
         Contractor entity = new Contractor();
         apply(entity, request);
-        return ContractorDto.from(repository.save(entity));
+        Contractor saved = repository.save(entity);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return ContractorDto.from(saved);
     }
 
     public ContractorDto update(UUID id, ContractorRequest request) {
         Contractor entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         apply(entity, request);
+        audit(AuditAction.UPDATE, entity.getId(), oldJson, entity);
         return ContractorDto.from(entity);
     }
 
     public void delete(UUID id) {
         var entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
-        repository.save(entity);
+        Contractor saved = repository.save(entity);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
     }
 
     private Contractor getOrThrow(UUID id) {
@@ -64,5 +76,27 @@ public class ContractorService {
         entity.setEmail(request.email());
         entity.setSpecialization(request.specialization());
         if (request.status() != null) entity.setStatus(request.status());
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, Contractor current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "contractor",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.CONTRACTOR,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Подрядчик создан";
+            case UPDATE -> "Подрядчик обновлен";
+            case DELETE -> "Подрядчик удален";
+            default -> "Действие выполнено над подрядчиком";
+        };
     }
 }

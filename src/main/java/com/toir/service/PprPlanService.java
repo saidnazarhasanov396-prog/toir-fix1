@@ -1,4 +1,6 @@
 package com.toir.service;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.PlanStatus;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
@@ -12,6 +14,8 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 
 import com.toir.exception.RestException;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +31,8 @@ public class PprPlanService {
 
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -48,7 +54,9 @@ public class PprPlanService {
         plan.setDepartmentId(request.departmentId());
         plan.setCreatedById(request.createdById());
         plan.setNotes(request.notes());
-        return PprPlanDto.from(planRepository.save(plan));
+        PprPlan saved = planRepository.save(plan);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return PprPlanDto.from(saved);
     }
 
     public PprPlanDto update(UUID id, PprPlanRequest request) {
@@ -56,11 +64,13 @@ public class PprPlanService {
         if (plan.getStatus() != PlanStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT plans can be edited");
         }
+        String oldJson = auditSerializationService.toJson(plan);
         plan.setName(request.name());
         plan.setYear(request.year());
         plan.setMonth(request.month());
         plan.setDepartmentId(request.departmentId());
         plan.setNotes(request.notes());
+        audit(AuditAction.UPDATE, plan.getId(), oldJson, plan);
         return PprPlanDto.from(plan);
     }
 
@@ -69,8 +79,10 @@ public class PprPlanService {
         if (plan.getStatus() != PlanStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT plans can be deleted");
         }
+        String oldJson = auditSerializationService.toJson(plan);
         plan.setDeleted(true);
-        planRepository.save(plan);
+        PprPlan saved = planRepository.save(plan);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
     }
 
     public PprPlanDto approve(UUID planId, UUID approverId) {
@@ -136,5 +148,27 @@ public class PprPlanService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, PprPlan current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "ppr_plan",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.PPR_PLAN,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "ППР план создан";
+            case UPDATE -> "ППР план обновлен";
+            case DELETE -> "ППР план удален";
+            default -> "Действие выполнено над ППР планом";
+        };
     }
 }

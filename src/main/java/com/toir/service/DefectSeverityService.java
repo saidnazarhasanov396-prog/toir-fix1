@@ -1,9 +1,13 @@
 package com.toir.service;
 import com.toir.entity.DefectSeverity;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.DefectSeverityRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.defectseverity.DefectSeverityDto;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +22,8 @@ import java.util.UUID;
 public class DefectSeverityService {
 
     private final DefectSeverityRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -29,18 +35,24 @@ public class DefectSeverityService {
         DefectSeverity e = new DefectSeverity();
         e.setCode(nextCode());
         e.setName(r.name()); e.setWeight(r.weight());
-        return DefectSeverityDto.from(repository.save(e));
+        DefectSeverity saved = repository.save(e);
+        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        return DefectSeverityDto.from(saved);
     }
 
     public DefectSeverityDto update(UUID id, DefectSeverityDto r) {
         DefectSeverity e = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(e);
         e.setName(r.name()); e.setWeight(r.weight());
+        audit(AuditAction.UPDATE, e.getId(), oldJson, e);
         return DefectSeverityDto.from(e);
     }
 
     public void delete(UUID id) { var entity = getOrThrow(id);
+        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
-        repository.save(entity); }
+        DefectSeverity saved = repository.save(entity);
+        audit(AuditAction.DELETE, saved.getId(), oldJson, null); }
 
     private DefectSeverity getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -61,5 +73,27 @@ public class DefectSeverityService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private void audit(AuditAction action, UUID id, String oldJson, DefectSeverity current) {
+        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        auditBuilderService.log(
+                "defect_severity",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.DEFECT_SEVERITY,
+                auditMessage(action),
+                oldJson,
+                newJson
+        );
+    }
+
+    private String auditMessage(AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Серьезность дефекта создана";
+            case UPDATE -> "Серьезность дефекта обновлена";
+            case DELETE -> "Серьезность дефекта удалена";
+            default -> "Действие выполнено над серьезностью дефекта";
+        };
     }
 }
