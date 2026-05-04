@@ -1,6 +1,5 @@
 package com.toir.controller;
 
-import com.toir.dto.warehouse.ReorderSuggestionDto;
 import com.toir.service.WarehouseReorderService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
