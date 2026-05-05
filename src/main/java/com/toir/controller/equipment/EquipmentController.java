@@ -49,6 +49,15 @@ public class EquipmentController {
     @GetMapping("/{id}")
     public ResponseEntity<EquipmentDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
+    @GetMapping("/{id}/children")
+    public ResponseEntity<Page<EquipmentDto>> children(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(service.findChildren(id, Math.max(0, page), Math.max(1, size)));
+    }
+
     @PostMapping
     public ResponseEntity<EquipmentDto> create(@Valid @RequestBody EquipmentRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));

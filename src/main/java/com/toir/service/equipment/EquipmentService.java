@@ -60,11 +60,18 @@ public class EquipmentService {
         return enrich(List.of(getOrThrow(id))).getFirst();
     }
 
+    @Transactional(readOnly = true)
+    public Page<EquipmentDto> findChildren(UUID parentId, int page, int pageSize) {
+        getOrThrow(parentId);
+        return enrich(repository.findAllByParentIdAndIsDeletedFalse(parentId, PaginationUtils.pageRequest(page, pageSize)));
+    }
+
     @Transactional
     public EquipmentDto create(EquipmentRequest request) {
         if (repository.existsByInventoryNumberAndIsDeletedFalse(request.inventoryNumber())) {
             throw RestException.conflict("Inventory number already exists: " + request.inventoryNumber());
         }
+        validateParent(null, request.parentId());
         Equipment entity = new Equipment();
         entity.setCode(nextCode());
         apply(entity, request);
@@ -90,6 +97,7 @@ public class EquipmentService {
         String oldJson = auditSerializationService.toJson(entity);
 
         applyForUpdate(entity, request);
+        validateParent(entity.getId(), entity.getParentId());
 
         Equipment saved = repository.save(entity);
         String newJson = auditSerializationService.toJson(saved);
@@ -108,7 +116,7 @@ public class EquipmentService {
     public void delete(UUID id) {
         Equipment entity = getOrThrow(id);
         if (!repository.findAllByParentIdAndIsDeletedFalse(id).isEmpty()) {
-            throw RestException.conflict("Equipment has child nodes");
+            throw RestException.conflict("Equipment has child equipment");
         }
         String oldJson = auditSerializationService.toJson(entity);
 
@@ -245,7 +253,7 @@ public class EquipmentService {
         entity.setEquipmentTypeId(request.equipmentTypeId() != null ? request.equipmentTypeId() : entity.getEquipmentTypeId());
         entity.setDepartmentId(request.departmentId() != null ? request.departmentId() : entity.getDepartmentId());
         entity.setLocationId(request.locationId() != null ? request.locationId() : entity.getLocationId());
-        entity.setParentId(request.parentId() != null ? request.parentId() : entity.getParentId());
+        entity.setParentId(request.parentId());
         entity.setCriticalityClassId(request.criticalityClassId()  != null ? request.criticalityClassId() : entity.getCriticalityClassId());
         entity.setResponsibleId(request.responsibleId() != null ? request.responsibleId() : entity.getResponsibleId());
         entity.setManufacturer(request.manufacturer() != null ? request.manufacturer() : entity.getManufacturer());
@@ -254,5 +262,31 @@ public class EquipmentService {
         entity.setCommissionedAt(request.commissionedAt() != null ? request.commissionedAt() : entity.getCommissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil() != null ? request.warrantyUntil() : entity.getWarrantyUntil());
         entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
+    }
+
+    private void validateParent(UUID equipmentId, UUID parentId) {
+        if (parentId == null) {
+            return;
+        }
+        if (parentId.equals(equipmentId)) {
+            throw RestException.badRequest("Equipment cannot be parent of itself");
+        }
+
+        Equipment parent = repository.findByIdAndIsDeletedFalse(parentId)
+                .orElseThrow(() -> RestException.notFound("Parent equipment not found: " + parentId));
+        UUID currentParentId = parent.getParentId();
+        Set<UUID> visited = new HashSet<>();
+        while (currentParentId != null) {
+            if (!visited.add(currentParentId)) {
+                throw RestException.conflict("Circular equipment parent chain detected");
+            }
+            if (currentParentId.equals(equipmentId)) {
+                throw RestException.badRequest("Equipment parent chain cannot be circular");
+            }
+            UUID finalCurrentParentId = currentParentId;
+            Equipment currentParent = repository.findByIdAndIsDeletedFalse(currentParentId)
+                    .orElseThrow(() -> RestException.notFound("Parent equipment not found: " + finalCurrentParentId));
+            currentParentId = currentParent.getParentId();
+        }
     }
 }
