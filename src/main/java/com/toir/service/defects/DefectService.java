@@ -104,21 +104,24 @@ public class DefectService {
         return toResponse(DefectDto.from(entity));
     }
 
+    @Transactional
     public DefectResponse resolve(UUID id) {
         Defect entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setStatus(DefectStatus.RESOLVED);
         entity.setResolvedAt(Instant.now());
+
+        Defect saved = repository.save(entity);
+
         auditBuilderService.log(
                 "defect",
-                entity.getId().toString(),
+                saved.getId().toString(),
                 AuditAction.UPDATE,
                 AuditModule.DEFECT,
                 "Дефект устранен",
-                oldJson,
-                entity
+                entity,
+                saved
         );
-        return toResponse(DefectDto.from(entity));
+        return toResponse(DefectDto.from(saved));
     }
 
     @Transactional
