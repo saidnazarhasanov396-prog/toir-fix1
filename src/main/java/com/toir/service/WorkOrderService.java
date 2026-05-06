@@ -1,6 +1,12 @@
 package com.toir.service;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.PprTask;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.PprTaskRepository;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.enums.PprTaskStatus;
+import com.toir.enums.RequestStatus;
 import com.toir.enums.WorkOrderStatus;
 
 import com.toir.enums.AuditAction;
@@ -46,6 +52,8 @@ public class WorkOrderService {
     private final SecurityScope securityScope;
     private final AuditBuilderService auditBuilderService;
     private final AuditSerializationService auditSerializationService;
+    private final PprTaskRepository pprTaskRepository;
+    private final RepairRequestRepository repairRequestRepository;
 
 
     @Transactional(readOnly = true)
@@ -160,8 +168,70 @@ public class WorkOrderService {
         entity.setClosureNotes(request.closureNotes());
         entity.setStatus(WorkOrderStatus.CLOSED);
         entity.setCompletedAt(Instant.now());
+        completeLinkedPprTask(entity);
+        closeLinkedRepairRequestIfReady(entity, request.result());
         audit(AuditAction.CLOSE, entity.getId(), "Закрыт наряд " + entity.getNumber());
         return toDto(entity);
+    }
+
+    private void completeLinkedPprTask(WorkOrder workOrder) {
+        if (workOrder.getPprTaskId() == null) {
+            return;
+        }
+        PprTask task = pprTaskRepository.findByIdAndIsDeletedFalse(workOrder.getPprTaskId())
+                .orElseThrow(() -> RestException.notFound("PPR task not found: " + workOrder.getPprTaskId()));
+        if (task.getStatus() == PprTaskStatus.COMPLETED || task.getStatus() == PprTaskStatus.CANCELLED) {
+            return;
+        }
+        String oldJson = auditSerializationService.toJson(task);
+        task.setStatus(PprTaskStatus.COMPLETED);
+        auditBuilderService.log(
+                "ppr_task",
+                task.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PPR_TASK,
+                "Задача ППР завершена при закрытии наряда " + workOrder.getNumber(),
+                oldJson,
+                task
+        );
+    }
+
+    private void closeLinkedRepairRequestIfReady(WorkOrder workOrder, String closeResult) {
+        if (workOrder.getRepairRequestId() == null) {
+            return;
+        }
+        List<WorkOrder> linkedWorkOrders = repository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrder.getRepairRequestId());
+        if (linkedWorkOrders.isEmpty()) {
+            return;
+        }
+        boolean allTerminal = linkedWorkOrders.stream().allMatch(this::isTerminal);
+        if (!allTerminal) {
+            return;
+        }
+        RepairRequest request = repairRequestRepository.findByIdAndIsDeletedFalse(workOrder.getRepairRequestId())
+                .orElseThrow(() -> RestException.notFound("Repair request not found: " + workOrder.getRepairRequestId()));
+        if (request.getStatus() == RequestStatus.CLOSED || request.getStatus() == RequestStatus.CANCELLED) {
+            return;
+        }
+        String oldJson = auditSerializationService.toJson(request);
+        request.setStatus(RequestStatus.CLOSED);
+        request.setActualCompletionAt(Instant.now());
+        request.setCloseResult(closeResult);
+        auditBuilderService.log(
+                "repair_request",
+                request.getId().toString(),
+                AuditAction.CLOSE,
+                AuditModule.REPAIR_REQUEST,
+                "Заявка " + request.getNumber() + " закрыта после закрытия связанных нарядов",
+                oldJson,
+                request
+        );
+    }
+
+    private boolean isTerminal(WorkOrder workOrder) {
+        return workOrder.getStatus() == WorkOrderStatus.CLOSED
+                || workOrder.getStatus() == WorkOrderStatus.CANCELLED;
     }
 
     private WorkOrder getOrThrow(UUID id) {

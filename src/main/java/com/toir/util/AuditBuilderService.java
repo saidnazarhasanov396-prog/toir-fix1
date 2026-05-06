@@ -49,9 +49,9 @@ public class AuditBuilderService {
         if (value == null) {
             return null;
         }
-//        if (value instanceof String str) {
-//            return str;
-//        }
+        if (value instanceof String str) {
+            return str;
+        }
         return serializationService.toJson(value);
     }
 
