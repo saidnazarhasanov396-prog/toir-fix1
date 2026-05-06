@@ -113,14 +113,69 @@ public class PprPlanService {
     }
 
     public PprTaskDto postponeTask(UUID taskId, PostponeTaskRequest request) {
-        PprTask task = taskRepository.findByIdAndIsDeletedFalse(taskId)
-                .orElseThrow(() -> RestException.notFound("PPR task not found: " + taskId));
+        PprTask task = getTask(taskId);
         if (request.reason() == null || request.reason().isBlank()) {
             throw RestException.badRequest("Postpone reason is required");
         }
+        if (task.getStatus() == PprTaskStatus.COMPLETED || task.getStatus() == PprTaskStatus.CANCELLED) {
+            throw RestException.badRequest("Cannot postpone completed/cancelled PPR task");
+        }
+        String oldJson = auditSerializationService.toJson(task);
         task.setDueDate(request.newDueDate());
         task.setPostponeReason(request.reason());
         task.setStatus(PprTaskStatus.POSTPONED);
+        auditTask(AuditAction.UPDATE, task.getId(), oldJson, task, "Задача ППР перенесена");
+        return PprTaskDto.from(task);
+    }
+
+    public PprTaskDto approveTask(UUID taskId) {
+        PprTask task = getTask(taskId);
+        if (task.getStatus() != PprTaskStatus.PLANNED && task.getStatus() != PprTaskStatus.POSTPONED) {
+            throw RestException.badRequest("Only PLANNED/POSTPONED PPR tasks can be approved");
+        }
+        String oldJson = auditSerializationService.toJson(task);
+        task.setStatus(PprTaskStatus.APPROVED);
+        auditTask(AuditAction.APPROVE, task.getId(), oldJson, task, "Задача ППР утверждена");
+        return PprTaskDto.from(task);
+    }
+
+    public PprTaskDto startTask(UUID taskId) {
+        PprTask task = getTask(taskId);
+        if (task.getStatus() != PprTaskStatus.APPROVED && task.getStatus() != PprTaskStatus.PLANNED) {
+            throw RestException.badRequest("Only APPROVED/PLANNED PPR tasks can be started");
+        }
+        String oldJson = auditSerializationService.toJson(task);
+        task.setStatus(PprTaskStatus.IN_PROGRESS);
+        auditTask(AuditAction.UPDATE, task.getId(), oldJson, task, "Задача ППР начата");
+        return PprTaskDto.from(task);
+    }
+
+    public PprTaskDto completeTask(UUID taskId, Double actualLaborHours) {
+        PprTask task = getTask(taskId);
+        if (task.getStatus() != PprTaskStatus.IN_PROGRESS) {
+            throw RestException.badRequest("Only IN_PROGRESS PPR tasks can be completed");
+        }
+        if (actualLaborHours != null && actualLaborHours < 0) {
+            throw RestException.badRequest("Actual labor hours cannot be negative");
+        }
+        String oldJson = auditSerializationService.toJson(task);
+        task.setStatus(PprTaskStatus.COMPLETED);
+        task.setActualLaborHours(actualLaborHours);
+        auditTask(AuditAction.UPDATE, task.getId(), oldJson, task, "Задача ППР завершена");
+        return PprTaskDto.from(task);
+    }
+
+    public PprTaskDto cancelTask(UUID taskId, String reason) {
+        PprTask task = getTask(taskId);
+        if (task.getStatus() == PprTaskStatus.COMPLETED || task.getStatus() == PprTaskStatus.CANCELLED) {
+            throw RestException.badRequest("Cannot cancel completed/cancelled PPR task");
+        }
+        String oldJson = auditSerializationService.toJson(task);
+        task.setStatus(PprTaskStatus.CANCELLED);
+        if (reason != null && !reason.isBlank()) {
+            task.setPostponeReason(reason);
+        }
+        auditTask(AuditAction.CANCEL, task.getId(), oldJson, task, "Задача ППР отменена");
         return PprTaskDto.from(task);
     }
 
@@ -132,6 +187,11 @@ public class PprPlanService {
     private PprPlan getPlan(UUID id) {
         return planRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("PPR plan not found: " + id));
+    }
+
+    private PprTask getTask(UUID id) {
+        return taskRepository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("PPR task not found: " + id));
     }
 
     private String nextCode() {
@@ -160,6 +220,18 @@ public class PprPlanService {
                 auditMessage(action),
                 oldJson,
                 newJson
+        );
+    }
+
+    private void auditTask(AuditAction action, UUID id, String oldJson, PprTask current, String message) {
+        auditBuilderService.log(
+                "ppr_task",
+                id != null ? id.toString() : null,
+                action,
+                AuditModule.PPR_TASK,
+                message,
+                oldJson,
+                current
         );
     }
 
