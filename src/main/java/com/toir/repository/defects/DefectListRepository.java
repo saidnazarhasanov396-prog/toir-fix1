@@ -55,6 +55,16 @@ public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_lists WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
+    boolean existsByCode(String code);
+
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM defect_lists
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
+
     @Query(value = "SELECT * FROM defect_lists WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<DefectList> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 

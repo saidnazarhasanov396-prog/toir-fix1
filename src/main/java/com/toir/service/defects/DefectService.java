@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -64,10 +65,8 @@ public class DefectService {
 
     @Transactional
     public DefectResponse create(DefectRequest request) {
-        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Defect code already exists: " + request.code());
-        }
         Defect entity = new Defect();
+        entity.setCode(nextCode());
         apply(entity, request);
         Defect saved = repository.save(entity);
 
@@ -147,7 +146,6 @@ public class DefectService {
     }
 
     private void apply(Defect entity, DefectRequest request) {
-        entity.setCode(request.code());
         entity.setTitle(request.title());
         entity.setDescription(request.description());
         entity.setEquipmentId(request.equipmentId());
@@ -170,5 +168,21 @@ public class DefectService {
         return equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .map(Equipment::getName)
                 .orElse(null);
+    }
+
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "DEF-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("DEF", year, sequence);
+        while (repository.existsByCode(code)) {
+            sequence++;
+            code = formatCode("DEF", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 }
