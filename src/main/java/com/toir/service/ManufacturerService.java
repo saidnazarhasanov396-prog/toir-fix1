@@ -1,13 +1,12 @@
 package com.toir.service;
+
+import com.toir.dto.manufacturer.ManufacturerDto;
 import com.toir.entity.Manufacturer;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.ManufacturerRepository;
-
 import com.toir.exception.RestException;
-import com.toir.dto.manufacturer.ManufacturerDto;
+import com.toir.repository.ManufacturerRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,13 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class ManufacturerService {
 
     private final ManufacturerRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<ManufacturerDto> findAll(String search) {
@@ -35,29 +32,63 @@ public class ManufacturerService {
         return ManufacturerDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public ManufacturerDto create(ManufacturerDto request) {
         Manufacturer entity = new Manufacturer();
         entity.setCode(nextCode());
         apply(entity, request);
         Manufacturer saved = repository.save(entity);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "manufacturer",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.MANUFACTURER,
+                "Производитель создан",
+                null,
+                saved
+        );
+
         return ManufacturerDto.from(saved);
     }
 
+    @Transactional
     public ManufacturerDto update(UUID id, ManufacturerDto request) {
         Manufacturer entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         apply(entity, request);
-        audit(AuditAction.UPDATE, entity.getId(), oldJson, entity);
+
+        Manufacturer saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "manufacturer",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.MANUFACTURER,
+                "Производитель обновлен",
+                entity,
+                saved
+        );
+
         return ManufacturerDto.from(entity);
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         Manufacturer saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "manufacturer",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.MANUFACTURER,
+                "Производитель удален",
+                saved,
+                null
+
+        );
+
     }
 
     private Manufacturer getOrThrow(UUID id) {
@@ -88,25 +119,4 @@ public class ManufacturerService {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 
-    private void audit(AuditAction action, UUID id, String oldJson, Manufacturer current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "manufacturer",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.MANUFACTURER,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Производитель создан";
-            case UPDATE -> "Производитель обновлен";
-            case DELETE -> "Производитель удален";
-            default -> "Действие выполнено над производителем";
-        };
-    }
 }

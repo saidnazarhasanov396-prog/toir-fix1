@@ -1,19 +1,18 @@
 package com.toir.service.defects;
+
+import com.toir.dto.defect.DefectDto;
+import com.toir.dto.defect.DefectRequest;
 import com.toir.dto.defect.DefectResponse;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.DefectStatus;
+import com.toir.exception.RestException;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
-
-import com.toir.exception.RestException;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
-import com.toir.dto.defect.DefectDto;
-import com.toir.dto.defect.DefectRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -24,14 +23,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class DefectService {
 
     private final DefectRepository repository;
     private final EquipmentRepository equipmentRepository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<DefectResponse> findAll() {
@@ -65,6 +62,7 @@ public class DefectService {
                 .toList();
     }
 
+    @Transactional
     public DefectResponse create(DefectRequest request) {
         if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Defect code already exists: " + request.code());
@@ -72,41 +70,75 @@ public class DefectService {
         Defect entity = new Defect();
         apply(entity, request);
         Defect saved = repository.save(entity);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "defect",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.DEFECT,
+                "Дефект создан",
+                null,
+                saved
+        );
+
         return toResponse(DefectDto.from(saved));
     }
 
+    @Transactional
     public DefectResponse update(UUID id, DefectRequest request) {
         Defect entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         apply(entity, request);
-        audit(AuditAction.UPDATE, entity.getId(), oldJson, entity);
+
+        Defect save = repository.save(entity);
+
+        auditBuilderService.log(
+                "defect",
+                id != null ? id.toString() : null,
+                AuditAction.UPDATE,
+                AuditModule.DEFECT,
+                "Дефект обновлен",
+                entity,
+                save
+        );
+
         return toResponse(DefectDto.from(entity));
     }
 
+    @Transactional
     public DefectResponse resolve(UUID id) {
         Defect entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setStatus(DefectStatus.RESOLVED);
         entity.setResolvedAt(Instant.now());
+
+        Defect saved = repository.save(entity);
+
         auditBuilderService.log(
                 "defect",
-                entity.getId().toString(),
+                saved.getId().toString(),
                 AuditAction.UPDATE,
                 AuditModule.DEFECT,
                 "Дефект устранен",
-                oldJson,
-                entity
+                entity,
+                saved
         );
-        return toResponse(DefectDto.from(entity));
+        return toResponse(DefectDto.from(saved));
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         Defect saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "defect",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.DEFECT,
+                "Дефект удален",
+                saved,
+                null
+        );
     }
 
     private Defect getOrThrow(UUID id) {
@@ -138,27 +170,5 @@ public class DefectService {
         return equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .map(Equipment::getName)
                 .orElse(null);
-    }
-
-    private void audit(AuditAction action, UUID id, String oldJson, Defect current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "defect",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.DEFECT,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Дефект создан";
-            case UPDATE -> "Дефект обновлен";
-            case DELETE -> "Дефект удален";
-            default -> "Действие выполнено над дефектом";
-        };
     }
 }

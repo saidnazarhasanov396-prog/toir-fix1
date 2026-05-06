@@ -1,19 +1,18 @@
 package com.toir.service.maintanance;
+
+import com.toir.dto.maintenancetemplate.MaintenanceOperationDto;
+import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
+import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
 import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.MaintenanceKind;
+import com.toir.exception.RestException;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
-
-import com.toir.exception.RestException;
-import com.toir.dto.maintenancetemplate.MaintenanceOperationDto;
-import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
-import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
 import com.toir.service.SparePartService;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +21,6 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class MaintenanceTemplateService {
 
@@ -30,7 +28,6 @@ public class MaintenanceTemplateService {
     private final MaintenanceOperationRepository operationRepository;
     private final SparePartService sparePartService;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -45,6 +42,7 @@ public class MaintenanceTemplateService {
         return MaintenanceTemplateDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public MaintenanceTemplateDto create(MaintenanceTemplateRequest r) {
         if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Template code already exists: " + r.code());
@@ -52,24 +50,55 @@ public class MaintenanceTemplateService {
         MaintenanceTemplate t = new MaintenanceTemplate();
         apply(t, r);
         MaintenanceTemplate saved = repository.save(t);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "maintenance_template",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.MAINTENANCE_TEMPLATE,
+                "Шаблон обслуживания создан",
+                null,
+                saved);
+
         return MaintenanceTemplateDto.from(saved);
     }
 
+    @Transactional
     public MaintenanceTemplateDto update(UUID id, MaintenanceTemplateRequest r) {
         MaintenanceTemplate t = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(t);
         apply(t, r);
-        audit(AuditAction.UPDATE, t.getId(), oldJson, t);
+
+        MaintenanceTemplate saved = repository.save(t);
+
+        auditBuilderService.log(
+                "maintenance_template",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.MAINTENANCE_TEMPLATE,
+                "Шаблон обслуживания обновлен",
+                t,
+                saved);
+
         return MaintenanceTemplateDto.from(t);
     }
 
+    @Transactional
     public void delete(UUID id) { var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         MaintenanceTemplate saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null); }
 
+        auditBuilderService.log(
+                "maintenance_template",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.MAINTENANCE_TEMPLATE,
+                "Шаблон обслуживания удален",
+                saved,
+                null);
+
+    }
+
+    @Transactional
     public MaintenanceOperationDto addOperation(UUID templateId, MaintenanceOperationDto r) {
         MaintenanceTemplate t = getOrThrow(templateId);
         MaintenanceOperation op = new MaintenanceOperation();
@@ -92,6 +121,7 @@ public class MaintenanceTemplateService {
         return MaintenanceOperationDto.from(operationRepository.save(op));
     }
 
+    @Transactional
     public void removeOperation(UUID operationId) {
         operationRepository.findByIdAndIsDeletedFalse(operationId).ifPresent(entity -> {
             entity.setDeleted(true);
@@ -112,20 +142,5 @@ public class MaintenanceTemplateService {
         t.setMaintenanceKind(r.maintenanceKind());
         t.setNormativeLaborHours(r.normativeLaborHours());
         if (r.active() != null) t.setActive(r.active());
-    }
-
-    private void audit(AuditAction action, UUID id, String oldJson, MaintenanceTemplate current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log("maintenance_template", id != null ? id.toString() : null, action,
-                AuditModule.MAINTENANCE_TEMPLATE, auditMessage(action), oldJson, newJson);
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Шаблон обслуживания создан";
-            case UPDATE -> "Шаблон обслуживания обновлен";
-            case DELETE -> "Шаблон обслуживания удален";
-            default -> "Действие выполнено над шаблоном обслуживания";
-        };
     }
 }

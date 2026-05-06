@@ -1,17 +1,16 @@
 package com.toir.service;
+
+import com.toir.dto.sparepart.SparePartDto;
+import com.toir.dto.sparepart.SparePartRequest;
 import com.toir.entity.SparePart;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.InventoryItemKind;
-import com.toir.repository.SparePartRepository;
-
 import com.toir.exception.RestException;
-import com.toir.dto.sparepart.SparePartDto;
-import com.toir.dto.sparepart.SparePartRequest;
-import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -24,14 +23,12 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class SparePartService {
 
     private final SparePartRepository repository;
     private final WarehouseStockRepository stockRepository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public Page<SparePartDto> findAll(Integer pageSize, Integer page, String itemType, String search) {
@@ -83,26 +80,54 @@ public class SparePartService {
         SparePart entity = new SparePart();
         apply(entity, request);
         SparePart saved = repository.save(entity);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "spare_part",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.SPARE_PART,
+                "Запасная часть создана",
+                null,
+                saved
+        );
+
         return SparePartDto.from(saved);
     }
 
     @Transactional
     public SparePartDto update(UUID id, SparePartRequest request) {
         SparePart entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         apply(entity, request);
-        audit(AuditAction.UPDATE, entity.getId(), oldJson, entity);
+
+        SparePart saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "spare_part",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.SPARE_PART,
+                "Запасная часть обновлена",
+                entity,
+                saved
+        );
         return SparePartDto.from(entity);
     }
 
     @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         SparePart saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "spare_part",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.SPARE_PART,
+                "Запасная часть удалена",
+                saved,
+                null
+        );
     }
 
     SparePart getOrThrow(UUID id) {
@@ -126,27 +151,5 @@ public class SparePartService {
             return null;
         }
         return "%" + search.trim().toLowerCase() + "%";
-    }
-
-    private void audit(AuditAction action, UUID id, String oldJson, SparePart current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "spare_part",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.SPARE_PART,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Запасная часть создана";
-            case UPDATE -> "Запасная часть обновлена";
-            case DELETE -> "Запасная часть удалена";
-            default -> "Действие выполнено над запасной частью";
-        };
     }
 }

@@ -7,7 +7,6 @@ import com.toir.repository.contarctor.ContractorContractRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.contractorcontract.ContractorContractDto;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,19 +15,18 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class ContractorContractService {
 
     private final ContractorContractRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<ContractorContractDto> findByContractor(UUID contractorId) {
         return repository.findAllByContractorIdAndIsDeletedFalse(contractorId).stream().map(ContractorContractDto::from).toList();
     }
 
+    @Transactional
     public ContractorContractDto create(ContractorContractDto r) {
         if (repository.existsByNumberAndIsDeletedFalse(r.number())) {
             throw RestException.conflict("Contract number already exists: " + r.number());
@@ -36,24 +34,53 @@ public class ContractorContractService {
         ContractorContract c = new ContractorContract();
         apply(c, r);
         ContractorContract saved = repository.save(c);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "contractor_contract",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.CONTRACTOR_CONTRACT,
+                "Договор подрядчика создан" ,
+                null,
+                saved
+        );
         return ContractorContractDto.from(saved);
     }
 
+    @Transactional
     public ContractorContractDto update(UUID id, ContractorContractDto r) {
         ContractorContract c = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(c);
         apply(c, r);
-        audit(AuditAction.UPDATE, c.getId(), oldJson, c);
+
+        ContractorContract save = repository.save(c);
+        auditBuilderService.log(
+                "contractor_contract",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.CONTRACTOR_CONTRACT,
+                "Договор подрядчика обновлен" ,
+                c,
+                save
+        );
+
         return ContractorContractDto.from(c);
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         ContractorContract saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "contractor_contract",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.CONTRACTOR_CONTRACT,
+                "Договор подрядчика удален" ,
+                entity,
+                null
+        );
     }
 
     private ContractorContract getOrThrow(UUID id) {
@@ -69,27 +96,5 @@ public class ContractorContractService {
         c.setEndDate(r.endDate());
         c.setAmount(r.amount());
         if (r.status() != null) c.setStatus(r.status());
-    }
-
-    private void audit(AuditAction action, UUID id, String oldJson, ContractorContract current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "contractor_contract",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.CONTRACTOR_CONTRACT,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Договор подрядчика создан";
-            case UPDATE -> "Договор подрядчика обновлен";
-            case DELETE -> "Договор подрядчика удален";
-            default -> "Действие выполнено над договором подрядчика";
-        };
     }
 }

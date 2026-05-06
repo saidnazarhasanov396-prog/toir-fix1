@@ -1,21 +1,20 @@
 package com.toir.service;
-import com.toir.dto.rcm.EquipmentRiskScore;
 
+import com.toir.dto.rcm.EquipmentRiskScore;
+import com.toir.entity.PprPlan;
+import com.toir.entity.PprTask;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
-import com.toir.entity.equipment.Equipment;
-import com.toir.repository.equipment.EquipmentRepository;
-import com.toir.entity.maintenance.MaintenanceRegulation;
-import com.toir.repository.maintenance.MaintenanceRegulationRepository;
-import com.toir.entity.PprPlan;
 import com.toir.repository.PprPlanRepository;
-import com.toir.entity.PprTask;
 import com.toir.repository.PprTaskRepository;
-import com.toir.enums.PprTaskStatus;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +31,6 @@ import java.util.UUID;
  * не указан — используется первый план по текущему месяцу.
  */
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class RcmAutoPlannerService {
 
@@ -42,10 +40,10 @@ public class RcmAutoPlannerService {
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
 
+    @Transactional
     public AutoPlanResult generate(int riskThreshold, UUID planId) {
         List<EquipmentRiskScore> scores = rcmService.computeAll().stream()
                 .filter(s -> s.riskScore() >= riskThreshold)
@@ -71,7 +69,7 @@ public class RcmAutoPlannerService {
                 skipped++;
                 continue;
             }
-            MaintenanceRegulation reg = regs.get(0);
+            MaintenanceRegulation reg = regs.getFirst();
             String code = "RCM-" + eq.getCode() + "-" + System.currentTimeMillis() + "-" + matched;
             LocalDateTime now = LocalDateTime.now();
             PprTask task = new PprTask();
@@ -87,7 +85,17 @@ public class RcmAutoPlannerService {
             task.setPriority(priorityFor(s));
             task.setPlannedLaborHours(reg.getNormativeLaborHours());
             PprTask saved = taskRepository.save(task);
-            auditTask(AuditAction.CREATE, saved.getId(), null, saved);
+
+            auditBuilderService.log(
+                    "ppr_task",
+                    saved.getId().toString(),
+                    AuditAction.CREATE,
+                    AuditModule.PPR_TASK,
+                    "Задача ППР создана",
+                    null,
+                    saved
+            );
+
             matched++;
             created.add(code);
         }
@@ -110,31 +118,9 @@ public class RcmAutoPlannerService {
         if (plans.isEmpty()) {
             List<PprPlan> any = planRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
             if (any.isEmpty()) throw RestException.badRequest("No PprPlan exists — create one first");
-            return any.get(0);
+            return any.getFirst();
         }
-        return plans.get(0);
-    }
-
-    private void auditTask(AuditAction action, UUID id, String oldJson, PprTask current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "ppr_task",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.PPR_TASK,
-                auditTaskMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditTaskMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Задача ППР создана";
-            case UPDATE -> "Задача ППР обновлена";
-            case DELETE -> "Задача ППР удалена";
-            default -> "Действие выполнено над задачей ППР";
-        };
+        return plans.getFirst();
     }
 
     public record AutoPlanResult(int candidates, int tasksCreated, int skipped, List<String> createdCodes) {}

@@ -1,19 +1,15 @@
 package com.toir.service;
+
+import com.toir.dto.pprplanning.*;
+import com.toir.entity.PprPlan;
+import com.toir.entity.PprTask;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.PlanStatus;
-import com.toir.entity.PprPlan;
-import com.toir.entity.PprTask;
 import com.toir.enums.PprTaskStatus;
-import com.toir.dto.pprplanning.PostponeTaskRequest;
-import com.toir.dto.pprplanning.PprPlanDto;
-import com.toir.dto.pprplanning.PprPlanRequest;
-import com.toir.dto.pprplanning.PprTaskDto;
-import com.toir.dto.pprplanning.PprTaskRequest;
+import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
-
-import com.toir.exception.RestException;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +41,7 @@ public class PprPlanService {
         return PprPlanDto.from(getPlan(id));
     }
 
+    @Transactional
     public PprPlanDto create(PprPlanRequest request) {
         PprPlan plan = new PprPlan();
         plan.setCode(nextCode());
@@ -55,7 +52,17 @@ public class PprPlanService {
         plan.setCreatedById(request.createdById());
         plan.setNotes(request.notes());
         PprPlan saved = planRepository.save(plan);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "ppr_plan",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.PPR_PLAN,
+                "ППР план создан",
+                null,
+                saved
+        );
+
         return PprPlanDto.from(saved);
     }
 
@@ -64,25 +71,43 @@ public class PprPlanService {
         if (plan.getStatus() != PlanStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT plans can be edited");
         }
-        String oldJson = auditSerializationService.toJson(plan);
         plan.setName(request.name());
         plan.setYear(request.year());
         plan.setMonth(request.month());
         plan.setDepartmentId(request.departmentId());
         plan.setNotes(request.notes());
-        audit(AuditAction.UPDATE, plan.getId(), oldJson, plan);
+
+        PprPlan saved = planRepository.save(plan);
+        auditBuilderService.log(
+                "ppr_plan",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PPR_PLAN,
+                "ППР план обновлен",
+                plan,
+                saved
+        );
         return PprPlanDto.from(plan);
     }
 
+    @Transactional
     public void delete(UUID id) {
         PprPlan plan = getPlan(id);
         if (plan.getStatus() != PlanStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT plans can be deleted");
         }
-        String oldJson = auditSerializationService.toJson(plan);
         plan.setDeleted(true);
         PprPlan saved = planRepository.save(plan);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "ppr_plan",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.PPR_PLAN,
+                "ППР план удален",
+                saved,
+                null
+        );
     }
 
     public PprPlanDto approve(UUID planId, UUID approverId) {
@@ -120,11 +145,21 @@ public class PprPlanService {
         if (task.getStatus() == PprTaskStatus.COMPLETED || task.getStatus() == PprTaskStatus.CANCELLED) {
             throw RestException.badRequest("Cannot postpone completed/cancelled PPR task");
         }
-        String oldJson = auditSerializationService.toJson(task);
         task.setDueDate(request.newDueDate());
         task.setPostponeReason(request.reason());
         task.setStatus(PprTaskStatus.POSTPONED);
-        auditTask(AuditAction.UPDATE, task.getId(), oldJson, task, "Задача ППР перенесена");
+
+        PprTask saved = taskRepository.save(task);
+        auditBuilderService.log(
+                "ppr_plan",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PPR_PLAN,
+                "Задача ППР перенесена",
+                task,
+                saved
+        );
+
         return PprTaskDto.from(task);
     }
 
@@ -133,9 +168,19 @@ public class PprPlanService {
         if (task.getStatus() != PprTaskStatus.PLANNED && task.getStatus() != PprTaskStatus.POSTPONED) {
             throw RestException.badRequest("Only PLANNED/POSTPONED PPR tasks can be approved");
         }
-        String oldJson = auditSerializationService.toJson(task);
         task.setStatus(PprTaskStatus.APPROVED);
-        auditTask(AuditAction.APPROVE, task.getId(), oldJson, task, "Задача ППР утверждена");
+
+        PprTask saved = taskRepository.save(task);
+        auditBuilderService.log(
+                "ppr_plan",
+                saved.getId().toString(),
+                AuditAction.APPROVE,
+                AuditModule.PPR_PLAN,
+                "Задача ППР утверждена",
+                task,
+                saved
+        );
+
         return PprTaskDto.from(task);
     }
 
@@ -144,9 +189,19 @@ public class PprPlanService {
         if (task.getStatus() != PprTaskStatus.APPROVED && task.getStatus() != PprTaskStatus.PLANNED) {
             throw RestException.badRequest("Only APPROVED/PLANNED PPR tasks can be started");
         }
-        String oldJson = auditSerializationService.toJson(task);
         task.setStatus(PprTaskStatus.IN_PROGRESS);
-        auditTask(AuditAction.UPDATE, task.getId(), oldJson, task, "Задача ППР начата");
+
+        PprTask saved = taskRepository.save(task);
+        auditBuilderService.log(
+                "ppr_plan",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PPR_PLAN,
+                "Задача ППР начата",
+                task,
+                saved
+        );
+
         return PprTaskDto.from(task);
     }
 
@@ -158,10 +213,21 @@ public class PprPlanService {
         if (actualLaborHours != null && actualLaborHours < 0) {
             throw RestException.badRequest("Actual labor hours cannot be negative");
         }
-        String oldJson = auditSerializationService.toJson(task);
         task.setStatus(PprTaskStatus.COMPLETED);
         task.setActualLaborHours(actualLaborHours);
-        auditTask(AuditAction.UPDATE, task.getId(), oldJson, task, "Задача ППР завершена");
+
+        PprTask saved = taskRepository.save(task);
+
+        auditBuilderService.log(
+                "ppr_plan",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PPR_PLAN,
+                "Задача ППР завершена",
+                task,
+                saved
+        );
+
         return PprTaskDto.from(task);
     }
 
@@ -170,12 +236,22 @@ public class PprPlanService {
         if (task.getStatus() == PprTaskStatus.COMPLETED || task.getStatus() == PprTaskStatus.CANCELLED) {
             throw RestException.badRequest("Cannot cancel completed/cancelled PPR task");
         }
-        String oldJson = auditSerializationService.toJson(task);
         task.setStatus(PprTaskStatus.CANCELLED);
         if (reason != null && !reason.isBlank()) {
             task.setPostponeReason(reason);
         }
-        auditTask(AuditAction.CANCEL, task.getId(), oldJson, task, "Задача ППР отменена");
+
+        PprTask saved = taskRepository.save(task);
+
+        auditBuilderService.log(
+                "ppr_plan",
+                saved.getId().toString(),
+                AuditAction.CANCEL,
+                AuditModule.PPR_PLAN,
+                "Задача ППР отменена",
+                task,
+                saved
+        );
         return PprTaskDto.from(task);
     }
 
@@ -210,37 +286,4 @@ public class PprPlanService {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 
-    private void audit(AuditAction action, UUID id, String oldJson, PprPlan current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "ppr_plan",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.PPR_PLAN,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private void auditTask(AuditAction action, UUID id, String oldJson, PprTask current, String message) {
-        auditBuilderService.log(
-                "ppr_task",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.PPR_TASK,
-                message,
-                oldJson,
-                current
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "ППР план создан";
-            case UPDATE -> "ППР план обновлен";
-            case DELETE -> "ППР план удален";
-            default -> "Действие выполнено над ППР планом";
-        };
-    }
 }

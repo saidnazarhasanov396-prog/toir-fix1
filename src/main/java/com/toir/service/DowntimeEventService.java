@@ -1,13 +1,12 @@
 package com.toir.service;
+
+import com.toir.dto.downtime.DowntimeEventDto;
 import com.toir.entity.DowntimeEvent;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.DowntimeEventRepository;
-
 import com.toir.exception.RestException;
-import com.toir.dto.downtime.DowntimeEventDto;
+import com.toir.repository.DowntimeEventRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +23,6 @@ public class DowntimeEventService {
 
     private final DowntimeEventRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -42,7 +40,19 @@ public class DowntimeEventService {
         e.setType(r.type());
         e.setDescription(r.description());
         DowntimeEvent saved = repository.save(e);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+
+        auditBuilderService.log(
+                "downtime_event",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.DOWNTIME_EVENT,
+                "Событие простоя создано",
+                null,
+                saved
+        );
+
+
         return DowntimeEventDto.from(saved);
     }
 
@@ -53,32 +63,21 @@ public class DowntimeEventService {
         if (finalEnd.isBefore(e.getStartAt())) {
             throw RestException.badRequest("End must be after start");
         }
-        String oldJson = auditSerializationService.toJson(e);
         e.setEndAt(finalEnd);
         e.setDurationMinutes((int) Duration.between(e.getStartAt(), finalEnd).toMinutes());
-        audit(AuditAction.UPDATE, e.getId(), oldJson, e);
-        return DowntimeEventDto.from(e);
-    }
 
-    private void audit(AuditAction action, UUID id, String oldJson, DowntimeEvent current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        DowntimeEvent saved = repository.save(e);
+
         auditBuilderService.log(
                 "downtime_event",
-                id != null ? id.toString() : null,
-                action,
+                saved.getId().toString(),
+                AuditAction.UPDATE,
                 AuditModule.DOWNTIME_EVENT,
-                auditMessage(action),
-                oldJson,
-                newJson
+                "Событие простоя обновлено",
+                e,
+                saved
         );
-    }
 
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Событие простоя создано";
-            case UPDATE -> "Событие простоя обновлено";
-            case DELETE -> "Событие простоя удалено";
-            default -> "Действие выполнено над событием простоя";
-        };
+        return DowntimeEventDto.from(e);
     }
 }

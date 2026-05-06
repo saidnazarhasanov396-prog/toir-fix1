@@ -1,18 +1,17 @@
 package com.toir.service;
-import com.toir.entity.StockMovement;
-import com.toir.enums.AuditAction;
-import com.toir.enums.AuditModule;
-import com.toir.repository.StockMovementRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementRequest;
-import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.entity.SparePart;
-import com.toir.repository.WarehouseStockRepository;
+import com.toir.entity.StockMovement;
+import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.StockMovementRepository;
+import com.toir.repository.WarehouseStockRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class StockMovementService {
 
@@ -28,7 +26,6 @@ public class StockMovementService {
     private final WarehouseStockRepository stockRepository;
     private final SparePartRepository sparePartRepository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -36,6 +33,7 @@ public class StockMovementService {
         return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(StockMovementDto::from).toList();
     }
 
+    @Transactional
     public StockMovementDto create(StockMovementRequest request) {
         WarehouseStock stock = stockRepository
                 .findByWarehouseIdAndSparePartIdAndIsDeletedFalse(request.warehouseId(), request.sparePartId())
@@ -87,29 +85,17 @@ public class StockMovementService {
         movement.setCreatedById(request.createdById());
         movement.setNotes(request.notes());
         StockMovement saved = repository.save(movement);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
-        return StockMovementDto.from(saved);
-    }
 
-    private void audit(AuditAction action, java.util.UUID id, String oldJson, StockMovement current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
         auditBuilderService.log(
                 "stock_movement",
-                id != null ? id.toString() : null,
-                action,
+                saved.getId().toString(),
+                AuditAction.CREATE,
                 AuditModule.STOCK_MOVEMENT,
-                auditMessage(action),
-                oldJson,
-                newJson
+                "Движение склада создано",
+                null,
+                saved
         );
-    }
 
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Движение склада создано";
-            case UPDATE -> "Движение склада обновлено";
-            case DELETE -> "Движение склада удалено";
-            default -> "Действие выполнено над движением склада";
-        };
+        return StockMovementDto.from(saved);
     }
 }

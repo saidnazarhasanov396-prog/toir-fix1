@@ -1,14 +1,13 @@
 package com.toir.service;
+
+import com.toir.dto.integration.IntegrationEndpointDto;
 import com.toir.entity.IntegrationEndpoint;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.IntegrationSyncStatus;
-import com.toir.repository.IntegrationEndpointRepository;
-
 import com.toir.exception.RestException;
-import com.toir.dto.integration.IntegrationEndpointDto;
+import com.toir.repository.IntegrationEndpointRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,13 +17,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class IntegrationEndpointService {
 
     private final IntegrationEndpointRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -32,6 +29,7 @@ public class IntegrationEndpointService {
         return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(IntegrationEndpointDto::from).toList();
     }
 
+    @Transactional
     public IntegrationEndpointDto create(IntegrationEndpointDto r) {
         if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Endpoint code already exists: " + r.code());
@@ -39,18 +37,38 @@ public class IntegrationEndpointService {
         IntegrationEndpoint e = new IntegrationEndpoint();
         apply(e, r);
         IntegrationEndpoint saved = repository.save(e);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "integration_endpoint",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.INTEGRATION_ENDPOINT,
+                "Интеграционная точка создана",
+                null,
+                saved);
+
         return IntegrationEndpointDto.from(saved);
     }
 
+    @Transactional
     public IntegrationEndpointDto update(UUID id, IntegrationEndpointDto r) {
         IntegrationEndpoint e = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(e);
         apply(e, r);
-        audit(AuditAction.UPDATE, e.getId(), oldJson, e);
+
+        IntegrationEndpoint saved = repository.save(e);
+        auditBuilderService.log(
+                "integration_endpoint",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.INTEGRATION_ENDPOINT,
+                "Интеграционная точка обновлена",
+                e,
+                saved);
+
         return IntegrationEndpointDto.from(e);
     }
 
+    @Transactional
     public IntegrationEndpointDto recordSync(UUID id, IntegrationSyncStatus status) {
         IntegrationEndpoint e = getOrThrow(id);
         e.setLastSyncAt(Instant.now());
@@ -63,11 +81,21 @@ public class IntegrationEndpointService {
         return IntegrationEndpointDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public void delete(UUID id) { var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         IntegrationEndpoint saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null); }
+
+        auditBuilderService.log(
+                "integration_endpoint",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.INTEGRATION_ENDPOINT,
+                "Интеграционная точка удалена",
+                saved,
+                null);
+
+    }
 
     private IntegrationEndpoint getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -95,18 +123,5 @@ public class IntegrationEndpointService {
         if (r.active() != null) e.setActive(r.active());
     }
 
-    private void audit(AuditAction action, UUID id, String oldJson, IntegrationEndpoint current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log("integration_endpoint", id != null ? id.toString() : null, action,
-                AuditModule.INTEGRATION_ENDPOINT, auditMessage(action), oldJson, newJson);
-    }
 
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Интеграционная точка создана";
-            case UPDATE -> "Интеграционная точка обновлена";
-            case DELETE -> "Интеграционная точка удалена";
-            default -> "Действие выполнено над интеграционной точкой";
-        };
-    }
 }

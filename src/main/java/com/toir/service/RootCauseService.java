@@ -1,13 +1,12 @@
 package com.toir.service;
+
+import com.toir.dto.rootcause.RootCauseDto;
 import com.toir.entity.RootCause;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.RootCauseRepository;
-
 import com.toir.exception.RestException;
-import com.toir.dto.rootcause.RootCauseDto;
+import com.toir.repository.RootCauseRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,13 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class RootCauseService {
 
     private final RootCauseRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -31,28 +28,64 @@ public class RootCauseService {
         return repository.findAllBySearch(search).stream().map(RootCauseDto::from).toList();
     }
 
+    @Transactional
     public RootCauseDto create(RootCauseDto r) {
         RootCause e = new RootCause();
         e.setCode(nextCode());
-        e.setName(r.name()); e.setDescription(r.description());
+        e.setName(r.name());
+        e.setDescription(r.description());
         RootCause saved = repository.save(e);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "root_cause",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.ROOT_CAUSE,
+                "Корневая причина создана",
+                null,
+                saved
+        );
+
         return RootCauseDto.from(saved);
     }
 
+    @Transactional
     public RootCauseDto update(UUID id, RootCauseDto r) {
         RootCause e = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(e);
-        e.setName(r.name()); e.setDescription(r.description());
-        audit(AuditAction.UPDATE, e.getId(), oldJson, e);
+        e.setName(r.name());
+        e.setDescription(r.description());
+
+        RootCause saved = repository.save(e);
+        auditBuilderService.log(
+                "root_cause",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.ROOT_CAUSE,
+                "Корневая причина обновлена",
+                e,
+                saved
+        );
+
         return RootCauseDto.from(e);
     }
 
-    public void delete(UUID id) { var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
+    @Transactional
+    public void delete(UUID id) {
+        var entity = getOrThrow(id);
         entity.setDeleted(true);
         RootCause saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null); }
+
+        auditBuilderService.log(
+                "root_cause",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.ROOT_CAUSE,
+                "Корневая причина удалена",
+                saved,
+                null
+        );
+
+    }
 
     private RootCause getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -73,27 +106,5 @@ public class RootCauseService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
-    }
-
-    private void audit(AuditAction action, UUID id, String oldJson, RootCause current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "root_cause",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.ROOT_CAUSE,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Корневая причина создана";
-            case UPDATE -> "Корневая причина обновлена";
-            case DELETE -> "Корневая причина удалена";
-            default -> "Действие выполнено над корневой причиной";
-        };
     }
 }

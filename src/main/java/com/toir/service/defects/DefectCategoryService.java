@@ -1,13 +1,12 @@
 package com.toir.service.defects;
+
+import com.toir.dto.defectcategory.DefectCategoryDto;
 import com.toir.entity.defects.DefectCategory;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.defects.DefectCategoryRepository;
-
 import com.toir.exception.RestException;
-import com.toir.dto.defectcategory.DefectCategoryDto;
+import com.toir.repository.defects.DefectCategoryRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,13 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class DefectCategoryService {
 
     private final DefectCategoryRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -31,30 +28,66 @@ public class DefectCategoryService {
         return repository.findAll(search).stream().map(DefectCategoryDto::from).toList();
     }
 
+    @Transactional
     public DefectCategoryDto create(DefectCategoryDto r) {
         DefectCategory e = new DefectCategory();
         e.setCode(nextCode());
         e.setName(r.name());
         e.setDescription(r.description());
         DefectCategory saved = repository.save(e);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+
+        auditBuilderService.log(
+                "defect_category",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.DEFECT_CATEGORY,
+                "Категория дефекта создана",
+                null,
+                saved
+        );
+
         return DefectCategoryDto.from(saved);
     }
 
+    @Transactional
     public DefectCategoryDto update(UUID id, DefectCategoryDto r) {
         DefectCategory e = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(e);
         e.setName(r.name());
         e.setDescription(r.description());
-        audit(AuditAction.UPDATE, e.getId(), oldJson, e);
+        DefectCategory save = repository.save(e);
+
+
+        auditBuilderService.log(
+                "defect_category",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.DEFECT_CATEGORY,
+                "Категория дефекта обновлена",
+                e,
+                save
+        );
+
         return DefectCategoryDto.from(e);
     }
 
-    public void delete(UUID id) { var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
+    @Transactional
+    public void delete(UUID id) {
+        var entity = getOrThrow(id);
         entity.setDeleted(true);
         DefectCategory saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null); }
+
+        auditBuilderService.log(
+                "defect_category",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.DEFECT_CATEGORY,
+                "Категория дефекта удалена",
+                entity,
+                null
+        );
+
+    }
 
     private DefectCategory getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -77,25 +110,4 @@ public class DefectCategoryService {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 
-    private void audit(AuditAction action, UUID id, String oldJson, DefectCategory current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "defect_category",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.DEFECT_CATEGORY,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Категория дефекта создана";
-            case UPDATE -> "Категория дефекта обновлена";
-            case DELETE -> "Категория дефекта удалена";
-            default -> "Действие выполнено над категорией дефекта";
-        };
-    }
 }

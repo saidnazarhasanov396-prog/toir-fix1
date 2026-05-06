@@ -17,13 +17,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class DefectSeverityService {
 
     private final DefectSeverityRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -31,28 +29,61 @@ public class DefectSeverityService {
         return repository.findAllBySearch(search).stream().map(DefectSeverityDto::from).toList();
     }
 
+    @Transactional
     public DefectSeverityDto create(DefectSeverityDto r) {
         DefectSeverity e = new DefectSeverity();
         e.setCode(nextCode());
         e.setName(r.name()); e.setWeight(r.weight());
         DefectSeverity saved = repository.save(e);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+        auditBuilderService.log(
+                "defect_severity",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.DEFECT_SEVERITY,
+                "Серьезность дефекта создана",
+                null,
+                saved
+        );
+
+
         return DefectSeverityDto.from(saved);
     }
 
+    @Transactional
     public DefectSeverityDto update(UUID id, DefectSeverityDto r) {
         DefectSeverity e = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(e);
         e.setName(r.name()); e.setWeight(r.weight());
-        audit(AuditAction.UPDATE, e.getId(), oldJson, e);
+        DefectSeverity updated = repository.save(e);
+
+        auditBuilderService.log(
+                "defect_severity",
+                updated.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.DEFECT_SEVERITY,
+                "Серьезность дефекта обновлена",
+                e,
+                updated
+        );
+
         return DefectSeverityDto.from(e);
     }
 
+    @Transactional
     public void delete(UUID id) { var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
-        DefectSeverity saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null); }
+        DefectSeverity deleted = repository.save(entity);
+
+        auditBuilderService.log(
+                "defect_severity",
+                deleted.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.DEFECT_SEVERITY,
+                "Серьезность дефекта удалена",
+                deleted,
+                null
+        );
+
+    }
 
     private DefectSeverity getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -73,27 +104,5 @@ public class DefectSeverityService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
-    }
-
-    private void audit(AuditAction action, UUID id, String oldJson, DefectSeverity current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "defect_severity",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.DEFECT_SEVERITY,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Серьезность дефекта создана";
-            case UPDATE -> "Серьезность дефекта обновлена";
-            case DELETE -> "Серьезность дефекта удалена";
-            default -> "Действие выполнено над серьезностью дефекта";
-        };
     }
 }

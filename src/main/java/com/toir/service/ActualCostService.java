@@ -1,14 +1,13 @@
 package com.toir.service;
-import com.toir.entity.projects.ActualCost;
-import com.toir.enums.AuditAction;
-import com.toir.enums.AuditModule;
-import com.toir.enums.ActualCostStatus;
-import com.toir.repository.actualCost.ActualCostRepository;
 
 import com.toir.dto.actualcost.ActualCostDto;
+import com.toir.entity.projects.ActualCost;
+import com.toir.enums.ActualCostStatus;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +23,6 @@ public class ActualCostService {
 
     private final ActualCostRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
@@ -48,7 +46,17 @@ public class ActualCostService {
         c.setNotes(r.notes());
         c.setStatus(ActualCostStatus.PENDING);
         ActualCost saved = repository.save(c);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "actual_cost",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.ACTUAL_COST,
+                "Фактическая стоимость создана",
+                null,
+                saved
+        );
+
         return ActualCostDto.from(saved);
     }
 
@@ -56,34 +64,22 @@ public class ActualCostService {
     public ActualCostDto review(UUID id, boolean approve, UUID reviewerId, String comment) {
         ActualCost c = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Actual cost not found: " + id));
-        String oldJson = auditSerializationService.toJson(c);
         c.setStatus(approve ? ActualCostStatus.APPROVED : ActualCostStatus.REJECTED);
         c.setReviewedById(reviewerId);
         c.setReviewedAt(Instant.now());
         c.setReviewComment(comment);
-        audit(AuditAction.UPDATE, c.getId(), oldJson, c);
-        return ActualCostDto.from(c);
-    }
 
-    private void audit(AuditAction action, UUID id, String oldJson, ActualCost current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        ActualCost saved = repository.save(c);
+
         auditBuilderService.log(
                 "actual_cost",
-                id != null ? id.toString() : null,
-                action,
+                saved.getId().toString(),
+                AuditAction.UPDATE,
                 AuditModule.ACTUAL_COST,
-                auditMessage(action),
-                oldJson,
-                newJson
+                "Фактическая стоимость обновлена",
+                c,
+                saved
         );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Фактическая стоимость создана";
-            case UPDATE -> "Фактическая стоимость обновлена";
-            case DELETE -> "Фактическая стоимость удалена";
-            default -> "Действие выполнено над фактической стоимостью";
-        };
+        return ActualCostDto.from(c);
     }
 }

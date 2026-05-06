@@ -1,17 +1,16 @@
 package com.toir.service.equipment;
-import com.toir.entity.equipment.EquipmentSparePart;
-import com.toir.enums.AuditAction;
-import com.toir.enums.AuditModule;
-import com.toir.repository.equipment.EquipmentSparePartRepository;
 
-import com.toir.exception.RestException;
-import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.dto.equipmentsparepart.EquipmentSparePartDto;
 import com.toir.dto.equipmentsparepart.EquipmentSparePartRequest;
 import com.toir.entity.SparePart;
+import com.toir.entity.equipment.EquipmentSparePart;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentSparePartRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +19,6 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class EquipmentSparePartService {
 
@@ -28,7 +26,6 @@ public class EquipmentSparePartService {
     private final EquipmentRepository equipmentRepository;
     private final SparePartRepository sparePartRepository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<EquipmentSparePartDto> listForEquipment(UUID equipmentId) {
@@ -46,6 +43,7 @@ public class EquipmentSparePartService {
         return repo.findAllBySparePartIdAndIsDeletedFalse(sparePartId).stream().map(this::enrich).toList();
     }
 
+    @Transactional
     public EquipmentSparePartDto add(UUID equipmentId, EquipmentSparePartRequest r) {
         if (!equipmentRepository.existsByIdAndIsDeletedFalse(equipmentId)) {
             throw RestException.notFound("Equipment not found: " + equipmentId);
@@ -61,14 +59,23 @@ public class EquipmentSparePartService {
         esp.setCriticality(r.criticality());
         esp.setNotes(r.notes());
         EquipmentSparePart saved = repo.save(esp);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "equipment_spare_part",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.EQUIPMENT_SPARE_PART,
+                "Запчасть оборудования добавлена",
+                null,
+                saved
+        );
         return enrich(saved);
     }
 
+    @Transactional
     public EquipmentSparePartDto update(UUID id, EquipmentSparePartRequest r) {
         EquipmentSparePart esp = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment spare part link not found: " + id));
-        String oldJson = auditSerializationService.toJson(esp);
         if (!esp.getSparePartId().equals(r.sparePartId())) {
             sparePartRepository.findByIdAndIsDeletedFalse(r.sparePartId())
                     .orElseThrow(() -> RestException.notFound("Spare part not found: " + r.sparePartId()));
@@ -79,17 +86,40 @@ public class EquipmentSparePartService {
         esp.setConsumptionRatePerYear(r.consumptionRatePerYear());
         esp.setCriticality(r.criticality());
         esp.setNotes(r.notes());
-        audit(AuditAction.UPDATE, esp.getId(), oldJson, esp);
-        return enrich(esp);
+
+        EquipmentSparePart save = repo.save(esp);
+
+        auditBuilderService.log(
+                "equipment_spare_part",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.EQUIPMENT_SPARE_PART,
+                "Запчасть оборудования обновлена",
+                esp,
+                save
+        );
+
+
+        return enrich(save);
     }
 
+    @Transactional
     public void remove(UUID id) {
         EquipmentSparePart esp = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment spare part link not found: " + id));
-        String oldJson = auditSerializationService.toJson(esp);
         esp.setDeleted(true);
         EquipmentSparePart saved = repo.save(esp);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "equipment_spare_part",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.EQUIPMENT_SPARE_PART,
+                "Запчасть оборудования удалена",
+                saved,
+                null
+        );
+
     }
 
     private EquipmentSparePartDto enrich(EquipmentSparePart esp) {
@@ -98,25 +128,4 @@ public class EquipmentSparePartService {
                 .orElseGet(() -> EquipmentSparePartDto.from(esp));
     }
 
-    private void audit(AuditAction action, UUID id, String oldJson, EquipmentSparePart current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "equipment_spare_part",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.EQUIPMENT_SPARE_PART,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Запчасть оборудования добавлена";
-            case UPDATE -> "Запчасть оборудования обновлена";
-            case DELETE -> "Запчасть оборудования удалена";
-            default -> "Действие выполнено над запчастью оборудования";
-        };
-    }
 }

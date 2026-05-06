@@ -1,18 +1,17 @@
 package com.toir.service.users;
+
+import com.toir.dto.user.CreateRoleUserRequest;
+import com.toir.dto.user.CreateUserRequest;
+import com.toir.dto.user.UpdateUserRequest;
+import com.toir.dto.user.UserDto;
+import com.toir.entity.users.Role;
 import com.toir.entity.users.User;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.users.UserRepository;
-
 import com.toir.exception.RestException;
-import com.toir.entity.users.Role;
 import com.toir.repository.users.RoleRepository;
-import com.toir.dto.user.CreateUserRequest;
-import com.toir.dto.user.CreateRoleUserRequest;
-import com.toir.dto.user.UpdateUserRequest;
-import com.toir.dto.user.UserDto;
+import com.toir.repository.users.UserRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.Hibernate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -20,14 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class UserService {
 
@@ -35,7 +29,6 @@ public class UserService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -78,9 +71,17 @@ public class UserService {
         user.setPrimaryRole(resolveRole(request.primaryRoleId()));
         user.setRoles(resolveRoles(request.roleIds()));
         User saved = userRepository.save(user);
-        UserDto dto = UserDto.from(saved);
-        audit(AuditAction.CREATE, saved.getId(), null, dto);
-        return dto;
+
+        auditBuilderService.log(
+                "user",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.USER,
+                "Пользователь создан",
+                null,
+                saved
+        );
+        return UserDto.from(saved);
     }
 
     @Transactional
@@ -90,6 +91,7 @@ public class UserService {
                 .orElseThrow(() -> RestException.badRequest("Role not found: " + roleCode));
 
         String username = roleCode;
+
         if (userRepository.existsByUsernameAndIsDeletedFalse(username)) {
             throw RestException.conflict("Username already taken: " + username);
         }
@@ -118,15 +120,22 @@ public class UserService {
         roles.add(role);
         user.setRoles(roles);
         User saved = userRepository.save(user);
-        UserDto dto = UserDto.from(saved);
-        audit(AuditAction.CREATE, saved.getId(), null, dto);
-        return dto;
+
+        auditBuilderService.log(
+                "user",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.USER,
+                "Пользователь создан",
+                null,
+                saved
+        );
+        return UserDto.from(saved);
     }
 
     @Transactional
     public UserDto update(UUID id, UpdateUserRequest request) {
         User user = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(UserDto.from(user));
         if (!user.getEmail().equals(request.email()) && userRepository.existsByEmailAndIsDeletedFalse(request.email())) {
             throw RestException.conflict("Email already taken");
         }
@@ -141,21 +150,45 @@ public class UserService {
         user.setPrimaryRole(resolveRole(request.primaryRoleId()));
         user.setRoles(resolveRoles(request.roleIds()));
         UserDto dto = UserDto.from(user);
-        audit(AuditAction.UPDATE, user.getId(), oldJson, dto);
+
+        User save = userRepository.save(user);
+
+        auditBuilderService.log(
+                "user",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.USER,
+                "Пользователь обновлен",
+                user,
+                save
+        );
+
         return dto;
     }
 
+    @Transactional
     public void delete(UUID id) {
         User user = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(UserDto.from(user));
         user.setDeleted(true);
         User saved = userRepository.save(user);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+
+        auditBuilderService.log(
+                "user",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.USER,
+                "Пользователь удален",
+                user,
+                null
+        );
     }
 
+    @Transactional
     public void touchLastLogin(UUID id) {
         User user = getOrThrow(id);
         user.setLastLoginAt(Instant.now());
+        userRepository.save(user);
     }
 
     private User getOrThrow(UUID id) {
@@ -178,25 +211,5 @@ public class UserService {
         return found;
     }
 
-    private void audit(AuditAction action, UUID id, String oldJson, UserDto current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "user",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.USER,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
 
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Пользователь создан";
-            case UPDATE -> "Пользователь обновлен";
-            case DELETE -> "Пользователь удален";
-            default -> "Действие выполнено над пользователем";
-        };
-    }
 }
