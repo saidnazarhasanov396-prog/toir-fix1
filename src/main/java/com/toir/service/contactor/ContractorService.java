@@ -1,14 +1,13 @@
 package com.toir.service.contactor;
+
+import com.toir.dto.contractor.ContractorDto;
+import com.toir.dto.contractor.ContractorRequest;
 import com.toir.entity.contractors.Contractor;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.contarctor.ContractorRepository;
-
 import com.toir.exception.RestException;
-import com.toir.dto.contractor.ContractorDto;
-import com.toir.dto.contractor.ContractorRequest;
+import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,13 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class ContractorService {
 
     private final ContractorRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<ContractorDto> findAll(String search) {
@@ -35,6 +32,7 @@ public class ContractorService {
         return ContractorDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public ContractorDto create(ContractorRequest request) {
         if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Contractor code already exists: " + request.code());
@@ -42,24 +40,55 @@ public class ContractorService {
         Contractor entity = new Contractor();
         apply(entity, request);
         Contractor saved = repository.save(entity);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "contractor",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.CONTRACTOR,
+                "Подрядчик создан" ,
+                null,
+                saved
+        );
+
         return ContractorDto.from(saved);
     }
 
+    @Transactional
     public ContractorDto update(UUID id, ContractorRequest request) {
         Contractor entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
+
         apply(entity, request);
-        audit(AuditAction.UPDATE, entity.getId(), oldJson, entity);
+        Contractor save = repository.save(entity);
+
+        auditBuilderService.log(
+                "contractor",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.CONTRACTOR,
+                "Подрядчик обновлен",
+                entity,
+                save
+        );
         return ContractorDto.from(entity);
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         Contractor saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "contractor",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.CONTRACTOR,
+                "Подрядчик удален",
+                entity,
+                null
+        );
+
     }
 
     private Contractor getOrThrow(UUID id) {
@@ -78,25 +107,4 @@ public class ContractorService {
         if (request.status() != null) entity.setStatus(request.status());
     }
 
-    private void audit(AuditAction action, UUID id, String oldJson, Contractor current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "contractor",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.CONTRACTOR,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Подрядчик создан";
-            case UPDATE -> "Подрядчик обновлен";
-            case DELETE -> "Подрядчик удален";
-            default -> "Действие выполнено над подрядчиком";
-        };
-    }
 }

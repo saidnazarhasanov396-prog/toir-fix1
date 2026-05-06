@@ -1,19 +1,18 @@
 package com.toir.service.users;
-import com.toir.entity.users.Employee;
-import com.toir.entity.TimesheetEntry;
-import com.toir.enums.AuditAction;
-import com.toir.enums.AuditModule;
-import com.toir.enums.TimesheetStatus;
-import com.toir.repository.users.EmployeeRepository;
-import com.toir.repository.TimesheetEntryRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeRequest;
 import com.toir.dto.hr.TimesheetEntryDto;
 import com.toir.dto.hr.TimesheetEntryRequest;
+import com.toir.entity.TimesheetEntry;
+import com.toir.entity.users.Employee;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.TimesheetStatus;
+import com.toir.exception.RestException;
+import com.toir.repository.TimesheetEntryRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -25,14 +24,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class HrService {
 
     private final EmployeeRepository employeeRepository;
     private final TimesheetEntryRepository timesheetRepository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public Page<EmployeeDto> listEmployees(int page, int pageSize, String search, Boolean activeOnly) {
@@ -56,6 +53,7 @@ public class HrService {
         return EmployeeDto.from(getEmployeeOrThrow(id));
     }
 
+    @Transactional
     public EmployeeDto createEmployee(EmployeeRequest r) {
         if (employeeRepository.existsByPersonnelNumberAndIsDeletedFalse(r.personnelNumber())) {
             throw RestException.conflict("Personnel number already exists: " + r.personnelNumber());
@@ -63,24 +61,54 @@ public class HrService {
         Employee e = new Employee();
         applyEmployee(e, r);
         Employee saved = employeeRepository.save(e);
-        auditEmployee(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "employee",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.EMPLOYEE,
+                "Сотрудник создан",
+                null,
+                saved
+        );
+
         return EmployeeDto.from(saved);
     }
 
+    @Transactional
     public EmployeeDto updateEmployee(UUID id, EmployeeRequest r) {
         Employee e = getEmployeeOrThrow(id);
-        String oldJson = auditSerializationService.toJson(e);
         applyEmployee(e, r);
-        auditEmployee(AuditAction.UPDATE, e.getId(), oldJson, e);
-        return EmployeeDto.from(e);
+
+        Employee save = employeeRepository.save(e);
+
+        auditBuilderService.log(
+                "employee",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.EMPLOYEE,
+                "Сотрудник обновлен",
+                e,
+                save
+        );
+        return EmployeeDto.from(save);
     }
 
+    @Transactional
     public void deleteEmployee(UUID id) {
         var entity = getEmployeeOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         Employee saved = employeeRepository.save(entity);
-        auditEmployee(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "employee",
+                id != null ? id.toString() : null,
+                AuditAction.DELETE,
+                AuditModule.EMPLOYEE,
+                "Сотрудник удален",
+                saved,
+                null
+        );
     }
 
     @Transactional(readOnly = true)
@@ -96,39 +124,81 @@ public class HrService {
                 .stream().map(TimesheetEntryDto::from).toList();
     }
 
+    @Transactional
     public TimesheetEntryDto createTimesheet(TimesheetEntryRequest r) {
         getEmployeeOrThrow(r.employeeId());
         TimesheetEntry e = new TimesheetEntry();
         applyTimesheet(e, r);
         TimesheetEntry saved = timesheetRepository.save(e);
-        auditTimesheet(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "timesheet_entry",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.TIMESHEET_ENTRY,
+                "Табельная запись создана",
+                null,
+                saved
+        );
         return TimesheetEntryDto.from(saved);
     }
 
+    @Transactional
     public TimesheetEntryDto updateTimesheet(UUID id, TimesheetEntryRequest r) {
         TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
-        String oldJson = auditSerializationService.toJson(e);
         applyTimesheet(e, r);
-        auditTimesheet(AuditAction.UPDATE, e.getId(), oldJson, e);
+
+        TimesheetEntry save = timesheetRepository.save(e);
+
+        auditBuilderService.log(
+                "timesheet_entry",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.TIMESHEET_ENTRY,
+                "Табельная запись обновлена",
+                e,
+                save
+        );
         return TimesheetEntryDto.from(e);
     }
 
+    @Transactional
     public void deleteTimesheet(UUID id) {
         TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
-        String oldJson = auditSerializationService.toJson(e);
         e.setDeleted(true);
         TimesheetEntry saved = timesheetRepository.save(e);
-        auditTimesheet(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "timesheet_entry",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.TIMESHEET_ENTRY,
+                "Табельная запись удалена",
+                saved,
+                null
+        );
     }
 
+    @Transactional
     public TimesheetEntryDto approveTimesheet(UUID id) {
         TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
-        String oldJson = auditSerializationService.toJson(e);
+
         e.setStatus(TimesheetStatus.APPROVED);
-        auditTimesheet(AuditAction.UPDATE, e.getId(), oldJson, e);
+
+        TimesheetEntry save = timesheetRepository.save(e);
+
+        auditBuilderService.log(
+                "timesheet_entry",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.TIMESHEET_ENTRY,
+                "Табельная запись обновлена",
+                e,
+                save
+        );
         return TimesheetEntryDto.from(e);
     }
 
@@ -167,47 +237,5 @@ public class HrService {
         e.setNote(r.note());
     }
 
-    private void auditEmployee(AuditAction action, UUID id, String oldJson, Employee current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "employee",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.EMPLOYEE,
-                auditEmployeeMessage(action),
-                oldJson,
-                newJson
-        );
-    }
 
-    private void auditTimesheet(AuditAction action, UUID id, String oldJson, TimesheetEntry current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "timesheet_entry",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.TIMESHEET_ENTRY,
-                auditTimesheetMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditEmployeeMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Сотрудник создан";
-            case UPDATE -> "Сотрудник обновлен";
-            case DELETE -> "Сотрудник удален";
-            default -> "Действие выполнено над сотрудником";
-        };
-    }
-
-    private String auditTimesheetMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Табельная запись создана";
-            case UPDATE -> "Табельная запись обновлена";
-            case DELETE -> "Табельная запись удалена";
-            default -> "Действие выполнено над табельной записью";
-        };
-    }
-}
+   }

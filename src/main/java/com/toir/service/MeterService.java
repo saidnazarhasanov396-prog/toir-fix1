@@ -1,21 +1,20 @@
 package com.toir.service;
+
+import com.toir.dto.meter.EquipmentMeterDto;
+import com.toir.dto.meter.EquipmentMeterRequest;
+import com.toir.dto.meter.MeterReadingDto;
+import com.toir.dto.meter.MeterReadingRequest;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.equipment.MeterReading;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.MeterType;
+import com.toir.exception.RestException;
+import com.toir.repository.MeterReadingRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
-import com.toir.repository.MeterReadingRepository;
-
-import com.toir.exception.RestException;
-import com.toir.dto.meter.EquipmentMeterDto;
-import com.toir.dto.meter.EquipmentMeterRequest;
-import com.toir.dto.meter.MeterReadingDto;
-import com.toir.dto.meter.MeterReadingRequest;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,7 +32,6 @@ public class MeterService {
     private final MeterReadingRepository readingRepository;
     private final EquipmentRepository equipmentRepository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listByEquipment(UUID equipmentId) {
@@ -55,6 +53,7 @@ public class MeterService {
         return enrichWithEquipmentName(getMeterOrThrow(id));
     }
 
+    @Transactional
     public EquipmentMeterDto createMeter(EquipmentMeterRequest request) {
         EquipmentMeter meter = new EquipmentMeter();
         meter.setEquipmentId(request.equipmentId());
@@ -65,38 +64,68 @@ public class MeterService {
         meter.setRolloverValue(request.rolloverValue());
         if (request.active() != null) meter.setActive(request.active());
         EquipmentMeter saved = meterRepository.save(meter);
-        auditMeter(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "equipment_meter",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.EQUIPMENT_METER,
+                "Счетчик оборудования создан",
+                null,
+                saved
+        );
+
         return enrichWithEquipmentName(saved);
     }
 
+    @Transactional
     public EquipmentMeterDto updateMeter(UUID id, EquipmentMeterRequest request) {
         EquipmentMeter meter = getMeterOrThrow(id);
-        String oldJson = auditSerializationService.toJson(meter);
         meter.setEquipmentId(request.equipmentId());
         meter.setMeterType(request.meterType());
         meter.setName(request.name());
         meter.setUnit(request.unit());
         meter.setRolloverValue(request.rolloverValue());
         if (request.active() != null) meter.setActive(request.active());
-        meterRepository.save(meter);
-        auditMeter(AuditAction.UPDATE, meter.getId(), oldJson, meter);
+        EquipmentMeter saved = meterRepository.save(meter);
+
+        auditBuilderService.log(
+                "equipment_meter",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.EQUIPMENT_METER,
+                "Счетчик оборудования обновлен",
+                meter,
+                saved
+        );
+
         return enrichWithEquipmentName(meter);
     }
 
+    @Transactional
     public void deleteMeter(UUID id) {
         var entity = getMeterOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         EquipmentMeter saved = meterRepository.save(entity);
-        auditMeter(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "equipment_meter",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.EQUIPMENT_METER,
+                "Счетчик оборудования удален",
+                saved,
+                null
+        );
+
     }
 
+    @Transactional
     public MeterReadingDto addReading(MeterReadingRequest request) {
         EquipmentMeter meter = getMeterOrThrow(request.meterId());
         if (!meter.isActive()) {
             throw RestException.conflict("Meter is not active: " + meter.getId());
         }
-        String oldMeterJson = auditSerializationService.toJson(meter);
         double newValue = request.value();
         double previous = meter.getCurrentValue();
         Double delta = null;
@@ -125,8 +154,27 @@ public class MeterService {
 
         meter.setCurrentValue(newValue);
         meter.setLastReadAt(readAt);
-        auditReading(AuditAction.CREATE, saved.getId(), null, saved);
-        auditMeter(AuditAction.UPDATE, meter.getId(), oldMeterJson, meter);
+
+        auditBuilderService.log(
+                "meter_reading",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.METER_READING,
+                "Показание счетчика создано",
+                null,
+                saved
+        );
+
+        EquipmentMeter savedMeter = meterRepository.save(meter);
+        auditBuilderService.log(
+                "equipment_meter",
+                savedMeter.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.EQUIPMENT_METER,
+                "Счетчик оборудования обновлен",
+                meter,
+                savedMeter
+        );
 
         return MeterReadingDto.from(saved);
     }
@@ -148,13 +196,24 @@ public class MeterService {
                 .stream().map(MeterReadingDto::from).toList();
     }
 
+    @Transactional
     public void deleteReading(UUID readingId) {
         MeterReading reading = readingRepository.findByIdAndIsDeletedFalse(readingId)
                 .orElseThrow(() -> RestException.notFound("Meter reading not found: " + readingId));
-        String oldJson = auditSerializationService.toJson(reading);
         reading.setDeleted(true);
         MeterReading saved = readingRepository.save(reading);
-        auditReading(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "meter_reading",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.METER_READING,
+                "Показание счетчика удалено",
+                saved,
+                null
+        );
+
+
     }
 
     private EquipmentMeter getMeterOrThrow(UUID id) {
@@ -167,49 +226,5 @@ public class MeterService {
                 .map(Equipment::getName)
                 .orElse("Unknown");
         return EquipmentMeterDto.from(meter, equipmentName);
-    }
-
-    private void auditMeter(AuditAction action, UUID id, String oldJson, EquipmentMeter current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "equipment_meter",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.EQUIPMENT_METER,
-                auditMeterMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private void auditReading(AuditAction action, UUID id, String oldJson, MeterReading current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "meter_reading",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.METER_READING,
-                auditReadingMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMeterMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Счетчик оборудования создан";
-            case UPDATE -> "Счетчик оборудования обновлен";
-            case DELETE -> "Счетчик оборудования удален";
-            default -> "Действие выполнено над счетчиком оборудования";
-        };
-    }
-
-    private String auditReadingMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Показание счетчика создано";
-            case UPDATE -> "Показание счетчика обновлено";
-            case DELETE -> "Показание счетчика удалено";
-            default -> "Действие выполнено над показанием счетчика";
-        };
     }
 }

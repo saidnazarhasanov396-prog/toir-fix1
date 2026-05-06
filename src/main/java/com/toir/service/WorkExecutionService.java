@@ -1,18 +1,17 @@
 package com.toir.service;
+
+import com.toir.dto.workexecution.ExecutionLogDto;
+import com.toir.dto.workexecution.WorkExecutionDto;
 import com.toir.entity.WorkExecution;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.WorkOrderStatus;
-import com.toir.repository.WorkExecutionRepository;
-
 import com.toir.exception.RestException;
+import com.toir.repository.WorkExecutionRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
-import com.toir.dto.workexecution.ExecutionLogDto;
-import com.toir.dto.workexecution.WorkExecutionDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -23,14 +22,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class WorkExecutionService {
 
     private final WorkExecutionRepository repository;
     private final WorkOrderRepository workOrderRepository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -64,7 +61,17 @@ public class WorkExecutionService {
         e.setStartedAt(startedAt);
         e.setNotes(r.notes());
         WorkExecution saved = repository.save(e);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "work_execution",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.WORK_EXECUTION,
+                "Выполнение работы начато",
+                null,
+                saved
+        );
+
         return WorkExecutionDto.from(saved);
     }
 
@@ -72,34 +79,23 @@ public class WorkExecutionService {
     public WorkExecutionDto end(UUID id, WorkExecutionDto r) {
         WorkExecution e = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Execution not found: " + id));
-        String oldJson = auditSerializationService.toJson(e);
         e.setEndedAt(r.endedAt() != null ? r.endedAt() : Instant.now());
         e.setResult(r.result());
         if (r.notes() != null) e.setNotes(r.notes());
-        audit(AuditAction.UPDATE, e.getId(), oldJson, e);
-        return WorkExecutionDto.from(e);
-    }
 
-    private void audit(AuditAction action, UUID id, String oldJson, WorkExecution current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        WorkExecution saved = repository.save(e);
+
         auditBuilderService.log(
                 "work_execution",
-                id != null ? id.toString() : null,
-                action,
+                saved.getId().toString(),
+                AuditAction.UPDATE,
                 AuditModule.WORK_EXECUTION,
-                auditMessage(action),
-                oldJson,
-                newJson
+                "Выполнение работы обновлено",
+                e,
+                saved
         );
-    }
 
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Выполнение работы начато";
-            case UPDATE -> "Выполнение работы обновлено";
-            case DELETE -> "Выполнение работы удалено";
-            default -> "Действие выполнено над выполнением работы";
-        };
+        return WorkExecutionDto.from(e);
     }
 
 }

@@ -1,15 +1,14 @@
 package com.toir.service.repair;
+
+import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.repair.RepairMaterialUsage;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.repair.RepairMaterialUsageRepository;
-
 import com.toir.exception.RestException;
-import com.toir.dto.materialusage.RepairMaterialUsageDto;
-import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +23,6 @@ public class RepairMaterialUsageService {
     private final RepairMaterialUsageRepository repository;
     private final WarehouseStockRepository stockRepository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -32,6 +30,7 @@ public class RepairMaterialUsageService {
         return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId).stream().map(RepairMaterialUsageDto::from).toList();
     }
 
+    @Transactional
     public RepairMaterialUsageDto register(UUID workOrderId, RepairMaterialUsageDto r) {
         WarehouseStock stock = stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(r.warehouseId(), r.sparePartId())
                 .orElseThrow(() -> RestException.notFound("No stock found for spare part in this warehouse"));
@@ -48,29 +47,17 @@ public class RepairMaterialUsageService {
         usage.setQuantity(r.quantity());
         usage.setUnitCost(r.unitCost());
         RepairMaterialUsage saved = repository.save(usage);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
-        return RepairMaterialUsageDto.from(saved);
-    }
 
-    private void audit(AuditAction action, UUID id, String oldJson, RepairMaterialUsage current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
         auditBuilderService.log(
                 "repair_material_usage",
-                id != null ? id.toString() : null,
-                action,
+                saved.getId().toString(),
+                AuditAction.CREATE,
                 AuditModule.REPAIR_MATERIAL_USAGE,
-                auditMessage(action),
-                oldJson,
-                newJson
+                "Использование материала в ремонте создано",
+                null,
+                saved
         );
-    }
 
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Использование материала в ремонте создано";
-            case UPDATE -> "Использование материала в ремонте обновлено";
-            case DELETE -> "Использование материала в ремонте удалено";
-            default -> "Действие выполнено над использованием материала в ремонте";
-        };
+        return RepairMaterialUsageDto.from(saved);
     }
 }

@@ -1,23 +1,22 @@
 package com.toir.service.equipment;
+
+import com.toir.dto.equipment.EquipmentDto;
+import com.toir.dto.equipment.EquipmentRequest;
 import com.toir.entity.Department;
+import com.toir.entity.Location;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentPassport;
+import com.toir.entity.equipment.EquipmentType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
-import com.toir.entity.equipment.EquipmentType;
-import com.toir.entity.Location;
+import com.toir.exception.RestException;
+import com.toir.repository.LocationRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
-import com.toir.repository.LocationRepository;
-
-import com.toir.exception.RestException;
-import com.toir.dto.equipment.EquipmentDto;
-import com.toir.dto.equipment.EquipmentRequest;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -25,18 +24,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Year;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class EquipmentService {
 
@@ -46,7 +38,6 @@ public class EquipmentService {
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentPassportRepository passportRepository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -77,7 +68,6 @@ public class EquipmentService {
         apply(entity, request);
         Equipment saved = repository.save(entity);
 
-        String newJson = auditSerializationService.toJson(saved);
         auditBuilderService.log(
                 "equipment",
                 saved.getId().toString(),
@@ -85,7 +75,7 @@ public class EquipmentService {
                 com.toir.enums.AuditModule.EQUIPMENT,
                 "Оборудование создано: код=%s, наименование=%s".formatted(saved.getCode(), saved.getName()),
                 null,
-                newJson
+                saved
         );
         return enrich(List.of(saved)).getFirst();
     }
@@ -94,22 +84,21 @@ public class EquipmentService {
     public EquipmentDto update(UUID id, EquipmentRequest request) {
         Equipment entity = getOrThrow(id);
 
-        String oldJson = auditSerializationService.toJson(entity);
 
         applyForUpdate(entity, request);
         validateParent(entity.getId(), entity.getParentId());
 
         Equipment saved = repository.save(entity);
-        String newJson = auditSerializationService.toJson(saved);
+
         auditBuilderService.log(
                 "equipment",
                 saved.getId().toString(),
                 AuditAction.UPDATE,
                 com.toir.enums.AuditModule.EQUIPMENT,
                 "Оборудование обновлено: код=%s, наименование=%s".formatted(saved.getCode(), saved.getName()),
-                oldJson,
-                newJson);
-        return enrich(List.of(entity)).getFirst();
+                entity,
+                saved);
+        return enrich(List.of(saved)).getFirst();
     }
 
     @Transactional
@@ -118,7 +107,6 @@ public class EquipmentService {
         if (!repository.findAllByParentIdAndIsDeletedFalse(id).isEmpty()) {
             throw RestException.conflict("Equipment has child equipment");
         }
-        String oldJson = auditSerializationService.toJson(entity);
 
         entity.setDeleted(true);
         Equipment saved = repository.save(entity);
@@ -129,7 +117,7 @@ public class EquipmentService {
                 AuditAction.DELETE,
                 com.toir.enums.AuditModule.EQUIPMENT,
                 "Оборудование удалено: код=%s, наименование=%s".formatted(saved.getCode(), saved.getName()),
-                oldJson,
+                saved,
                 null);
     }
 

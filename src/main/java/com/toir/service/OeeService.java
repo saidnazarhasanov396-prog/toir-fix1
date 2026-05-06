@@ -1,16 +1,14 @@
 package com.toir.service;
+
+import com.toir.dto.oee.OeeRecordDto;
+import com.toir.dto.oee.OeeRecordRequest;
+import com.toir.dto.oee.OeeSummary;
 import com.toir.entity.OeeRecord;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.OeeRecordRepository;
-
-import com.toir.dto.oee.OeeSummary;
-
 import com.toir.exception.RestException;
-import com.toir.dto.oee.OeeRecordDto;
-import com.toir.dto.oee.OeeRecordRequest;
+import com.toir.repository.OeeRecordRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,13 +18,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class OeeService {
 
     private final OeeRecordRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -48,28 +44,59 @@ public class OeeService {
         return OeeRecordDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public OeeRecordDto create(OeeRecordRequest r) {
         OeeRecord entity = new OeeRecord();
         apply(entity, r);
         OeeRecord saved = repository.save(entity);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "oee_record",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.OEE_RECORD,
+                "Запись OEE создана",
+                null,
+                saved
+        );
+
         return OeeRecordDto.from(saved);
     }
 
+    @Transactional
     public OeeRecordDto update(UUID id, OeeRecordRequest r) {
         OeeRecord entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         apply(entity, r);
-        audit(AuditAction.UPDATE, entity.getId(), oldJson, entity);
+
+        OeeRecord saved = repository.save(entity);
+        auditBuilderService.log(
+                "oee_record",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.OEE_RECORD,
+                "Запись OEE обновлена",
+                entity,
+                saved
+        );
+
         return OeeRecordDto.from(entity);
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         OeeRecord saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "oee_record",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.OEE_RECORD,
+                "Запись OEE удалена",
+                saved,
+                null
+        );
     }
 
     public OeeSummary summary(UUID equipmentId, Instant from, Instant to) {
@@ -130,27 +157,5 @@ public class OeeService {
         entity.setPerformance(performance);
         entity.setQuality(quality);
         entity.setOee(availability * performance * quality);
-    }
-
-    private void audit(AuditAction action, UUID id, String oldJson, OeeRecord current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "oee_record",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.OEE_RECORD,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Запись OEE создана";
-            case UPDATE -> "Запись OEE обновлена";
-            case DELETE -> "Запись OEE удалена";
-            default -> "Действие выполнено над записью OEE";
-        };
     }
 }

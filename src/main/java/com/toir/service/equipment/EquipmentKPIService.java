@@ -7,7 +7,6 @@ import com.toir.repository.equipment.EquipmentKPIRepository;
 import com.toir.exception.RestException;
 import com.toir.dto.equipmentkpi.EquipmentKPIDto;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,13 +15,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class EquipmentKPIService {
 
     private final EquipmentKPIRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -31,6 +28,7 @@ public class EquipmentKPIService {
                 .map(EquipmentKPIDto::from).toList();
     }
 
+    @Transactional
     public EquipmentKPIDto record(EquipmentKPIDto r) {
         EquipmentKPI k = new EquipmentKPI();
         k.setEquipmentId(r.equipmentId());
@@ -57,39 +55,36 @@ public class EquipmentKPIService {
             double total = r.operatingHours() + r.downtimeHours();
             if (total > 0) k.setAvailability(r.operatingHours() / total);
         }
-        EquipmentKPI saved = repository.save(k);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
-        return EquipmentKPIDto.from(saved);
+        EquipmentKPI created = repository.save(k);
+
+        auditBuilderService.log(
+                "equipment_kpi",
+                created.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.EQUIPMENT_KPI,
+                "KPI оборудования создан",
+                 null,
+                created
+        );
+
+        return EquipmentKPIDto.from(created);
     }
 
+    @Transactional
     public void delete(UUID id) {
         EquipmentKPI k = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment KPI not found: " + id));
-        String oldJson = auditSerializationService.toJson(k);
         k.setDeleted(true);
-        EquipmentKPI saved = repository.save(k);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
-    }
+        EquipmentKPI deleted = repository.save(k);
 
-    private void audit(AuditAction action, UUID id, String oldJson, EquipmentKPI current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
         auditBuilderService.log(
                 "equipment_kpi",
-                id != null ? id.toString() : null,
-                action,
+                deleted.getId().toString(),
+                AuditAction.DELETE,
                 AuditModule.EQUIPMENT_KPI,
-                auditMessage(action),
-                oldJson,
-                newJson
+                "KPI оборудования удален",
+                deleted,
+                null
         );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "KPI оборудования создан";
-            case UPDATE -> "KPI оборудования обновлен";
-            case DELETE -> "KPI оборудования удален";
-            default -> "Действие выполнено над KPI оборудования";
-        };
     }
 }

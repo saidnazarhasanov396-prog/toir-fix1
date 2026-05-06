@@ -1,21 +1,18 @@
 package com.toir.service;
-import com.toir.entity.maintenance.WorkOrder;
-import com.toir.repository.WorkOrderRepository;
-import com.toir.enums.WorkOrderStatus;
 
+import com.toir.dto.workorder.*;
+import com.toir.entity.Department;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
-import com.toir.util.PaginationUtils;
-import com.toir.util.RequestContext;
+import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
-import com.toir.security.SecurityScope;
-import com.toir.dto.workorder.CloseWorkOrderRequest;
-import com.toir.dto.workorder.CompleteWorkOrderRequest;
-import com.toir.dto.workorder.WorkOrderDto;
-import com.toir.dto.workorder.WorkOrderRequest;
-import com.toir.dto.workorder.WorkOrderTaskDto;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -25,13 +22,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import com.toir.entity.equipment.Equipment;
-import com.toir.entity.Department;
-import com.toir.repository.equipment.EquipmentRepository;
-import com.toir.repository.department.DepartmentRepository;
-
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class WorkOrderService {
 
@@ -41,11 +32,7 @@ public class WorkOrderService {
     private final WorkOrderRepository repository;
     private final EquipmentRepository equipmentRepository;
     private final DepartmentRepository departmentRepository;
-    private final AuditLogService auditLogService;
-    private final RequestContext requestContext;
-    private final SecurityScope securityScope;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -106,7 +93,16 @@ public class WorkOrderService {
         entity.setCreatedById(request.createdById());
         entity.setSummary(request.summary());
         WorkOrder saved = repository.save(entity);
-        audit(AuditAction.CREATE, saved.getId(), "Создан наряд " + saved.getNumber());
+
+        auditBuilderService.log(
+                "work_order",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.WORK_ORDER,
+                "Создан наряд " + saved.getNumber(),
+                null,
+                saved);
+
         return toDto(saved);
     }
 
@@ -118,7 +114,18 @@ public class WorkOrderService {
         }
         entity.setStatus(WorkOrderStatus.APPROVED);
         entity.setApprovedById(approverId);
-        audit(AuditAction.APPROVE, entity.getId(), "Утверждён наряд " + entity.getNumber());
+
+        WorkOrder saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "work_order",
+                saved.getId().toString(),
+                AuditAction.APPROVE,
+                AuditModule.WORK_ORDER,
+                "Утверждён наряд " + entity.getNumber(),
+                entity,
+                saved);
+
         return toDto(entity);
     }
 
@@ -127,7 +134,18 @@ public class WorkOrderService {
         WorkOrder entity = getOrThrow(id);
         entity.setStatus(WorkOrderStatus.IN_PROGRESS);
         entity.setStartedAt(Instant.now());
-        audit(AuditAction.UPDATE, entity.getId(), "Начато выполнение наряда " + entity.getNumber());
+
+        WorkOrder saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "work_order",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.WORK_ORDER,
+                "Начато выполнение наряда " + saved.getNumber(),
+                entity,
+                saved);
+
         return toDto(entity);
     }
 
@@ -146,7 +164,17 @@ public class WorkOrderService {
         }
         entity.setStatus(WorkOrderStatus.COMPLETED);
         entity.setCompletedAt(Instant.now());
-        audit(AuditAction.UPDATE, entity.getId(), "Завершён наряд " + entity.getNumber());
+
+        WorkOrder saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "work_order",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.WORK_ORDER,
+                "Завершён наряд " + saved.getNumber(),
+                entity,
+                saved);
         return toDto(entity);
     }
 
@@ -160,28 +188,25 @@ public class WorkOrderService {
         entity.setClosureNotes(request.closureNotes());
         entity.setStatus(WorkOrderStatus.CLOSED);
         entity.setCompletedAt(Instant.now());
-        audit(AuditAction.CLOSE, entity.getId(), "Закрыт наряд " + entity.getNumber());
+
+        WorkOrder saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "work_order",
+                saved.getId().toString(),
+                AuditAction.CLOSE,
+                AuditModule.WORK_ORDER,
+                "Закрыт наряд " + saved.getNumber(),
+                saved,
+                null);
+
+
         return toDto(entity);
     }
 
     private WorkOrder getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + id));
-    }
-
-    private void audit(AuditAction action, UUID entityId, String message) {
-        WorkOrder current = entityId == null
-                ? null
-                : repository.findByIdAndIsDeletedFalse(entityId).orElse(null);
-        auditBuilderService.log(
-                "work_order",
-                entityId != null ? entityId.toString() : null,
-                action,
-                AuditModule.WORK_ORDER,
-                message,
-                null,
-                current == null ? null : auditSerializationService.toJson(current)
-        );
     }
 
     private WorkOrderDto toDto(WorkOrder entity) {

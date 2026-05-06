@@ -1,15 +1,14 @@
 package com.toir.service.maintanance;
+
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.maintenance.MaintenanceRegulationRepository;
-
 import com.toir.exception.RestException;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
-import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
-import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -19,13 +18,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class MaintenanceRegulationService {
 
     private final MaintenanceRegulationRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -47,15 +44,13 @@ public class MaintenanceRegulationService {
         return MaintenanceRegulationDto.from(getOrThrow(id));
     }
 
-    public MaintenanceRegulation getEntityOrThrow(UUID id) {
-        return getOrThrow(id);
-    }
 
     @Transactional(readOnly = true)
     public List<MaintenanceRegulation> findActiveByEquipmentType(UUID equipmentTypeId) {
         return repository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(equipmentTypeId);
     }
 
+    @Transactional
     public MaintenanceRegulationDto create(MaintenanceRegulationRequest request) {
         if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Regulation code already exists: " + request.code());
@@ -63,24 +58,53 @@ public class MaintenanceRegulationService {
         MaintenanceRegulation entity = new MaintenanceRegulation();
         apply(entity, request);
         MaintenanceRegulation saved = repository.save(entity);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "maintenance_regulation",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.MAINTENANCE_REGULATION,
+                "Регламент обслуживания создан",
+                null,
+                saved);
+
         return MaintenanceRegulationDto.from(saved);
     }
 
+    @Transactional
     public MaintenanceRegulationDto update(UUID id, MaintenanceRegulationRequest request) {
         MaintenanceRegulation entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         apply(entity, request);
-        audit(AuditAction.UPDATE, entity.getId(), oldJson, entity);
+
+        MaintenanceRegulation save = repository.save(entity);
+
+        auditBuilderService.log(
+                "maintenance_regulation",
+                id != null ? id.toString() : null,
+                AuditAction.UPDATE,
+                AuditModule.MAINTENANCE_REGULATION,
+                "Регламент обслуживания обновлен",
+                entity,
+                save);
+
         return MaintenanceRegulationDto.from(entity);
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         MaintenanceRegulation saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null);
+
+        auditBuilderService.log(
+                "maintenance_regulation",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.MAINTENANCE_REGULATION,
+                "Регламент обслуживания удален",
+                saved,
+                null);
+
     }
 
     private MaintenanceRegulation getOrThrow(UUID id) {
@@ -102,20 +126,5 @@ public class MaintenanceRegulationService {
         entity.setRequiresShutdown(request.requiresShutdown());
         entity.setTriggerMeterType(request.triggerMeterType());
         entity.setTriggerMeterInterval(request.triggerMeterInterval());
-    }
-
-    private void audit(AuditAction action, UUID id, String oldJson, MaintenanceRegulation current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log("maintenance_regulation", id != null ? id.toString() : null, action,
-                AuditModule.MAINTENANCE_REGULATION, auditMessage(action), oldJson, newJson);
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Регламент обслуживания создан";
-            case UPDATE -> "Регламент обслуживания обновлен";
-            case DELETE -> "Регламент обслуживания удален";
-            default -> "Действие выполнено над регламентом обслуживания";
-        };
     }
 }

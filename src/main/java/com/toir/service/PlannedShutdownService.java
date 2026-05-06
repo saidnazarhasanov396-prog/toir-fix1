@@ -1,15 +1,14 @@
 package com.toir.service;
+
+import com.toir.dto.plannedshutdown.PlannedShutdownDto;
 import com.toir.entity.PlannedShutdown;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.PlannedShutdownRepository;
-
-import com.toir.exception.RestException;
-import com.toir.dto.plannedshutdown.PlannedShutdownDto;
-import lombok.RequiredArgsConstructor;
 import com.toir.enums.PlanStatus;
+import com.toir.exception.RestException;
+import com.toir.repository.PlannedShutdownRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,13 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class PlannedShutdownService {
 
     private final PlannedShutdownRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -32,6 +29,7 @@ public class PlannedShutdownService {
                 .map(PlannedShutdownDto::from).toList();
     }
 
+    @Transactional
     public PlannedShutdownDto create(PlannedShutdownDto r) {
         if (!r.endAt().isAfter(r.startAt())) {
             throw RestException.badRequest("End must be after start");
@@ -43,38 +41,38 @@ public class PlannedShutdownService {
         s.setEndAt(r.endAt());
         s.setReason(r.reason());
         PlannedShutdown saved = repository.save(s);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "planned_shutdown",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.PLANNED_SHUTDOWN,
+                "Плановая остановка создана",
+                null,
+                saved
+        );
+
         return PlannedShutdownDto.from(saved);
     }
 
+    @Transactional
     public PlannedShutdownDto approve(UUID id) {
         PlannedShutdown s = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Planned shutdown not found: " + id));
-        String oldJson = auditSerializationService.toJson(s);
         s.setStatus(PlanStatus.APPROVED);
-        audit(AuditAction.UPDATE, s.getId(), oldJson, s);
-        return PlannedShutdownDto.from(s);
-    }
 
-    private void audit(AuditAction action, UUID id, String oldJson, PlannedShutdown current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
+        PlannedShutdown saved = repository.save(s);
+
         auditBuilderService.log(
                 "planned_shutdown",
-                id != null ? id.toString() : null,
-                action,
+                saved.getId().toString(),
+                AuditAction.UPDATE,
                 AuditModule.PLANNED_SHUTDOWN,
-                auditMessage(action),
-                oldJson,
-                newJson
+                "Плановая остановка обновлена",
+                s,
+                saved
         );
-    }
 
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Плановая остановка создана";
-            case UPDATE -> "Плановая остановка обновлена";
-            case DELETE -> "Плановая остановка удалена";
-            default -> "Действие выполнено над плановой остановкой";
-        };
+        return PlannedShutdownDto.from(s);
     }
 }

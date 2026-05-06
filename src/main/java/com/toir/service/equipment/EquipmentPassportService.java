@@ -23,6 +23,7 @@ public class EquipmentPassportService {
                 .orElseThrow(() -> RestException.notFound("Passport not found for equipment: " + equipmentId)));
     }
 
+    @Transactional
     public EquipmentPassportDto upsert(UUID equipmentId, EquipmentPassportDto r) {
         EquipmentPassport p = repository.findByEquipmentIdAndIsDeletedFalse(equipmentId).orElseGet(EquipmentPassport::new);
         p.setEquipmentId(equipmentId);

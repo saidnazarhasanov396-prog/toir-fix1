@@ -1,13 +1,12 @@
 package com.toir.service;
+
+import com.toir.dto.serviceclass.ServiceClassDto;
 import com.toir.entity.ServiceClass;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.repository.ServiceClassRepository;
-
 import com.toir.exception.RestException;
-import com.toir.dto.serviceclass.ServiceClassDto;
+import com.toir.repository.ServiceClassRepository;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,13 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class ServiceClassService {
 
     private final ServiceClassRepository repository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -36,28 +33,60 @@ public class ServiceClassService {
         return ServiceClassDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public ServiceClassDto create(ServiceClassDto r) {
         ServiceClass e = new ServiceClass();
         e.setCode(nextCode());
         e.setName(r.name()); e.setDescription(r.description());
         ServiceClass saved = repository.save(e);
-        audit(AuditAction.CREATE, saved.getId(), null, saved);
+
+        auditBuilderService.log(
+                "service_class",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.SERVICE_CLASS,
+                "Класс обслуживания создан",
+                null,
+                saved
+        );
         return ServiceClassDto.from(saved);
     }
 
+    @Transactional
     public ServiceClassDto update(UUID id, ServiceClassDto r) {
         ServiceClass e = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(e);
         e.setName(r.name()); e.setDescription(r.description());
-        audit(AuditAction.UPDATE, e.getId(), oldJson, e);
+
+        ServiceClass saved = repository.save(e);
+
+        auditBuilderService.log(
+                "service_class",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.SERVICE_CLASS,
+                "Класс обслуживания обновлен",
+                e,
+                saved
+        );
+
         return ServiceClassDto.from(e);
     }
 
+    @Transactional
     public void delete(UUID id) { var entity = getOrThrow(id);
-        String oldJson = auditSerializationService.toJson(entity);
         entity.setDeleted(true);
         ServiceClass saved = repository.save(entity);
-        audit(AuditAction.DELETE, saved.getId(), oldJson, null); }
+
+        auditBuilderService.log(
+                "service_class",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.SERVICE_CLASS,
+                "Класс обслуживания удален",
+                saved,
+                null
+        );
+    }
 
     private ServiceClass getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -78,27 +107,5 @@ public class ServiceClassService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
-    }
-
-    private void audit(AuditAction action, UUID id, String oldJson, ServiceClass current) {
-        String newJson = current == null ? null : auditSerializationService.toJson(current);
-        auditBuilderService.log(
-                "service_class",
-                id != null ? id.toString() : null,
-                action,
-                AuditModule.SERVICE_CLASS,
-                auditMessage(action),
-                oldJson,
-                newJson
-        );
-    }
-
-    private String auditMessage(AuditAction action) {
-        return switch (action) {
-            case CREATE -> "Класс обслуживания создан";
-            case UPDATE -> "Класс обслуживания обновлен";
-            case DELETE -> "Класс обслуживания удален";
-            default -> "Действие выполнено над классом обслуживания";
-        };
     }
 }
