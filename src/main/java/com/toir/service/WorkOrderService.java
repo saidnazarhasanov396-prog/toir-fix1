@@ -4,11 +4,18 @@ import com.toir.dto.workorder.*;
 import com.toir.entity.Department;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.PprTask;
+import com.toir.entity.repair.RepairRequest;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.PprTaskRepository;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.enums.PprTaskStatus;
+import com.toir.enums.RequestStatus;
+import com.toir.enums.WorkOrderStatus;
+
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
-import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.util.AuditBuilderService;
@@ -33,6 +40,8 @@ public class WorkOrderService {
     private final EquipmentRepository equipmentRepository;
     private final DepartmentRepository departmentRepository;
     private final AuditBuilderService auditBuilderService;
+    private final PprTaskRepository pprTaskRepository;
+    private final RepairRequestRepository repairRequestRepository;
 
 
     @Transactional(readOnly = true)
@@ -188,6 +197,8 @@ public class WorkOrderService {
         entity.setClosureNotes(request.closureNotes());
         entity.setStatus(WorkOrderStatus.CLOSED);
         entity.setCompletedAt(Instant.now());
+        completeLinkedPprTask(entity);
+        closeLinkedRepairRequestIfReady(entity, request.result());
 
         WorkOrder saved = repository.save(entity);
 
@@ -202,6 +213,69 @@ public class WorkOrderService {
 
 
         return toDto(entity);
+    }
+
+    private void completeLinkedPprTask(WorkOrder workOrder) {
+        if (workOrder.getPprTaskId() == null) {
+            return;
+        }
+        PprTask task = pprTaskRepository.findByIdAndIsDeletedFalse(workOrder.getPprTaskId())
+                .orElseThrow(() -> RestException.notFound("PPR task not found: " + workOrder.getPprTaskId()));
+        if (task.getStatus() == PprTaskStatus.COMPLETED || task.getStatus() == PprTaskStatus.CANCELLED) {
+            return;
+        }
+        task.setStatus(PprTaskStatus.COMPLETED);
+
+        PprTask saved = pprTaskRepository.save(task);
+        auditBuilderService.log(
+                "ppr_task",
+                task.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PPR_TASK,
+                "Задача ППР завершена при закрытии наряда " + workOrder.getNumber(),
+                task,
+                saved
+        );
+    }
+
+    private void closeLinkedRepairRequestIfReady(WorkOrder workOrder, String closeResult) {
+        if (workOrder.getRepairRequestId() == null) {
+            return;
+        }
+        List<WorkOrder> linkedWorkOrders = repository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrder.getRepairRequestId());
+        if (linkedWorkOrders.isEmpty()) {
+            return;
+        }
+        boolean allTerminal = linkedWorkOrders.stream().allMatch(this::isTerminal);
+        if (!allTerminal) {
+            return;
+        }
+        RepairRequest request = repairRequestRepository.findByIdAndIsDeletedFalse(workOrder.getRepairRequestId())
+                .orElseThrow(() -> RestException.notFound("Repair request not found: " + workOrder.getRepairRequestId()));
+        if (request.getStatus() == RequestStatus.CLOSED || request.getStatus() == RequestStatus.CANCELLED) {
+            return;
+        }
+        request.setStatus(RequestStatus.CLOSED);
+        request.setActualCompletionAt(Instant.now());
+        request.setCloseResult(closeResult);
+
+        RepairRequest saved = repairRequestRepository.save(request);
+
+        auditBuilderService.log(
+                "repair_request",
+                saved.getId().toString(),
+                AuditAction.CLOSE,
+                AuditModule.REPAIR_REQUEST,
+                "Заявка " + saved.getNumber() + " закрыта после закрытия связанных нарядов",
+                request,
+                saved
+        );
+    }
+
+    private boolean isTerminal(WorkOrder workOrder) {
+        return workOrder.getStatus() == WorkOrderStatus.CLOSED
+                || workOrder.getStatus() == WorkOrderStatus.CANCELLED;
     }
 
     private WorkOrder getOrThrow(UUID id) {

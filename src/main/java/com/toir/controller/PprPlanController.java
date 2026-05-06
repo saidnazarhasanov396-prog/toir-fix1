@@ -78,4 +78,30 @@ public class PprPlanController {
     public ResponseEntity<PprTaskDto> postponeTask(@PathVariable UUID taskId, @Valid @RequestBody PostponeTaskRequest request) {
         return ResponseEntity.ok(service.postponeTask(taskId, request));
     }
+
+    @PostMapping("/tasks/{taskId}/approve")
+    public ResponseEntity<PprTaskDto> approveTask(@PathVariable UUID taskId) {
+        return ResponseEntity.ok(service.approveTask(taskId));
+    }
+
+    @PostMapping("/tasks/{taskId}/start")
+    public ResponseEntity<PprTaskDto> startTask(@PathVariable UUID taskId) {
+        return ResponseEntity.ok(service.startTask(taskId));
+    }
+
+    @PostMapping("/tasks/{taskId}/complete")
+    public ResponseEntity<PprTaskDto> completeTask(
+            @PathVariable UUID taskId,
+            @RequestParam(required = false) Double actualLaborHours
+    ) {
+        return ResponseEntity.ok(service.completeTask(taskId, actualLaborHours));
+    }
+
+    @PostMapping("/tasks/{taskId}/cancel")
+    public ResponseEntity<PprTaskDto> cancelTask(
+            @PathVariable UUID taskId,
+            @RequestParam(required = false) String reason
+    ) {
+        return ResponseEntity.ok(service.cancelTask(taskId, reason));
+    }
 }
