@@ -24,18 +24,6 @@ public class WarehouseReorderController {
         this.stockRepository = stockRepository;
     }
 
-    public record ReorderSuggestion(
-            UUID stockId,
-            UUID warehouseId,
-            UUID sparePartId,
-            double quantity,
-            double available,
-            Double minQty,
-            Double reorderPoint,
-            Double reorderQty,
-            double shortfall,
-            String urgency
-    ) {}
 
     @GetMapping("/suggestions")
     public ResponseEntity<Page<ReorderSuggestion>> suggestions(@RequestParam(required = false) UUID warehouseId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
