@@ -18,6 +18,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -58,11 +59,8 @@ public class DefectListService {
 
     @Transactional
     public DefectListDto create(DefectListRequest request) {
-        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Defect list code already exists: " + request.code());
-        }
         DefectList d = new DefectList();
-        d.setCode(request.code());
+        d.setCode(nextCode());
         d.setTitle(request.title());
         d.setEquipmentId(request.equipmentId());
         d.setRepairRequestId(request.repairRequestId());
@@ -90,10 +88,6 @@ public class DefectListService {
         if (d.getStatus() != DefectListStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT defect lists can be updated");
         }
-        if (!d.getCode().equals(request.code()) && repository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Defect list code already exists: " + request.code());
-        }
-        d.setCode(request.code());
         d.setTitle(request.title());
         d.setEquipmentId(request.equipmentId());
         d.setRepairRequestId(request.repairRequestId());
@@ -264,5 +258,20 @@ public class DefectListService {
                 .orElseThrow(() -> RestException.notFound("Defect list not found: " + id));
     }
 
+    private String nextCode() {
+        int year = Year.now().getValue();
+        String codePrefix = "DL-" + year + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
+        String code = formatCode("DL", year, sequence);
+        while (repository.existsByCode(code)) {
+            sequence++;
+            code = formatCode("DL", year, sequence);
+        }
+        return code;
+    }
+
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
 
 }
