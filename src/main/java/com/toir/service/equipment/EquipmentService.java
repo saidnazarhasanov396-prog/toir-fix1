@@ -57,6 +57,10 @@ public class EquipmentService {
                                      String search,
                                      int page,
                                      int pageSize) {
+        String searchPattern = null;
+        if (search != null && !search.isBlank()) {
+            searchPattern = "%" + search.trim().toLowerCase() + "%";
+        }
         Page<Equipment> items;
         if (availableForReplacement) {
             if (warehouseId == null) {
@@ -73,11 +77,18 @@ public class EquipmentService {
                     equipmentTypeId,
                     status,
                     category,
-                    search,
+                    searchPattern,
                     PaginationUtils.pageRequest(page, pageSize)
             );
         } else {
-            items = repository.search(departmentId, equipmentTypeId, status, category, search, PaginationUtils.pageRequest(page, pageSize));
+            items = repository.search(
+                    departmentId,
+                    equipmentTypeId,
+                    status,
+                    category,
+                    searchPattern,
+                    PaginationUtils.pageRequest(page, pageSize)
+            );
         }
         return enrich(items);
     }

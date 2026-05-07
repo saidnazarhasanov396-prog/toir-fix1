@@ -85,6 +85,48 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void searchWithNullSearchShouldPassNullPattern() {
+        Equipment equipment = equipment("EQ-NO-SEARCH");
+        Page<Equipment> page = new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1);
+        stubEnrichment();
+        when(repository.search(any(), any(), any(), any(), any(), any())).thenReturn(page);
+
+        service.search(null, null, null, null, null, false, null, 0, 20);
+
+        ArgumentCaptor<String> searchPatternCaptor = ArgumentCaptor.forClass(String.class);
+        verify(repository).search(any(), any(), any(), any(), searchPatternCaptor.capture(), any());
+        assertThat(searchPatternCaptor.getValue()).isNull();
+    }
+
+    @Test
+    void searchWithBlankSearchShouldPassNullPattern() {
+        Equipment equipment = equipment("EQ-BLANK-SEARCH");
+        Page<Equipment> page = new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1);
+        stubEnrichment();
+        when(repository.search(any(), any(), any(), any(), any(), any())).thenReturn(page);
+
+        service.search(null, null, null, null, null, false, "   ", 0, 20);
+
+        ArgumentCaptor<String> searchPatternCaptor = ArgumentCaptor.forClass(String.class);
+        verify(repository).search(any(), any(), any(), any(), searchPatternCaptor.capture(), any());
+        assertThat(searchPatternCaptor.getValue()).isNull();
+    }
+
+    @Test
+    void searchWithTextShouldPassNormalizedLikePattern() {
+        Equipment equipment = equipment("EQ-TEXT-SEARCH");
+        Page<Equipment> page = new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1);
+        stubEnrichment();
+        when(repository.search(any(), any(), any(), any(), any(), any())).thenReturn(page);
+
+        service.search(null, null, null, null, null, false, "  PuMp-42  ", 0, 20);
+
+        ArgumentCaptor<String> searchPatternCaptor = ArgumentCaptor.forClass(String.class);
+        verify(repository).search(any(), any(), any(), any(), searchPatternCaptor.capture(), any());
+        assertThat(searchPatternCaptor.getValue()).isEqualTo("%pump-42%");
+    }
+
+    @Test
     void availableForReplacementWithoutWarehouseIdFails() {
         assertThatThrownBy(() -> service.search(
                 null, null, null, null, null, true, null, 0, 20
@@ -117,6 +159,39 @@ class EquipmentServiceTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().getFirst().code()).isEqualTo("EQ-2");
+    }
+
+    @Test
+    void availableForReplacementWithNullSearchShouldPassNullPattern() {
+        UUID warehouseId = UUID.randomUUID();
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        Equipment equipment = equipment("EQ-NULL-SEARCH-REPL");
+        Page<Equipment> page = new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1);
+
+        stubEnrichment();
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(repository.searchAvailableForReplacement(
+                eq(warehouseId),
+                eq(WarehouseEquipmentStatus.AVAILABLE),
+                eq(WorkType.REPLACEMENT),
+                anyCollection(),
+                any(), any(), any(), any(), any(), any()
+        )).thenReturn(page);
+
+        service.search(null, null, null, null, warehouseId, true, null, 0, 20);
+
+        ArgumentCaptor<String> searchPatternCaptor = ArgumentCaptor.forClass(String.class);
+        verify(repository).searchAvailableForReplacement(
+                eq(warehouseId),
+                eq(WarehouseEquipmentStatus.AVAILABLE),
+                eq(WorkType.REPLACEMENT),
+                anyCollection(),
+                any(), any(), any(), any(),
+                searchPatternCaptor.capture(),
+                any()
+        );
+        assertThat(searchPatternCaptor.getValue()).isNull();
     }
 
     @Test
