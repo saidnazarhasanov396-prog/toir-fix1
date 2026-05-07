@@ -30,6 +30,8 @@ public class EquipmentController {
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) EquipmentStatus status,
             @RequestParam(required = false) EquipmentCategory category,
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(defaultValue = "false") boolean availableForReplacement,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size
@@ -41,6 +43,8 @@ public class EquipmentController {
                 equipmentTypeId,
                 status,
                 category,
+                warehouseId,
+                availableForReplacement,
                 search,
                 safePage,
                 safePageSize));

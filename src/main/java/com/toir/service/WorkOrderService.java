@@ -6,12 +6,17 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.PprTask;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.WarehouseEquipmentItemRepository;
+import com.toir.repository.WarehouseRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkType;
 
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -26,7 +31,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -42,6 +49,10 @@ public class WorkOrderService {
     private final AuditBuilderService auditBuilderService;
     private final PprTaskRepository pprTaskRepository;
     private final RepairRequestRepository repairRequestRepository;
+    private final WarehouseRepository warehouseRepository;
+    private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
+    private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
+            EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
 
 
     @Transactional(readOnly = true)
@@ -84,6 +95,8 @@ public class WorkOrderService {
         if (request.equipmentId() == null) {
             throw RestException.badRequest("Equipment is required to create a work order");
         }
+        WorkType effectiveWorkType = request.workType() != null ? request.workType() : WorkType.REPAIR;
+        validateReplacementFields(request, effectiveWorkType);
         if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Work order number already exists: " + request.number());
         }
@@ -96,6 +109,9 @@ public class WorkOrderService {
         entity.setPprTaskId(request.pprTaskId());
         entity.setContractorId(request.contractorId());
         entity.setType(request.type());
+        entity.setWorkType(effectiveWorkType);
+        entity.setWarehouseId(request.warehouseId());
+        entity.setReplacementEquipmentId(request.replacementEquipmentId());
         if (request.priority() != null) entity.setPriority(request.priority());
         entity.setStartPlannedAt(request.startPlannedAt());
         entity.setEndPlannedAt(request.endPlannedAt());
@@ -283,6 +299,43 @@ public class WorkOrderService {
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + id));
     }
 
+    private void validateReplacementFields(WorkOrderRequest request, WorkType effectiveWorkType) {
+        if (effectiveWorkType == WorkType.REPLACEMENT) {
+            if (request.warehouseId() == null) {
+                throw RestException.badRequest("warehouseId is required when workType is REPLACEMENT");
+            }
+            if (request.replacementEquipmentId() == null) {
+                throw RestException.badRequest("replacementEquipmentId is required when workType is REPLACEMENT");
+            }
+            if (request.replacementEquipmentId().equals(request.equipmentId())) {
+                throw RestException.badRequest("replacementEquipmentId must be different from equipmentId");
+            }
+            warehouseRepository.findByIdAndIsDeletedFalse(request.warehouseId())
+                    .orElseThrow(() -> RestException.notFound("Warehouse not found: " + request.warehouseId()));
+            equipmentRepository.findByIdAndIsDeletedFalse(request.replacementEquipmentId())
+                    .orElseThrow(() -> RestException.notFound("Replacement equipment not found: " + request.replacementEquipmentId()));
+            WarehouseEquipmentItem warehouseEquipmentItem = warehouseEquipmentItemRepository
+                    .findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
+                            request.warehouseId(),
+                            request.replacementEquipmentId()
+                    ).orElseThrow(() -> RestException.badRequest("Replacement equipment does not belong to selected warehouse"));
+            if (warehouseEquipmentItem.getStatus() != WarehouseEquipmentStatus.AVAILABLE) {
+                throw RestException.badRequest("Replacement equipment must be AVAILABLE");
+            }
+            if (repository.existsActiveReplacementAssignment(
+                    request.replacementEquipmentId(),
+                    WorkType.REPLACEMENT,
+                    FINAL_WORK_ORDER_STATUSES
+            )) {
+                throw RestException.conflict("Replacement equipment is already assigned to another active work order");
+            }
+            return;
+        }
+        if (request.warehouseId() != null || request.replacementEquipmentId() != null) {
+            throw RestException.badRequest("warehouseId and replacementEquipmentId must be null when workType is not REPLACEMENT");
+        }
+    }
+
     private WorkOrderDto toDto(WorkOrder entity) {
         String equipmentName = equipmentRepository.findById(entity.getEquipmentId())
                 .map(Equipment::getName)
@@ -290,14 +343,20 @@ public class WorkOrderService {
         String departmentName = departmentRepository.findById(entity.getDepartmentId())
                 .map(Department::getName)
                 .orElse(null);
+        String replacementEquipmentName = entity.getReplacementEquipmentId() == null
+                ? null
+                : equipmentRepository.findById(entity.getReplacementEquipmentId())
+                .map(Equipment::getName)
+                .orElse(null);
         return new WorkOrderDto(
                 entity.getId(), entity.getNumber(), entity.getTitle(), entity.getEquipmentId(), entity.getDepartmentId(),
                 equipmentName, departmentName,
                 entity.getRepairRequestId(), entity.getPprTaskId(), entity.getContractorId(),
-                entity.getStatus(), entity.getType(), entity.getPriority(),
+                entity.getStatus(), entity.getType(), entity.getWorkType(), entity.getPriority(),
                 entity.getStartPlannedAt(), entity.getEndPlannedAt(), entity.getStartedAt(), entity.getCompletedAt(),
                 entity.getSummary(), entity.getResult(), entity.getClosureNotes(),
                 entity.getCreatedById(), entity.getApprovedById(),
+                entity.getWarehouseId(), entity.getReplacementEquipmentId(), replacementEquipmentName,
                 entity.getTasks().stream().map(WorkOrderTaskDto::from).toList()
         );
     }

@@ -4,6 +4,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
 
 import com.toir.enums.WorkOrderType;
+import com.toir.enums.WorkType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -42,6 +43,12 @@ public class WorkOrder extends BaseEntity {
     @Column(name = "contractor_id")
     private UUID contractorId;
 
+    @Column(name = "warehouse_id")
+    private UUID warehouseId;
+
+    @Column(name = "replacement_equipment_id")
+    private UUID replacementEquipmentId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private WorkOrderStatus status = WorkOrderStatus.DRAFT;
@@ -49,6 +56,10 @@ public class WorkOrder extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private WorkOrderType type;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "work_type", nullable = false)
+    private WorkType workType = WorkType.REPAIR;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
