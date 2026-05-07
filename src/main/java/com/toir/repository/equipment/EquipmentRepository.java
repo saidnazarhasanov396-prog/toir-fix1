@@ -75,21 +75,21 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
             "(:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId) and " +
             "(:status is null or e.status = :status) and " +
             "(:category is null or e.category = :category) and " +
-            "(cast(:search as string) is null or " +
-            "lower(e.code) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.name) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.inventoryNumber) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.technicalNumber) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.serialNumber) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.model) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.manufacturer) like lower(concat('%', cast(:search as string), '%')) or " +
-            "lower(e.description) like lower(concat('%', cast(:search as string), '%'))) " +
+            "(:searchPattern is null or " +
+            "lower(e.code) like :searchPattern or " +
+            "lower(e.name) like :searchPattern or " +
+            "lower(e.inventoryNumber) like :searchPattern or " +
+            "lower(e.technicalNumber) like :searchPattern or " +
+            "lower(e.serialNumber) like :searchPattern or " +
+            "lower(e.model) like :searchPattern or " +
+            "lower(e.manufacturer) like :searchPattern or " +
+            "lower(e.description) like :searchPattern) " +
             "order by e.updatedAt desc")
     Page<Equipment> search(@Param("departmentId") UUID departmentId,
                            @Param("equipmentTypeId") UUID equipmentTypeId,
                            @Param("status") EquipmentStatus status,
                            @Param("category") EquipmentCategory category,
-                           @Param("search") String search,
+                           @Param("searchPattern") String searchPattern,
                            Pageable pageable);
 
     @Query("""
@@ -101,15 +101,15 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
               and (:status is null or e.status = :status)
               and (:category is null or e.category = :category)
               and (
-                    :search is null
-                    or lower(e.code) like lower(concat('%', :search, '%'))
-                    or lower(e.name) like lower(concat('%', :search, '%'))
-                    or lower(e.inventoryNumber) like lower(concat('%', :search, '%'))
-                    or lower(e.technicalNumber) like lower(concat('%', :search, '%'))
-                    or lower(e.serialNumber) like lower(concat('%', :search, '%'))
-                    or lower(e.model) like lower(concat('%', :search, '%'))
-                    or lower(e.manufacturer) like lower(concat('%', :search, '%'))
-                    or lower(e.description) like lower(concat('%', :search, '%'))
+                    :searchPattern is null
+                    or lower(e.code) like :searchPattern
+                    or lower(e.name) like :searchPattern
+                    or lower(e.inventoryNumber) like :searchPattern
+                    or lower(e.technicalNumber) like :searchPattern
+                    or lower(e.serialNumber) like :searchPattern
+                    or lower(e.model) like :searchPattern
+                    or lower(e.manufacturer) like :searchPattern
+                    or lower(e.description) like :searchPattern
                   )
               and exists (
                     select 1
@@ -138,6 +138,6 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                                                   @Param("equipmentTypeId") UUID equipmentTypeId,
                                                   @Param("status") EquipmentStatus status,
                                                   @Param("category") EquipmentCategory category,
-                                                  @Param("search") String search,
+                                                  @Param("searchPattern") String searchPattern,
                                                   Pageable pageable);
 }
