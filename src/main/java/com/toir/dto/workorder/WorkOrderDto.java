@@ -3,6 +3,7 @@ package com.toir.dto.workorder;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
+import com.toir.enums.WorkType;
 
 import java.time.Instant;
 import java.util.List;
@@ -21,6 +22,7 @@ public record WorkOrderDto(
         UUID contractorId,
         WorkOrderStatus status,
         WorkOrderType type,
+        WorkType workType,
         PriorityLevel priority,
         Instant startPlannedAt,
         Instant endPlannedAt,
@@ -31,6 +33,9 @@ public record WorkOrderDto(
         String closureNotes,
         UUID createdById,
         UUID approvedById,
+        UUID warehouseId,
+        UUID replacementEquipmentId,
+        String replacementEquipmentName,
         List<WorkOrderTaskDto> tasks
 ) {
 //    public static WorkOrderDto from(WorkOrder w) {

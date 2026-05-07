@@ -2,11 +2,12 @@ package com.toir.service;
 
 import com.toir.dto.warehouse.WarehouseDto;
 import com.toir.entity.warehouse.Warehouse;
-import com.toir.repository.department.DepartmentRepository;
-import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.users.EmployeeRepository;
+import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -37,6 +38,9 @@ class WarehouseServiceTest {
 
     @Mock
     EmployeeRepository employeeRepository;
+
+    @Mock
+    AuditBuilderService auditBuilderService;
 
     @InjectMocks
     WarehouseService service;

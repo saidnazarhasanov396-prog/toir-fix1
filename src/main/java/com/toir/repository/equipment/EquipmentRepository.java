@@ -3,6 +3,9 @@ package com.toir.repository.equipment;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.WarehouseEquipmentStatus;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -88,4 +91,53 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                            @Param("category") EquipmentCategory category,
                            @Param("search") String search,
                            Pageable pageable);
+
+    @Query("""
+            select e
+            from Equipment e
+            where e.isDeleted = false
+              and (:departmentId is null or e.departmentId = :departmentId)
+              and (:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId)
+              and (:status is null or e.status = :status)
+              and (:category is null or e.category = :category)
+              and (
+                    :search is null
+                    or lower(e.code) like lower(concat('%', :search, '%'))
+                    or lower(e.name) like lower(concat('%', :search, '%'))
+                    or lower(e.inventoryNumber) like lower(concat('%', :search, '%'))
+                    or lower(e.technicalNumber) like lower(concat('%', :search, '%'))
+                    or lower(e.serialNumber) like lower(concat('%', :search, '%'))
+                    or lower(e.model) like lower(concat('%', :search, '%'))
+                    or lower(e.manufacturer) like lower(concat('%', :search, '%'))
+                    or lower(e.description) like lower(concat('%', :search, '%'))
+                  )
+              and exists (
+                    select 1
+                    from WarehouseEquipmentItem wei
+                    where wei.warehouseId = :warehouseId
+                      and wei.equipmentId = e.id
+                      and wei.active = true
+                      and wei.isDeleted = false
+                      and wei.status = :warehouseEquipmentStatus
+                  )
+              and not exists (
+                    select 1
+                    from WorkOrder wo
+                    where wo.isDeleted = false
+                      and wo.workType = :replacementWorkType
+                      and wo.replacementEquipmentId = e.id
+                      and wo.status not in :finalStatuses
+                  )
+            order by e.updatedAt desc
+            """)
+    Page<Equipment> searchAvailableForReplacement(@Param("warehouseId") UUID warehouseId,
+                                                  @Param("warehouseEquipmentStatus") WarehouseEquipmentStatus warehouseEquipmentStatus,
+                                                  @Param("replacementWorkType") WorkType replacementWorkType,
+                                                  @Param("finalStatuses") Collection<WorkOrderStatus> finalStatuses,
+                                                  @Param("departmentId") UUID departmentId,
+                                                  @Param("equipmentTypeId") UUID equipmentTypeId,
+                                                  @Param("status") EquipmentStatus status,
+                                                  @Param("category") EquipmentCategory category,
+                                                  @Param("search") String search,
+                                                  Pageable pageable);
 }

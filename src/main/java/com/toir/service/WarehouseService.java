@@ -148,4 +148,5 @@ public class WarehouseService {
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
+
 }

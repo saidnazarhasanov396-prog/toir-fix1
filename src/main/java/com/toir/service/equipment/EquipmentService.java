@@ -10,7 +10,11 @@ import com.toir.entity.equipment.EquipmentType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.WarehouseEquipmentStatus;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
+import com.toir.repository.WarehouseRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
@@ -37,12 +41,44 @@ public class EquipmentService {
     private final LocationRepository locationRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentPassportRepository passportRepository;
+    private final WarehouseRepository warehouseRepository;
     private final AuditBuilderService auditBuilderService;
+    private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
+            EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
 
 
     @Transactional(readOnly = true)
-    public Page<EquipmentDto> search(UUID departmentId, UUID equipmentTypeId, EquipmentStatus status, EquipmentCategory category, String search, int page, int pageSize) {
-        Page<Equipment> items = repository.search(departmentId, equipmentTypeId, status, category, search, PaginationUtils.pageRequest(page, pageSize));
+    public Page<EquipmentDto> search(UUID departmentId,
+                                     UUID equipmentTypeId,
+                                     EquipmentStatus status,
+                                     EquipmentCategory category,
+                                     UUID warehouseId,
+                                     boolean availableForReplacement,
+                                     String search,
+                                     int page,
+                                     int pageSize) {
+        Page<Equipment> items;
+        if (availableForReplacement) {
+            if (warehouseId == null) {
+                throw RestException.badRequest("warehouseId is required when availableForReplacement is true");
+            }
+            warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
+                    .orElseThrow(() -> RestException.notFound("Warehouse not found: " + warehouseId));
+            items = repository.searchAvailableForReplacement(
+                    warehouseId,
+                    WarehouseEquipmentStatus.AVAILABLE,
+                    WorkType.REPLACEMENT,
+                    FINAL_WORK_ORDER_STATUSES,
+                    departmentId,
+                    equipmentTypeId,
+                    status,
+                    category,
+                    search,
+                    PaginationUtils.pageRequest(page, pageSize)
+            );
+        } else {
+            items = repository.search(departmentId, equipmentTypeId, status, category, search, PaginationUtils.pageRequest(page, pageSize));
+        }
         return enrich(items);
     }
 
