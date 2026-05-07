@@ -2,6 +2,7 @@ package com.toir.repository;
 
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -36,6 +37,9 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
 
     @Query(value = "SELECT COUNT(*) FROM work_orders WHERE status = :status AND is_deleted = false", nativeQuery = true)
     long countByStatusAndIsDeletedFalse(@Param("status") String status);
+
+    @Query(value = "SELECT * FROM work_orders WHERE repair_request_id = cast(:repairRequestId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<WorkOrder> findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("repairRequestId") UUID repairRequestId);
 
     @Query("SELECT w FROM WorkOrder w WHERE w.isDeleted = false " +
             "AND (:status IS NULL OR w.status = :status) " +
@@ -95,4 +99,16 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
                                      @Param("equipmentId") UUID equipmentId,
                                      @Param("search") String search,
                                      Pageable pageable);
+
+    @Query("""
+            select case when count(w) > 0 then true else false end
+            from WorkOrder w
+            where w.isDeleted = false
+              and w.workType = :workType
+              and w.replacementEquipmentId = :replacementEquipmentId
+              and w.status not in :finalStatuses
+            """)
+    boolean existsActiveReplacementAssignment(@Param("replacementEquipmentId") UUID replacementEquipmentId,
+                                              @Param("workType") WorkType workType,
+                                              @Param("finalStatuses") Collection<WorkOrderStatus> finalStatuses);
 }

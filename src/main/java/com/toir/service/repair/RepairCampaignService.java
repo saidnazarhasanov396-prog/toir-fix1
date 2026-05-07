@@ -1,14 +1,17 @@
 package com.toir.service.repair;
-import com.toir.entity.repair.RepairCampaign;
-import com.toir.entity.repair.RepairCampaignStage;
-import com.toir.enums.RepairCampaignStatus;
-import com.toir.repository.repair.RepairCampaignRepository;
-import com.toir.repository.repair.RepairCampaignStageRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
+import com.toir.entity.repair.RepairCampaign;
+import com.toir.entity.repair.RepairCampaignStage;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.RepairCampaignStatus;
+import com.toir.exception.RestException;
+import com.toir.repository.repair.RepairCampaignRepository;
+import com.toir.repository.repair.RepairCampaignStageRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,12 +20,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class RepairCampaignService {
 
     private final RepairCampaignRepository repository;
     private final RepairCampaignStageRepository stageRepository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -41,6 +44,7 @@ public class RepairCampaignService {
         return RepairCampaignDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public RepairCampaignDto create(RepairCampaignRequest r) {
         if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Campaign code already exists: " + r.code());
@@ -59,42 +63,96 @@ public class RepairCampaignService {
         c.setTotalBudget(r.totalBudget());
         c.setScope(r.scope());
         c.setNotes(r.notes());
-        return RepairCampaignDto.from(repository.save(c));
+        RepairCampaign saved = repository.save(c);
+
+        auditBuilderService.log(
+                "repair_campaign",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.REPAIR_CAMPAIGN,
+                "Ремонтная кампания создана",
+                null,
+                saved
+        );
+
+        return RepairCampaignDto.from(saved);
     }
 
+    @Transactional
     public RepairCampaignDto approve(UUID id) {
         RepairCampaign c = getOrThrow(id);
         if (c.getStatus() != RepairCampaignStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT campaigns can be approved");
         }
         c.setStatus(RepairCampaignStatus.APPROVED);
+
+        RepairCampaign saved = repository.save(c);
+
+        auditBuilderService.log(
+                "repair_campaign",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_CAMPAIGN,
+                "Ремонтная кампания обновлена",
+                c,
+                saved
+        );
         return RepairCampaignDto.from(c);
     }
 
+    @Transactional
     public RepairCampaignDto start(UUID id) {
         RepairCampaign c = getOrThrow(id);
         if (c.getStatus() != RepairCampaignStatus.APPROVED) {
             throw RestException.badRequest("Only APPROVED campaigns can be started");
         }
         c.setStatus(RepairCampaignStatus.IN_PROGRESS);
+
+        RepairCampaign save = repository.save(c);
+
+        auditBuilderService.log(
+                "repair_campaign",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_CAMPAIGN,
+                "Ремонтная кампания обновлена",
+                c,
+                save
+        );
         return RepairCampaignDto.from(c);
     }
 
+    @Transactional
     public RepairCampaignDto close(UUID id) {
         RepairCampaign c = getOrThrow(id);
         if (c.getStatus() != RepairCampaignStatus.IN_PROGRESS
                 && c.getStatus() != RepairCampaignStatus.COMPLETED) {
             throw RestException.badRequest("Only IN_PROGRESS/COMPLETED campaigns can be closed");
         }
+
         c.setStatus(RepairCampaignStatus.CLOSED);
+
+        RepairCampaign save = repository.save(c);
+
+        auditBuilderService.log(
+                "repair_campaign",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_CAMPAIGN,
+                "Ремонтная кампания обновлена",
+                c,
+                save
+        );
         return RepairCampaignDto.from(c);
     }
 
+    @Transactional
     public RepairCampaignStageDto addStage(UUID campaignId, RepairCampaignStageDto r) {
         RepairCampaign c = getOrThrow(campaignId);
         if (c.getStatus() == RepairCampaignStatus.CLOSED || c.getStatus() == RepairCampaignStatus.CANCELLED) {
             throw RestException.badRequest("Cannot add stages to closed/cancelled campaign");
         }
+
         RepairCampaignStage s = new RepairCampaignStage();
         s.setCampaign(c);
         s.setSequence(r.sequence());
@@ -105,17 +163,67 @@ public class RepairCampaignService {
         s.setActualCost(r.actualCost());
         s.setNotes(r.notes());
         c.getStages().add(s);
-        RepairCampaignStage saved = stageRepository.save(s);
+        RepairCampaignStage repairCampaignStage = stageRepository.save(s);
         recalcTotals(c);
-        return RepairCampaignStageDto.from(saved);
+
+
+        auditBuilderService.log(
+                "repair_campaign_stage",
+                repairCampaignStage.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.REPAIR_CAMPAIGN_STAGE,
+                "Этап ремонтной кампании создан",
+                null,
+                repairCampaignStage
+        );
+
+
+        RepairCampaign repairCampaign = repository.save(c);
+
+        auditBuilderService.log(
+                "repair_campaign",
+                repairCampaign.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_CAMPAIGN,
+                "Ремонтная кампания обновлена",
+                c,
+                repairCampaign
+        );
+        return RepairCampaignStageDto.from(repairCampaignStage);
     }
 
+    @Transactional
     public RepairCampaignStageDto completeStage(UUID stageId, double actualCost) {
         RepairCampaignStage s = stageRepository.findByIdAndIsDeletedFalse(stageId)
                 .orElseThrow(() -> RestException.notFound("Stage not found: " + stageId));
+
         s.setActualCost(actualCost);
         s.setStatus(RepairCampaignStatus.COMPLETED);
         recalcTotals(s.getCampaign());
+
+
+        RepairCampaignStage repairCampaignStage = stageRepository.save(s);
+
+        auditBuilderService.log(
+                "repair_campaign_stage",
+                repairCampaignStage.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_CAMPAIGN_STAGE,
+               "Этап ремонтной кампании обновлен",
+                s,
+                repairCampaignStage
+        );
+
+
+        auditBuilderService.log(
+                "repair_campaign",
+                repairCampaignStage.getCampaign().getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_CAMPAIGN,
+                "Ремонтная кампания обновлена",
+                s.getCampaign(),
+                repairCampaignStage.getCampaign()
+        );
         return RepairCampaignStageDto.from(s);
     }
 

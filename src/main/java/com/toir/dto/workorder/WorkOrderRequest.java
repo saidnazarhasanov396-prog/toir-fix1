@@ -2,6 +2,7 @@ package com.toir.dto.workorder;
 
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderType;
+import com.toir.enums.WorkType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -17,6 +18,9 @@ public record WorkOrderRequest(
         UUID pprTaskId,
         UUID contractorId,
         @NotNull WorkOrderType type,
+        WorkType workType,
+        UUID warehouseId,
+        UUID replacementEquipmentId,
         PriorityLevel priority,
         Instant startPlannedAt,
         Instant endPlannedAt,

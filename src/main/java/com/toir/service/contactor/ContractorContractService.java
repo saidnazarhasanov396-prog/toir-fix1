@@ -1,9 +1,12 @@
 package com.toir.service.contactor;
 import com.toir.entity.contractors.ContractorContract;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.contarctor.ContractorContractRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.contractorcontract.ContractorContractDto;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,35 +15,73 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class ContractorContractService {
 
     private final ContractorContractRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
     public List<ContractorContractDto> findByContractor(UUID contractorId) {
         return repository.findAllByContractorIdAndIsDeletedFalse(contractorId).stream().map(ContractorContractDto::from).toList();
     }
 
+    @Transactional
     public ContractorContractDto create(ContractorContractDto r) {
         if (repository.existsByNumberAndIsDeletedFalse(r.number())) {
             throw RestException.conflict("Contract number already exists: " + r.number());
         }
         ContractorContract c = new ContractorContract();
         apply(c, r);
-        return ContractorContractDto.from(repository.save(c));
+        ContractorContract saved = repository.save(c);
+
+        auditBuilderService.log(
+                "contractor_contract",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.CONTRACTOR_CONTRACT,
+                "Договор подрядчика создан" ,
+                null,
+                saved
+        );
+        return ContractorContractDto.from(saved);
     }
 
+    @Transactional
     public ContractorContractDto update(UUID id, ContractorContractDto r) {
         ContractorContract c = getOrThrow(id);
         apply(c, r);
+
+        ContractorContract save = repository.save(c);
+        auditBuilderService.log(
+                "contractor_contract",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.CONTRACTOR_CONTRACT,
+                "Договор подрядчика обновлен" ,
+                c,
+                save
+        );
+
         return ContractorContractDto.from(c);
     }
 
-    public void delete(UUID id) { var entity = getOrThrow(id);
+    @Transactional
+    public void delete(UUID id) {
+        var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity); }
+        ContractorContract saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "contractor_contract",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.CONTRACTOR_CONTRACT,
+                "Договор подрядчика удален" ,
+                entity,
+                null
+        );
+    }
 
     private ContractorContract getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)

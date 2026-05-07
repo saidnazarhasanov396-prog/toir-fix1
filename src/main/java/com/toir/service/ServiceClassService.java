@@ -1,9 +1,12 @@
 package com.toir.service;
-import com.toir.entity.ServiceClass;
-import com.toir.repository.ServiceClassRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.serviceclass.ServiceClassDto;
+import com.toir.entity.ServiceClass;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
+import com.toir.repository.ServiceClassRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,11 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class ServiceClassService {
 
     private final ServiceClassRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -30,22 +33,60 @@ public class ServiceClassService {
         return ServiceClassDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public ServiceClassDto create(ServiceClassDto r) {
         ServiceClass e = new ServiceClass();
         e.setCode(nextCode());
         e.setName(r.name()); e.setDescription(r.description());
-        return ServiceClassDto.from(repository.save(e));
+        ServiceClass saved = repository.save(e);
+
+        auditBuilderService.log(
+                "service_class",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.SERVICE_CLASS,
+                "Класс обслуживания создан",
+                null,
+                saved
+        );
+        return ServiceClassDto.from(saved);
     }
 
+    @Transactional
     public ServiceClassDto update(UUID id, ServiceClassDto r) {
         ServiceClass e = getOrThrow(id);
         e.setName(r.name()); e.setDescription(r.description());
+
+        ServiceClass saved = repository.save(e);
+
+        auditBuilderService.log(
+                "service_class",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.SERVICE_CLASS,
+                "Класс обслуживания обновлен",
+                e,
+                saved
+        );
+
         return ServiceClassDto.from(e);
     }
 
+    @Transactional
     public void delete(UUID id) { var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity); }
+        ServiceClass saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "service_class",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.SERVICE_CLASS,
+                "Класс обслуживания удален",
+                saved,
+                null
+        );
+    }
 
     private ServiceClass getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)

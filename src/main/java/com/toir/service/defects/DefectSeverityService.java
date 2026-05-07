@@ -1,9 +1,13 @@
 package com.toir.service.defects;
 import com.toir.entity.defects.DefectSeverity;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.repository.defects.DefectSeverityRepository;
 
 import com.toir.exception.RestException;
 import com.toir.dto.defectseverity.DefectSeverityDto;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,11 +17,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class DefectSeverityService {
 
     private final DefectSeverityRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -25,22 +29,61 @@ public class DefectSeverityService {
         return repository.findAllBySearch(search).stream().map(DefectSeverityDto::from).toList();
     }
 
+    @Transactional
     public DefectSeverityDto create(DefectSeverityDto r) {
         DefectSeverity e = new DefectSeverity();
         e.setCode(nextCode());
         e.setName(r.name()); e.setWeight(r.weight());
-        return DefectSeverityDto.from(repository.save(e));
+        DefectSeverity saved = repository.save(e);
+        auditBuilderService.log(
+                "defect_severity",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.DEFECT_SEVERITY,
+                "Серьезность дефекта создана",
+                null,
+                saved
+        );
+
+
+        return DefectSeverityDto.from(saved);
     }
 
+    @Transactional
     public DefectSeverityDto update(UUID id, DefectSeverityDto r) {
         DefectSeverity e = getOrThrow(id);
         e.setName(r.name()); e.setWeight(r.weight());
+        DefectSeverity updated = repository.save(e);
+
+        auditBuilderService.log(
+                "defect_severity",
+                updated.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.DEFECT_SEVERITY,
+                "Серьезность дефекта обновлена",
+                e,
+                updated
+        );
+
         return DefectSeverityDto.from(e);
     }
 
+    @Transactional
     public void delete(UUID id) { var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity); }
+        DefectSeverity deleted = repository.save(entity);
+
+        auditBuilderService.log(
+                "defect_severity",
+                deleted.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.DEFECT_SEVERITY,
+                "Серьезность дефекта удалена",
+                deleted,
+                null
+        );
+
+    }
 
     private DefectSeverity getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)

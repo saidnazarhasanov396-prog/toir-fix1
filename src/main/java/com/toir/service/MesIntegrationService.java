@@ -4,10 +4,13 @@ import com.toir.dto.integration.ConnectionTestResult;
 import com.toir.dto.integration.IntegrationSyncLogDto;
 import com.toir.entity.IntegrationEndpoint;
 import com.toir.entity.IntegrationSyncLog;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.IntegrationSyncStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.IntegrationEndpointRepository;
 import com.toir.repository.IntegrationSyncLogRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +30,7 @@ public class MesIntegrationService {
 
     private final IntegrationEndpointRepository endpointRepository;
     private final IntegrationSyncLogRepository syncLogRepository;
+    private final AuditBuilderService auditBuilderService;
 
 
     public ConnectionTestResult testConnection(UUID endpointId) {
@@ -76,7 +80,17 @@ public class MesIntegrationService {
         log.setDirection("BIDIRECTIONAL");
         log.setStartedAt(Instant.now());
         log.setStatus(IntegrationSyncStatus.RUNNING);
-        syncLogRepository.save(log);
+        IntegrationSyncLog savedLog = syncLogRepository.save(log);
+
+        auditBuilderService.log(
+                "integration_sync_log",
+                savedLog.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.INTEGRATION_SYNC_LOG,
+                "Лог синхронизации интеграции создан",
+                null,
+                savedLog
+        );
 
         try {
             String fullUrl = ep.getFullUrl();
@@ -127,6 +141,30 @@ public class MesIntegrationService {
             ep.setLastSyncStatus(IntegrationSyncStatus.FAILED);
             ep.setLastError(e.getMessage());
         }
+
+
+        IntegrationEndpoint savedEP = endpointRepository.save(ep);
+        IntegrationSyncLog logSave = syncLogRepository.save(log);
+
+        auditBuilderService.log(
+                "integration_endpoint",
+                savedEP.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.INTEGRATION_ENDPOINT,
+                "Интеграционная точка обновлена",
+                ep,
+                savedEP
+        );
+
+        auditBuilderService.log(
+                "integration_sync_log",
+                logSave.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.INTEGRATION_SYNC_LOG,
+                "Лог синхронизации интеграции обновлен",
+                log,
+                logSave
+        );
 
         return IntegrationSyncLogDto.from(log);
     }

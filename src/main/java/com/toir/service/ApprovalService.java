@@ -1,14 +1,17 @@
 package com.toir.service;
-import com.toir.enums.ApprovalDecision;
-import com.toir.entity.ApprovalRequest;
-import com.toir.enums.ApprovalStatus;
-import com.toir.entity.ApprovalStep;
-import com.toir.repository.ApprovalRequestRepository;
 
 import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
+import com.toir.entity.ApprovalRequest;
+import com.toir.entity.ApprovalStep;
+import com.toir.enums.ApprovalDecision;
+import com.toir.enums.ApprovalStatus;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
+import com.toir.repository.ApprovalRequestRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +26,8 @@ import java.util.UUID;
 public class ApprovalService {
 
     private final ApprovalRequestRepository requestRepository;
+    private final AuditBuilderService auditBuilderService;
+
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> listByDocument(String documentType, UUID documentId) {
@@ -68,7 +73,19 @@ public class ApprovalService {
             step.setDecision(ApprovalDecision.PENDING);
             request.getSteps().add(step);
         }
-        return ApprovalRequestDto.from(requestRepository.save(request));
+        ApprovalRequest saved = requestRepository.save(request);
+
+        auditBuilderService.log(
+                "approval_request",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.APPROVAL_REQUEST,
+                "Заявка на согласование создана",
+                null,
+                saved
+        );
+
+        return ApprovalRequestDto.from(saved);
     }
 
     @Transactional
@@ -89,6 +106,20 @@ public class ApprovalService {
         }
         request.setStatus(ApprovalStatus.CANCELLED);
         request.setCompletedAt(Instant.now());
+
+        ApprovalRequest saved = requestRepository.save(request);
+
+
+        auditBuilderService.log(
+                "approval_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.APPROVAL_REQUEST,
+                "Заявка на согласование обновлена",
+                request,
+                saved
+        );
+
         return ApprovalRequestDto.from(request);
     }
 
@@ -121,6 +152,20 @@ public class ApprovalService {
                 request.setCompletedAt(Instant.now());
             }
         }
+
+        ApprovalRequest saved = requestRepository.save(request);
+
+        auditBuilderService.log(
+                "approval_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.APPROVAL_REQUEST,
+                "Заявка на согласование обновлена",
+                request,
+                saved
+        );
+
+
         return ApprovalRequestDto.from(request);
     }
 

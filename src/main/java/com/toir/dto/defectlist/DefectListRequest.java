@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
 public record DefectListRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String title,
         @NotNull UUID equipmentId,
         UUID repairRequestId,

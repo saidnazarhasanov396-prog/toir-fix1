@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,19 +22,13 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/defects")
 @Tag(name = "defects")
+@RequiredArgsConstructor
 public class DefectController {
 
     private final DefectService service;
     private final DefectRepository defectRepository;
     private final KnowledgeArticleRepository knowledgeRepository;
 
-    public DefectController(DefectService service,
-                            DefectRepository defectRepository,
-                            KnowledgeArticleRepository knowledgeRepository) {
-        this.service = service;
-        this.defectRepository = defectRepository;
-        this.knowledgeRepository = knowledgeRepository;
-    }
 
     @GetMapping
     public ResponseEntity<Page<DefectResponse>> list(

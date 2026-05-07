@@ -1,10 +1,12 @@
 package com.toir.service;
-import com.toir.entity.FileAsset;
-import com.toir.repository.FileAssetRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.file.FileAssetDto;
-import lombok.RequiredArgsConstructor;
+import com.toir.entity.FileAsset;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
+import com.toir.repository.FileAssetRepository;
+import com.toir.util.AuditBuilderService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,15 +20,17 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 public class FileAssetService {
 
     private final FileAssetRepository repository;
+    private final AuditBuilderService auditBuilderService;
     private final Path storageRoot;
 
     public FileAssetService(FileAssetRepository repository,
+                            AuditBuilderService auditBuilderService,
                             @Value("${app.files.storage-path:uploads}") String storagePath) {
         this.repository = repository;
+        this.auditBuilderService = auditBuilderService;
         this.storageRoot = Paths.get(storagePath).toAbsolutePath();
         try {
             Files.createDirectories(this.storageRoot);
@@ -41,6 +45,7 @@ public class FileAssetService {
                 .map(FileAssetDto::from).toList();
     }
 
+    @Transactional
     public FileAssetDto upload(MultipartFile file, String entityType, String entityId, UUID uploadedById) {
         if (file == null || file.isEmpty()) {
             throw RestException.badRequest("File is required");
@@ -61,9 +66,22 @@ public class FileAssetService {
         asset.setEntityType(entityType);
         asset.setEntityId(entityId);
         asset.setUploadedById(uploadedById);
-        return FileAssetDto.from(repository.save(asset));
+        FileAsset saved = repository.save(asset);
+
+        auditBuilderService.log(
+                "file_asset",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.FILE_ASSET,
+                "Файл загружен",
+                null,
+                saved
+        );
+
+        return FileAssetDto.from(saved);
     }
 
+    @Transactional
     public void delete(UUID id) {
         FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("File not found: " + id));
@@ -72,6 +90,20 @@ public class FileAssetService {
         } catch (IOException ignored) {
         }
         asset.setDeleted(true);
-        repository.save(asset);
+        FileAsset saved = repository.save(asset);
+
+        auditBuilderService.log(
+                "file_asset",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.FILE_ASSET,
+                "Файл удален",
+                saved,
+                null
+
+        );
+
     }
+
+
 }

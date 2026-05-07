@@ -1,8 +1,11 @@
 package com.toir.service;
-import com.toir.entity.ReliabilityMetric;
-import com.toir.repository.ReliabilityMetricRepository;
 
 import com.toir.dto.reliability.ReliabilityMetricDto;
+import com.toir.entity.ReliabilityMetric;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.repository.ReliabilityMetricRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,11 +14,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class ReliabilityMetricService {
 
     private final ReliabilityMetricRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -24,6 +27,7 @@ public class ReliabilityMetricService {
                 .map(ReliabilityMetricDto::from).toList();
     }
 
+    @Transactional
     public ReliabilityMetricDto record(ReliabilityMetricDto r) {
         ReliabilityMetric m = new ReliabilityMetric();
         m.setEquipmentId(r.equipmentId());
@@ -32,6 +36,17 @@ public class ReliabilityMetricService {
         m.setMttrHours(r.mttrHours());
         m.setAvailability(r.availability());
         m.setFailureRate(r.failureRate());
-        return ReliabilityMetricDto.from(repository.save(m));
+        ReliabilityMetric saved = repository.save(m);
+        auditBuilderService.log(
+                "reliability_metric",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.RELIABILITY_METRIC,
+                "Метрика надежности создана",
+                null,
+                saved
+        );
+
+        return ReliabilityMetricDto.from(saved);
     }
 }

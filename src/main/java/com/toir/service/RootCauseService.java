@@ -1,9 +1,12 @@
 package com.toir.service;
-import com.toir.entity.RootCause;
-import com.toir.repository.RootCauseRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.rootcause.RootCauseDto;
+import com.toir.entity.RootCause;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
+import com.toir.repository.RootCauseRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,11 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class RootCauseService {
 
     private final RootCauseRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -25,22 +28,64 @@ public class RootCauseService {
         return repository.findAllBySearch(search).stream().map(RootCauseDto::from).toList();
     }
 
+    @Transactional
     public RootCauseDto create(RootCauseDto r) {
         RootCause e = new RootCause();
         e.setCode(nextCode());
-        e.setName(r.name()); e.setDescription(r.description());
-        return RootCauseDto.from(repository.save(e));
+        e.setName(r.name());
+        e.setDescription(r.description());
+        RootCause saved = repository.save(e);
+
+        auditBuilderService.log(
+                "root_cause",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.ROOT_CAUSE,
+                "Корневая причина создана",
+                null,
+                saved
+        );
+
+        return RootCauseDto.from(saved);
     }
 
+    @Transactional
     public RootCauseDto update(UUID id, RootCauseDto r) {
         RootCause e = getOrThrow(id);
-        e.setName(r.name()); e.setDescription(r.description());
+        e.setName(r.name());
+        e.setDescription(r.description());
+
+        RootCause saved = repository.save(e);
+        auditBuilderService.log(
+                "root_cause",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.ROOT_CAUSE,
+                "Корневая причина обновлена",
+                e,
+                saved
+        );
+
         return RootCauseDto.from(e);
     }
 
-    public void delete(UUID id) { var entity = getOrThrow(id);
+    @Transactional
+    public void delete(UUID id) {
+        var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity); }
+        RootCause saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "root_cause",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.ROOT_CAUSE,
+                "Корневая причина удалена",
+                saved,
+                null
+        );
+
+    }
 
     private RootCause getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)

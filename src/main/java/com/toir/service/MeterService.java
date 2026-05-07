@@ -1,17 +1,20 @@
 package com.toir.service;
-import com.toir.entity.equipment.Equipment;
-import com.toir.entity.equipment.EquipmentMeter;
-import com.toir.entity.equipment.MeterReading;
-import com.toir.enums.MeterType;
-import com.toir.repository.equipment.EquipmentMeterRepository;
-import com.toir.repository.equipment.EquipmentRepository;
-import com.toir.repository.MeterReadingRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.meter.EquipmentMeterDto;
 import com.toir.dto.meter.EquipmentMeterRequest;
 import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.meter.MeterReadingRequest;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentMeter;
+import com.toir.entity.equipment.MeterReading;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.MeterType;
+import com.toir.exception.RestException;
+import com.toir.repository.MeterReadingRepository;
+import com.toir.repository.equipment.EquipmentMeterRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,6 +31,7 @@ public class MeterService {
     private final EquipmentMeterRepository meterRepository;
     private final MeterReadingRepository readingRepository;
     private final EquipmentRepository equipmentRepository;
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listByEquipment(UUID equipmentId) {
@@ -49,6 +53,7 @@ public class MeterService {
         return enrichWithEquipmentName(getMeterOrThrow(id));
     }
 
+    @Transactional
     public EquipmentMeterDto createMeter(EquipmentMeterRequest request) {
         EquipmentMeter meter = new EquipmentMeter();
         meter.setEquipmentId(request.equipmentId());
@@ -58,9 +63,22 @@ public class MeterService {
         meter.setCurrentValue(request.initialValue());
         meter.setRolloverValue(request.rolloverValue());
         if (request.active() != null) meter.setActive(request.active());
-        return enrichWithEquipmentName(meterRepository.save(meter));
+        EquipmentMeter saved = meterRepository.save(meter);
+
+        auditBuilderService.log(
+                "equipment_meter",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.EQUIPMENT_METER,
+                "Счетчик оборудования создан",
+                null,
+                saved
+        );
+
+        return enrichWithEquipmentName(saved);
     }
 
+    @Transactional
     public EquipmentMeterDto updateMeter(UUID id, EquipmentMeterRequest request) {
         EquipmentMeter meter = getMeterOrThrow(id);
         meter.setEquipmentId(request.equipmentId());
@@ -69,16 +87,40 @@ public class MeterService {
         meter.setUnit(request.unit());
         meter.setRolloverValue(request.rolloverValue());
         if (request.active() != null) meter.setActive(request.active());
-        meterRepository.save(meter);
+        EquipmentMeter saved = meterRepository.save(meter);
+
+        auditBuilderService.log(
+                "equipment_meter",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.EQUIPMENT_METER,
+                "Счетчик оборудования обновлен",
+                meter,
+                saved
+        );
+
         return enrichWithEquipmentName(meter);
     }
 
+    @Transactional
     public void deleteMeter(UUID id) {
         var entity = getMeterOrThrow(id);
         entity.setDeleted(true);
-        meterRepository.save(entity);
+        EquipmentMeter saved = meterRepository.save(entity);
+
+        auditBuilderService.log(
+                "equipment_meter",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.EQUIPMENT_METER,
+                "Счетчик оборудования удален",
+                saved,
+                null
+        );
+
     }
 
+    @Transactional
     public MeterReadingDto addReading(MeterReadingRequest request) {
         EquipmentMeter meter = getMeterOrThrow(request.meterId());
         if (!meter.isActive()) {
@@ -113,6 +155,27 @@ public class MeterService {
         meter.setCurrentValue(newValue);
         meter.setLastReadAt(readAt);
 
+        auditBuilderService.log(
+                "meter_reading",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.METER_READING,
+                "Показание счетчика создано",
+                null,
+                saved
+        );
+
+        EquipmentMeter savedMeter = meterRepository.save(meter);
+        auditBuilderService.log(
+                "equipment_meter",
+                savedMeter.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.EQUIPMENT_METER,
+                "Счетчик оборудования обновлен",
+                meter,
+                savedMeter
+        );
+
         return MeterReadingDto.from(saved);
     }
 
@@ -133,11 +196,24 @@ public class MeterService {
                 .stream().map(MeterReadingDto::from).toList();
     }
 
+    @Transactional
     public void deleteReading(UUID readingId) {
         MeterReading reading = readingRepository.findByIdAndIsDeletedFalse(readingId)
                 .orElseThrow(() -> RestException.notFound("Meter reading not found: " + readingId));
         reading.setDeleted(true);
-        readingRepository.save(reading);
+        MeterReading saved = readingRepository.save(reading);
+
+        auditBuilderService.log(
+                "meter_reading",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.METER_READING,
+                "Показание счетчика удалено",
+                saved,
+                null
+        );
+
+
     }
 
     private EquipmentMeter getMeterOrThrow(UUID id) {

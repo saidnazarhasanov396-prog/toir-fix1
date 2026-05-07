@@ -84,7 +84,7 @@ public class MaintenanceAdvisor {
             List<CalibrationRecord> calibs = calibrationRecordRepository
                     .findAllByEquipmentIdAndIsDeletedFalseOrderByPerformedAtDesc(eq.getId());
             if (!calibs.isEmpty()) {
-                CalibrationRecord latest = calibs.get(0);
+                CalibrationRecord latest = calibs.getFirst();
                 if (latest.getNextDueAt() != null) {
                     long daysToDue = java.time.temporal.ChronoUnit.DAYS.between(today, latest.getNextDueAt());
                     if (daysToDue < 0) {

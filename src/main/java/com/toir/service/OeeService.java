@@ -1,12 +1,14 @@
 package com.toir.service;
-import com.toir.entity.OeeRecord;
-import com.toir.repository.OeeRecordRepository;
 
-import com.toir.dto.oee.OeeSummary;
-
-import com.toir.exception.RestException;
 import com.toir.dto.oee.OeeRecordDto;
 import com.toir.dto.oee.OeeRecordRequest;
+import com.toir.dto.oee.OeeSummary;
+import com.toir.entity.OeeRecord;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
+import com.toir.repository.OeeRecordRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,11 +18,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class OeeService {
 
     private final OeeRecordRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -42,22 +44,59 @@ public class OeeService {
         return OeeRecordDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public OeeRecordDto create(OeeRecordRequest r) {
         OeeRecord entity = new OeeRecord();
         apply(entity, r);
-        return OeeRecordDto.from(repository.save(entity));
+        OeeRecord saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "oee_record",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.OEE_RECORD,
+                "Запись OEE создана",
+                null,
+                saved
+        );
+
+        return OeeRecordDto.from(saved);
     }
 
+    @Transactional
     public OeeRecordDto update(UUID id, OeeRecordRequest r) {
         OeeRecord entity = getOrThrow(id);
         apply(entity, r);
+
+        OeeRecord saved = repository.save(entity);
+        auditBuilderService.log(
+                "oee_record",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.OEE_RECORD,
+                "Запись OEE обновлена",
+                entity,
+                saved
+        );
+
         return OeeRecordDto.from(entity);
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity);
+        OeeRecord saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "oee_record",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.OEE_RECORD,
+                "Запись OEE удалена",
+                saved,
+                null
+        );
     }
 
     public OeeSummary summary(UUID equipmentId, Instant from, Instant to) {

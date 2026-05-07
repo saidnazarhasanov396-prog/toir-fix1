@@ -8,6 +8,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,13 +18,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/approvals")
 @Tag(name = "approvals")
+@RequiredArgsConstructor
 public class ApprovalController {
 
     private final ApprovalService service;
 
-    public ApprovalController(ApprovalService service) {
-        this.service = service;
-    }
 
     @GetMapping
     public ResponseEntity<Page<ApprovalRequestDto>> list(

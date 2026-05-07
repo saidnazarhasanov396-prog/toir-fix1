@@ -1,13 +1,16 @@
 package com.toir.service;
-import com.toir.entity.SparePart;
-import com.toir.enums.InventoryItemKind;
-import com.toir.repository.SparePartRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.sparepart.SparePartDto;
 import com.toir.dto.sparepart.SparePartRequest;
+import com.toir.entity.SparePart;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.InventoryItemKind;
+import com.toir.exception.RestException;
+import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -20,12 +23,12 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class SparePartService {
 
     private final SparePartRepository repository;
     private final WarehouseStockRepository stockRepository;
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
     public Page<SparePartDto> findAll(Integer pageSize, Integer page, String itemType, String search) {
@@ -76,13 +79,37 @@ public class SparePartService {
         }
         SparePart entity = new SparePart();
         apply(entity, request);
-        return SparePartDto.from(repository.save(entity));
+        SparePart saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "spare_part",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.SPARE_PART,
+                "Запасная часть создана",
+                null,
+                saved
+        );
+
+        return SparePartDto.from(saved);
     }
 
     @Transactional
     public SparePartDto update(UUID id, SparePartRequest request) {
         SparePart entity = getOrThrow(id);
         apply(entity, request);
+
+        SparePart saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "spare_part",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.SPARE_PART,
+                "Запасная часть обновлена",
+                entity,
+                saved
+        );
         return SparePartDto.from(entity);
     }
 
@@ -90,7 +117,17 @@ public class SparePartService {
     public void delete(UUID id) {
         var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity);
+        SparePart saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "spare_part",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.SPARE_PART,
+                "Запасная часть удалена",
+                saved,
+                null
+        );
     }
 
     SparePart getOrThrow(UUID id) {

@@ -1,10 +1,13 @@
 package com.toir.service.contactor;
-import com.toir.entity.contractors.Contractor;
-import com.toir.repository.contarctor.ContractorRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.contractor.ContractorDto;
 import com.toir.dto.contractor.ContractorRequest;
+import com.toir.entity.contractors.Contractor;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
+import com.toir.repository.contarctor.ContractorRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,11 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class ContractorService {
 
     private final ContractorRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
     public List<ContractorDto> findAll(String search) {
@@ -29,25 +32,63 @@ public class ContractorService {
         return ContractorDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public ContractorDto create(ContractorRequest request) {
         if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Contractor code already exists: " + request.code());
         }
         Contractor entity = new Contractor();
         apply(entity, request);
-        return ContractorDto.from(repository.save(entity));
+        Contractor saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "contractor",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.CONTRACTOR,
+                "Подрядчик создан" ,
+                null,
+                saved
+        );
+
+        return ContractorDto.from(saved);
     }
 
+    @Transactional
     public ContractorDto update(UUID id, ContractorRequest request) {
         Contractor entity = getOrThrow(id);
+
         apply(entity, request);
+        Contractor save = repository.save(entity);
+
+        auditBuilderService.log(
+                "contractor",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.CONTRACTOR,
+                "Подрядчик обновлен",
+                entity,
+                save
+        );
         return ContractorDto.from(entity);
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity);
+        Contractor saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "contractor",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.CONTRACTOR,
+                "Подрядчик удален",
+                entity,
+                null
+        );
+
     }
 
     private Contractor getOrThrow(UUID id) {
@@ -65,4 +106,5 @@ public class ContractorService {
         entity.setSpecialization(request.specialization());
         if (request.status() != null) entity.setStatus(request.status());
     }
+
 }

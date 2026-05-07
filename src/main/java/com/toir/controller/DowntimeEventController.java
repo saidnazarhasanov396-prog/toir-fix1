@@ -7,6 +7,8 @@ import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,11 +17,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/downtimes")
 @Tag(name = "downtimes")
+@RequiredArgsConstructor
 public class DowntimeEventController {
 
     private final DowntimeEventService service;
-
-    public DowntimeEventController(DowntimeEventService service) { this.service = service; }
 
     @GetMapping
     public ResponseEntity<Page<DowntimeEventDto>> list(@RequestParam UUID equipmentId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {

@@ -4,6 +4,8 @@ import com.toir.service.SafetyPermitService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -11,11 +13,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "safety-permits")
+@RequiredArgsConstructor
 public class SafetyPermitController {
 
     private final SafetyPermitService service;
-
-    public SafetyPermitController(SafetyPermitService service) { this.service = service; }
 
     @GetMapping("/work-orders/{workOrderId}/safety-permit")
     public ResponseEntity<SafetyPermitDto> get(@PathVariable UUID workOrderId) { return ResponseEntity.ok(service.findByWorkOrder(workOrderId)); }

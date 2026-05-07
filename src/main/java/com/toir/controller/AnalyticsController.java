@@ -10,6 +10,8 @@ import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,13 +23,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/analytics")
 @Tag(name = "analytics")
+@RequiredArgsConstructor
 public class AnalyticsController {
 
     private final AnalyticsService service;
-
-    public AnalyticsController(AnalyticsService service) {
-        this.service = service;
-    }
 
     @GetMapping("/overview")
     public ResponseEntity<AnalyticsOverview> overview() {

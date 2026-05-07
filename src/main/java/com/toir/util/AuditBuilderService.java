@@ -18,14 +18,14 @@ public class AuditBuilderService {
     private final AuditLogService logService;
     private final SecurityScope securityScope;
 
-    public void log(
+    public <T> void log(
             String entityType,
             String resourceId,
             AuditAction action,
             AuditModule module,
             String description,
-            Object oldObj,
-            Object newObj
+            T oldObj,
+            T newObj
     ) {
         String oldJson = normalize(oldObj);
         String newJson = normalize(newObj);
@@ -45,7 +45,7 @@ public class AuditBuilderService {
         );
     }
 
-    private String normalize(Object value) {
+    private <T> String normalize(T value) {
         if (value == null) {
             return null;
         }

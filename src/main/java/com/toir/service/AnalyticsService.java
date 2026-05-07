@@ -28,6 +28,7 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
@@ -50,7 +51,7 @@ public class AnalyticsService {
     private final DepartmentRepository departmentRepository;
 
 
-
+    @Transactional
     public AnalyticsOverview overview() {
         long openRequests = repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN.name())
                 + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS.name());
@@ -207,6 +208,7 @@ public class AnalyticsService {
                 reliabilitySnapshot, repeatedDefects, maintenanceKpis);
     }
 
+    @Transactional
     public FailureParetoResponse failurePareto() {
         List<FailureReasonRow> items = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> d.getFailureReason() != null && !d.getFailureReason().isBlank())
@@ -218,6 +220,7 @@ public class AnalyticsService {
         return new FailureParetoResponse(items);
     }
 
+    @Transactional
     public RcaOverviewResponse rcaOverview() {
         List<Defect> all = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         List<RcaOverviewResponse.CountRow> topRoot = all.stream()
@@ -239,6 +242,7 @@ public class AnalyticsService {
         return new RcaOverviewResponse(topRoot, topRoot, List.of(), List.of(), List.of(), categoryBreakdown);
     }
 
+    @Transactional
     public RcaEquipmentResponse rcaEquipment(UUID equipmentId) {
         List<Defect> defects = defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
         Map<String, Long> topCauses = defects.stream()
@@ -293,6 +297,7 @@ public class AnalyticsService {
         );
     }
 
+    @Transactional
     public List<ReliabilityMetric> reliabilityList() {
         return reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
     }

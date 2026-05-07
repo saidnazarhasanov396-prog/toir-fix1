@@ -12,11 +12,10 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
 
 import com.toir.enums.AuditAction;
-import com.toir.service.AuditLogService;
+import com.toir.enums.AuditModule;
+import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
-import com.toir.util.RequestContext;
 import com.toir.exception.RestException;
-import com.toir.security.SecurityScope;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
@@ -29,21 +28,15 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class RepairRequestService {
-
-    private static final String MODULE = "repair-request";
-    private static final String ENTITY = "RepairRequest";
 
     private final RepairRequestRepository repository;
     private final EquipmentRepository equipmentRepository;
     private final DepartmentRepository departmentRepository;
     private final LocationRepository locationRepository;
     private final UserRepository userRepository;
-    private final AuditLogService auditLogService;
-    private final RequestContext requestContext;
-    private final SecurityScope securityScope;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -67,6 +60,7 @@ public class RepairRequestService {
         return toDto(getOrThrow(id));
     }
 
+    @Transactional
     public RepairRequestDto create(RepairRequestRequest request) {
         if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Request number already exists: " + request.number());
@@ -84,30 +78,67 @@ public class RepairRequestService {
         if (request.source() != null) entity.setSource(request.source());
         entity.setTargetCompletionAt(request.targetCompletionAt());
         RepairRequest saved = repository.save(entity);
-        audit(AuditAction.CREATE, saved.getId(), "Создана заявка " + saved.getNumber());
+
+        auditBuilderService.log(
+                "repair_request",
+                String.valueOf(saved.getId()),
+                AuditAction.CREATE,
+                AuditModule.REPAIR_REQUEST,
+                "Создана заявка " + saved.getNumber(),
+                null,
+                saved
+        );
+
         return toDto(saved);
     }
 
+    @Transactional
     public RepairRequestDto changeStatus(UUID id, RequestStatus newStatus) {
         RepairRequest entity = getOrThrow(id);
+
         captureReaction(entity, newStatus);
         entity.setStatus(newStatus);
-        audit(AuditAction.UPDATE, entity.getId(), "Заявка " + entity.getNumber() + " переведена в " + newStatus);
+
+        RepairRequest save = repository.save(entity);
+
+        auditBuilderService.log(
+                "repair_request",
+                String.valueOf(save.getId()),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_REQUEST,
+                "Заявка " + entity.getNumber() + " переведена в " + newStatus,
+                entity,
+                save
+        );
         return toDto(entity);
     }
 
+
+    @Transactional
     public RepairRequestDto assign(UUID id, UUID assigneeId) {
         RepairRequest entity = getOrThrow(id);
         if (entity.getStatus() == RequestStatus.CLOSED || entity.getStatus() == RequestStatus.CANCELLED) {
             throw RestException.badRequest("Cannot assign a closed/cancelled request");
         }
+
         captureReaction(entity, RequestStatus.ASSIGNED);
         entity.setAssignedToId(assigneeId);
         entity.setStatus(RequestStatus.ASSIGNED);
-        audit(AuditAction.UPDATE, entity.getId(), "Заявка " + entity.getNumber() + " назначена исполнителю");
+        RepairRequest save = repository.save(entity);
+
+        auditBuilderService.log(
+                "repair_request",
+                String.valueOf(save.getId()),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_REQUEST,
+                "Заявка " + entity.getNumber() + " назначена исполнителю",
+                entity,
+                save
+        );
         return toDto(entity);
     }
 
+    @Transactional
     public RepairRequestDto reject(UUID id, String reason) {
         if (reason == null || reason.isBlank()) {
             throw RestException.badRequest("Rejection reason is required");
@@ -116,13 +147,25 @@ public class RepairRequestService {
         if (entity.getStatus() == RequestStatus.CLOSED || entity.getStatus() == RequestStatus.CANCELLED) {
             throw RestException.badRequest("Cannot reject a closed/cancelled request");
         }
+
         captureReaction(entity, RequestStatus.REJECTED);
         entity.setStatus(RequestStatus.REJECTED);
         entity.setRejectionReason(reason);
-        audit(AuditAction.CANCEL, entity.getId(), "Заявка " + entity.getNumber() + " отклонена: " + reason);
+        RepairRequest save = repository.save(entity);
+
+        auditBuilderService.log(
+                "repair_request",
+                String.valueOf(save.getId()),
+                AuditAction.CANCEL,
+                AuditModule.REPAIR_REQUEST,
+                "Заявка " + entity.getNumber() + " отклонена: " + reason,
+                entity,
+                save
+        );
         return toDto(entity);
     }
 
+    @Transactional
     public RepairRequestDto requestClarification(UUID id, String comment) {
         if (comment == null || comment.isBlank()) {
             throw RestException.badRequest("Clarification comment is required");
@@ -131,9 +174,22 @@ public class RepairRequestService {
         captureReaction(entity, RequestStatus.NEEDS_CLARIFICATION);
         entity.setStatus(RequestStatus.NEEDS_CLARIFICATION);
         entity.setRejectionReason(comment);
-        audit(AuditAction.UPDATE, entity.getId(), "Заявка " + entity.getNumber() + " требует уточнения: " + comment);
+
+        RepairRequest save = repository.save(entity);
+
+        auditBuilderService.log(
+                "repair_request",
+                String.valueOf(save.getId()),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_REQUEST,
+                "Заявка " + entity.getNumber() + " требует уточнения: " + comment,
+                entity,
+                save
+        );
+
         return toDto(entity);
     }
+
 
     private void captureReaction(RepairRequest entity, RequestStatus nextStatus) {
         if (entity.getReactedAt() == null
@@ -144,15 +200,28 @@ public class RepairRequestService {
         }
     }
 
+    @Transactional
     public RepairRequestDto close(UUID id, CloseRequestRequest request) {
         RepairRequest entity = getOrThrow(id);
         if (request.closeResult() == null || request.closeResult().isBlank()) {
             throw RestException.badRequest("Close result is required");
         }
+
         entity.setCloseResult(request.closeResult());
         entity.setActualCompletionAt(Instant.now());
         entity.setStatus(RequestStatus.CLOSED);
-        audit(AuditAction.CLOSE, entity.getId(), "Закрыта заявка " + entity.getNumber());
+
+        RepairRequest save = repository.save(entity);
+
+        auditBuilderService.log(
+                "repair_request",
+                String.valueOf(save.getId()),
+                AuditAction.CLOSE,
+                AuditModule.REPAIR_REQUEST,
+                "Закрыта заявка " + entity.getNumber(),
+                entity,
+                save
+        );
         return toDto(entity);
     }
 
@@ -197,13 +266,5 @@ public class RepairRequestService {
     private RepairRequest getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Repair request not found: " + id));
-    }
-
-    private void audit(AuditAction action, UUID entityId, String message) {
-//        UUID userId = securityScope.currentUser() != null
-//                ? UUID.fromString(securityScope.currentUser().id())
-//                : null;
-//        auditLogService.record(userId, MODULE, ENTITY, entityId.toString(), action, message,
-//                requestContext.getIpAddress(), requestContext.getUserAgent());
     }
 }

@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,11 +16,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/cost-categories")
 @Tag(name = "cost-categories")
+@RequiredArgsConstructor
 public class CostCategoryController {
 
     private final CostCategoryService service;
-
-    public CostCategoryController(CostCategoryService service) { this.service = service; }
 
     @GetMapping public ResponseEntity<Page<CostCategoryDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
 

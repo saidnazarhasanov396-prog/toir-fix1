@@ -8,6 +8,8 @@ import com.toir.service.equipment.EquipmentService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,15 +18,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/equipment")
 @Tag(name = "equipment")
+@RequiredArgsConstructor
 public class EquipmentController {
 
     private final EquipmentService service;
     private final SecurityScope securityScope;
-
-    public EquipmentController(EquipmentService service, SecurityScope securityScope) {
-        this.service = service;
-        this.securityScope = securityScope;
-    }
 
     @GetMapping
     public ResponseEntity<Page<EquipmentDto>> list(
@@ -32,6 +30,8 @@ public class EquipmentController {
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) EquipmentStatus status,
             @RequestParam(required = false) EquipmentCategory category,
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(defaultValue = "false") boolean availableForReplacement,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size
@@ -43,6 +43,8 @@ public class EquipmentController {
                 equipmentTypeId,
                 status,
                 category,
+                warehouseId,
+                availableForReplacement,
                 search,
                 safePage,
                 safePageSize));
@@ -50,6 +52,15 @@ public class EquipmentController {
 
     @GetMapping("/{id}")
     public ResponseEntity<EquipmentDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
+
+    @GetMapping("/{id}/children")
+    public ResponseEntity<Page<EquipmentDto>> children(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(service.findChildren(id, Math.max(0, page), Math.max(1, size)));
+    }
 
     @PostMapping
     public ResponseEntity<EquipmentDto> create(@Valid @RequestBody EquipmentRequest request) {

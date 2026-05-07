@@ -1,14 +1,17 @@
 package com.toir.service;
-import com.toir.entity.WorkExecution;
-import com.toir.entity.maintenance.WorkOrder;
-import com.toir.enums.WorkOrderStatus;
-import com.toir.repository.WorkExecutionRepository;
 
-import com.toir.exception.RestException;
-import com.toir.repository.WorkOrderRepository;
-import com.toir.util.PaginationUtils;
 import com.toir.dto.workexecution.ExecutionLogDto;
 import com.toir.dto.workexecution.WorkExecutionDto;
+import com.toir.entity.WorkExecution;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.exception.RestException;
+import com.toir.repository.WorkExecutionRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -19,12 +22,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class WorkExecutionService {
 
     private final WorkExecutionRepository repository;
     private final WorkOrderRepository workOrderRepository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -57,7 +60,19 @@ public class WorkExecutionService {
         e.setPerformerId(r.performerId());
         e.setStartedAt(startedAt);
         e.setNotes(r.notes());
-        return WorkExecutionDto.from(repository.save(e));
+        WorkExecution saved = repository.save(e);
+
+        auditBuilderService.log(
+                "work_execution",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.WORK_EXECUTION,
+                "Выполнение работы начато",
+                null,
+                saved
+        );
+
+        return WorkExecutionDto.from(saved);
     }
 
     @Transactional
@@ -67,6 +82,19 @@ public class WorkExecutionService {
         e.setEndedAt(r.endedAt() != null ? r.endedAt() : Instant.now());
         e.setResult(r.result());
         if (r.notes() != null) e.setNotes(r.notes());
+
+        WorkExecution saved = repository.save(e);
+
+        auditBuilderService.log(
+                "work_execution",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.WORK_EXECUTION,
+                "Выполнение работы обновлено",
+                e,
+                saved
+        );
+
         return WorkExecutionDto.from(e);
     }
 

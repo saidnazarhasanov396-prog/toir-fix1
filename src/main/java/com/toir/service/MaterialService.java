@@ -1,9 +1,12 @@
 package com.toir.service;
-import com.toir.entity.Material;
-import com.toir.repository.MaterialRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.material.MaterialDto;
+import com.toir.entity.Material;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
+import com.toir.repository.MaterialRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,34 +16,74 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class MaterialService {
 
     private final MaterialRepository repository;
-
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
     public List<MaterialDto> findAll(String search) {
         return repository.findAllBySearch(search).stream().map(MaterialDto::from).toList();
     }
 
+    @Transactional
     public MaterialDto create(MaterialDto r) {
         Material m = new Material();
         m.setCode(nextCode());
         apply(m, r);
-        return MaterialDto.from(repository.save(m));
+        Material saved = repository.save(m);
+
+        auditBuilderService.log(
+                "material",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.MATERIAL,
+                "Материал создан",
+                null,
+                saved
+        );
+
+        return MaterialDto.from(saved);
     }
 
+    @Transactional
     public MaterialDto update(UUID id, MaterialDto r) {
         Material m = getOrThrow(id);
         apply(m, r);
+
+        Material saved = repository.save(m);
+
+        auditBuilderService.log(
+                "material",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.MATERIAL,
+                "Материал обновлен",
+                m,
+                saved
+        );
+
         return MaterialDto.from(m);
     }
 
-    public void delete(UUID id) { var entity = getOrThrow(id);
+    @Transactional
+    public void delete(UUID id) {
+        var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity); }
+        Material saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "material",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.MATERIAL,
+                "Материал удален",
+                saved,
+                null
+        );
+
+    }
 
     private Material getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -70,4 +113,5 @@ public class MaterialService {
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
+
 }

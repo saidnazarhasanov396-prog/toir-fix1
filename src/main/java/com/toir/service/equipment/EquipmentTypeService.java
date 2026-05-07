@@ -1,10 +1,14 @@
 package com.toir.service.equipment;
 import com.toir.entity.equipment.EquipmentType;
-import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 
 import com.toir.exception.RestException;
 import com.toir.dto.equipmenttype.EquipmentTypeDto;
 import com.toir.dto.equipmenttype.EquipmentTypeRequest;
+import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.AuditSerializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,11 +18,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class EquipmentTypeService {
 
     private final EquipmentTypeRepository repository;
+    private final AuditBuilderService auditBuilderService;
+    private final AuditSerializationService auditSerializationService;
 
 
     @Transactional(readOnly = true)
@@ -35,27 +40,62 @@ public class EquipmentTypeService {
         return EquipmentTypeDto.from(getOrThrow(id));
     }
 
-    public EquipmentType getEntityOrThrow(UUID id) {
-        return getOrThrow(id);
-    }
 
+    @Transactional
     public EquipmentTypeDto create(EquipmentTypeRequest request) {
         EquipmentType entity = new EquipmentType();
         entity.setCode(nextCode());
         apply(entity, request);
-        return EquipmentTypeDto.from(repository.save(entity));
+        EquipmentType saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "equipment_type",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.EQUIPMENT_TYPE,
+                "Тип оборудования создан",
+                null,
+                saved
+        );
+        return EquipmentTypeDto.from(saved);
     }
 
+    @Transactional
     public EquipmentTypeDto update(UUID id, EquipmentTypeRequest request) {
         EquipmentType entity = getOrThrow(id);
         apply(entity, request);
+
+        EquipmentType save = repository.save(entity);
+
+        auditBuilderService.log(
+                "equipment_type",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.EQUIPMENT_TYPE,
+                "Тип оборудования обновлен",
+                entity,
+                save
+        );
+
+
         return EquipmentTypeDto.from(entity);
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity);
+        EquipmentType saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "equipment_type",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.EQUIPMENT_TYPE,
+                "Тип оборудования удален",
+                entity,
+                null
+        );
     }
 
     private EquipmentType getOrThrow(UUID id) {

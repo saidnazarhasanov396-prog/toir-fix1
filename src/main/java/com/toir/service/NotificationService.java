@@ -31,6 +31,7 @@ public class NotificationService {
         return repository.countByRecipientIdAndStatusAndIsDeletedFalse(recipientId, NotificationStatus.SENT);
     }
 
+    @Transactional
     public NotificationDto send(NotificationDto r) {
         Notification n = new Notification();
         n.setRecipientId(r.recipientId());
@@ -44,6 +45,7 @@ public class NotificationService {
         return NotificationDto.from(repository.save(n));
     }
 
+    @Transactional
     public NotificationDto markRead(UUID id) {
         Notification n = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Notification not found: " + id));

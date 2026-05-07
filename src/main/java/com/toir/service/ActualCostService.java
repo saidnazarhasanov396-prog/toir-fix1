@@ -1,10 +1,13 @@
 package com.toir.service;
-import com.toir.entity.projects.ActualCost;
-import com.toir.enums.ActualCostStatus;
-import com.toir.repository.actualCost.ActualCostRepository;
 
 import com.toir.dto.actualcost.ActualCostDto;
+import com.toir.entity.projects.ActualCost;
+import com.toir.enums.ActualCostStatus;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
+import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +22,7 @@ import java.util.UUID;
 public class ActualCostService {
 
     private final ActualCostRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
@@ -41,7 +45,19 @@ public class ActualCostService {
         c.setAmount(r.amount());
         c.setNotes(r.notes());
         c.setStatus(ActualCostStatus.PENDING);
-        return ActualCostDto.from(repository.save(c));
+        ActualCost saved = repository.save(c);
+
+        auditBuilderService.log(
+                "actual_cost",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.ACTUAL_COST,
+                "Фактическая стоимость создана",
+                null,
+                saved
+        );
+
+        return ActualCostDto.from(saved);
     }
 
     @Transactional
@@ -52,6 +68,18 @@ public class ActualCostService {
         c.setReviewedById(reviewerId);
         c.setReviewedAt(Instant.now());
         c.setReviewComment(comment);
+
+        ActualCost saved = repository.save(c);
+
+        auditBuilderService.log(
+                "actual_cost",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.ACTUAL_COST,
+                "Фактическая стоимость обновлена",
+                c,
+                saved
+        );
         return ActualCostDto.from(c);
     }
 }

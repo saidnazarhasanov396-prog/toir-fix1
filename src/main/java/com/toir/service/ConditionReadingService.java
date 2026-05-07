@@ -1,16 +1,19 @@
 package com.toir.service;
-import com.toir.enums.ConditionParameter;
-import com.toir.entity.ConditionReading;
-import com.toir.repository.ConditionReadingRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.conditionreading.ConditionReadingDto;
 import com.toir.dto.conditionreading.ConditionReadingRequest;
+import com.toir.entity.ConditionReading;
 import com.toir.entity.defects.Defect;
-import com.toir.repository.defects.DefectRepository;
-import com.toir.enums.DefectStatus;
 import com.toir.entity.equipment.Equipment;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.ConditionParameter;
+import com.toir.enums.DefectStatus;
+import com.toir.exception.RestException;
+import com.toir.repository.ConditionReadingRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +31,7 @@ public class ConditionReadingService {
     private final EquipmentRepository equipmentRepository;
     private final DefectRepository defectRepository;
     private final WebhookService webhookService;
+    private final AuditBuilderService auditBuilderService;
 
 
 
@@ -47,6 +51,7 @@ public class ConditionReadingService {
                 .map(ConditionReadingDto::from).toList();
     }
 
+    @Transactional
     public ConditionReadingDto record(UUID equipmentId, ConditionReadingRequest r, UUID userId) {
         Equipment eq = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
@@ -64,6 +69,17 @@ public class ConditionReadingService {
         cr.setSeverity(computeSeverity(r.value(), r.warnHigh(), r.alarmHigh(), r.warnLow(), r.alarmLow()));
         cr.setNotes(r.notes());
         ConditionReading saved = repo.save(cr);
+
+        auditBuilderService.log(
+                "condition_reading",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.CONDITION_READING,
+                "Показание состояния создано",
+                null,
+                saved
+        );
+
         if ("ALARM".equals(saved.getSeverity())) {
             autoCreateDefect(eq.getId(), saved);
             webhookService.publish("CONDITION_ALARM", ConditionReadingDto.from(saved));
@@ -72,6 +88,7 @@ public class ConditionReadingService {
         }
         return ConditionReadingDto.from(saved);
     }
+
 
     private void autoCreateDefect(UUID equipmentId, ConditionReading cr) {
         Defect d = new Defect();
@@ -88,11 +105,23 @@ public class ConditionReadingService {
         defectRepository.save(d);
     }
 
+    @Transactional
     public void delete(UUID id) {
         ConditionReading cr = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Condition reading not found: " + id));
         cr.setDeleted(true);
-        repo.save(cr);
+        ConditionReading saved = repo.save(cr);
+
+        auditBuilderService.log(
+                "condition_reading",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.CONDITION_READING,
+                "Показание состояния удалено",
+                cr,
+                saved
+        );
+
     }
 
     private String computeSeverity(double value, Double warnHigh, Double alarmHigh, Double warnLow, Double alarmLow) {

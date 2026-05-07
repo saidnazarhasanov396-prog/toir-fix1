@@ -1,14 +1,17 @@
 package com.toir.service;
-import com.toir.entity.users.Brigade;
-import com.toir.entity.users.BrigadeMember;
-import com.toir.repository.projects.BrigadeMemberRepository;
-import com.toir.repository.projects.BrigadeRepository;
 
 import com.toir.dto.brigade.BrigadeDto;
 import com.toir.dto.brigade.BrigadeMemberDto;
 import com.toir.dto.brigade.BrigadeMemberRequest;
 import com.toir.dto.brigade.BrigadeRequest;
+import com.toir.entity.users.Brigade;
+import com.toir.entity.users.BrigadeMember;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
+import com.toir.repository.projects.BrigadeMemberRepository;
+import com.toir.repository.projects.BrigadeRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +20,6 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class BrigadeService {
 
@@ -25,6 +27,7 @@ public class BrigadeService {
     private final BrigadeMemberRepository memberRepo;
     private final CertificationGuard certificationGuard;
     private final SparePartService sparePartService;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -39,6 +42,7 @@ public class BrigadeService {
         return BrigadeDto.from(load(id));
     }
 
+    @Transactional
     public BrigadeDto create(BrigadeRequest r) {
         if (brigadeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Brigade code already exists: " + r.code());
@@ -50,9 +54,21 @@ public class BrigadeService {
         b.setForemanId(r.foremanId());
         b.setSpecialization(r.specialization());
         if (r.active() != null) b.setActive(r.active());
-        return BrigadeDto.from(brigadeRepo.save(b));
+        Brigade saved = brigadeRepo.save(b);
+
+        auditBuilderService.log(
+                "brigade",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.BRIGADE,
+                "Бригада создана",
+                null,
+                saved
+        );
+        return BrigadeDto.from(saved);
     }
 
+    @Transactional
     public BrigadeDto update(UUID id, BrigadeRequest r) {
         Brigade b = load(id);
         if (!b.getCode().equals(r.code()) && brigadeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
@@ -64,15 +80,41 @@ public class BrigadeService {
         b.setForemanId(r.foremanId());
         b.setSpecialization(r.specialization());
         if (r.active() != null) b.setActive(r.active());
+
+        Brigade saved = brigadeRepo.save(b);
+
+        auditBuilderService.log(
+                "brigade",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.BRIGADE,
+                "Бригада обновлена",
+                b,
+                saved
+        );
         return BrigadeDto.from(b);
     }
 
+    @Transactional
     public void delete(UUID id) {
         Brigade b = load(id);
         b.setDeleted(true);
-        brigadeRepo.save(b);
+        Brigade saved = brigadeRepo.save(b);
+
+        auditBuilderService.log(
+                "brigade",
+                id != null ? id.toString() : null,
+                AuditAction.DELETE,
+                AuditModule.BRIGADE,
+                "Бригада удалена",
+                saved,
+                null
+        );
+
+
     }
 
+    @Transactional
     public BrigadeMemberDto addMember(UUID brigadeId, BrigadeMemberRequest r) {
         Brigade b = load(brigadeId);
         memberRepo.findByBrigadeIdAndUserIdAndIsDeletedFalse(brigadeId, r.userId()).ifPresent(m -> {
@@ -86,9 +128,22 @@ public class BrigadeService {
         m.setGrade(r.grade());
         m.setQualifications(r.qualifications());
         if (r.active() != null) m.setActive(r.active());
-        return BrigadeMemberDto.from(memberRepo.save(m));
+        BrigadeMember saved = memberRepo.save(m);
+
+        auditBuilderService.log(
+                "brigade_member",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.BRIGADE_MEMBER,
+                "Участник бригады добавлен",
+                null,
+                saved
+        );
+
+        return BrigadeMemberDto.from(saved);
     }
 
+    @Transactional
     public void removeMember(UUID brigadeId, UUID memberId) {
         BrigadeMember m = memberRepo.findByIdAndIsDeletedFalse(memberId)
                 .orElseThrow(() -> RestException.notFound("Brigade member not found: " + memberId));
@@ -96,7 +151,18 @@ public class BrigadeService {
             throw RestException.badRequest("Member does not belong to this brigade");
         }
         m.setDeleted(true);
-        memberRepo.save(m);
+        BrigadeMember saved = memberRepo.save(m);
+
+
+        auditBuilderService.log(
+                "brigade_member",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.BRIGADE_MEMBER,
+                "Участник бригады удален",
+                saved,
+                null
+        );
     }
 
     @Transactional(readOnly = true)

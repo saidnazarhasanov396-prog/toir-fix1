@@ -5,6 +5,8 @@ import com.toir.service.maintanance.MaintenanceRegulationService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,13 +15,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/maintenance-regulations")
 @Tag(name = "maintenance-regulations")
+@RequiredArgsConstructor
 public class MaintenanceRegulationController {
 
     private final MaintenanceRegulationService service;
-
-    public MaintenanceRegulationController(MaintenanceRegulationService service) {
-        this.service = service;
-    }
 
     @GetMapping
     public ResponseEntity<Page<MaintenanceRegulationDto>> list(

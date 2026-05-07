@@ -1,13 +1,18 @@
 package com.toir.service;
-import com.toir.entity.warehouse.Warehouse;
-import com.toir.repository.*;
 
-import com.toir.exception.RestException;
 import com.toir.dto.warehouse.WarehouseDto;
 import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.dto.warehouse.WarehouseStockDto;
+import com.toir.entity.warehouse.Warehouse;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
+import com.toir.repository.LocationRepository;
+import com.toir.repository.WarehouseRepository;
+import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +22,6 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class WarehouseService {
 
@@ -26,6 +30,7 @@ public class WarehouseService {
     private final DepartmentRepository departmentRepository;
     private final LocationRepository locationRepository;
     private final EmployeeRepository employeeRepository;
+    private final AuditBuilderService auditBuilderService;
 
 
 
@@ -50,26 +55,62 @@ public class WarehouseService {
         return stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId).stream().map(WarehouseStockDto::from).toList();
     }
 
+    @Transactional
     public WarehouseDto create(WarehouseRequest request) {
         Warehouse entity = new Warehouse();
         entity.setCode(nextCode());
         apply(entity, request);
         Warehouse saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "warehouse",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.WAREHOUSE,
+                "Склад создан",
+                null,
+                saved
+        );
+
         return WarehouseDto.fromWithStocks(saved, List.of(), departmentRepository, locationRepository, employeeRepository);
     }
 
+    @Transactional
     public WarehouseDto update(UUID id, WarehouseRequest request) {
         Warehouse entity = getOrThrow(id);
         apply(entity, request);
         Warehouse updated = repository.save(entity);
+
+        auditBuilderService.log(
+                "warehouse",
+                updated.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.WAREHOUSE,
+                "Склад обновлен",
+                entity,
+                updated
+        );
+
         return WarehouseDto.fromWithStocks(updated, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(id),
                 departmentRepository, locationRepository, employeeRepository);
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity);
+        Warehouse saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "warehouse",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.WAREHOUSE,
+                "Склад удален",
+                saved,
+                null
+        );
+
     }
 
     Warehouse getOrThrow(UUID id) {
@@ -107,4 +148,5 @@ public class WarehouseService {
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
+
 }

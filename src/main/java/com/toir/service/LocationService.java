@@ -1,11 +1,14 @@
 package com.toir.service;
-import com.toir.entity.Location;
-import com.toir.repository.LocationRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.location.LocationDto;
 import com.toir.dto.location.LocationRequest;
+import com.toir.entity.Location;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.LocationType;
+import com.toir.exception.RestException;
+import com.toir.repository.LocationRepository;
+import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -22,6 +25,7 @@ import java.util.UUID;
 public class LocationService {
 
     private final LocationRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -45,13 +49,39 @@ public class LocationService {
         Location entity = new Location();
         entity.setCode(nextCode());
         apply(entity, request);
-        return LocationDto.from(repository.save(entity));
+        Location saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "location",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.LOCATION,
+                "Локация создана",
+                null,
+                saved
+        );
+
+
+        return LocationDto.from(saved);
     }
 
     @Transactional
     public LocationDto update(UUID id, LocationRequest request) {
         Location entity = getOrThrow(id);
         apply(entity, request);
+
+        Location saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "location",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.LOCATION,
+                "Локация обновлена",
+                entity,
+                saved
+        );
+
         return LocationDto.from(entity);
     }
 
@@ -62,7 +92,19 @@ public class LocationService {
             throw RestException.conflict("Location has children");
         }
         entity.setDeleted(true);
-        repository.save(entity);
+        Location saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "location",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.LOCATION,
+                "Локация удалена",
+                entity,
+                saved
+        );
+
+
     }
 
     private Location getOrThrow(UUID id) {

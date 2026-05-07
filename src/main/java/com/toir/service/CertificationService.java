@@ -1,13 +1,16 @@
 package com.toir.service;
-import com.toir.entity.CertificationType;
-import com.toir.entity.users.UserCertification;
-import com.toir.repository.CertificationTypeRepository;
-import com.toir.repository.users.UserCertificationRepository;
 
 import com.toir.dto.certification.CertificationTypeDto;
 import com.toir.dto.certification.UserCertificationDto;
 import com.toir.dto.certification.UserCertificationRequest;
+import com.toir.entity.CertificationType;
+import com.toir.entity.users.UserCertification;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
+import com.toir.repository.CertificationTypeRepository;
+import com.toir.repository.users.UserCertificationRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +25,7 @@ public class CertificationService {
 
     private final CertificationTypeRepository typeRepo;
     private final UserCertificationRepository certRepo;
+    private final AuditBuilderService auditBuilderService;
 
     // types
     @Transactional(readOnly = true)
@@ -29,26 +33,63 @@ public class CertificationService {
         return typeRepo.findAllByIsDeletedFalse(code,name,search).stream().map(CertificationTypeDto::from).toList();
     }
 
+    @Transactional
     public CertificationTypeDto createType(CertificationTypeDto r) {
         if (typeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Certification type code already exists: " + r.code());
         }
         CertificationType t = new CertificationType();
         applyType(t, r);
-        return CertificationTypeDto.from(typeRepo.save(t));
+        CertificationType saved = typeRepo.save(t);
+
+        auditBuilderService.log(
+                "certification_type",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.CERTIFICATION_TYPE,
+                "Тип сертификации создан",
+                null,
+                saved
+        );
+        return CertificationTypeDto.from(saved);
     }
 
+    @Transactional
     public CertificationTypeDto updateType(UUID id, CertificationTypeDto r) {
         CertificationType t = typeRepo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Certification type not found: " + id));
+
         applyType(t, r);
-        return CertificationTypeDto.from(t);
+
+        CertificationType save = typeRepo.save(t);
+
+        auditBuilderService.log(
+                "certification_type",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.CERTIFICATION_TYPE,
+                "Тип сертификации обновлен",
+                t,
+                save
+        );
+        return CertificationTypeDto.from(save);
     }
 
+    @Transactional
     public void deleteType(UUID id) {
         var entity = typeRepo.findByIdAndIsDeletedFalse(id).orElseThrow();
         entity.setDeleted(true);
-        typeRepo.save(entity);
+        CertificationType saved = typeRepo.save(entity);
+
+        auditBuilderService.log(
+                "certification_type",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.CERTIFICATION_TYPE,
+                "Тип сертификации удален",
+                entity,
+                null
+        );
     }
 
     // user certifications
@@ -91,20 +132,58 @@ public class CertificationService {
         c.setDocumentFileId(r.documentFileId());
         c.setNotes(r.notes());
         c.setStatus("ACTIVE");
-        return UserCertificationDto.from(certRepo.save(c));
+        UserCertification saved = certRepo.save(c);
+
+        auditBuilderService.log(
+                "user_certification",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.USER_CERTIFICATION,
+                "Сертификация пользователя создана",
+                null,
+                saved
+        );
+
+        return UserCertificationDto.from(saved);
     }
 
+    @Transactional
     public UserCertificationDto suspend(UUID id, String reason) {
         UserCertification c = load(id);
         c.setStatus("SUSPENDED");
         c.setNotes(reason);
+
+        UserCertification save = certRepo.save(c);
+
+        auditBuilderService.log(
+                "user_certification",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.USER_CERTIFICATION,
+                "Сертификация пользователя обновлена",
+                c,
+                save
+        );
         return UserCertificationDto.from(c);
     }
 
     public UserCertificationDto revoke(UUID id, String reason) {
         UserCertification c = load(id);
+
         c.setStatus("REVOKED");
         c.setNotes(reason);
+
+        UserCertification save = certRepo.save(c);
+
+        auditBuilderService.log(
+                "user_certification",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.USER_CERTIFICATION,
+                "Сертификация пользователя обновлена",
+                c,
+                save
+        );
         return UserCertificationDto.from(c);
     }
 
@@ -115,6 +194,17 @@ public class CertificationService {
         for (UserCertification c : certRepo.findAllByStatusAndIsDeletedFalse("ACTIVE")) {
             if (c.getExpiresAt() != null && c.getExpiresAt().isBefore(today)) {
                 c.setStatus("EXPIRED");
+                UserCertification save = certRepo.save(c);
+
+                auditBuilderService.log(
+                        "user_certification",
+                        save.getId().toString(),
+                        AuditAction.UPDATE,
+                        AuditModule.USER_CERTIFICATION,
+                        "Сертификация пользователя обновлена",
+                        c,
+                        save
+                );
                 count++;
             }
         }

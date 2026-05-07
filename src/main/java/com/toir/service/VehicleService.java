@@ -6,12 +6,15 @@ import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleSummaryDto;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.VehicleDetails;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.exception.RestException;
-import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.VehicleDetailsRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.service.equipment.EquipmentService;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,13 +22,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -36,6 +33,7 @@ public class VehicleService {
     private final EquipmentRepository equipmentRepository;
     private final VehicleDetailsRepository vehicleDetailsRepository;
     private final EquipmentService equipmentService;
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, String search, int page, int pageSize) {
@@ -86,6 +84,16 @@ public class VehicleService {
         applyDetails(details, request);
         VehicleDetails savedDetails = vehicleDetailsRepository.save(details);
 
+        auditBuilderService.log(
+                "vehicle",
+                savedEquipment.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.VEHICLE,
+                "Транспорт создан",
+                null,
+                Map.of(equipment, savedDetails)
+        );
+
         return VehicleDetailDto.from(equipmentService.findById(savedEquipment.getId()), savedDetails);
     }
 
@@ -102,6 +110,23 @@ public class VehicleService {
         validateUniqueUpdate(equipmentId, equipment, details, request);
         applyEquipment(equipment, request);
         applyDetails(details, request);
+
+        Equipment newEquipment = equipmentRepository.save(equipment);
+        VehicleDetails newDetails = vehicleDetailsRepository.save(details);
+
+        auditBuilderService.log(
+                "vehicle",
+                newEquipment.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.VEHICLE,
+                "Транспорт обновлен",
+                Map.of(equipment, details),
+                Map.of(newEquipment, newDetails)
+        );
+
+
+
+
         return VehicleDetailDto.from(equipmentService.findById(equipmentId), details);
     }
 
@@ -113,6 +138,18 @@ public class VehicleService {
                 .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
         details.setDeleted(true);
         equipment.setDeleted(true);
+
+        Equipment saved = equipmentRepository.save(equipment);
+
+        auditBuilderService.log(
+                "vehicle",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.VEHICLE,
+                "Транспорт удален",
+                Map.of(saved, details),
+                null
+        );
     }
 
     private void validateUniqueCreate(VehicleRequest request) {
@@ -216,6 +253,7 @@ public class VehicleService {
     private static String normalizeBlankToNull(String value) {
         return hasText(value) ? value : null;
     }
+
 
     private static final class FixedTotalPage<T> implements Page<T> {
         private final List<T> content;

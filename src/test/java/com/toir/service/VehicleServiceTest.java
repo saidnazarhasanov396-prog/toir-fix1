@@ -336,7 +336,7 @@ class VehicleServiceTest {
         VehicleDetails completeDetails = details(completeId, "01A030AA", "VIN-030");
         PageRequest pageRequest = PageRequest.of(0, 20);
 
-        when(equipmentService.search(null, null, null, EquipmentCategory.VEHICLE, null, 0, 20))
+        when(equipmentService.search(null, null, null, EquipmentCategory.VEHICLE, null, false, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(EquipmentDto.from(complete), EquipmentDto.from(incomplete)), pageRequest, 2));
         when(vehicleDetailsRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(completeId, incompleteId)))
                 .thenReturn(List.of(completeDetails));

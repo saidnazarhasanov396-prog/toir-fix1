@@ -1,23 +1,26 @@
 package com.toir.service.equipment;
+
+import com.toir.dto.equipment.EquipmentDto;
+import com.toir.dto.equipment.EquipmentRequest;
 import com.toir.entity.Department;
+import com.toir.entity.Location;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentPassport;
+import com.toir.entity.equipment.EquipmentType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
-import com.toir.entity.equipment.EquipmentType;
-import com.toir.entity.Location;
+import com.toir.enums.WarehouseEquipmentStatus;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkType;
+import com.toir.exception.RestException;
+import com.toir.repository.WarehouseRepository;
+import com.toir.repository.LocationRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
-import com.toir.repository.LocationRepository;
-
-import com.toir.exception.RestException;
-import com.toir.dto.equipment.EquipmentDto;
-import com.toir.dto.equipment.EquipmentRequest;
 import com.toir.util.AuditBuilderService;
-import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -25,18 +28,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Year;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class EquipmentService {
 
@@ -45,13 +41,55 @@ public class EquipmentService {
     private final LocationRepository locationRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentPassportRepository passportRepository;
+    private final WarehouseRepository warehouseRepository;
     private final AuditBuilderService auditBuilderService;
-    private final AuditSerializationService auditSerializationService;
+    private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
+            EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
 
 
     @Transactional(readOnly = true)
-    public Page<EquipmentDto> search(UUID departmentId, UUID equipmentTypeId, EquipmentStatus status, EquipmentCategory category, String search, int page, int pageSize) {
-        Page<Equipment> items = repository.search(departmentId, equipmentTypeId, status, category, search, PaginationUtils.pageRequest(page, pageSize));
+    public Page<EquipmentDto> search(UUID departmentId,
+                                     UUID equipmentTypeId,
+                                     EquipmentStatus status,
+                                     EquipmentCategory category,
+                                     UUID warehouseId,
+                                     boolean availableForReplacement,
+                                     String search,
+                                     int page,
+                                     int pageSize) {
+        String searchPattern = null;
+        if (search != null && !search.isBlank()) {
+            searchPattern = "%" + search.trim().toLowerCase() + "%";
+        }
+        Page<Equipment> items;
+        if (availableForReplacement) {
+            if (warehouseId == null) {
+                throw RestException.badRequest("warehouseId is required when availableForReplacement is true");
+            }
+            warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
+                    .orElseThrow(() -> RestException.notFound("Warehouse not found: " + warehouseId));
+            items = repository.searchAvailableForReplacement(
+                    warehouseId,
+                    WarehouseEquipmentStatus.AVAILABLE,
+                    WorkType.REPLACEMENT,
+                    FINAL_WORK_ORDER_STATUSES,
+                    departmentId,
+                    equipmentTypeId,
+                    status,
+                    category,
+                    searchPattern,
+                    PaginationUtils.pageRequest(page, pageSize)
+            );
+        } else {
+            items = repository.search(
+                    departmentId,
+                    equipmentTypeId,
+                    status,
+                    category,
+                    searchPattern,
+                    PaginationUtils.pageRequest(page, pageSize)
+            );
+        }
         return enrich(items);
     }
 
@@ -60,17 +98,23 @@ public class EquipmentService {
         return enrich(List.of(getOrThrow(id))).getFirst();
     }
 
+    @Transactional(readOnly = true)
+    public Page<EquipmentDto> findChildren(UUID parentId, int page, int pageSize) {
+        getOrThrow(parentId);
+        return enrich(repository.findAllByParentIdAndIsDeletedFalse(parentId, PaginationUtils.pageRequest(page, pageSize)));
+    }
+
     @Transactional
     public EquipmentDto create(EquipmentRequest request) {
         if (repository.existsByInventoryNumberAndIsDeletedFalse(request.inventoryNumber())) {
             throw RestException.conflict("Inventory number already exists: " + request.inventoryNumber());
         }
+        validateParent(null, request.parentId());
         Equipment entity = new Equipment();
         entity.setCode(nextCode());
         apply(entity, request);
         Equipment saved = repository.save(entity);
 
-        String newJson = auditSerializationService.toJson(saved);
         auditBuilderService.log(
                 "equipment",
                 saved.getId().toString(),
@@ -78,7 +122,7 @@ public class EquipmentService {
                 com.toir.enums.AuditModule.EQUIPMENT,
                 "Оборудование создано: код=%s, наименование=%s".formatted(saved.getCode(), saved.getName()),
                 null,
-                newJson
+                saved
         );
         return enrich(List.of(saved)).getFirst();
     }
@@ -87,30 +131,29 @@ public class EquipmentService {
     public EquipmentDto update(UUID id, EquipmentRequest request) {
         Equipment entity = getOrThrow(id);
 
-        String oldJson = auditSerializationService.toJson(entity);
 
         applyForUpdate(entity, request);
+        validateParent(entity.getId(), entity.getParentId());
 
         Equipment saved = repository.save(entity);
-        String newJson = auditSerializationService.toJson(saved);
+
         auditBuilderService.log(
                 "equipment",
                 saved.getId().toString(),
                 AuditAction.UPDATE,
                 com.toir.enums.AuditModule.EQUIPMENT,
                 "Оборудование обновлено: код=%s, наименование=%s".formatted(saved.getCode(), saved.getName()),
-                oldJson,
-                newJson);
-        return enrich(List.of(entity)).getFirst();
+                entity,
+                saved);
+        return enrich(List.of(saved)).getFirst();
     }
 
     @Transactional
     public void delete(UUID id) {
         Equipment entity = getOrThrow(id);
         if (!repository.findAllByParentIdAndIsDeletedFalse(id).isEmpty()) {
-            throw RestException.conflict("Equipment has child nodes");
+            throw RestException.conflict("Equipment has child equipment");
         }
-        String oldJson = auditSerializationService.toJson(entity);
 
         entity.setDeleted(true);
         Equipment saved = repository.save(entity);
@@ -121,7 +164,7 @@ public class EquipmentService {
                 AuditAction.DELETE,
                 com.toir.enums.AuditModule.EQUIPMENT,
                 "Оборудование удалено: код=%s, наименование=%s".formatted(saved.getCode(), saved.getName()),
-                oldJson,
+                saved,
                 null);
     }
 
@@ -245,7 +288,7 @@ public class EquipmentService {
         entity.setEquipmentTypeId(request.equipmentTypeId() != null ? request.equipmentTypeId() : entity.getEquipmentTypeId());
         entity.setDepartmentId(request.departmentId() != null ? request.departmentId() : entity.getDepartmentId());
         entity.setLocationId(request.locationId() != null ? request.locationId() : entity.getLocationId());
-        entity.setParentId(request.parentId() != null ? request.parentId() : entity.getParentId());
+        entity.setParentId(request.parentId());
         entity.setCriticalityClassId(request.criticalityClassId()  != null ? request.criticalityClassId() : entity.getCriticalityClassId());
         entity.setResponsibleId(request.responsibleId() != null ? request.responsibleId() : entity.getResponsibleId());
         entity.setManufacturer(request.manufacturer() != null ? request.manufacturer() : entity.getManufacturer());
@@ -254,5 +297,31 @@ public class EquipmentService {
         entity.setCommissionedAt(request.commissionedAt() != null ? request.commissionedAt() : entity.getCommissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil() != null ? request.warrantyUntil() : entity.getWarrantyUntil());
         entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
+    }
+
+    private void validateParent(UUID equipmentId, UUID parentId) {
+        if (parentId == null) {
+            return;
+        }
+        if (parentId.equals(equipmentId)) {
+            throw RestException.badRequest("Equipment cannot be parent of itself");
+        }
+
+        Equipment parent = repository.findByIdAndIsDeletedFalse(parentId)
+                .orElseThrow(() -> RestException.notFound("Parent equipment not found: " + parentId));
+        UUID currentParentId = parent.getParentId();
+        Set<UUID> visited = new HashSet<>();
+        while (currentParentId != null) {
+            if (!visited.add(currentParentId)) {
+                throw RestException.conflict("Circular equipment parent chain detected");
+            }
+            if (currentParentId.equals(equipmentId)) {
+                throw RestException.badRequest("Equipment parent chain cannot be circular");
+            }
+            UUID finalCurrentParentId = currentParentId;
+            Equipment currentParent = repository.findByIdAndIsDeletedFalse(currentParentId)
+                    .orElseThrow(() -> RestException.notFound("Parent equipment not found: " + finalCurrentParentId));
+            currentParentId = currentParent.getParentId();
+        }
     }
 }

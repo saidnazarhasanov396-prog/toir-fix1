@@ -1,9 +1,12 @@
 package com.toir.service;
-import com.toir.entity.equipment.CriticalityClass;
-import com.toir.repository.CriticalityClassRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.criticalityclass.CriticalityClassDto;
+import com.toir.entity.equipment.CriticalityClass;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
+import com.toir.repository.CriticalityClassRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +21,7 @@ import java.util.UUID;
 public class CriticalityClassService {
 
     private final CriticalityClassRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -30,22 +34,64 @@ public class CriticalityClassService {
         return CriticalityClassDto.from(getOrThrow(id));
     }
 
+    @Transactional()
     public CriticalityClassDto create(CriticalityClassDto r) {
         CriticalityClass e = new CriticalityClass();
         e.setCode(nextCode());
         apply(e, r);
-        return CriticalityClassDto.from(repository.save(e));
+        CriticalityClass saved = repository.save(e);
+
+        auditBuilderService.log(
+                "criticality_class",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.CRITICALITY_CLASS,
+                "Класс критичности создан",
+                null,
+                saved
+        );
+
+
+        return CriticalityClassDto.from(saved);
     }
 
+    @Transactional
     public CriticalityClassDto update(UUID id, CriticalityClassDto r) {
         CriticalityClass e = getOrThrow(id);
         apply(e, r);
+
+        CriticalityClass saved = repository.save(e);
+
+        auditBuilderService.log(
+                "criticality_class",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.CRITICALITY_CLASS,
+                "Класс критичности обновлен",
+                e,
+                saved
+        );
+
+
         return CriticalityClassDto.from(e);
     }
 
-    public void delete(UUID id) { var entity = getOrThrow(id);
+    @Transactional
+    public void delete(UUID id) {
+        var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity); }
+        CriticalityClass saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "criticality_class",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.CRITICALITY_CLASS,
+                "Класс критичности удален",
+                saved,
+                null
+        );
+    }
 
     private CriticalityClass getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)

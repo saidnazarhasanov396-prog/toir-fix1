@@ -1,9 +1,12 @@
 package com.toir.service;
-import com.toir.entity.projects.FinancialApprovalRule;
-import com.toir.repository.projects.FinancialApprovalRuleRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.financialapprovalrule.FinancialApprovalRuleDto;
+import com.toir.entity.projects.FinancialApprovalRule;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
+import com.toir.repository.projects.FinancialApprovalRuleRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,11 +15,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class FinancialApprovalRuleService {
 
     private final FinancialApprovalRuleRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -24,24 +27,62 @@ public class FinancialApprovalRuleService {
         return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(FinancialApprovalRuleDto::from).toList();
     }
 
+    @Transactional
     public FinancialApprovalRuleDto create(FinancialApprovalRuleDto r) {
         if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Approval rule code already exists: " + r.code());
         }
         FinancialApprovalRule rule = new FinancialApprovalRule();
         apply(rule, r);
-        return FinancialApprovalRuleDto.from(repository.save(rule));
+        FinancialApprovalRule saved = repository.save(rule);
+
+        auditBuilderService.log(
+                "financial_approval_rule",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.FINANCIAL_APPROVAL_RULE,
+                "Правило финансового согласования создано",
+                null,
+                saved);
+
+
+        return FinancialApprovalRuleDto.from(saved);
     }
 
+    @Transactional
     public FinancialApprovalRuleDto update(UUID id, FinancialApprovalRuleDto r) {
         FinancialApprovalRule rule = getOrThrow(id);
         apply(rule, r);
+
+        FinancialApprovalRule saved = repository.save(rule);
+
+        auditBuilderService.log(
+                "financial_approval_rule",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.FINANCIAL_APPROVAL_RULE,
+                "Правило финансового согласования обновлено",
+                rule,
+                saved);
+
+
         return FinancialApprovalRuleDto.from(rule);
     }
 
+    @Transactional
     public void delete(UUID id) { var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity); }
+        FinancialApprovalRule saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "financial_approval_rule",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.FINANCIAL_APPROVAL_RULE,
+                "Правило финансового согласования удалено",
+                saved,
+                null);
+    }
 
     private FinancialApprovalRule getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)

@@ -1,11 +1,14 @@
 package com.toir.service;
-import com.toir.entity.equipment.CalibrationRecord;
-import com.toir.repository.CalibrationRecordRepository;
 
 import com.toir.dto.calibration.CalibrationRecordDto;
 import com.toir.dto.calibration.CalibrationRecordRequest;
+import com.toir.entity.equipment.CalibrationRecord;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
+import com.toir.repository.CalibrationRecordRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,15 +17,13 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-import static java.util.Locale.filter;
-
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class CalibrationService {
 
     private final CalibrationRecordRepository repo;
     private final EquipmentRepository equipmentRepository;
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
     public List<CalibrationRecordDto> findForEquipment(UUID equipmentId) {
@@ -42,6 +43,7 @@ public class CalibrationService {
                 .map(CalibrationRecordDto::from).toList();
     }
 
+    @Transactional
     public CalibrationRecordDto create(CalibrationRecordRequest r) {
         if (!equipmentRepository.existsByIdAndIsDeletedFalse(r.equipmentId())) {
             throw RestException.notFound("Equipment not found: " + r.equipmentId());
@@ -58,9 +60,23 @@ public class CalibrationService {
         c.setUnit(r.unit());
         c.setDocumentFileId(r.documentFileId());
         c.setNotes(r.notes());
-        return CalibrationRecordDto.from(repo.save(c));
+        CalibrationRecord saved = repo.save(c);
+
+        auditBuilderService.log(
+                "calibration_record",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.CALIBRATION_RECORD,
+                "Запись калибровки создана",
+                null,
+                saved
+        );
+
+
+        return CalibrationRecordDto.from(saved);
     }
 
+    @Transactional
     public CalibrationRecordDto update(UUID id, CalibrationRecordRequest r) {
         CalibrationRecord c = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Calibration record not found: " + id));
@@ -78,14 +94,38 @@ public class CalibrationService {
         c.setUnit(r.unit());
         c.setDocumentFileId(r.documentFileId());
         c.setNotes(r.notes());
+
+
+        CalibrationRecord saved = repo.save(c);
+
+        auditBuilderService.log(
+                "calibration_record",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.CALIBRATION_RECORD,
+                "Запись калибровки удалена",
+                c,
+                saved
+        );
         return CalibrationRecordDto.from(c);
     }
 
+    @Transactional
     public void delete(UUID id) {
         CalibrationRecord c = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Calibration record not found: " + id));
         c.setDeleted(true);
-        repo.save(c);
+        CalibrationRecord saved = repo.save(c);
+
+        auditBuilderService.log(
+                "calibration_record",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.CALIBRATION_RECORD,
+                "Запись калибровки удалена",
+                c,
+                null
+        );
     }
 
     public CalibrationRecordDto findById(UUID id) {

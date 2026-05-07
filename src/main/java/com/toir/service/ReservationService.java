@@ -1,13 +1,16 @@
 package com.toir.service;
-import com.toir.entity.Reservation;
-import com.toir.repository.ReservationRepository;
-import com.toir.enums.ReservationStatus;
 
-import com.toir.exception.RestException;
 import com.toir.dto.reservation.ReservationDto;
 import com.toir.dto.reservation.ReservationRequest;
+import com.toir.entity.Reservation;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.ReservationStatus;
+import com.toir.exception.RestException;
+import com.toir.repository.ReservationRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +25,7 @@ public class ReservationService {
 
     private final ReservationRepository repository;
     private final WarehouseStockRepository stockRepository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -44,7 +48,19 @@ public class ReservationService {
         reservation.setRepairRequestId(r.repairRequestId());
         reservation.setReservedById(r.reservedById());
         reservation.setQuantity(r.quantity());
-        return ReservationDto.from(repository.save(reservation));
+        Reservation saved = repository.save(reservation);
+
+        auditBuilderService.log(
+                "reservation",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.RESERVATION,
+                "Резерв создан",
+                null,
+                saved
+        );
+
+        return ReservationDto.from(saved);
     }
 
     public ReservationDto cancel(UUID id) {
@@ -55,9 +71,23 @@ public class ReservationService {
         WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseStockId()).orElseThrow();
         stock.setReservedQty(Math.max(0, stock.getReservedQty() - reservation.getQuantity()));
         reservation.setStatus(ReservationStatus.CANCELLED);
-        return ReservationDto.from(reservation);
+
+        Reservation saved = repository.save(reservation);
+
+        auditBuilderService.log(
+                "reservation",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.RESERVATION,
+                "Резерв обновлен",
+                reservation,
+                saved
+        );
+
+        return ReservationDto.from(saved);
     }
 
+    @Transactional
     public ReservationDto fulfill(UUID id) {
         Reservation reservation = getOrThrow(id);
         if (reservation.getStatus() != ReservationStatus.ACTIVE) {
@@ -67,6 +97,19 @@ public class ReservationService {
         stock.setQuantity(stock.getQuantity() - reservation.getQuantity());
         stock.setReservedQty(Math.max(0, stock.getReservedQty() - reservation.getQuantity()));
         reservation.setStatus(ReservationStatus.FULFILLED);
+
+        Reservation saved = repository.save(reservation);
+
+        auditBuilderService.log(
+                "reservation",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.RESERVATION,
+                "Резерв обновлен",
+                reservation,
+                saved
+        );
+
         return ReservationDto.from(reservation);
     }
 

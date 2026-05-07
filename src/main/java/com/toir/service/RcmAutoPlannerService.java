@@ -1,17 +1,20 @@
 package com.toir.service;
-import com.toir.dto.rcm.EquipmentRiskScore;
 
+import com.toir.dto.rcm.EquipmentRiskScore;
+import com.toir.entity.PprPlan;
+import com.toir.entity.PprTask;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
-import com.toir.entity.equipment.Equipment;
-import com.toir.repository.equipment.EquipmentRepository;
-import com.toir.entity.maintenance.MaintenanceRegulation;
-import com.toir.repository.maintenance.MaintenanceRegulationRepository;
-import com.toir.entity.PprPlan;
 import com.toir.repository.PprPlanRepository;
-import com.toir.entity.PprTask;
 import com.toir.repository.PprTaskRepository;
-import com.toir.enums.PprTaskStatus;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,7 +31,6 @@ import java.util.UUID;
  * не указан — используется первый план по текущему месяцу.
  */
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class RcmAutoPlannerService {
 
@@ -37,9 +39,11 @@ public class RcmAutoPlannerService {
     private final MaintenanceRegulationRepository regulationRepository;
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
+    private final AuditBuilderService auditBuilderService;
 
 
 
+    @Transactional
     public AutoPlanResult generate(int riskThreshold, UUID planId) {
         List<EquipmentRiskScore> scores = rcmService.computeAll().stream()
                 .filter(s -> s.riskScore() >= riskThreshold)
@@ -65,7 +69,7 @@ public class RcmAutoPlannerService {
                 skipped++;
                 continue;
             }
-            MaintenanceRegulation reg = regs.get(0);
+            MaintenanceRegulation reg = regs.getFirst();
             String code = "RCM-" + eq.getCode() + "-" + System.currentTimeMillis() + "-" + matched;
             LocalDateTime now = LocalDateTime.now();
             PprTask task = new PprTask();
@@ -80,7 +84,18 @@ public class RcmAutoPlannerService {
             task.setStatus(PprTaskStatus.PLANNED);
             task.setPriority(priorityFor(s));
             task.setPlannedLaborHours(reg.getNormativeLaborHours());
-            taskRepository.save(task);
+            PprTask saved = taskRepository.save(task);
+
+            auditBuilderService.log(
+                    "ppr_task",
+                    saved.getId().toString(),
+                    AuditAction.CREATE,
+                    AuditModule.PPR_TASK,
+                    "Задача ППР создана",
+                    null,
+                    saved
+            );
+
             matched++;
             created.add(code);
         }
@@ -103,9 +118,9 @@ public class RcmAutoPlannerService {
         if (plans.isEmpty()) {
             List<PprPlan> any = planRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
             if (any.isEmpty()) throw RestException.badRequest("No PprPlan exists — create one first");
-            return any.get(0);
+            return any.getFirst();
         }
-        return plans.get(0);
+        return plans.getFirst();
     }
 
     public record AutoPlanResult(int candidates, int tasksCreated, int skipped, List<String> createdCodes) {}

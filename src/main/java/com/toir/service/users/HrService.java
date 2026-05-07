@@ -1,15 +1,18 @@
 package com.toir.service.users;
-import com.toir.entity.users.Employee;
-import com.toir.entity.TimesheetEntry;
-import com.toir.enums.TimesheetStatus;
-import com.toir.repository.users.EmployeeRepository;
-import com.toir.repository.TimesheetEntryRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeRequest;
 import com.toir.dto.hr.TimesheetEntryDto;
 import com.toir.dto.hr.TimesheetEntryRequest;
+import com.toir.entity.TimesheetEntry;
+import com.toir.entity.users.Employee;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.TimesheetStatus;
+import com.toir.exception.RestException;
+import com.toir.repository.TimesheetEntryRepository;
+import com.toir.repository.users.EmployeeRepository;
+import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -21,12 +24,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class HrService {
 
     private final EmployeeRepository employeeRepository;
     private final TimesheetEntryRepository timesheetRepository;
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
     public Page<EmployeeDto> listEmployees(int page, int pageSize, String search, Boolean activeOnly) {
@@ -50,25 +53,62 @@ public class HrService {
         return EmployeeDto.from(getEmployeeOrThrow(id));
     }
 
+    @Transactional
     public EmployeeDto createEmployee(EmployeeRequest r) {
         if (employeeRepository.existsByPersonnelNumberAndIsDeletedFalse(r.personnelNumber())) {
             throw RestException.conflict("Personnel number already exists: " + r.personnelNumber());
         }
         Employee e = new Employee();
         applyEmployee(e, r);
-        return EmployeeDto.from(employeeRepository.save(e));
+        Employee saved = employeeRepository.save(e);
+
+        auditBuilderService.log(
+                "employee",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.EMPLOYEE,
+                "Сотрудник создан",
+                null,
+                saved
+        );
+
+        return EmployeeDto.from(saved);
     }
 
+    @Transactional
     public EmployeeDto updateEmployee(UUID id, EmployeeRequest r) {
         Employee e = getEmployeeOrThrow(id);
         applyEmployee(e, r);
-        return EmployeeDto.from(e);
+
+        Employee save = employeeRepository.save(e);
+
+        auditBuilderService.log(
+                "employee",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.EMPLOYEE,
+                "Сотрудник обновлен",
+                e,
+                save
+        );
+        return EmployeeDto.from(save);
     }
 
+    @Transactional
     public void deleteEmployee(UUID id) {
         var entity = getEmployeeOrThrow(id);
         entity.setDeleted(true);
-        employeeRepository.save(entity);
+        Employee saved = employeeRepository.save(entity);
+
+        auditBuilderService.log(
+                "employee",
+                id != null ? id.toString() : null,
+                AuditAction.DELETE,
+                AuditModule.EMPLOYEE,
+                "Сотрудник удален",
+                saved,
+                null
+        );
     }
 
     @Transactional(readOnly = true)
@@ -84,31 +124,81 @@ public class HrService {
                 .stream().map(TimesheetEntryDto::from).toList();
     }
 
+    @Transactional
     public TimesheetEntryDto createTimesheet(TimesheetEntryRequest r) {
         getEmployeeOrThrow(r.employeeId());
         TimesheetEntry e = new TimesheetEntry();
         applyTimesheet(e, r);
-        return TimesheetEntryDto.from(timesheetRepository.save(e));
+        TimesheetEntry saved = timesheetRepository.save(e);
+
+        auditBuilderService.log(
+                "timesheet_entry",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.TIMESHEET_ENTRY,
+                "Табельная запись создана",
+                null,
+                saved
+        );
+        return TimesheetEntryDto.from(saved);
     }
 
+    @Transactional
     public TimesheetEntryDto updateTimesheet(UUID id, TimesheetEntryRequest r) {
         TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
         applyTimesheet(e, r);
+
+        TimesheetEntry save = timesheetRepository.save(e);
+
+        auditBuilderService.log(
+                "timesheet_entry",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.TIMESHEET_ENTRY,
+                "Табельная запись обновлена",
+                e,
+                save
+        );
         return TimesheetEntryDto.from(e);
     }
 
+    @Transactional
     public void deleteTimesheet(UUID id) {
         TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
         e.setDeleted(true);
-        timesheetRepository.save(e);
+        TimesheetEntry saved = timesheetRepository.save(e);
+
+        auditBuilderService.log(
+                "timesheet_entry",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.TIMESHEET_ENTRY,
+                "Табельная запись удалена",
+                saved,
+                null
+        );
     }
 
+    @Transactional
     public TimesheetEntryDto approveTimesheet(UUID id) {
         TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
+
         e.setStatus(TimesheetStatus.APPROVED);
+
+        TimesheetEntry save = timesheetRepository.save(e);
+
+        auditBuilderService.log(
+                "timesheet_entry",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.TIMESHEET_ENTRY,
+                "Табельная запись обновлена",
+                e,
+                save
+        );
         return TimesheetEntryDto.from(e);
     }
 
@@ -146,4 +236,6 @@ public class HrService {
         if (r.status() != null) e.setStatus(r.status());
         e.setNote(r.note());
     }
-}
+
+
+   }

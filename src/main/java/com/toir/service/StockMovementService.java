@@ -1,14 +1,17 @@
 package com.toir.service;
-import com.toir.entity.StockMovement;
-import com.toir.repository.StockMovementRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementRequest;
-import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.entity.SparePart;
-import com.toir.repository.WarehouseStockRepository;
+import com.toir.entity.StockMovement;
+import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.StockMovementRepository;
+import com.toir.repository.WarehouseStockRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,13 +19,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class StockMovementService {
 
     private final StockMovementRepository repository;
     private final WarehouseStockRepository stockRepository;
     private final SparePartRepository sparePartRepository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -30,6 +33,7 @@ public class StockMovementService {
         return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(StockMovementDto::from).toList();
     }
 
+    @Transactional
     public StockMovementDto create(StockMovementRequest request) {
         WarehouseStock stock = stockRepository
                 .findByWarehouseIdAndSparePartIdAndIsDeletedFalse(request.warehouseId(), request.sparePartId())
@@ -80,6 +84,18 @@ public class StockMovementService {
         movement.setDocumentNumber(request.documentNumber());
         movement.setCreatedById(request.createdById());
         movement.setNotes(request.notes());
-        return StockMovementDto.from(repository.save(movement));
+        StockMovement saved = repository.save(movement);
+
+        auditBuilderService.log(
+                "stock_movement",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.STOCK_MOVEMENT,
+                "Движение склада создано",
+                null,
+                saved
+        );
+
+        return StockMovementDto.from(saved);
     }
 }

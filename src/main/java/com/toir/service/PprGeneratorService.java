@@ -1,19 +1,16 @@
 package com.toir.service;
-import com.toir.enums.PlanStatus;
+
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
-import com.toir.enums.PprTaskStatus;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.enums.*;
+import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
-
-import com.toir.enums.PriorityLevel;
-import com.toir.exception.RestException;
-import com.toir.entity.equipment.Equipment;
 import com.toir.repository.equipment.EquipmentRepository;
-import com.toir.enums.EquipmentStatus;
-import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
-import com.toir.enums.PeriodicityUnit;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +30,7 @@ public class PprGeneratorService {
     private final PprTaskRepository taskRepository;
     private final MaintenanceRegulationRepository regulationRepository;
     private final EquipmentRepository equipmentRepository;
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional
     public GenerationResult generateForPlan(UUID planId) {
@@ -104,13 +102,36 @@ public class PprGeneratorService {
                 task.setStatus(PprTaskStatus.PLANNED);
 
                 plan.getTasks().add(task);
-                taskRepository.save(task);
+                PprTask saved = taskRepository.save(task);
+
+                auditBuilderService.log(
+                        "ppr_task",
+                        saved.getId().toString(),
+                        AuditAction.CREATE,
+                        AuditModule.PPR_TASK,
+                        "Задача ППР создана",
+                        null,
+                        saved
+                );
+
                 created++;
             }
         }
 
         if (created > 0 && plan.getStatus() == PlanStatus.DRAFT) {
             plan.setStatus(PlanStatus.GENERATED);
+
+            PprPlan pprPlan = planRepository.save(plan);
+
+            auditBuilderService.log(
+                    "ppr_plan",
+                    pprPlan.getId().toString(),
+                    AuditAction.UPDATE,
+                    AuditModule.PPR_PLAN,
+                    "План ППР обновлен",
+                    plan,
+                    pprPlan
+            );
         }
 
         return new GenerationResult(plan.getId(), created, skipped);

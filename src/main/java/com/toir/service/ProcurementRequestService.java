@@ -1,17 +1,20 @@
 package com.toir.service;
-import com.toir.entity.projects.ProcurementRequest;
-import com.toir.entity.equipment.ProcurementRequestLine;
-import com.toir.enums.ProcurementRequestStatus;
-import com.toir.repository.ProcurementRequestRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.procurement.ProcurementLineRequest;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.entity.SparePart;
-import com.toir.repository.SparePartRepository;
+import com.toir.entity.equipment.ProcurementRequestLine;
+import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.ProcurementRequestStatus;
+import com.toir.exception.RestException;
+import com.toir.repository.ProcurementRequestRepository;
+import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,20 +22,16 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class ProcurementRequestService {
 
     private final ProcurementRequestRepository repo;
     private final SparePartRepository sparePartRepository;
     private final WarehouseStockRepository stockRepository;
+    private final AuditBuilderService auditBuilderService;
 
 
 
@@ -50,6 +49,7 @@ public class ProcurementRequestService {
         return ProcurementRequestDto.from(load(id));
     }
 
+    @Transactional
     public ProcurementRequestDto create(ProcurementRequestRequest r) {
         ProcurementRequest p = new ProcurementRequest();
         p.setNumber(nextNumber());
@@ -66,9 +66,22 @@ public class ProcurementRequestService {
             }
         }
         recalcTotal(p);
-        return ProcurementRequestDto.from(repo.save(p));
+        ProcurementRequest saved = repo.save(p);
+
+        auditBuilderService.log(
+                "procurement_request",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.PROCUREMENT_REQUEST,
+                "Заявка на закупку создана",
+                null,
+                saved
+        );
+
+        return ProcurementRequestDto.from(saved);
     }
 
+    @Transactional
     public ProcurementRequestDto addLine(UUID id, ProcurementLineRequest line) {
         ProcurementRequest p = load(id);
         if (p.getStatus() != ProcurementRequestStatus.DRAFT) {
@@ -76,9 +89,23 @@ public class ProcurementRequestService {
         }
         p.getLines().add(buildLine(p, line));
         recalcTotal(p);
+
+        ProcurementRequest saved = repo.save(p);
+        auditBuilderService.log(
+                "procurement_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PROCUREMENT_REQUEST,
+                "Заявка на закупку обновлена",
+                p,
+                saved
+        );
+
+
         return ProcurementRequestDto.from(p);
     }
 
+    @Transactional
     public ProcurementRequestDto submit(UUID id) {
         ProcurementRequest p = load(id);
         if (p.getStatus() != ProcurementRequestStatus.DRAFT) {
@@ -89,9 +116,22 @@ public class ProcurementRequestService {
         }
         p.setStatus(ProcurementRequestStatus.SUBMITTED);
         p.setSubmittedAt(Instant.now());
+
+        ProcurementRequest saved = repo.save(p);
+        auditBuilderService.log(
+                "procurement_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PROCUREMENT_REQUEST,
+                "Заявка на закупку обновлена",
+                p,
+                saved
+        );
+
         return ProcurementRequestDto.from(p);
     }
 
+    @Transactional
     public ProcurementRequestDto approve(UUID id) {
         ProcurementRequest p = load(id);
         if (p.getStatus() != ProcurementRequestStatus.SUBMITTED) {
@@ -99,9 +139,20 @@ public class ProcurementRequestService {
         }
         p.setStatus(ProcurementRequestStatus.APPROVED);
         p.setApprovedAt(Instant.now());
+        ProcurementRequest saved = repo.save(p);
+        auditBuilderService.log(
+                "procurement_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PROCUREMENT_REQUEST,
+                "Заявка на закупку обновлена",
+                p,
+                saved
+        );
         return ProcurementRequestDto.from(p);
     }
 
+    @Transactional
     public ProcurementRequestDto reject(UUID id, String reason) {
         ProcurementRequest p = load(id);
         if (p.getStatus() == ProcurementRequestStatus.RECEIVED
@@ -110,9 +161,21 @@ public class ProcurementRequestService {
         }
         p.setStatus(ProcurementRequestStatus.REJECTED);
         p.setRejectionReason(reason);
+
+        ProcurementRequest saved = repo.save(p);
+        auditBuilderService.log(
+                "procurement_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PROCUREMENT_REQUEST,
+                "Заявка на закупку обновлена",
+                p,
+                saved
+        );
         return ProcurementRequestDto.from(p);
     }
 
+    @Transactional
     public ProcurementRequestDto markOrdered(UUID id) {
         ProcurementRequest p = load(id);
         if (p.getStatus() != ProcurementRequestStatus.APPROVED) {
@@ -120,9 +183,20 @@ public class ProcurementRequestService {
         }
         p.setStatus(ProcurementRequestStatus.ORDERED);
         p.setOrderedAt(Instant.now());
+        ProcurementRequest saved = repo.save(p);
+        auditBuilderService.log(
+                "procurement_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PROCUREMENT_REQUEST,
+                "Заявка на закупку обновлена",
+                p,
+                saved
+        );
         return ProcurementRequestDto.from(p);
     }
 
+    @Transactional
     public ProcurementRequestDto markReceived(UUID id) {
         ProcurementRequest p = load(id);
         if (p.getStatus() != ProcurementRequestStatus.ORDERED) {
@@ -130,19 +204,41 @@ public class ProcurementRequestService {
         }
         p.setStatus(ProcurementRequestStatus.RECEIVED);
         p.setReceivedAt(Instant.now());
+        ProcurementRequest saved = repo.save(p);
+        auditBuilderService.log(
+                "procurement_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PROCUREMENT_REQUEST,
+                "Заявка на закупку обновлена",
+                p,
+                saved
+        );
         return ProcurementRequestDto.from(p);
     }
 
+    @Transactional
     public ProcurementRequestDto cancel(UUID id) {
         ProcurementRequest p = load(id);
         if (p.getStatus() == ProcurementRequestStatus.RECEIVED) {
             throw RestException.badRequest("Cannot cancel received procurement request");
         }
         p.setStatus(ProcurementRequestStatus.CANCELLED);
+        ProcurementRequest saved = repo.save(p);
+        auditBuilderService.log(
+                "procurement_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PROCUREMENT_REQUEST,
+                "Заявка на закупку обновлена",
+                p,
+                saved
+        );
         return ProcurementRequestDto.from(p);
     }
 
     /** Сгенерировать заявку(и) на закупку из low-stock позиций (по складу). */
+    @Transactional
     public List<ProcurementRequestDto> generateFromLowStock(UUID warehouseId) {
         List<WarehouseStock> stocks = stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(s -> warehouseId == null || s.getWarehouseId().equals(warehouseId))
@@ -182,7 +278,19 @@ public class ProcurementRequestService {
         for (ProcurementRequest p : byWarehouse.values()) {
             if (p.getLines().isEmpty()) continue;
             recalcTotal(p);
-            result.add(ProcurementRequestDto.from(repo.save(p)));
+            ProcurementRequest saved = repo.save(p);
+
+            auditBuilderService.log(
+                    "procurement_request",
+                    saved.getId().toString(),
+                    AuditAction.CREATE,
+                    AuditModule.PROCUREMENT_REQUEST,
+                    "Заявка на закупку создана",
+                    null,
+                    saved
+            );
+
+            result.add(ProcurementRequestDto.from(saved));
         }
         return result;
     }

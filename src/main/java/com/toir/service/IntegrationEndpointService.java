@@ -1,10 +1,13 @@
 package com.toir.service;
-import com.toir.entity.IntegrationEndpoint;
-import com.toir.enums.IntegrationSyncStatus;
-import com.toir.repository.IntegrationEndpointRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.integration.IntegrationEndpointDto;
+import com.toir.entity.IntegrationEndpoint;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.IntegrationSyncStatus;
+import com.toir.exception.RestException;
+import com.toir.repository.IntegrationEndpointRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,11 +17,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class IntegrationEndpointService {
 
     private final IntegrationEndpointRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -26,21 +29,46 @@ public class IntegrationEndpointService {
         return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(IntegrationEndpointDto::from).toList();
     }
 
+    @Transactional
     public IntegrationEndpointDto create(IntegrationEndpointDto r) {
         if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Endpoint code already exists: " + r.code());
         }
         IntegrationEndpoint e = new IntegrationEndpoint();
         apply(e, r);
-        return IntegrationEndpointDto.from(repository.save(e));
+        IntegrationEndpoint saved = repository.save(e);
+
+        auditBuilderService.log(
+                "integration_endpoint",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.INTEGRATION_ENDPOINT,
+                "Интеграционная точка создана",
+                null,
+                saved);
+
+        return IntegrationEndpointDto.from(saved);
     }
 
+    @Transactional
     public IntegrationEndpointDto update(UUID id, IntegrationEndpointDto r) {
         IntegrationEndpoint e = getOrThrow(id);
         apply(e, r);
+
+        IntegrationEndpoint saved = repository.save(e);
+        auditBuilderService.log(
+                "integration_endpoint",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.INTEGRATION_ENDPOINT,
+                "Интеграционная точка обновлена",
+                e,
+                saved);
+
         return IntegrationEndpointDto.from(e);
     }
 
+    @Transactional
     public IntegrationEndpointDto recordSync(UUID id, IntegrationSyncStatus status) {
         IntegrationEndpoint e = getOrThrow(id);
         e.setLastSyncAt(Instant.now());
@@ -53,9 +81,21 @@ public class IntegrationEndpointService {
         return IntegrationEndpointDto.from(getOrThrow(id));
     }
 
+    @Transactional
     public void delete(UUID id) { var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity); }
+        IntegrationEndpoint saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "integration_endpoint",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.INTEGRATION_ENDPOINT,
+                "Интеграционная точка удалена",
+                saved,
+                null);
+
+    }
 
     private IntegrationEndpoint getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -82,4 +122,6 @@ public class IntegrationEndpointService {
         e.setSyncProduction(r.syncProduction());
         if (r.active() != null) e.setActive(r.active());
     }
+
+
 }

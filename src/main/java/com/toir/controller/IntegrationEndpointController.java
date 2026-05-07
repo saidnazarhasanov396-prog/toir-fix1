@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,16 +22,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/integrations")
 @Tag(name = "integrations")
 @RequiresAdmin
+@RequiredArgsConstructor
 public class IntegrationEndpointController {
 
     private final IntegrationEndpointService service;
     private final com.toir.service.MesIntegrationService mesService;
-
-    public IntegrationEndpointController(IntegrationEndpointService service,
-                                         com.toir.service.MesIntegrationService mesService) {
-        this.service = service;
-        this.mesService = mesService;
-    }
 
     @GetMapping public ResponseEntity<Page<IntegrationEndpointDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
 

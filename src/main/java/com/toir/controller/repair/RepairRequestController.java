@@ -9,6 +9,8 @@ import com.toir.service.repair.RepairRequestService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,15 +19,12 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/repair-requests")
 @Tag(name = "repair-requests")
+@RequiredArgsConstructor
 public class RepairRequestController {
 
     private final RepairRequestService service;
     private final SecurityScope securityScope;
 
-    public RepairRequestController(RepairRequestService service, SecurityScope securityScope) {
-        this.service = service;
-        this.securityScope = securityScope;
-    }
 
     @GetMapping
     public ResponseEntity<Page<RepairRequestDto>> list(

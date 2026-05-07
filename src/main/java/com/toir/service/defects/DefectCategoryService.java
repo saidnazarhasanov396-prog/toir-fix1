@@ -1,9 +1,12 @@
 package com.toir.service.defects;
-import com.toir.entity.defects.DefectCategory;
-import com.toir.repository.defects.DefectCategoryRepository;
 
-import com.toir.exception.RestException;
 import com.toir.dto.defectcategory.DefectCategoryDto;
+import com.toir.entity.defects.DefectCategory;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
+import com.toir.repository.defects.DefectCategoryRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,11 +16,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class DefectCategoryService {
 
     private final DefectCategoryRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -25,24 +28,66 @@ public class DefectCategoryService {
         return repository.findAll(search).stream().map(DefectCategoryDto::from).toList();
     }
 
+    @Transactional
     public DefectCategoryDto create(DefectCategoryDto r) {
         DefectCategory e = new DefectCategory();
         e.setCode(nextCode());
         e.setName(r.name());
         e.setDescription(r.description());
-        return DefectCategoryDto.from(repository.save(e));
+        DefectCategory saved = repository.save(e);
+
+
+        auditBuilderService.log(
+                "defect_category",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.DEFECT_CATEGORY,
+                "Категория дефекта создана",
+                null,
+                saved
+        );
+
+        return DefectCategoryDto.from(saved);
     }
 
+    @Transactional
     public DefectCategoryDto update(UUID id, DefectCategoryDto r) {
         DefectCategory e = getOrThrow(id);
         e.setName(r.name());
         e.setDescription(r.description());
+        DefectCategory save = repository.save(e);
+
+
+        auditBuilderService.log(
+                "defect_category",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.DEFECT_CATEGORY,
+                "Категория дефекта обновлена",
+                e,
+                save
+        );
+
         return DefectCategoryDto.from(e);
     }
 
-    public void delete(UUID id) { var entity = getOrThrow(id);
+    @Transactional
+    public void delete(UUID id) {
+        var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity); }
+        DefectCategory saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "defect_category",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.DEFECT_CATEGORY,
+                "Категория дефекта удалена",
+                entity,
+                null
+        );
+
+    }
 
     private DefectCategory getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
@@ -64,4 +109,5 @@ public class DefectCategoryService {
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
+
 }

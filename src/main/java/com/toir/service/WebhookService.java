@@ -1,13 +1,16 @@
 package com.toir.service;
-import com.toir.dto.webhook.WebhookDto;
-import com.toir.entity.WebhookEventLog;
-import com.toir.repository.WebhookEventLogRepository;
-import com.toir.entity.WebhookSubscription;
-import com.toir.repository.WebhookSubscriptionRepository;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.dto.webhook.WebhookDto;
+import com.toir.entity.WebhookEventLog;
+import com.toir.entity.WebhookSubscription;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
+import com.toir.repository.WebhookEventLogRepository;
+import com.toir.repository.WebhookSubscriptionRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,25 +37,36 @@ import java.util.UUID;
  * Таймаут 5 секунд — интеграции не должны блокировать основной flow.
  */
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class WebhookService {
 
     private final WebhookSubscriptionRepository repository;
     private final WebhookEventLogRepository eventLogRepository;
     private final ObjectMapper objectMapper;
+    private final AuditBuilderService auditBuilderService;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(3))
             .build();
 
 
+    @Transactional(readOnly = true)
     public List<WebhookDto> findAll(String search,Boolean active) {
         return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc(search,active).stream().map(WebhookDto::fromEntity).toList();
     }
 
+    @Transactional
     public WebhookDto create(WebhookSubscription sub) {
         sub.setCode(webHookGenerateCode());
         WebhookSubscription saved = repository.save(sub);
+        auditBuilderService.log(
+                "webhook",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.WEBHOOK,
+                "Webhook-подписка создана",
+                null,
+                saved
+        );
         return WebhookDto.fromEntity(saved);
     }
 
@@ -71,6 +85,7 @@ public class WebhookService {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 
+    @Transactional
     public WebhookDto update(UUID id, WebhookSubscription patch) {
         WebhookSubscription existing = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Webhook subscription not found: " + id));
@@ -79,16 +94,39 @@ public class WebhookService {
         existing.setSecret(patch.getSecret());
         existing.setEvents(patch.getEvents());
         existing.setActive(patch.isActive());
+
+        WebhookSubscription saved = repository.save(existing);
+
+        auditBuilderService.log(
+                "webhook",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.WEBHOOK,
+                "Webhook-подписка обновлена",
+                existing,
+                saved
+        );
         return WebhookDto.fromEntity(existing);
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = repository.findByIdAndIsDeletedFalse(id).orElseThrow();
         entity.setDeleted(true);
-        repository.save(entity);
+        WebhookSubscription saved = repository.save(entity);
+        auditBuilderService.log(
+                "webhook",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.WEBHOOK,
+                "Webhook-подписка удалена",
+                saved,
+                null
+        );
     }
 
     /** Публикует событие всем активным подписчикам. Исключения в сети не бросаем — пишем в лог. */
+    @Transactional
     public int publish(String eventCode, Object payload) {
         List<WebhookSubscription> subs = repository.findAllByActiveTrueAndIsDeletedFalse();
         if (subs.isEmpty()) return 0;
@@ -141,6 +179,7 @@ public class WebhookService {
         return delivered;
     }
 
+    @Transactional
     public List<WebhookEventLog> recentForSubscription(UUID subscriptionId) {
         return eventLogRepository.findTop50BySubscriptionIdAndIsDeletedFalseOrderByFiredAtDesc(subscriptionId);
     }

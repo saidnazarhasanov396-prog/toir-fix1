@@ -1,11 +1,14 @@
 package com.toir.service.maintanance;
-import com.toir.entity.maintenance.MaintenanceRegulation;
-import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 
-import com.toir.exception.RestException;
-import com.toir.util.PaginationUtils;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
+import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.exception.RestException;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.util.AuditBuilderService;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -15,11 +18,11 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class MaintenanceRegulationService {
 
     private final MaintenanceRegulationRepository repository;
+    private final AuditBuilderService auditBuilderService;
 
 
     @Transactional(readOnly = true)
@@ -41,34 +44,67 @@ public class MaintenanceRegulationService {
         return MaintenanceRegulationDto.from(getOrThrow(id));
     }
 
-    public MaintenanceRegulation getEntityOrThrow(UUID id) {
-        return getOrThrow(id);
-    }
 
     @Transactional(readOnly = true)
     public List<MaintenanceRegulation> findActiveByEquipmentType(UUID equipmentTypeId) {
         return repository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(equipmentTypeId);
     }
 
+    @Transactional
     public MaintenanceRegulationDto create(MaintenanceRegulationRequest request) {
         if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
             throw RestException.conflict("Regulation code already exists: " + request.code());
         }
         MaintenanceRegulation entity = new MaintenanceRegulation();
         apply(entity, request);
-        return MaintenanceRegulationDto.from(repository.save(entity));
+        MaintenanceRegulation saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "maintenance_regulation",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.MAINTENANCE_REGULATION,
+                "Регламент обслуживания создан",
+                null,
+                saved);
+
+        return MaintenanceRegulationDto.from(saved);
     }
 
+    @Transactional
     public MaintenanceRegulationDto update(UUID id, MaintenanceRegulationRequest request) {
         MaintenanceRegulation entity = getOrThrow(id);
         apply(entity, request);
+
+        MaintenanceRegulation save = repository.save(entity);
+
+        auditBuilderService.log(
+                "maintenance_regulation",
+                id != null ? id.toString() : null,
+                AuditAction.UPDATE,
+                AuditModule.MAINTENANCE_REGULATION,
+                "Регламент обслуживания обновлен",
+                entity,
+                save);
+
         return MaintenanceRegulationDto.from(entity);
     }
 
+    @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
         entity.setDeleted(true);
-        repository.save(entity);
+        MaintenanceRegulation saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "maintenance_regulation",
+                saved.getId().toString(),
+                AuditAction.DELETE,
+                AuditModule.MAINTENANCE_REGULATION,
+                "Регламент обслуживания удален",
+                saved,
+                null);
+
     }
 
     private MaintenanceRegulation getOrThrow(UUID id) {
