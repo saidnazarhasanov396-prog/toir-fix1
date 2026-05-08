@@ -27,5 +27,7 @@ public record RepairRequestDto(
         Instant actualCompletionAt,
         Instant reactedAt,
         String rejectionReason,
+        String clarificationReason,
         String closeResult
 ) {}
+

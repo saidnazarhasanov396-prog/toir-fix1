@@ -35,6 +35,8 @@ public class StockMovementService {
 
     @Transactional
     public StockMovementDto create(StockMovementRequest request) {
+        validatePositiveQuantity(request.quantity());
+
         WarehouseStock stock = stockRepository
                 .findByWarehouseIdAndSparePartIdAndIsDeletedFalse(request.warehouseId(), request.sparePartId())
                 .orElseGet(() -> {
@@ -65,13 +67,22 @@ public class StockMovementService {
                 stock.setReservedQty(stock.getReservedQty() + request.quantity());
             }
             case RELEASE -> stock.setReservedQty(Math.max(0, stock.getReservedQty() - request.quantity()));
-            case ADJUSTMENT -> stock.setQuantity(request.quantity());
+            case ADJUSTMENT -> {
+                if (request.quantity() < stock.getReservedQty()) {
+                    throw RestException.badRequest("Cannot adjust quantity below reserved: reserved="
+                            + stock.getReservedQty() + ", requested=" + request.quantity());
+                }
+                stock.setQuantity(request.quantity());
+            }
             case TRANSFER -> {
                 if (stock.getAvailable() < request.quantity()) {
                     throw RestException.badRequest("Cannot transfer more than available");
                 }
                 stock.setQuantity(stock.getQuantity() - request.quantity());
             }
+        }
+        if (stock.getQuantity() < 0) {
+            throw RestException.badRequest("Stock quantity cannot be negative");
         }
 
         StockMovement movement = new StockMovement();
@@ -97,5 +108,11 @@ public class StockMovementService {
         );
 
         return StockMovementDto.from(saved);
+    }
+
+    private void validatePositiveQuantity(double quantity) {
+        if (quantity <= 0) {
+            throw RestException.badRequest("Quantity must be greater than 0");
+        }
     }
 }

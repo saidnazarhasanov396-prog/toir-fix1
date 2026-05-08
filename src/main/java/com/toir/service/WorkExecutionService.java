@@ -47,12 +47,8 @@ public class WorkExecutionService {
         Instant startedAt = r.startedAt() != null ? r.startedAt() : Instant.now();
         WorkOrder workOrder = workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + workOrderId));
-        if (workOrder.getStatus() == WorkOrderStatus.COMPLETED || workOrder.getStatus() == WorkOrderStatus.CLOSED) {
-            throw RestException.badRequest("Cannot start execution for a completed or closed work order");
-        }
         if (workOrder.getStatus() != WorkOrderStatus.IN_PROGRESS) {
-            workOrder.setStatus(WorkOrderStatus.IN_PROGRESS);
-            workOrder.setStartedAt(startedAt);
+            throw RestException.badRequest("Work order must be IN_PROGRESS to start execution");
         }
 
         WorkExecution e = new WorkExecution();

@@ -1,7 +1,10 @@
 package com.toir.repository;
 
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
+import com.toir.enums.WarehouseEquipmentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -36,5 +39,13 @@ public interface WarehouseEquipmentItemRepository extends JpaRepository<Warehous
             """, nativeQuery = true)
     Optional<WarehouseEquipmentItem> findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(@Param("warehouseId") UUID warehouseId,
                                                                                                      @Param("equipmentId") UUID equipmentId);
+
+    boolean existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(UUID equipmentId);
+
+    Page<WarehouseEquipmentItem> findByWarehouseIdAndActiveTrueAndIsDeletedFalse(UUID warehouseId, Pageable pageable);
+
+    Page<WarehouseEquipmentItem> findByWarehouseIdAndStatusAndActiveTrueAndIsDeletedFalse(UUID warehouseId,
+                                                                                            WarehouseEquipmentStatus status,
+                                                                                            Pageable pageable);
 
 }
