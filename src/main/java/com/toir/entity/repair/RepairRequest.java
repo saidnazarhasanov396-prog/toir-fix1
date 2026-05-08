@@ -75,6 +75,10 @@ public class RepairRequest extends BaseEntity {
     @Column(name = "rejection_reason", columnDefinition = "text")
     private String rejectionReason;
 
+    @Column(name = "clarification_reason", columnDefinition = "text")
+    private String clarificationReason;
+
     @Column(name = "close_result", columnDefinition = "text")
     private String closeResult;
 }
+

@@ -151,6 +151,7 @@ public class RepairRequestService {
         captureReaction(entity, RequestStatus.REJECTED);
         entity.setStatus(RequestStatus.REJECTED);
         entity.setRejectionReason(reason);
+        entity.setClarificationReason(null);
         RepairRequest save = repository.save(entity);
 
         auditBuilderService.log(
@@ -173,7 +174,8 @@ public class RepairRequestService {
         RepairRequest entity = getOrThrow(id);
         captureReaction(entity, RequestStatus.NEEDS_CLARIFICATION);
         entity.setStatus(RequestStatus.NEEDS_CLARIFICATION);
-        entity.setRejectionReason(comment);
+        entity.setClarificationReason(comment);
+        entity.setRejectionReason(null);
 
         RepairRequest save = repository.save(entity);
 
@@ -259,6 +261,7 @@ public class RepairRequestService {
                 r.getActualCompletionAt(),
                 r.getReactedAt(),
                 r.getRejectionReason(),
+                r.getClarificationReason(),
                 r.getCloseResult()
         );
     }
@@ -268,3 +271,4 @@ public class RepairRequestService {
                 .orElseThrow(() -> RestException.notFound("Repair request not found: " + id));
     }
 }
+

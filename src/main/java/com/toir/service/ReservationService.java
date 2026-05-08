@@ -3,12 +3,15 @@ package com.toir.service;
 import com.toir.dto.reservation.ReservationDto;
 import com.toir.dto.reservation.ReservationRequest;
 import com.toir.entity.Reservation;
+import com.toir.entity.StockMovement;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.ReservationStatus;
+import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.ReservationRepository;
+import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +28,7 @@ public class ReservationService {
 
     private final ReservationRepository repository;
     private final WarehouseStockRepository stockRepository;
+    private final StockMovementRepository stockMovementRepository;
     private final AuditBuilderService auditBuilderService;
 
 
@@ -34,6 +38,8 @@ public class ReservationService {
     }
 
     public ReservationDto reserve(ReservationRequest r) {
+        validatePositiveQuantity(r.quantity());
+
         WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(r.warehouseStockId())
                 .orElseThrow(() -> RestException.notFound("Stock not found: " + r.warehouseStockId()));
         if (stock.getAvailable() < r.quantity()) {
@@ -41,6 +47,7 @@ public class ReservationService {
                     + stock.getAvailable() + ", requested=" + r.quantity());
         }
         stock.setReservedQty(stock.getReservedQty() + r.quantity());
+        stockRepository.save(stock);
 
         Reservation reservation = new Reservation();
         reservation.setWarehouseStockId(r.warehouseStockId());
@@ -49,6 +56,7 @@ public class ReservationService {
         reservation.setReservedById(r.reservedById());
         reservation.setQuantity(r.quantity());
         Reservation saved = repository.save(reservation);
+        stockMovementRepository.save(buildMovement(stock, saved, StockMovementType.RESERVATION));
 
         auditBuilderService.log(
                 "reservation",
@@ -68,11 +76,15 @@ public class ReservationService {
         if (reservation.getStatus() != ReservationStatus.ACTIVE) {
             throw RestException.badRequest("Only active reservations can be cancelled");
         }
+        validatePositiveQuantity(reservation.getQuantity());
+
         WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseStockId()).orElseThrow();
         stock.setReservedQty(Math.max(0, stock.getReservedQty() - reservation.getQuantity()));
+        stockRepository.save(stock);
         reservation.setStatus(ReservationStatus.CANCELLED);
 
         Reservation saved = repository.save(reservation);
+        stockMovementRepository.save(buildMovement(stock, saved, StockMovementType.RELEASE));
 
         auditBuilderService.log(
                 "reservation",
@@ -93,12 +105,20 @@ public class ReservationService {
         if (reservation.getStatus() != ReservationStatus.ACTIVE) {
             throw RestException.badRequest("Only active reservations can be fulfilled");
         }
+        validatePositiveQuantity(reservation.getQuantity());
+
         WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseStockId()).orElseThrow();
+        if (stock.getQuantity() < reservation.getQuantity()) {
+            throw RestException.badRequest("Cannot fulfill more than stock quantity: available="
+                    + stock.getQuantity() + ", requested=" + reservation.getQuantity());
+        }
         stock.setQuantity(stock.getQuantity() - reservation.getQuantity());
         stock.setReservedQty(Math.max(0, stock.getReservedQty() - reservation.getQuantity()));
+        stockRepository.save(stock);
         reservation.setStatus(ReservationStatus.FULFILLED);
 
         Reservation saved = repository.save(reservation);
+        stockMovementRepository.save(buildMovement(stock, saved, StockMovementType.ISSUE));
 
         auditBuilderService.log(
                 "reservation",
@@ -116,5 +136,22 @@ public class ReservationService {
     private Reservation getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Reservation not found: " + id));
+    }
+
+    private void validatePositiveQuantity(double quantity) {
+        if (quantity <= 0) {
+            throw RestException.badRequest("Quantity must be greater than 0");
+        }
+    }
+
+    private StockMovement buildMovement(WarehouseStock stock, Reservation reservation, StockMovementType type) {
+        StockMovement movement = new StockMovement();
+        movement.setWarehouseId(stock.getWarehouseId());
+        movement.setSparePartId(stock.getSparePartId());
+        movement.setWorkOrderId(reservation.getWorkOrderId());
+        movement.setCreatedById(reservation.getReservedById());
+        movement.setType(type);
+        movement.setQuantity(reservation.getQuantity());
+        return movement;
     }
 }

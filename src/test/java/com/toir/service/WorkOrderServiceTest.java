@@ -1,5 +1,7 @@
 package com.toir.service;
 
+import com.toir.dto.workorder.CloseWorkOrderRequest;
+import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.entity.Department;
@@ -9,6 +11,7 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.WarehouseEquipmentStatus;
+import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
@@ -35,6 +38,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -263,6 +268,255 @@ class WorkOrderServiceTest {
                 .hasMessageContaining("must be null when workType is not REPLACEMENT");
     }
 
+    @Test
+    void approveReplacementWorkOrderShouldReserveReplacementEquipment() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID replacementEquipmentId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.DRAFT, warehouseId, replacementEquipmentId);
+        WarehouseEquipmentItem item = warehouseItem(warehouseId, replacementEquipmentId, WarehouseEquipmentStatus.AVAILABLE);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
+                .thenReturn(Optional.of(item));
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        service.approve(workOrderId, UUID.randomUUID());
+
+        assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.RESERVED);
+    }
+
+    @Test
+    void approveReplacementWorkOrderWithReservedItemShouldSucceedWithoutStatusChange() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID replacementEquipmentId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.DRAFT, warehouseId, replacementEquipmentId);
+        WarehouseEquipmentItem item = warehouseItem(warehouseId, replacementEquipmentId, WarehouseEquipmentStatus.RESERVED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
+                .thenReturn(Optional.of(item));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        service.approve(workOrderId, UUID.randomUUID());
+
+        assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.RESERVED);
+        verify(warehouseEquipmentItemRepository, never()).save(any(WarehouseEquipmentItem.class));
+    }
+
+    @Test
+    void approveReplacementWorkOrderWithInstalledItemShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID replacementEquipmentId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.DRAFT, warehouseId, replacementEquipmentId);
+        WarehouseEquipmentItem item = warehouseItem(warehouseId, replacementEquipmentId, WarehouseEquipmentStatus.INSTALLED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
+                .thenReturn(Optional.of(item));
+
+        assertThatThrownBy(() -> service.approve(workOrderId, UUID.randomUUID()))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("must be AVAILABLE or RESERVED");
+    }
+
+    @Test
+    void approveReplacementWorkOrderWithOutOfServiceItemShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID replacementEquipmentId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.DRAFT, warehouseId, replacementEquipmentId);
+        WarehouseEquipmentItem item = warehouseItem(warehouseId, replacementEquipmentId, WarehouseEquipmentStatus.OUT_OF_SERVICE);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
+                .thenReturn(Optional.of(item));
+
+        assertThatThrownBy(() -> service.approve(workOrderId, UUID.randomUUID()))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("must be AVAILABLE or RESERVED");
+    }
+
+    @Test
+    void startApprovedReplacementWorkOrderShouldReserveReplacementEquipment() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID replacementEquipmentId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.APPROVED, warehouseId, replacementEquipmentId);
+        WarehouseEquipmentItem item = warehouseItem(warehouseId, replacementEquipmentId, WarehouseEquipmentStatus.AVAILABLE);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
+                .thenReturn(Optional.of(item));
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        service.start(workOrderId);
+
+        assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.RESERVED);
+    }
+
+    @Test
+    void startFromDraftShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.start(workOrderId))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only approved work orders can be started");
+    }
+
+    @Test
+    void startFromClosedShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.CLOSED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.start(workOrderId))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only approved work orders can be started");
+    }
+
+    @Test
+    void completeReplacementWorkOrderShouldSetReplacementEquipmentInstalled() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID replacementEquipmentId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.IN_PROGRESS, warehouseId, replacementEquipmentId);
+        WarehouseEquipmentItem item = warehouseItem(warehouseId, replacementEquipmentId, WarehouseEquipmentStatus.RESERVED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
+                .thenReturn(Optional.of(item));
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary"));
+
+        assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.INSTALLED);
+    }
+
+    @Test
+    void completeFromApprovedShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only in-progress work orders can be completed");
+    }
+
+    @Test
+    void closeReplacementWorkOrderShouldSetReplacementEquipmentInstalled() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID replacementEquipmentId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.COMPLETED, warehouseId, replacementEquipmentId);
+        WarehouseEquipmentItem item = warehouseItem(warehouseId, replacementEquipmentId, WarehouseEquipmentStatus.RESERVED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
+                .thenReturn(Optional.of(item));
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes"));
+
+        assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.INSTALLED);
+    }
+
+    @Test
+    void closeFromDraftShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only completed work orders can be closed");
+    }
+
+    @Test
+    void closeFromApprovedShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only completed work orders can be closed");
+    }
+
+    @Test
+    void closeFromCompletedShouldSucceed() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto result = service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes"));
+
+        assertThat(result.status()).isEqualTo(WorkOrderStatus.CLOSED);
+    }
+
+    @Test
+    void nonReplacementLifecycleShouldNotChangeWarehouseEquipmentItemStatus() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        service.approve(workOrderId, UUID.randomUUID());
+
+        verifyNoInteractions(warehouseEquipmentItemRepository);
+    }
+
+    @Test
+    void startReplacementWorkOrderWithInvalidWarehouseEquipmentStateShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID replacementEquipmentId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.APPROVED, warehouseId, replacementEquipmentId);
+        WarehouseEquipmentItem item = warehouseItem(warehouseId, replacementEquipmentId, WarehouseEquipmentStatus.INSTALLED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
+                .thenReturn(Optional.of(item));
+
+        assertThatThrownBy(() -> service.start(workOrderId))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("must be AVAILABLE or RESERVED");
+    }
+
+    @Test
+    void startReplacementWorkOrderWithMissingWarehouseEquipmentItemShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID replacementEquipmentId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.APPROVED, warehouseId, replacementEquipmentId);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.start(workOrderId))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Replacement equipment item not found in selected warehouse");
+    }
+
     private WorkOrderRequest request(WorkOrderType type, WorkType workType, UUID warehouseId, UUID replacementEquipmentId) {
         return new WorkOrderRequest(
                 "WO-2026-REPL-1",
@@ -296,5 +550,43 @@ class WorkOrderServiceTest {
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
         when(equipmentRepository.findById(eq(request.equipmentId()))).thenReturn(Optional.of(sourceEquipment));
         when(departmentRepository.findById(eq(request.departmentId()))).thenReturn(Optional.of(department));
+    }
+
+    private WorkOrder lifecycleWorkOrder(UUID id,
+                                         WorkType workType,
+                                         WorkOrderStatus status,
+                                         UUID warehouseId,
+                                         UUID replacementEquipmentId) {
+        WorkOrder workOrder = new WorkOrder();
+        ReflectionTestUtils.setField(workOrder, "id", id);
+        workOrder.setNumber("WO-LIFE-" + id);
+        workOrder.setTitle("Lifecycle test");
+        workOrder.setEquipmentId(UUID.randomUUID());
+        workOrder.setDepartmentId(UUID.randomUUID());
+        workOrder.setType(WorkOrderType.PLANNED);
+        workOrder.setWorkType(workType);
+        workOrder.setStatus(status);
+        workOrder.setCreatedById(UUID.randomUUID());
+        workOrder.setWarehouseId(warehouseId);
+        workOrder.setReplacementEquipmentId(replacementEquipmentId);
+        return workOrder;
+    }
+
+    private WarehouseEquipmentItem warehouseItem(UUID warehouseId, UUID equipmentId, WarehouseEquipmentStatus status) {
+        WarehouseEquipmentItem item = new WarehouseEquipmentItem();
+        item.setWarehouseId(warehouseId);
+        item.setEquipmentId(equipmentId);
+        item.setStatus(status);
+        item.setActive(true);
+        item.setDeleted(false);
+        return item;
+    }
+
+    private void stubLifecycleDtoLookups(WorkOrder workOrder) {
+        when(equipmentRepository.findById(workOrder.getEquipmentId())).thenReturn(Optional.empty());
+        when(departmentRepository.findById(workOrder.getDepartmentId())).thenReturn(Optional.empty());
+        if (workOrder.getReplacementEquipmentId() != null) {
+            when(equipmentRepository.findById(workOrder.getReplacementEquipmentId())).thenReturn(Optional.empty());
+        }
     }
 }

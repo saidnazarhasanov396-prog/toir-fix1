@@ -1,7 +1,12 @@
 package com.toir.controller;
 import com.toir.dto.warehouse.WarehouseDto;
+import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
+import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
+import com.toir.dto.warehouse.WarehouseEquipmentStatusUpdateRequest;
 import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.dto.warehouse.WarehouseStockDto;
+import com.toir.enums.WarehouseEquipmentStatus;
+import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.service.WarehouseService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 public class WarehouseController {
 
     private final WarehouseService service;
+    private final WarehouseEquipmentItemService warehouseEquipmentItemService;
 
     @GetMapping
     public ResponseEntity<Page<WarehouseDto>> list(@RequestParam(required = false) String search,
@@ -46,6 +52,35 @@ public class WarehouseController {
 
     @GetMapping("/{id}/stocks")
     public ResponseEntity<Page<WarehouseStockDto>> stocks(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findStocks(id), page, size)); }
+
+    @PostMapping("/{warehouseId}/equipment")
+    public ResponseEntity<WarehouseEquipmentItemDto> assignEquipment(@PathVariable UUID warehouseId,
+                                                                      @Valid @RequestBody WarehouseEquipmentAssignRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(warehouseEquipmentItemService.assign(warehouseId, request));
+    }
+
+    @GetMapping("/{warehouseId}/equipment")
+    public ResponseEntity<Page<WarehouseEquipmentItemDto>> listEquipment(@PathVariable UUID warehouseId,
+                                                                          @RequestParam(required = false) WarehouseEquipmentStatus status,
+                                                                          @RequestParam(defaultValue = "0") int page,
+                                                                          @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(warehouseEquipmentItemService.list(warehouseId, status, Math.max(0, page), Math.max(1, size)));
+    }
+
+    @PatchMapping("/{warehouseId}/equipment/{equipmentId}/status")
+    public ResponseEntity<WarehouseEquipmentItemDto> updateEquipmentStatus(@PathVariable UUID warehouseId,
+                                                                            @PathVariable UUID equipmentId,
+                                                                            @Valid @RequestBody WarehouseEquipmentStatusUpdateRequest request) {
+        return ResponseEntity.ok(warehouseEquipmentItemService.updateStatus(warehouseId, equipmentId, request.status()));
+    }
+
+    @DeleteMapping("/{warehouseId}/equipment/{equipmentId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public ResponseEntity<Void> unassignEquipment(@PathVariable UUID warehouseId,
+                                                  @PathVariable UUID equipmentId) {
+        warehouseEquipmentItemService.remove(warehouseId, equipmentId);
+        return ResponseEntity.noContent().build();
+    }
 
     @PostMapping
     public ResponseEntity<WarehouseDto> create(@Valid @RequestBody WarehouseRequest request) {

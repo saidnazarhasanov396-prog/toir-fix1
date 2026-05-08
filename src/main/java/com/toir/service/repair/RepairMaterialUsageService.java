@@ -1,12 +1,16 @@
 package com.toir.service.repair;
 
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
+import com.toir.entity.StockMovement;
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
+import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +26,8 @@ public class RepairMaterialUsageService {
 
     private final RepairMaterialUsageRepository repository;
     private final WarehouseStockRepository stockRepository;
+    private final WorkOrderRepository workOrderRepository;
+    private final StockMovementRepository stockMovementRepository;
     private final AuditBuilderService auditBuilderService;
 
 
@@ -32,13 +38,22 @@ public class RepairMaterialUsageService {
 
     @Transactional
     public RepairMaterialUsageDto register(UUID workOrderId, RepairMaterialUsageDto r) {
+        if (!workOrderRepository.existsByIdAndIsDeletedFalse(workOrderId)) {
+            throw RestException.notFound("Work order not found: " + workOrderId);
+        }
+        if (r.quantity() <= 0) {
+            throw RestException.badRequest("Quantity must be greater than 0");
+        }
+
         WarehouseStock stock = stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(r.warehouseId(), r.sparePartId())
                 .orElseThrow(() -> RestException.notFound("No stock found for spare part in this warehouse"));
-        if (stock.getQuantity() < r.quantity()) {
+        double available = stock.getAvailable();
+        if (r.quantity() > available) {
             throw RestException.badRequest("Cannot write off more than available: available="
-                    + stock.getQuantity() + ", requested=" + r.quantity());
+                    + available + ", requested=" + r.quantity());
         }
         stock.setQuantity(stock.getQuantity() - r.quantity());
+        stockRepository.save(stock);
 
         RepairMaterialUsage usage = new RepairMaterialUsage();
         usage.setWorkOrderId(workOrderId);
@@ -47,6 +62,15 @@ public class RepairMaterialUsageService {
         usage.setQuantity(r.quantity());
         usage.setUnitCost(r.unitCost());
         RepairMaterialUsage saved = repository.save(usage);
+
+        StockMovement movement = new StockMovement();
+        movement.setWarehouseId(r.warehouseId());
+        movement.setSparePartId(r.sparePartId());
+        movement.setWorkOrderId(workOrderId);
+        movement.setType(StockMovementType.ISSUE);
+        movement.setQuantity(r.quantity());
+        movement.setUnitCost(r.unitCost());
+        stockMovementRepository.save(movement);
 
         auditBuilderService.log(
                 "repair_material_usage",
