@@ -33,4 +33,22 @@ public interface FinancialApprovalRuleRepository extends JpaRepository<Financial
 
     @Query(value = "SELECT * FROM financial_approval_rules WHERE is_active = true AND is_deleted = false ORDER BY priority ASC", nativeQuery = true)
     List<FinancialApprovalRule> findAllByActiveTrueAndIsDeletedFalseOrderByPriorityAsc();
+
+    @Query("""
+            select r
+            from FinancialApprovalRule r
+            where r.active = true
+              and r.isDeleted = false
+              and (:departmentId is null or r.departmentId = :departmentId or r.departmentId is null)
+              and (r.minAmount is null or r.minAmount <= :amount)
+              and (r.maxAmount is null or r.maxAmount >= :amount)
+            order by
+              case when r.departmentId = :departmentId then 0 else 1 end,
+              r.priority asc
+            limit 1
+            """)
+    Optional<FinancialApprovalRule> findFirstMatchingRule(
+            UUID departmentId,
+            Double amount
+    );
 }

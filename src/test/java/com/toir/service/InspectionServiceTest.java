@@ -21,10 +21,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,6 +51,35 @@ class InspectionServiceTest {
 
     @InjectMocks
     InspectionService service;
+
+    @Test
+    void listRoundsWithNullFiltersReturnsEmptyList() {
+        when(roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(null, null, null))
+                .thenReturn(List.of());
+
+        assertThat(service.listRounds(null, null, null)).isEmpty();
+        verify(roundRepo).findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(null, null, null);
+    }
+
+    @Test
+    void listRoundsWithRouteAndStatusFiltersReturnsData() {
+        UUID routeId = UUID.randomUUID();
+        UUID performedBy = UUID.randomUUID();
+        InspectionRound round = round(UUID.randomUUID(), InspectionRoundStatus.IN_PROGRESS);
+        round.setPerformedBy(performedBy);
+        when(roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(
+                eq(routeId),
+                eq(performedBy),
+                eq(InspectionRoundStatus.IN_PROGRESS)
+        )).thenReturn(List.of(round));
+
+        assertThat(service.listRounds(routeId, performedBy, InspectionRoundStatus.IN_PROGRESS))
+                .hasSize(1)
+                .allSatisfy(item -> {
+                    assertThat(item.status()).isEqualTo(InspectionRoundStatus.IN_PROGRESS);
+                    assertThat(item.results()).isEmpty();
+                });
+    }
 
     @Test
     void inProgressRoundCanRecordResult() {
@@ -135,4 +166,3 @@ class InspectionServiceTest {
         return round;
     }
 }
-

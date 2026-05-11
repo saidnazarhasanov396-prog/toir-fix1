@@ -1,5 +1,6 @@
 package com.toir.controller;
 
+import com.toir.dto.knowledge.KnowledgeArticleDto;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.service.KnowledgeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,11 +21,12 @@ public class KnowledgeController {
     private final KnowledgeService service;
 
     @GetMapping
-    public ResponseEntity<Page<KnowledgeArticle>> list(
-            @RequestParam(required = false) UUID equipmentId,
-            @RequestParam(required = false) UUID equipmentTypeId,
-            @RequestParam(required = false) String kind
-            , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size
+    public ResponseEntity<Page<KnowledgeArticleDto>> list(
+            @RequestParam(name = "equipmentId", required = false) UUID equipmentId,
+            @RequestParam(name = "equipmentTypeId", required = false) UUID equipmentTypeId,
+            @RequestParam(name = "kind", required = false) String kind,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size
     ) {
         return ResponseEntity.ok(service.list(equipmentId, equipmentTypeId, kind, page, size));
     }

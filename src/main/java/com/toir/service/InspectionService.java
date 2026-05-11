@@ -152,11 +152,10 @@ public class InspectionService {
 
     @Transactional(readOnly = true)
     public List<InspectionRoundDto> listRounds(UUID routeId, UUID performedBy,InspectionRoundStatus status) {
-        String statusStr = status == null ? null : status.toString();
         return roundRepo
-                .findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(routeId,performedBy,statusStr)
+                .findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(routeId, performedBy, status)
                 .stream()
-                .map(InspectionRoundDto::from)
+                .map(InspectionRoundDto::fromSummary)
                 .toList();
     }
 
