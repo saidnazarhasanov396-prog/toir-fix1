@@ -62,6 +62,9 @@ public class ActualCostService {
 
     @Transactional
     public ActualCostDto review(UUID id, boolean approve, UUID reviewerId, String comment) {
+        if (!approve && (comment == null || comment.isBlank())) {
+            throw RestException.badRequest("Rejection comment is required");
+        }
         ActualCost c = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Actual cost not found: " + id));
         c.setStatus(approve ? ActualCostStatus.APPROVED : ActualCostStatus.REJECTED);

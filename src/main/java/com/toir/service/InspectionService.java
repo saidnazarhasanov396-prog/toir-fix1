@@ -192,7 +192,7 @@ public class InspectionService {
     @Transactional
     public InspectionRoundResultDto recordResult(UUID roundId, InspectionRoundResultRequest r) {
         InspectionRound round = loadRound(roundId);
-        if (!"IN_PROGRESS".equals(round.getStatus())) {
+        if (round.getStatus() != InspectionRoundStatus.IN_PROGRESS) {
             throw RestException.badRequest("Cannot add results to a completed round");
         }
         InspectionRoundResult result = new InspectionRoundResult();
@@ -216,10 +216,11 @@ public class InspectionService {
             round.setFindingsCount(round.getFindingsCount() + 1);
         }
 
+        String resultResourceId = result.getId() != null ? result.getId().toString() : roundId.toString();
 
         auditBuilderService.log(
                 "inspection_round_result",
-                result.getId().toString(),
+                resultResourceId,
                 AuditAction.CREATE,
                 AuditModule.INSPECTION_ROUND_RESULT,
                 "Результат осмотра создан",
@@ -258,7 +259,7 @@ public class InspectionService {
     @Transactional
     public InspectionRoundDto completeRound(UUID roundId, String notes) {
         InspectionRound round = loadRound(roundId);
-        if (!"IN_PROGRESS".equals(round.getStatus())) {
+        if (round.getStatus() != InspectionRoundStatus.IN_PROGRESS) {
             throw RestException.badRequest("Round is not IN_PROGRESS");
         }
         round.setStatus(InspectionRoundStatus.COMPLETED);
