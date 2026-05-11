@@ -6,6 +6,7 @@ import com.toir.dto.warehouse.WarehouseEquipmentStatusUpdateRequest;
 import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.dto.warehouse.WarehouseStockDto;
 import com.toir.enums.WarehouseEquipmentStatus;
+import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.service.WarehouseService;
 import com.toir.util.PaginationUtils;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/warehouses")
 @Tag(name = "warehouses")
+@RequiresSensitiveAccess
 @RequiredArgsConstructor
 public class WarehouseController {
 

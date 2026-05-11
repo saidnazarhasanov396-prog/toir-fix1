@@ -9,15 +9,19 @@ import com.toir.dto.budget.ContractorWorkRecommendationResponse;
 import com.toir.dto.common.PageResponse;
 import com.toir.dto.common.PageResponseWithSummary;
 import com.toir.dto.costcategory.CostCategoryDto;
+import com.toir.entity.users.User;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.ActualCostStatus;
+import com.toir.exception.RestException;
+import com.toir.security.RequiresSensitiveAccess;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
+import com.toir.repository.users.UserRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -43,6 +47,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/budgets")
 @Tag(name = "budgets-summary")
+@RequiresSensitiveAccess
 @RequiredArgsConstructor
 public class BudgetSummaryController {
 
@@ -50,6 +55,7 @@ public class BudgetSummaryController {
     private final BudgetLineRepository lineRepository;
     private final ActualCostRepository actualCostRepository;
     private final CostCategoryRepository costCategoryRepository;
+    private final UserRepository userRepository;
 
 
 
@@ -157,19 +163,34 @@ public class BudgetSummaryController {
 
     @GetMapping("/actual-costs/{id}/review-history")
     public ResponseEntity<ActualCostReviewHistoryResponse> reviewHistory(@PathVariable UUID id) {
-        return ResponseEntity.ok(actualCostRepository.findByIdAndIsDeletedFalse(id)
-                .map(c -> new ActualCostReviewHistoryResponse(
-                        id.toString(),
-                        c.getReviewedAt() != null
-                                ? List.of(new ActualCostReviewHistoryResponse.Event(
-                                        c.getReviewedAt(),
-                                        c.getStatus().name(),
-                                        c.getReviewedById(),
-                                        c.getReviewComment() != null ? c.getReviewComment() : ""
-                                ))
-                                : List.of()
-                ))
-                .orElse(new ActualCostReviewHistoryResponse(id.toString(), List.of())));
+        ActualCost actualCost = actualCostRepository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Actual cost not found: " + id));
+
+        List<ActualCostReviewHistoryResponse.Event> events = actualCost.getReviewedAt() != null
+                ? List.of(new ActualCostReviewHistoryResponse.Event(
+                actualCost.getId(),
+                actualCost.getReviewedAt(),
+                actualCost.getStatus() != null ? actualCost.getStatus().name() : null,
+                actualCost.getReviewedById(),
+                toUserRef(actualCost.getReviewedById()),
+                actualCost.getReviewComment() != null ? actualCost.getReviewComment() : ""
+        ))
+                : List.of();
+
+        ActualCostReviewHistoryResponse response = new ActualCostReviewHistoryResponse(
+                actualCost.getId().toString(),
+                new ActualCostReviewHistoryResponse.ActualCostRef(
+                        actualCost.getId(),
+                        actualCost.getStatus() != null ? actualCost.getStatus().name() : null,
+                        actualCost.getAmount(),
+                        actualCost.getCostDate(),
+                        actualCost.getReviewedAt(),
+                        actualCost.getReviewedById(),
+                        actualCost.getReviewComment() != null ? actualCost.getReviewComment() : ""
+                ),
+                events
+        );
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/actual-costs/review-activity")
@@ -264,5 +285,15 @@ public class BudgetSummaryController {
 
     private boolean containsIgnoreCase(String value, String search) {
         return value != null && value.toLowerCase().contains(search.toLowerCase());
+    }
+
+    private ActualCostReviewHistoryResponse.UserRef toUserRef(UUID userId) {
+        if (userId == null) {
+            return new ActualCostReviewHistoryResponse.UserRef(null, null);
+        }
+        return userRepository.findByIdAndIsDeletedFalse(userId)
+                .map(User::getFullName)
+                .map(fullName -> new ActualCostReviewHistoryResponse.UserRef(userId, fullName))
+                .orElse(new ActualCostReviewHistoryResponse.UserRef(userId, null));
     }
 }

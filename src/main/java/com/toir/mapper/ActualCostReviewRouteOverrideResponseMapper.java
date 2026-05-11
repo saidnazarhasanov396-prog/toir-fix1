@@ -38,7 +38,7 @@ public class ActualCostReviewRouteOverrideResponseMapper {
             ActualCostReviewRouteOverride override,
             ActualCost actualCost
     ) {
-        WorkOrder workOrder = resolveWorkOrder(actualCost).orElse(null);
+        WorkOrder workOrder = actualCost != null ? resolveWorkOrder(actualCost).orElse(null) : null;
         Department department = resolveDepartment(override, workOrder).orElse(null);
 
         return new ActualCostReviewRouteOverrideResponseDto(
@@ -65,23 +65,45 @@ public class ActualCostReviewRouteOverrideResponseMapper {
             WorkOrder workOrder,
             Department department
     ) {
-        CostCategory costCategory = costCategoryRepository
-                .findById(actualCost.getCostCategoryId())
-                .orElse(null);
+        if (actualCost == null) {
+            return new ActualCostRouteViewDto(
+                    override.getActualCostId(),
+                    null,
+                    "OVERRIDE",
+                    false,
+                    null,
+                    null,
+                    null,
+                    override.getApprovalRoleCode(),
+                    override.getEscalationRoleCode(),
+                    null,
+                    null,
+                    emptyCostCategory(),
+                    emptyApprovalRule(),
+                    null,
+                    toDepartmentShort(department),
+                    toWorkOrderShort(workOrder),
+                    emptyContractorWork()
+            );
+        }
 
-        FinancialApprovalRule approvalRule = resolveApprovalRule(actualCost, department).orElse(null);
+        CostCategory costCategory = actualCost.getCostCategoryId() != null
+                ? costCategoryRepository.findByIdAndIsDeletedFalse(actualCost.getCostCategoryId()).orElse(null)
+                : null;
+
+        FinancialApprovalRule approvalRule = null;
 
         ContractorWork contractorWork = null;
         if (actualCost.getContractorWorkId() != null) {
             contractorWork = contractorWorkRepository
-                    .findById(actualCost.getContractorWorkId())
+                    .findByIdAndIsDeletedFalse(actualCost.getContractorWorkId())
                     .orElse(null);
         }
 
         WorkOrder contractorWorkOrder = null;
         if (contractorWork != null && contractorWork.getWorkOrderId() != null) {
             contractorWorkOrder = workOrderRepository
-                    .findById(contractorWork.getWorkOrderId())
+                    .findByIdAndIsDeletedFalse(contractorWork.getWorkOrderId())
                     .orElse(null);
         }
 
@@ -108,16 +130,16 @@ public class ActualCostReviewRouteOverrideResponseMapper {
 
     private Optional<WorkOrder> resolveWorkOrder(ActualCost actualCost) {
         if (actualCost.getWorkOrderId() != null) {
-            return workOrderRepository.findById(actualCost.getWorkOrderId());
+            return workOrderRepository.findByIdAndIsDeletedFalse(actualCost.getWorkOrderId());
         }
 
         if (actualCost.getContractorWorkId() != null) {
-            return contractorWorkRepository.findById(actualCost.getContractorWorkId())
+            return contractorWorkRepository.findByIdAndIsDeletedFalse(actualCost.getContractorWorkId())
                     .flatMap(contractorWork -> {
                         if (contractorWork.getWorkOrderId() == null) {
                             return Optional.empty();
                         }
-                        return workOrderRepository.findById(contractorWork.getWorkOrderId());
+                        return workOrderRepository.findByIdAndIsDeletedFalse(contractorWork.getWorkOrderId());
                     });
         }
 
@@ -129,11 +151,11 @@ public class ActualCostReviewRouteOverrideResponseMapper {
             WorkOrder workOrder
     ) {
         if (override.getDepartmentId() != null) {
-            return departmentRepository.findById(override.getDepartmentId());
+            return departmentRepository.findByIdAndIsDeletedFalse(override.getDepartmentId());
         }
 
         if (workOrder != null && workOrder.getDepartmentId() != null) {
-            return departmentRepository.findById(workOrder.getDepartmentId());
+            return departmentRepository.findByIdAndIsDeletedFalse(workOrder.getDepartmentId());
         }
 
         return Optional.empty();
@@ -143,6 +165,9 @@ public class ActualCostReviewRouteOverrideResponseMapper {
             ActualCost actualCost,
             Department department
     ) {
+        if (actualCost == null) {
+            return Optional.empty();
+        }
         UUID departmentId = department != null ? department.getId() : null;
 
         return financialApprovalRuleRepository.findFirstMatchingRule(
@@ -153,21 +178,21 @@ public class ActualCostReviewRouteOverrideResponseMapper {
 
     private UserShortDto toUserShort(UUID userId) {
         if (userId == null) {
-            return null;
+            return new UserShortDto(null, null);
         }
 
-        return userRepository.findById(userId)
-                .map(User::getFullName)
-                .map(UserShortDto::new)
-                .orElse(null);
+        return userRepository.findByIdAndIsDeletedFalse(userId)
+                .map(u -> new UserShortDto(u.getId(), u.getFullName()))
+                .orElse(new UserShortDto(userId, null));
     }
 
     private DepartmentShortDto toDepartmentShort(Department department) {
         if (department == null) {
-            return null;
+            return new DepartmentShortDto(null, null, null);
         }
 
         return new DepartmentShortDto(
+                department.getId(),
                 department.getCode(),
                 department.getName()
         );
@@ -175,26 +200,27 @@ public class ActualCostReviewRouteOverrideResponseMapper {
 
     private CostCategoryShortDto toCostCategoryShort(CostCategory costCategory) {
         if (costCategory == null) {
-            return null;
+            return emptyCostCategory();
         }
 
-        return new CostCategoryShortDto(costCategory.getCode());
+        return new CostCategoryShortDto(costCategory.getId(), costCategory.getCode());
     }
 
     private ApprovalRuleShortDto toApprovalRuleShort(FinancialApprovalRule approvalRule) {
         if (approvalRule == null) {
-            return null;
+            return emptyApprovalRule();
         }
 
-        return new ApprovalRuleShortDto(approvalRule.getCode());
+        return new ApprovalRuleShortDto(approvalRule.getId(), approvalRule.getCode());
     }
 
     private WorkOrderShortDto toWorkOrderShort(WorkOrder workOrder) {
         if (workOrder == null) {
-            return null;
+            return emptyWorkOrder();
         }
 
         return new WorkOrderShortDto(
+                workOrder.getId(),
                 workOrder.getNumber(),
                 workOrder.getTitle()
         );
@@ -205,12 +231,13 @@ public class ActualCostReviewRouteOverrideResponseMapper {
             WorkOrder contractorWorkOrder
     ) {
         if (contractorWork == null) {
-            return null;
+            return emptyContractorWork();
         }
 
         return new ContractorWorkShortDto(
+                contractorWork.getId(),
                 contractorWork.getDescription(),
-                null,
+                new ContractorShortDto(contractorWork.getContractorId(), null),
                 toWorkOrderShort(contractorWorkOrder)
         );
     }
@@ -236,7 +263,8 @@ public class ActualCostReviewRouteOverrideResponseMapper {
             return false;
         }
 
-        return ageHours >= override.getThresholdHours();
+        int thresholdHours = safeThreshold(override);
+        return ageHours >= thresholdHours;
     }
 
     private Integer calculateHoursToOverdue(
@@ -249,6 +277,32 @@ public class ActualCostReviewRouteOverrideResponseMapper {
             return null;
         }
 
-        return Math.max(override.getThresholdHours() - ageHours, 0);
+        int thresholdHours = safeThreshold(override);
+        return Math.max(thresholdHours - ageHours, 0);
+    }
+
+    private int safeThreshold(ActualCostReviewRouteOverride override) {
+        return Math.max(override.getThresholdHours(), 0);
+    }
+
+    private CostCategoryShortDto emptyCostCategory() {
+        return new CostCategoryShortDto(null, null);
+    }
+
+    private ApprovalRuleShortDto emptyApprovalRule() {
+        return new ApprovalRuleShortDto(null, null);
+    }
+
+    private WorkOrderShortDto emptyWorkOrder() {
+        return new WorkOrderShortDto(null, null, null);
+    }
+
+    private ContractorWorkShortDto emptyContractorWork() {
+        return new ContractorWorkShortDto(
+                null,
+                null,
+                new ContractorShortDto(null, null),
+                emptyWorkOrder()
+        );
     }
 }

@@ -3,6 +3,7 @@ import com.toir.dto.procurement.ProcurementLineRequest;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.ProcurementRequestService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/procurement-requests")
 @Tag(name = "procurement-requests")
+@RequiresSensitiveAccess
 @RequiredArgsConstructor
 public class ProcurementRequestController {
 

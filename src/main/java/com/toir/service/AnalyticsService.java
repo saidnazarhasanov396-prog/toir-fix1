@@ -268,10 +268,20 @@ public class AnalyticsService {
     }
 
     public EquipmentAnalyticsResponse equipmentAnalytics(UUID equipmentId) {
+        equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> com.toir.exception.RestException.notFound("Equipment not found: " + equipmentId));
+
         List<ReliabilityMetric> metrics = reliabilityMetricRepository
                 .findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(equipmentId);
+        if (metrics == null) {
+            metrics = List.of();
+        }
+
         List<DowntimeEvent> downtimes = downtimeEventRepository
                 .findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId);
+        if (downtimes == null) {
+            downtimes = List.of();
+        }
 
         ReliabilityMetric latest = metrics.isEmpty() ? null : metrics.get(0);
         long downtimeMinutes = downtimes.stream()
@@ -279,6 +289,17 @@ public class AnalyticsService {
                 .filter(Objects::nonNull)
                 .mapToInt(Integer::intValue)
                 .sum();
+
+        List<EquipmentAnalyticsResponse.DowntimeRow> downtimeRows = downtimes.stream()
+                .map(d -> new EquipmentAnalyticsResponse.DowntimeRow(
+                        d.getId(),
+                        d.getStartAt(),
+                        d.getEndAt(),
+                        d.getDurationMinutes(),
+                        d.getType(),
+                        d.getDescription()
+                ))
+                .toList();
 
         return new EquipmentAnalyticsResponse(
                 equipmentId.toString(),
@@ -293,7 +314,9 @@ public class AnalyticsService {
                                 m.getMttrHours() != null ? m.getMttrHours() : 0,
                                 m.getAvailability() != null ? m.getAvailability() : 0
                         ))
-                        .toList()
+                        .toList(),
+                downtimeRows,
+                downtimeRows
         );
     }
 

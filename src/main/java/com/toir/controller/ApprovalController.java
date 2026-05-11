@@ -2,6 +2,7 @@ package com.toir.controller;
 import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
+import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.ApprovalService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/approvals")
 @Tag(name = "approvals")
+@RequiresSensitiveAccess
 @RequiredArgsConstructor
 public class ApprovalController {
 

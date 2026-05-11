@@ -83,14 +83,31 @@ public class EquipmentLabelController {
     private EquipmentLabelResponse buildPayload(Equipment eq) {
         String qrPayload = String.format("toir://equipment/%s?code=%s&inv=%s",
                 eq.getId(), eq.getCode(), eq.getInventoryNumber());
+        EquipmentLabelResponse.EquipmentRef ref = new EquipmentLabelResponse.EquipmentRef(
+                eq.getId(),
+                eq.getCode(),
+                eq.getName(),
+                eq.getInventoryNumber(),
+                eq.getTechnicalNumber(),
+                eq.getSerialNumber(),
+                eq.getModel(),
+                eq.getEquipmentTypeId(),
+                eq.getDepartmentId(),
+                eq.getLocationId(),
+                eq.getParentId(),
+                eq.getManufacturer(),
+                eq.getStatus(),
+                eq.getCategory()
+        );
         return new EquipmentLabelResponse(
-                eq,
+                ref,
                 eq.getId(),
                 eq.getCode(),
                 eq.getInventoryNumber(),
                 eq.getName(),
                 qrPayload,
-                Instant.now().toString()
+                Instant.now().toString(),
+                java.util.List.of(ref)
         );
     }
 
