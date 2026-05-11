@@ -42,10 +42,14 @@ public interface BrigadeRepository extends JpaRepository<Brigade, UUID> {
         where b.isDeleted = false
         and (:departmentId is null or b.departmentId = :departmentId)
         and (:activeOnly is null or :activeOnly = false or b.active = true)
-        and (:search is null or lower(b.name) like :search or
-             :search is null or lower(b.code) like :search or
-             :search is null or lower(b.specialization) like :search)
+        and (:search is null or lower(coalesce(b.name, '')) like :search or
+             lower(coalesce(b.code, '')) like :search or
+             lower(coalesce(b.specialization, '')) like :search)
         order by b.updatedAt desc
 """)
-    List<Brigade> findAllByDepartmentAndIsActiveOnlyAndDeletedAndSearch(UUID departmentId, Boolean activeOnly, String search);
+    List<Brigade> findAllByDepartmentAndIsActiveOnlyAndDeletedAndSearch(
+            @Param("departmentId") UUID departmentId,
+            @Param("activeOnly") Boolean activeOnly,
+            @Param("search") String search
+    );
 }

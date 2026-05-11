@@ -1,2 +1,6 @@
-package com.toir.dto.actualcostrouteoverride;public class CostCategoryShortDto {
+package com.toir.dto.actualcostrouteoverride;
+
+public record CostCategoryShortDto(
+        String code
+) {
 }

@@ -1,2 +1,5 @@
-package com.toir.dto.actualcostrouteoverride;public record ContractorShortDto() {
-}
+package com.toir.dto.actualcostrouteoverride;
+
+public record ContractorShortDto(
+        String code
+) {}

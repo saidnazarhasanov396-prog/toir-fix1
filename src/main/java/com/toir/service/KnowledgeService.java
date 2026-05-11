@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.knowledge.KnowledgeArticleDto;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.exception.RestException;
 import com.toir.repository.KnowledgeArticleRepository;
@@ -18,17 +19,26 @@ public class KnowledgeService {
     private final KnowledgeArticleRepository repository;
 
     @Transactional(readOnly = true)
-    public Page<KnowledgeArticle> list(UUID equipmentId, UUID equipmentTypeId, String kind, int page, int size) {
+    public Page<KnowledgeArticleDto> list(UUID equipmentId, UUID equipmentTypeId, String kind, int page, int size) {
+        String normalizedKind = kind == null || kind.isBlank() ? null : kind.trim();
         if (equipmentId != null) {
-            return PaginationUtils.page(repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId), page, size);
+            return PaginationUtils
+                    .page(repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId), page, size)
+                    .map(KnowledgeArticleDto::from);
         }
         if (equipmentTypeId != null) {
-            return PaginationUtils.page(repository.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId), page, size);
+            return PaginationUtils
+                    .page(repository.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId), page, size)
+                    .map(KnowledgeArticleDto::from);
         }
-        if (kind != null) {
-            return PaginationUtils.page(repository.findAllByKindAndIsDeletedFalse(kind), page, size);
+        if (normalizedKind != null) {
+            return PaginationUtils
+                    .page(repository.findAllByKindAndIsDeletedFalse(normalizedKind), page, size)
+                    .map(KnowledgeArticleDto::from);
         }
-        return PaginationUtils.page(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc(), page, size);
+        return PaginationUtils
+                .page(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc(), page, size)
+                .map(KnowledgeArticleDto::from);
     }
 
     @Transactional

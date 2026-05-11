@@ -2,6 +2,7 @@ package com.toir.dto.inspection;
 
 import com.toir.entity.inspection.InspectionRound;
 import com.toir.enums.InspectionRoundStatus;
+import jakarta.persistence.EntityNotFoundException;
 
 import java.time.Instant;
 import java.util.List;
@@ -22,7 +23,7 @@ public record InspectionRoundDto(
     public static InspectionRoundDto from(InspectionRound r) {
         return new InspectionRoundDto(
                 r.getId(),
-                r.getRoute() != null ? r.getRoute().getId() : null,
+                routeIdOrNull(r),
                 r.getPerformedBy(),
                 r.getStartedAt(),
                 r.getCompletedAt(),
@@ -33,5 +34,31 @@ public record InspectionRoundDto(
                 r.getResults() == null ? List.of()
                         : r.getResults().stream().map(InspectionRoundResultDto::from).toList()
         );
+    }
+
+    public static InspectionRoundDto fromSummary(InspectionRound r) {
+        return new InspectionRoundDto(
+                r.getId(),
+                routeIdOrNull(r),
+                r.getPerformedBy(),
+                r.getStartedAt(),
+                r.getCompletedAt(),
+                r.getStatus(),
+                r.getFindingsCount(),
+                r.getAlarmCount(),
+                r.getNotes(),
+                List.of()
+        );
+    }
+
+    private static UUID routeIdOrNull(InspectionRound r) {
+        if (r.getRoute() == null) {
+            return null;
+        }
+        try {
+            return r.getRoute().getId();
+        } catch (EntityNotFoundException ex) {
+            return null;
+        }
     }
 }

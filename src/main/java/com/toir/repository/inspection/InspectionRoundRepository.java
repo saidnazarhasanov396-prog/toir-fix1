@@ -1,6 +1,7 @@
 package com.toir.repository.inspection;
 
 import com.toir.entity.inspection.InspectionRound;
+import com.toir.enums.InspectionRoundStatus;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -29,17 +30,18 @@ public interface InspectionRoundRepository extends JpaRepository<InspectionRound
     @Query(value = "SELECT COUNT(*) FROM inspection_rounds WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
-    @Query(value = """
-            SELECT ir.* FROM inspection_rounds ir 
-            WHERE  is_deleted = false 
-                  AND (CAST(:routeId as uuid) IS NULL OR ir.route_id = CAST(:routeId as uuid)) 
-                  AND (CAST(:performedBy as uuid) IS NULL OR ir.performed_by = CAST(:performedBy as uuid)) 
-                  AND (CAST(:status as text) IS NULL OR ir.status = CAST(:status as text))
-            ORDER BY updated_at DESC""", nativeQuery = true)
+    @Query("""
+            select ir from InspectionRound ir
+            where ir.isDeleted = false
+              and (:routeId is null or ir.route.id = :routeId)
+              and (:performedBy is null or ir.performedBy = :performedBy)
+              and (:status is null or ir.status = :status)
+            order by ir.updatedAt desc
+            """)
     List<InspectionRound> findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(
             @Param("routeId") UUID routeId,
             @Param("performedBy") UUID performedBy,
-            @Param("status") String status
+            @Param("status") InspectionRoundStatus status
     );
 
     @Query(value = "SELECT * FROM inspection_rounds WHERE performed_by = :performedBy AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)

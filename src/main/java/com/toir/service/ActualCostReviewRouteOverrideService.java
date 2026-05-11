@@ -1,12 +1,14 @@
 package com.toir.service;
-import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideWithActualCostDto;
+
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideCreateRequest;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideResponseDto;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.ActualCostReviewRouteOverride;
+import com.toir.exception.RestException;
+import com.toir.mapper.ActualCostReviewRouteOverrideResponseMapper;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.actualCost.ActualCostReviewRouteOverrideRepository;
-
-import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
-import com.toir.exception.RestException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,7 +23,7 @@ public class ActualCostReviewRouteOverrideService {
 
     private final ActualCostReviewRouteOverrideRepository repository;
     private final ActualCostRepository actualCostRepository;
-
+    private final ActualCostReviewRouteOverrideResponseMapper responseMapper;
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewRouteOverrideDto> findActive() {
@@ -35,14 +37,15 @@ public class ActualCostReviewRouteOverrideService {
     }
 
     @Transactional
-    public ActualCostReviewRouteOverrideWithActualCostDto apply(ActualCostReviewRouteOverrideDto r) {
+    public ActualCostReviewRouteOverrideResponseDto apply(
+            ActualCostReviewRouteOverrideCreateRequest r
+    ) {
         if (r.comment() == null || r.comment().isBlank()) {
             throw RestException.badRequest("Comment is required");
         }
 
-        ActualCost actualCost = actualCostRepository.findByIdAndIsDeletedFalse(r.actualCostId())
+        ActualCost actualCost = actualCostRepository.findById(r.actualCostId())
                 .orElseThrow(() -> RestException.notFound("Actual cost not found"));
-
 
         repository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(r.actualCostId())
                 .ifPresent(existing -> {
@@ -56,13 +59,16 @@ public class ActualCostReviewRouteOverrideService {
         o.setDepartmentId(r.departmentId());
         o.setApprovalRoleCode(r.approvalRoleCode());
         o.setEscalationRoleCode(r.escalationRoleCode());
-        if (r.thresholdHours() != null) o.setThresholdHours(r.thresholdHours());
+
+        if (r.thresholdHours() != null) {
+            o.setThresholdHours(r.thresholdHours());
+        }
+
         o.setComment(r.comment());
-        o.setCreatedById(UUID.randomUUID());
 
         ActualCostReviewRouteOverride saved = repository.save(o);
 
-        return ActualCostReviewRouteOverrideWithActualCostDto.from(saved,actualCost);
+        return responseMapper.toResponse(saved, actualCost);
     }
 
     @Transactional
