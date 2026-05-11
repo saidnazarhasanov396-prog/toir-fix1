@@ -501,6 +501,33 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void recalculateLinkedPprPlanForHistoricalClosedWorkOrderShouldMoveDraftPlanOutOfDraft() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        UUID linkedTaskId = UUID.randomUUID();
+
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.CLOSED, null, null);
+        workOrder.setPprTaskId(linkedTaskId);
+
+        PprPlan plan = pprPlan(planId, PlanStatus.DRAFT);
+        PprTask linkedTask = pprTask(linkedTaskId, plan, com.toir.enums.PprTaskStatus.COMPLETED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(pprTaskRepository.findByIdAndIsDeletedFalse(linkedTaskId)).thenReturn(Optional.of(linkedTask));
+        when(pprTaskRepository.findAllByPlanIdAndIsDeletedFalseOrderByUpdatedAtDesc(planId))
+                .thenReturn(java.util.List.of(linkedTask));
+        when(pprPlanRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto result = service.recalculateLinkedPprPlanForWorkOrder(workOrderId);
+
+        assertThat(result.id()).isEqualTo(workOrderId);
+        assertThat(plan.getStatus()).isEqualTo(PlanStatus.CLOSED);
+        assertThat(plan.getStatus()).isNotEqualTo(PlanStatus.DRAFT);
+        verify(pprPlanRepository).save(any(PprPlan.class));
+    }
+
+    @Test
     void completeWithoutLinkedPprTaskShouldKeepExistingBehavior() {
         UUID workOrderId = UUID.randomUUID();
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);

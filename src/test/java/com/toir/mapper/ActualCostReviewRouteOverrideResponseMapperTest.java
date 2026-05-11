@@ -104,4 +104,36 @@ class ActualCostReviewRouteOverrideResponseMapperTest {
         assertThat(response.actualCost().workOrder()).isNotNull();
         assertThat(response.actualCost().contractorWork()).isNotNull();
     }
+
+    @Test
+    void toResponseNormalizesSearchableStringFieldsToNonNull() {
+        UUID overrideId = UUID.randomUUID();
+        UUID actualCostId = UUID.randomUUID();
+
+        ActualCostReviewRouteOverride override = new ActualCostReviewRouteOverride();
+        ReflectionTestUtils.setField(override, "id", overrideId);
+        override.setActualCostId(actualCostId);
+        override.setApprovalRoleCode(null);
+        override.setEscalationRoleCode(null);
+        override.setComment(null);
+        override.setThresholdHours(24);
+        override.setActive(true);
+
+        ActualCostReviewRouteOverrideResponseDto response = mapper.toResponse(override, null);
+
+        assertThat(response.approvalRoleCode()).isEqualTo("");
+        assertThat(response.escalationRoleCode()).isEqualTo("");
+        assertThat(response.comment()).isEqualTo("");
+        assertThat(response.deactivationComment()).isEqualTo("");
+        assertThat(response.actualCost().notes()).isEqualTo("");
+        assertThat(response.actualCost().reviewComment()).isEqualTo("");
+        assertThat(response.actualCost().department().code()).isEqualTo("");
+        assertThat(response.actualCost().department().name()).isEqualTo("");
+        assertThat(response.actualCost().costCategory().code()).isEqualTo("");
+        assertThat(response.actualCost().approvalRule().code()).isEqualTo("");
+        assertThat(response.actualCost().workOrder().number()).isEqualTo("");
+        assertThat(response.actualCost().workOrder().title()).isEqualTo("");
+        assertThat(response.actualCost().contractorWork().description()).isEqualTo("");
+        assertThat(response.actualCost().contractorWork().contractor().code()).isEqualTo("");
+    }
 }

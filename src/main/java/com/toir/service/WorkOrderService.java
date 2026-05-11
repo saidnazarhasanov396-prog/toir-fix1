@@ -246,6 +246,18 @@ public class WorkOrderService {
         return toDto(entity);
     }
 
+    @Transactional
+    public WorkOrderDto recalculateLinkedPprPlanForWorkOrder(UUID id) {
+        WorkOrder entity = getOrThrow(id);
+        if (entity.getPprTaskId() == null) {
+            return toDto(entity);
+        }
+        PprTask task = pprTaskRepository.findByIdAndIsDeletedFalse(entity.getPprTaskId())
+                .orElseThrow(() -> RestException.notFound("PPR task not found: " + entity.getPprTaskId()));
+        recalculatePlanStatus(task.getPlan());
+        return toDto(entity);
+    }
+
     private void completeLinkedPprTask(WorkOrder workOrder) {
         if (workOrder.getPprTaskId() == null) {
             return;
