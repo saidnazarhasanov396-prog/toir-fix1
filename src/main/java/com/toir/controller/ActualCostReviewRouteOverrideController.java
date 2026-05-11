@@ -1,5 +1,6 @@
 package com.toir.controller;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideWithActualCostDto;
 import com.toir.service.ActualCostReviewRouteOverrideService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,7 +31,7 @@ public class ActualCostReviewRouteOverrideController {
     }
 
     @PostMapping
-    public ResponseEntity<ActualCostReviewRouteOverrideDto> apply(@Valid @RequestBody ActualCostReviewRouteOverrideDto r) {
+    public ResponseEntity<ActualCostReviewRouteOverrideWithActualCostDto> apply(@Valid @RequestBody ActualCostReviewRouteOverrideDto r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.apply(r));
     }
 
