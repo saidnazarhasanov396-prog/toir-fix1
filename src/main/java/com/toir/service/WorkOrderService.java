@@ -4,10 +4,13 @@ import com.toir.dto.workorder.*;
 import com.toir.entity.Department;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
+import com.toir.enums.PlanStatus;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
@@ -47,6 +50,7 @@ public class WorkOrderService {
     private final EquipmentRepository equipmentRepository;
     private final DepartmentRepository departmentRepository;
     private final AuditBuilderService auditBuilderService;
+    private final PprPlanRepository pprPlanRepository;
     private final PprTaskRepository pprTaskRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final WarehouseRepository warehouseRepository;
@@ -195,6 +199,7 @@ public class WorkOrderService {
         entity.setStatus(WorkOrderStatus.COMPLETED);
         entity.setCompletedAt(Instant.now());
         updateReplacementEquipmentStatus(entity, WarehouseEquipmentStatus.INSTALLED);
+        completeLinkedPprTask(entity);
 
         WorkOrder saved = repository.save(entity);
 
@@ -248,6 +253,7 @@ public class WorkOrderService {
         PprTask task = pprTaskRepository.findByIdAndIsDeletedFalse(workOrder.getPprTaskId())
                 .orElseThrow(() -> RestException.notFound("PPR task not found: " + workOrder.getPprTaskId()));
         if (task.getStatus() == PprTaskStatus.COMPLETED || task.getStatus() == PprTaskStatus.CANCELLED) {
+            recalculatePlanStatus(task.getPlan());
             return;
         }
         task.setStatus(PprTaskStatus.COMPLETED);
@@ -258,9 +264,51 @@ public class WorkOrderService {
                 task.getId().toString(),
                 AuditAction.UPDATE,
                 AuditModule.PPR_TASK,
-                "Задача ППР завершена при закрытии наряда " + workOrder.getNumber(),
+                "PPR task completed from linked work order " + workOrder.getNumber(),
                 task,
                 saved
+        );
+        recalculatePlanStatus(task.getPlan());
+    }
+
+    private void recalculatePlanStatus(PprPlan plan) {
+        if (plan == null || plan.getId() == null) {
+            return;
+        }
+        if (plan.getStatus() == PlanStatus.CANCELLED) {
+            return;
+        }
+        List<PprTask> planTasks = pprTaskRepository.findAllByPlanIdAndIsDeletedFalseOrderByUpdatedAtDesc(plan.getId());
+        if (planTasks.isEmpty()) {
+            return;
+        }
+
+        boolean allCompleted = planTasks.stream()
+                .allMatch(t -> t.getStatus() == PprTaskStatus.COMPLETED);
+        boolean hasOperationalProgress = planTasks.stream()
+                .anyMatch(t -> t.getStatus() == PprTaskStatus.IN_PROGRESS || t.getStatus() == PprTaskStatus.COMPLETED);
+
+        PlanStatus newStatus = null;
+        if (allCompleted) {
+            newStatus = PlanStatus.CLOSED;
+        } else if (hasOperationalProgress) {
+            newStatus = PlanStatus.IN_PROGRESS;
+        }
+
+        if (newStatus == null || plan.getStatus() == newStatus) {
+            return;
+        }
+
+        plan.setStatus(newStatus);
+        PprPlan savedPlan = pprPlanRepository.save(plan);
+        auditBuilderService.log(
+                "ppr_plan",
+                savedPlan.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PPR_PLAN,
+                "PPR plan status recalculated from child task progress",
+                plan,
+                savedPlan
         );
     }
 
@@ -415,3 +463,4 @@ public class WorkOrderService {
         );
     }
 }
+

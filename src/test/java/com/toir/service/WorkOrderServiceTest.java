@@ -5,15 +5,19 @@ import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.entity.Department;
+import com.toir.entity.PprPlan;
+import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
+import com.toir.enums.PlanStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
+import com.toir.repository.PprPlanRepository;
 import com.toir.exception.RestException;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
@@ -61,6 +65,9 @@ class WorkOrderServiceTest {
 
     @Mock
     PprTaskRepository pprTaskRepository;
+
+    @Mock
+    PprPlanRepository pprPlanRepository;
 
     @Mock
     RepairRequestRepository repairRequestRepository;
@@ -405,6 +412,110 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void completeWithLinkedPprTaskShouldCompleteTaskAndMovePlanToInProgress() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        UUID linkedTaskId = UUID.randomUUID();
+
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setPprTaskId(linkedTaskId);
+
+        PprPlan plan = pprPlan(planId, PlanStatus.DRAFT);
+        PprTask linkedTask = pprTask(linkedTaskId, plan, com.toir.enums.PprTaskStatus.IN_PROGRESS);
+        PprTask plannedTask = pprTask(UUID.randomUUID(), plan, com.toir.enums.PprTaskStatus.PLANNED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(pprTaskRepository.findByIdAndIsDeletedFalse(linkedTaskId)).thenReturn(Optional.of(linkedTask));
+        when(pprTaskRepository.findAllByPlanIdAndIsDeletedFalseOrderByUpdatedAtDesc(planId))
+                .thenReturn(java.util.List.of(linkedTask, plannedTask));
+        when(pprTaskRepository.save(any(PprTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pprPlanRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary"));
+
+        assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
+        assertThat(linkedTask.getStatus()).isEqualTo(com.toir.enums.PprTaskStatus.COMPLETED);
+        assertThat(plan.getStatus()).isEqualTo(PlanStatus.IN_PROGRESS);
+        assertThat(plan.getStatus()).isNotEqualTo(PlanStatus.DRAFT);
+        verify(pprTaskRepository).save(any(PprTask.class));
+        verify(pprPlanRepository).save(any(PprPlan.class));
+    }
+
+    @Test
+    void completeWithLinkedPprTaskShouldClosePlanWhenAllTasksCompleted() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        UUID linkedTaskId = UUID.randomUUID();
+
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setPprTaskId(linkedTaskId);
+
+        PprPlan plan = pprPlan(planId, PlanStatus.DRAFT);
+        PprTask linkedTask = pprTask(linkedTaskId, plan, com.toir.enums.PprTaskStatus.IN_PROGRESS);
+        PprTask completedTask = pprTask(UUID.randomUUID(), plan, com.toir.enums.PprTaskStatus.COMPLETED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(pprTaskRepository.findByIdAndIsDeletedFalse(linkedTaskId)).thenReturn(Optional.of(linkedTask));
+        when(pprTaskRepository.findAllByPlanIdAndIsDeletedFalseOrderByUpdatedAtDesc(planId))
+                .thenReturn(java.util.List.of(linkedTask, completedTask));
+        when(pprTaskRepository.save(any(PprTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pprPlanRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary"));
+
+        assertThat(linkedTask.getStatus()).isEqualTo(com.toir.enums.PprTaskStatus.COMPLETED);
+        assertThat(plan.getStatus()).isEqualTo(PlanStatus.CLOSED);
+    }
+
+    @Test
+    void closeWithLinkedAlreadyCompletedTaskShouldRollupPlanStatus() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        UUID linkedTaskId = UUID.randomUUID();
+
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        workOrder.setPprTaskId(linkedTaskId);
+
+        PprPlan plan = pprPlan(planId, PlanStatus.DRAFT);
+        PprTask linkedTask = pprTask(linkedTaskId, plan, com.toir.enums.PprTaskStatus.COMPLETED);
+        PprTask plannedTask = pprTask(UUID.randomUUID(), plan, com.toir.enums.PprTaskStatus.PLANNED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(pprTaskRepository.findByIdAndIsDeletedFalse(linkedTaskId)).thenReturn(Optional.of(linkedTask));
+        when(pprTaskRepository.findAllByPlanIdAndIsDeletedFalseOrderByUpdatedAtDesc(planId))
+                .thenReturn(java.util.List.of(linkedTask, plannedTask));
+        when(pprPlanRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto result = service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes"));
+
+        assertThat(result.status()).isEqualTo(WorkOrderStatus.CLOSED);
+        assertThat(plan.getStatus()).isEqualTo(PlanStatus.IN_PROGRESS);
+        verify(pprTaskRepository, never()).save(any(PprTask.class));
+        verify(pprPlanRepository).save(any(PprPlan.class));
+    }
+
+    @Test
+    void completeWithoutLinkedPprTaskShouldKeepExistingBehavior() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary"));
+
+        assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
+        verifyNoInteractions(pprTaskRepository, pprPlanRepository);
+    }
+
+    @Test
     void completeFromApprovedShouldFail() {
         UUID workOrderId = UUID.randomUUID();
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
@@ -515,6 +626,34 @@ class WorkOrderServiceTest {
         assertThatThrownBy(() -> service.start(workOrderId))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Replacement equipment item not found in selected warehouse");
+    }
+
+    private PprPlan pprPlan(UUID id, PlanStatus status) {
+        PprPlan plan = new PprPlan();
+        plan.setId(id);
+        plan.setCode("PPR-2026-0001");
+        plan.setName("Monthly PPR plan");
+        plan.setYear(2026);
+        plan.setMonth(5);
+        plan.setStatus(status);
+        plan.setCreatedById(UUID.randomUUID());
+        return plan;
+    }
+
+    private PprTask pprTask(UUID id, PprPlan plan, com.toir.enums.PprTaskStatus status) {
+        PprTask task = new PprTask();
+        task.setId(id);
+        task.setCode("PT-" + id.toString().substring(0, 8));
+        task.setPlan(plan);
+        task.setStatus(status);
+        task.setRegulationId(UUID.randomUUID());
+        task.setEquipmentId(UUID.randomUUID());
+        task.setTitle("PPR task");
+        task.setScheduledStart(java.time.LocalDateTime.now().minusHours(1));
+        task.setScheduledEnd(java.time.LocalDateTime.now().plusHours(1));
+        task.setDueDate(java.time.LocalDateTime.now().plusDays(1));
+        task.setPlannedLaborHours(2.0);
+        return task;
     }
 
     private WorkOrderRequest request(WorkOrderType type, WorkType workType, UUID warehouseId, UUID replacementEquipmentId) {
