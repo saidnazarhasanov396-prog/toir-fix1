@@ -129,4 +129,26 @@ class FinancialReviewHistoryControllerContractTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").exists());
     }
+
+    @Test
+    void reviewHistoryWithoutReviewEventReturnsStableActualCostAndEmptyEvents() throws Exception {
+        UUID id = UUID.randomUUID();
+
+        ActualCost actualCost = new ActualCost();
+        ReflectionTestUtils.setField(actualCost, "id", id);
+        actualCost.setStatus(ActualCostStatus.PENDING);
+        actualCost.setAmount(10.0);
+        actualCost.setCostDate(Instant.now());
+        actualCost.setReviewedAt(null);
+        actualCost.setReviewedById(null);
+        actualCost.setReviewComment(null);
+
+        when(actualCostRepository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+
+        mockMvc.perform(get("/api/v1/budgets/actual-costs/{id}/review-history", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.actualCost.id").value(id.toString()))
+                .andExpect(jsonPath("$.events").isArray())
+                .andExpect(jsonPath("$.events.length()").value(0));
+    }
 }

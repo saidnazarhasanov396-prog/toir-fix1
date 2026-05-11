@@ -21,7 +21,7 @@ public record BrigadeMemberDto(
                 m.getUserId(),
                 m.getRoleCode(),
                 m.getGrade(),
-                m.getQualifications(),
+                m.getQualifications() == null ? List.of() : m.getQualifications(),
                 m.isActive()
         );
     }

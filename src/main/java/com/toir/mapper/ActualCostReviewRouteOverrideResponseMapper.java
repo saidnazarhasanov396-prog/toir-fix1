@@ -45,16 +45,16 @@ public class ActualCostReviewRouteOverrideResponseMapper {
                 override.getId(),
                 toActualCostView(actualCost, override, workOrder, department),
                 override.getDepartmentId(),
-                override.getApprovalRoleCode(),
-                override.getEscalationRoleCode(),
+                safeText(override.getApprovalRoleCode()),
+                safeText(override.getEscalationRoleCode()),
                 override.getThresholdHours(),
-                override.getComment(),
+                safeText(override.getComment()),
                 override.isActive(),
                 override.getCreatedById(),
                 toUserShort(override.getCreatedById()),
                 toDepartmentShort(department),
                 toUserShort(override.getDeactivatedById()),
-                override.getDeactivationComment(),
+                safeText(override.getDeactivationComment()),
                 override.getDeactivatedAt()
         );
     }
@@ -74,10 +74,10 @@ public class ActualCostReviewRouteOverrideResponseMapper {
                     null,
                     null,
                     null,
-                    override.getApprovalRoleCode(),
-                    override.getEscalationRoleCode(),
-                    null,
-                    null,
+                    safeText(override.getApprovalRoleCode()),
+                    safeText(override.getEscalationRoleCode()),
+                    "",
+                    "",
                     emptyCostCategory(),
                     emptyApprovalRule(),
                     null,
@@ -91,7 +91,7 @@ public class ActualCostReviewRouteOverrideResponseMapper {
                 ? costCategoryRepository.findByIdAndIsDeletedFalse(actualCost.getCostCategoryId()).orElse(null)
                 : null;
 
-        FinancialApprovalRule approvalRule = null;
+        FinancialApprovalRule approvalRule = resolveApprovalRule(actualCost, department).orElse(null);
 
         ContractorWork contractorWork = null;
         if (actualCost.getContractorWorkId() != null) {
@@ -115,10 +115,10 @@ public class ActualCostReviewRouteOverrideResponseMapper {
                 calculateHoursToOverdue(actualCost, override),
                 calculateAgeHours(actualCost),
                 actualCost.getAmount(),
-                override.getApprovalRoleCode(),
-                override.getEscalationRoleCode(),
-                actualCost.getReviewComment(),
-                actualCost.getNotes(),
+                safeText(override.getApprovalRoleCode()),
+                safeText(override.getEscalationRoleCode()),
+                safeText(actualCost.getReviewComment()),
+                safeText(actualCost.getNotes()),
                 toCostCategoryShort(costCategory),
                 toApprovalRuleShort(approvalRule),
                 null,
@@ -170,31 +170,32 @@ public class ActualCostReviewRouteOverrideResponseMapper {
         }
         UUID departmentId = department != null ? department.getId() : null;
 
-        return financialApprovalRuleRepository.findFirstMatchingRule(
+        Optional<FinancialApprovalRule> matched = financialApprovalRuleRepository.findFirstMatchingRule(
                 departmentId,
                 actualCost.getAmount()
         );
+        return matched == null ? Optional.empty() : matched;
     }
 
     private UserShortDto toUserShort(UUID userId) {
         if (userId == null) {
-            return new UserShortDto(null, null);
+            return new UserShortDto(null, "");
         }
 
         return userRepository.findByIdAndIsDeletedFalse(userId)
-                .map(u -> new UserShortDto(u.getId(), u.getFullName()))
-                .orElse(new UserShortDto(userId, null));
+                .map(u -> new UserShortDto(u.getId(), safeText(u.getFullName())))
+                .orElse(new UserShortDto(userId, ""));
     }
 
     private DepartmentShortDto toDepartmentShort(Department department) {
         if (department == null) {
-            return new DepartmentShortDto(null, null, null);
+            return new DepartmentShortDto(null, "", "");
         }
 
         return new DepartmentShortDto(
                 department.getId(),
-                department.getCode(),
-                department.getName()
+                safeText(department.getCode()),
+                safeText(department.getName())
         );
     }
 
@@ -203,7 +204,7 @@ public class ActualCostReviewRouteOverrideResponseMapper {
             return emptyCostCategory();
         }
 
-        return new CostCategoryShortDto(costCategory.getId(), costCategory.getCode());
+        return new CostCategoryShortDto(costCategory.getId(), safeText(costCategory.getCode()));
     }
 
     private ApprovalRuleShortDto toApprovalRuleShort(FinancialApprovalRule approvalRule) {
@@ -211,7 +212,7 @@ public class ActualCostReviewRouteOverrideResponseMapper {
             return emptyApprovalRule();
         }
 
-        return new ApprovalRuleShortDto(approvalRule.getId(), approvalRule.getCode());
+        return new ApprovalRuleShortDto(approvalRule.getId(), safeText(approvalRule.getCode()));
     }
 
     private WorkOrderShortDto toWorkOrderShort(WorkOrder workOrder) {
@@ -221,8 +222,8 @@ public class ActualCostReviewRouteOverrideResponseMapper {
 
         return new WorkOrderShortDto(
                 workOrder.getId(),
-                workOrder.getNumber(),
-                workOrder.getTitle()
+                safeText(workOrder.getNumber()),
+                safeText(workOrder.getTitle())
         );
     }
 
@@ -236,8 +237,8 @@ public class ActualCostReviewRouteOverrideResponseMapper {
 
         return new ContractorWorkShortDto(
                 contractorWork.getId(),
-                contractorWork.getDescription(),
-                new ContractorShortDto(contractorWork.getContractorId(), null),
+                safeText(contractorWork.getDescription()),
+                new ContractorShortDto(contractorWork.getContractorId(), ""),
                 toWorkOrderShort(contractorWorkOrder)
         );
     }
@@ -286,23 +287,27 @@ public class ActualCostReviewRouteOverrideResponseMapper {
     }
 
     private CostCategoryShortDto emptyCostCategory() {
-        return new CostCategoryShortDto(null, null);
+        return new CostCategoryShortDto(null, "");
     }
 
     private ApprovalRuleShortDto emptyApprovalRule() {
-        return new ApprovalRuleShortDto(null, null);
+        return new ApprovalRuleShortDto(null, "");
     }
 
     private WorkOrderShortDto emptyWorkOrder() {
-        return new WorkOrderShortDto(null, null, null);
+        return new WorkOrderShortDto(null, "", "");
     }
 
     private ContractorWorkShortDto emptyContractorWork() {
         return new ContractorWorkShortDto(
                 null,
-                null,
-                new ContractorShortDto(null, null),
+                "",
+                new ContractorShortDto(null, ""),
                 emptyWorkOrder()
         );
+    }
+
+    private String safeText(String value) {
+        return value == null ? "" : value;
     }
 }
