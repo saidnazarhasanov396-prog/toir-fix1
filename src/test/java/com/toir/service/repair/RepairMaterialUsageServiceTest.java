@@ -10,7 +10,6 @@ import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
-import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -25,10 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class RepairMaterialUsageServiceTest {
@@ -45,8 +41,6 @@ class RepairMaterialUsageServiceTest {
     @Mock
     StockMovementRepository stockMovementRepository;
 
-    @Mock
-    AuditBuilderService auditBuilderService;
 
     @InjectMocks
     RepairMaterialUsageService service;

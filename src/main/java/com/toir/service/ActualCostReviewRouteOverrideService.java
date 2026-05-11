@@ -1,5 +1,8 @@
 package com.toir.service;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideWithActualCostDto;
+import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.ActualCostReviewRouteOverride;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.actualCost.ActualCostReviewRouteOverrideRepository;
 
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
@@ -17,6 +20,7 @@ import java.util.UUID;
 public class ActualCostReviewRouteOverrideService {
 
     private final ActualCostReviewRouteOverrideRepository repository;
+    private final ActualCostRepository actualCostRepository;
 
 
     @Transactional(readOnly = true)
@@ -31,10 +35,15 @@ public class ActualCostReviewRouteOverrideService {
     }
 
     @Transactional
-    public ActualCostReviewRouteOverrideDto apply(ActualCostReviewRouteOverrideDto r) {
+    public ActualCostReviewRouteOverrideWithActualCostDto apply(ActualCostReviewRouteOverrideDto r) {
         if (r.comment() == null || r.comment().isBlank()) {
             throw RestException.badRequest("Comment is required");
         }
+
+        ActualCost actualCost = actualCostRepository.findByIdAndIsDeletedFalse(r.actualCostId())
+                .orElseThrow(() -> RestException.notFound("Actual cost not found"));
+
+
         repository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(r.actualCostId())
                 .ifPresent(existing -> {
                     existing.setActive(false);
@@ -49,8 +58,11 @@ public class ActualCostReviewRouteOverrideService {
         o.setEscalationRoleCode(r.escalationRoleCode());
         if (r.thresholdHours() != null) o.setThresholdHours(r.thresholdHours());
         o.setComment(r.comment());
-        o.setCreatedById(r.createdById());
-        return ActualCostReviewRouteOverrideDto.from(repository.save(o));
+        o.setCreatedById(UUID.randomUUID());
+
+        ActualCostReviewRouteOverride saved = repository.save(o);
+
+        return ActualCostReviewRouteOverrideWithActualCostDto.from(saved,actualCost);
     }
 
     @Transactional
