@@ -9,7 +9,6 @@ import com.toir.entity.users.User;
 import com.toir.enums.AuditAction;
 import com.toir.entity.AuditLog;
 import com.toir.enums.AuditModule;
-import com.toir.exception.RestException;
 import com.toir.repository.AuditLogRepository;
 
 
@@ -83,7 +82,8 @@ public class AuditLogService {
                 }
             });
         }
-        UserDto user = UserDto.from(resolveUser(log.getUserId()));
+        User resolvedUser = resolveUser(log.getUserId());
+        UserDto user = resolvedUser != null ? UserDto.from(resolvedUser) : null;
 
         return new AuditLogResponseDto(
                 log.getId(),
@@ -108,11 +108,7 @@ public class AuditLogService {
         if (userId == null) {
             return null;
         }
-        try {
-            return userRepository.findById(userId).orElse(null);
-        } catch (RestException ignored) {
-            return null;
-        }
+        return userRepository.findByIdAndIsDeletedFalse(userId).orElse(null);
     }
 
     private JsonNode readJson(String raw) {
