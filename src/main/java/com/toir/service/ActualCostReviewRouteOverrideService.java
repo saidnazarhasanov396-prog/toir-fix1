@@ -26,14 +26,17 @@ public class ActualCostReviewRouteOverrideService {
     private final ActualCostReviewRouteOverrideResponseMapper responseMapper;
 
     @Transactional(readOnly = true)
-    public List<ActualCostReviewRouteOverrideDto> findActive() {
-        return repository.findAllByActiveTrueAndIsDeletedFalse().stream().map(ActualCostReviewRouteOverrideDto::from).toList();
+    public List<ActualCostReviewRouteOverrideResponseDto> findActive() {
+        return repository.findAllByActiveTrueAndIsDeletedFalse().stream()
+                .map(this::toListResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<ActualCostReviewRouteOverrideDto> findByActualCost(UUID actualCostId) {
+    public List<ActualCostReviewRouteOverrideResponseDto> findByActualCost(UUID actualCostId) {
         return repository.findAllByActualCostIdAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId).stream()
-                .map(ActualCostReviewRouteOverrideDto::from).toList();
+                .map(this::toListResponse)
+                .toList();
     }
 
     @Transactional
@@ -44,7 +47,7 @@ public class ActualCostReviewRouteOverrideService {
             throw RestException.badRequest("Comment is required");
         }
 
-        ActualCost actualCost = actualCostRepository.findById(r.actualCostId())
+        ActualCost actualCost = actualCostRepository.findByIdAndIsDeletedFalse(r.actualCostId())
                 .orElseThrow(() -> RestException.notFound("Actual cost not found"));
 
         repository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(r.actualCostId())
@@ -86,5 +89,12 @@ public class ActualCostReviewRouteOverrideService {
         o.setDeactivatedById(userId);
         o.setDeactivationComment(comment);
         return ActualCostReviewRouteOverrideDto.from(o);
+    }
+
+    private ActualCostReviewRouteOverrideResponseDto toListResponse(ActualCostReviewRouteOverride override) {
+        ActualCost actualCost = actualCostRepository
+                .findByIdAndIsDeletedFalse(override.getActualCostId())
+                .orElse(null);
+        return responseMapper.toResponse(override, actualCost);
     }
 }

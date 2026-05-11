@@ -1,0 +1,15 @@
+package com.toir.security;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Target({ElementType.METHOD, ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@PreAuthorize("hasAuthority('SYSTEM_ADMIN') or (!hasAuthority('VIEWER') and !hasAuthority('CONTRACTOR'))")
+public @interface RequiresSensitiveAccess {
+}
+

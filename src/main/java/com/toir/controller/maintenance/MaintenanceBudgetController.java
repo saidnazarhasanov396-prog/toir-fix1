@@ -1,6 +1,7 @@
 package com.toir.controller.maintenance;
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
+import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.maintanance.MaintenanceBudgetService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/budgets")
 @Tag(name = "budgets")
+@RequiresSensitiveAccess
 @RequiredArgsConstructor
 public class MaintenanceBudgetController {
 

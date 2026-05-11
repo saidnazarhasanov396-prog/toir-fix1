@@ -4,6 +4,7 @@ import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.enums.WorkOrderStatus;
+import com.toir.security.RequiresSensitiveAccess;
 import com.toir.security.SecurityScope;
 import com.toir.service.WorkOrderService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/work-orders")
 @Tag(name = "work-orders")
+@RequiresSensitiveAccess
 @RequiredArgsConstructor
 public class WorkOrderController {
 

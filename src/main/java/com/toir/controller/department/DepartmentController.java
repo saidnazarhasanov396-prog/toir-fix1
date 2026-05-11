@@ -2,6 +2,7 @@ package com.toir.controller.department;
 import com.toir.dto.department.DepartmentDto;
 import com.toir.dto.department.DepartmentRequest;
 import com.toir.enums.DepartmentType;
+import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.department.DepartmentService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/departments")
 @Tag(name = "departments")
+@RequiresSensitiveAccess
 @RequiredArgsConstructor
 public class DepartmentController {
 

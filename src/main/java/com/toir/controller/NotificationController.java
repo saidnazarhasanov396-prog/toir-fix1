@@ -8,6 +8,7 @@ import com.toir.dto.notification.NotificationSummaryDto;
 import com.toir.dto.sla.SlaRuleDto;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
+import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.NotificationFacadeService;
 import com.toir.service.NotificationService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -61,6 +62,7 @@ public class NotificationController {
     public ResponseEntity<NotificationDto> markRead(@PathVariable UUID id) { return ResponseEntity.ok(service.markRead(id)); }
 
     @GetMapping("/financial-review-inbox")
+    @RequiresSensitiveAccess
     public ResponseEntity<PageResponseWithSummary<NotificationDto, FinancialReviewInboxSummary>> financialReviewInbox(
             @CurrentUser AuthenticatedUser user,
             @RequestParam(defaultValue = "0") int page,

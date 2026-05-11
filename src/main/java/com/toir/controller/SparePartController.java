@@ -2,6 +2,7 @@ package com.toir.controller;
 import com.toir.dto.sparepart.SparePartDto;
 import com.toir.dto.sparepart.SparePartRequest;
 import com.toir.enums.InventoryItemKind;
+import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.SparePartService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/spare-parts")
 @Tag(name = "spare-parts")
+@RequiresSensitiveAccess
 @RequiredArgsConstructor
 public class SparePartController {
 
