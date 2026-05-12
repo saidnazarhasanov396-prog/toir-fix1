@@ -22,6 +22,12 @@ public record NotificationDto(
         String entityId,
         Instant readAt
 ) {
+    public NotificationDto {
+        channel = channel != null ? channel : NotificationChannel.WEB;
+        status = status != null ? status : NotificationStatus.PENDING;
+        severity = severity != null ? severity : NotificationSeverity.INFO;
+    }
+
     public static NotificationDto from(Notification n) {
         return new NotificationDto(n.getId(), n.getRecipientId(), n.getTitle(), n.getMessage(),
                 n.getChannel(), n.getStatus(), n.getSeverity(), n.getEntityType(), n.getEntityId(), n.getReadAt());

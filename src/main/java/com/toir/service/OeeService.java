@@ -8,6 +8,7 @@ import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.OeeRecordRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import java.util.UUID;
 public class OeeService {
 
     private final OeeRecordRepository repository;
+    private final EquipmentRepository equipmentRepository;
     private final AuditBuilderService auditBuilderService;
 
 
@@ -33,10 +35,32 @@ public class OeeService {
 
     @Transactional(readOnly = true)
     public List<OeeRecordDto> listBetween(UUID equipmentId, Instant from, Instant to) {
+        return listBetween(equipmentId, null, from, to);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OeeRecordDto> listBetween(UUID equipmentId, String equipmentSearch, Instant from, Instant to) {
+        List<UUID> resolvedEquipmentIds = resolveEquipmentIds(equipmentId, equipmentSearch);
+        if (resolvedEquipmentIds != null && resolvedEquipmentIds.isEmpty()) {
+            return List.of();
+        }
         List<OeeRecord> records = equipmentId != null
                 ? repository.findAllByEquipmentIdAndShiftStartBetweenAndIsDeletedFalseOrderByShiftStartAsc(equipmentId, from, to)
+                : resolvedEquipmentIds != null
+                        ? repository.findAllByEquipmentIdInAndShiftStartBetweenAndIsDeletedFalseOrderByShiftStartAsc(resolvedEquipmentIds, from, to)
                 : repository.findAllByShiftStartBetweenAndIsDeletedFalse(from, to);
         return records.stream().map(OeeRecordDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<OeeRecordDto> list(String equipmentSearch) {
+        List<UUID> resolvedEquipmentIds = resolveEquipmentIds(null, equipmentSearch);
+        if (resolvedEquipmentIds == null || resolvedEquipmentIds.isEmpty()) {
+            return List.of();
+        }
+        return repository.findAllByEquipmentIdInAndIsDeletedFalseOrderByShiftStartDesc(resolvedEquipmentIds).stream()
+                .map(OeeRecordDto::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -99,13 +123,23 @@ public class OeeService {
         );
     }
 
-    public OeeSummary summary(UUID equipmentId, Instant from, Instant to) {
+    public OeeSummary summary(UUID equipmentId, String equipmentSearch, Instant from, Instant to) {
+        List<UUID> resolvedEquipmentIds = resolveEquipmentIds(equipmentId, equipmentSearch);
+        UUID summaryEquipmentId = equipmentId;
+        if (summaryEquipmentId == null && resolvedEquipmentIds != null && resolvedEquipmentIds.size() == 1) {
+            summaryEquipmentId = resolvedEquipmentIds.get(0);
+        }
+        if (resolvedEquipmentIds != null && resolvedEquipmentIds.isEmpty()) {
+            return new OeeSummary(summaryEquipmentId, from, to, 0, 0, 0, 0, 0);
+        }
         List<OeeRecord> records = equipmentId != null
                 ? repository.findAllByEquipmentIdAndShiftStartBetweenAndIsDeletedFalseOrderByShiftStartAsc(equipmentId, from, to)
-                : repository.findAllByShiftStartBetweenAndIsDeletedFalse(from, to);
+                : resolvedEquipmentIds != null
+                        ? repository.findAllByEquipmentIdInAndShiftStartBetweenAndIsDeletedFalseOrderByShiftStartAsc(resolvedEquipmentIds, from, to)
+                        : repository.findAllByShiftStartBetweenAndIsDeletedFalse(from, to);
 
         if (records.isEmpty()) {
-            return new OeeSummary(equipmentId, from, to, 0, 0, 0, 0, 0);
+            return new OeeSummary(summaryEquipmentId, from, to, 0, 0, 0, 0, 0);
         }
 
         double totalPlanned = 0, totalRun = 0, totalIdeal = 0, totalCount = 0, totalGood = 0;
@@ -122,7 +156,11 @@ public class OeeService {
         double quality = totalCount > 0 ? totalGood / totalCount : 0;
         double oee = availability * performance * quality;
 
-        return new OeeSummary(equipmentId, from, to, availability, performance, quality, oee, records.size());
+        return new OeeSummary(summaryEquipmentId, from, to, availability, performance, quality, oee, records.size());
+    }
+
+    public OeeSummary summary(UUID equipmentId, Instant from, Instant to) {
+        return summary(equipmentId, null, from, to);
     }
 
 
@@ -157,5 +195,16 @@ public class OeeService {
         entity.setPerformance(performance);
         entity.setQuality(quality);
         entity.setOee(availability * performance * quality);
+    }
+
+    private List<UUID> resolveEquipmentIds(UUID equipmentId, String equipmentSearch) {
+        if (equipmentId != null) {
+            return List.of(equipmentId);
+        }
+        if (equipmentSearch == null || equipmentSearch.isBlank()) {
+            return null;
+        }
+        String searchPattern = "%" + equipmentSearch.trim().toLowerCase() + "%";
+        return equipmentRepository.findIdsByBusinessSearch(searchPattern);
     }
 }

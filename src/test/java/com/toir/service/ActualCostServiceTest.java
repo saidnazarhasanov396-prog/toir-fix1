@@ -13,12 +13,15 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -73,5 +76,24 @@ class ActualCostServiceTest {
         assertThat(result.reviewComment()).isEqualTo("Invalid supporting documents");
         assertThat(result.reviewedAt()).isNotNull();
     }
-}
 
+    @Test
+    void findByFiltersShouldSupportBusinessSearchAndKeepWorkOrderFilter() {
+        UUID workOrderId = UUID.randomUUID();
+        ActualCost actualCost = new ActualCost();
+        actualCost.setWorkOrderId(workOrderId);
+        actualCost.setCostCategoryId(UUID.randomUUID());
+        actualCost.setStatus(ActualCostStatus.PENDING);
+        actualCost.setAmount(400);
+        actualCost.setCostDate(Instant.parse("2026-05-10T10:00:00Z"));
+
+        when(repository.findAllByFiltersOrderByUpdatedAtDesc(workOrderId, "WO-2026-1"))
+                .thenReturn(List.of(actualCost));
+
+        List<ActualCostDto> result = service.findByFilters(workOrderId, "WO-2026-1");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().workOrderId()).isEqualTo(workOrderId);
+        verify(repository).findAllByFiltersOrderByUpdatedAtDesc(workOrderId, "WO-2026-1");
+    }
+}

@@ -14,10 +14,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -92,5 +95,53 @@ class ActualCostControllerContractTest {
                 .andExpect(jsonPath("$.status").value("REJECTED"))
                 .andExpect(jsonPath("$.reviewComment").value("Reason"));
     }
-}
 
+    @Test
+    void listShouldSupportBusinessSearchWithoutWorkOrderId() throws Exception {
+        ActualCostDto dto = new ActualCostDto(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                null,
+                null,
+                UUID.randomUUID(),
+                ActualCostStatus.PENDING,
+                null,
+                null,
+                null,
+                250.0,
+                Instant.now(),
+                "WO-2026-10"
+        );
+        when(service.findByFilters(null, "WO-2026-10")).thenReturn(List.of(dto));
+
+        mockMvc.perform(get("/api/v1/actual-costs").param("search", "WO-2026-10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content[0].id").value(dto.id().toString()));
+
+        verify(service).findByFilters(null, "WO-2026-10");
+    }
+
+    @Test
+    void listShouldKeepExistingWorkOrderIdFilterBehavior() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        when(service.findByFilters(workOrderId, null)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/actual-costs").param("workOrderId", workOrderId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty());
+
+        verify(service).findByFilters(workOrderId, null);
+    }
+
+    @Test
+    void listWithInvalidWorkOrderIdShouldReturnBadRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/actual-costs").param("workOrderId", "invalid-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter 'workOrderId': invalid-uuid. Expected UUID."));
+
+        verifyNoInteractions(service);
+    }
+}

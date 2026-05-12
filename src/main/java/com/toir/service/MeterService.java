@@ -42,8 +42,13 @@ public class MeterService {
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listAll(String search, MeterType meterType) {
+        return listAll(search, meterType, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EquipmentMeterDto> listAll(String search, MeterType meterType, UUID equipmentId, String equipmentSearch) {
         String meterTypeStr = meterType == null ? null : meterType.toString();
-        return meterRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc(search,meterTypeStr).stream()
+        return meterRepository.findAllByFiltersOrderByUpdatedAtDesc(search, meterTypeStr, equipmentId, equipmentSearch).stream()
                 .map(this::enrichWithEquipmentName)
                 .toList();
     }
