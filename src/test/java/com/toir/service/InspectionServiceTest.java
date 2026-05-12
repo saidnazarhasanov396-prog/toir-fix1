@@ -3,8 +3,11 @@ package com.toir.service;
 import com.toir.dto.inspection.InspectionRoundDto;
 import com.toir.dto.inspection.InspectionRoundResultDto;
 import com.toir.dto.inspection.InspectionRoundResultRequest;
+import com.toir.dto.inspection.InspectionRouteDto;
+import com.toir.dto.inspection.InspectionRouteRequest;
 import com.toir.entity.inspection.InspectionRound;
 import com.toir.entity.inspection.InspectionRoundResult;
+import com.toir.entity.inspection.InspectionRoute;
 import com.toir.enums.InspectionRoundStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.defects.DefectRepository;
@@ -17,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
@@ -48,6 +52,9 @@ class InspectionServiceTest {
 
     @Mock
     AuditBuilderService auditBuilderService;
+
+    @Mock
+    UnitOfMeasurementService unitOfMeasurementService;
 
     @InjectMocks
     InspectionService service;
@@ -86,6 +93,7 @@ class InspectionServiceTest {
         UUID roundId = UUID.randomUUID();
         InspectionRound round = round(roundId, InspectionRoundStatus.IN_PROGRESS);
         when(roundRepo.findByIdAndIsDeletedFalse(roundId)).thenReturn(Optional.of(round));
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull("bar")).thenReturn("bar");
         when(roundRepo.save(any(InspectionRound.class))).thenAnswer(invocation -> {
             InspectionRound saved = invocation.getArgument(0);
             for (InspectionRoundResult item : saved.getResults()) {
@@ -118,6 +126,22 @@ class InspectionServiceTest {
         assertThat(result.status()).isEqualTo(InspectionRoundStatus.COMPLETED);
         assertThat(result.completedAt()).isNotNull();
         verify(roundRepo).save(any(InspectionRound.class));
+    }
+
+    @Test
+    void inProgressRoundCanRecordResultWithoutMeasuredUnit() {
+        UUID roundId = UUID.randomUUID();
+        InspectionRound round = round(roundId, InspectionRoundStatus.IN_PROGRESS);
+        when(roundRepo.findByIdAndIsDeletedFalse(roundId)).thenReturn(Optional.of(round));
+        when(roundRepo.save(any(InspectionRound.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        InspectionRoundResultDto result = service.recordResult(
+                roundId,
+                new InspectionRoundResultRequest(UUID.randomUUID(), "OK", 11.0, null, "ok", null)
+        );
+
+        assertThat(result.status()).isEqualTo("OK");
+        assertThat(result.measuredUnit()).isNull();
     }
 
     @Test
@@ -156,6 +180,81 @@ class InspectionServiceTest {
                 .hasMessageContaining("Round is not IN_PROGRESS");
 
         verify(roundRepo, never()).save(any(InspectionRound.class));
+    }
+
+    @Test
+    void createRouteWithKnownCheckpointUnitNormalizesAndSucceeds() {
+        when(routeRepo.existsByCodeAndIsDeletedFalse("IR-001")).thenReturn(false);
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull(" bar ")).thenReturn("bar");
+        when(routeRepo.save(any(InspectionRoute.class))).thenAnswer(invocation -> {
+            InspectionRoute route = invocation.getArgument(0);
+            ReflectionTestUtils.setField(route, "id", UUID.randomUUID());
+            return route;
+        });
+
+        InspectionRouteRequest request = routeRequest(" bar ");
+
+        InspectionRouteDto dto = service.createRoute(request);
+
+        assertThat(dto.checkpoints()).hasSize(1);
+        assertThat(dto.checkpoints().getFirst().expectedUnit()).isEqualTo("bar");
+        verify(routeRepo).save(any(InspectionRoute.class));
+    }
+
+    @Test
+    void createRouteWithUnknownCheckpointUnitReturnsBadRequest() {
+        when(routeRepo.existsByCodeAndIsDeletedFalse("IR-001")).thenReturn(false);
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull("mystery-unit"))
+                .thenThrow(RestException.badRequest("Unknown unit"));
+
+        assertThatThrownBy(() -> service.createRoute(routeRequest("mystery-unit")))
+                .isInstanceOf(RestException.class)
+                .extracting(ex -> ((RestException) ex).getStatus())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        verify(routeRepo, never()).save(any(InspectionRoute.class));
+    }
+
+    @Test
+    void createRouteWithBlankCheckpointUnitStoresNullWhenOptional() {
+        when(routeRepo.existsByCodeAndIsDeletedFalse("IR-001")).thenReturn(false);
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull("   ")).thenReturn(null);
+        when(routeRepo.save(any(InspectionRoute.class))).thenAnswer(invocation -> {
+            InspectionRoute route = invocation.getArgument(0);
+            ReflectionTestUtils.setField(route, "id", UUID.randomUUID());
+            return route;
+        });
+
+        InspectionRouteDto dto = service.createRoute(routeRequest("   "));
+
+        assertThat(dto.checkpoints()).hasSize(1);
+        assertThat(dto.checkpoints().getFirst().expectedUnit()).isNull();
+        verify(routeRepo).save(any(InspectionRoute.class));
+    }
+
+    private InspectionRouteRequest routeRequest(String expectedUnit) {
+        InspectionRouteRequest.CheckpointRequest checkpoint = new InspectionRouteRequest.CheckpointRequest(
+                1,
+                null,
+                null,
+                "Checkpoint",
+                "Instruction",
+                "MEASUREMENT",
+                0.0,
+                10.0,
+                expectedUnit,
+                true
+        );
+        return new InspectionRouteRequest(
+                "IR-001",
+                "Route 1",
+                null,
+                "DAILY",
+                15,
+                "desc",
+                true,
+                List.of(checkpoint)
+        );
     }
 
     private InspectionRound round(UUID id, InspectionRoundStatus status) {

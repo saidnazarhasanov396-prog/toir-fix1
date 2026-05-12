@@ -1,10 +1,12 @@
 package com.toir.service;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.repository.equipment.EquipmentMeterRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 
 import com.toir.dto.meter.MeterTriggerMatch;
 
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.exception.RestException;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,11 +20,15 @@ import java.util.UUID;
 public class MeterTriggerService {
 
     private final EquipmentMeterRepository meterRepository;
+    private final EquipmentRepository equipmentRepository;
     private final MaintenanceRegulationRepository regulationRepository;
 
 
 
     public List<MeterTriggerMatch> dueTriggers(UUID equipmentId) {
+        if (equipmentId == null) {
+            throw RestException.badRequest("equipmentId or equipmentSearch is required");
+        }
         List<EquipmentMeter> meters = meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId);
         List<MaintenanceRegulation> regs = regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(r -> r.isActive() && r.getTriggerMeterType() != null
@@ -44,6 +50,21 @@ public class MeterTriggerService {
             }
         }
         return result;
+    }
+
+    public List<MeterTriggerMatch> dueTriggers(UUID equipmentId, String equipmentSearch) {
+        if (equipmentId != null) {
+            return dueTriggers(equipmentId);
+        }
+        if (equipmentSearch == null || equipmentSearch.isBlank()) {
+            throw RestException.badRequest("equipmentId or equipmentSearch is required");
+        }
+        String pattern = "%" + equipmentSearch.trim().toLowerCase() + "%";
+        List<UUID> equipmentIds = equipmentRepository.findIdsByBusinessSearch(pattern);
+        if (equipmentIds.isEmpty()) {
+            return List.of();
+        }
+        return dueTriggers(equipmentIds.get(0));
     }
 
 }

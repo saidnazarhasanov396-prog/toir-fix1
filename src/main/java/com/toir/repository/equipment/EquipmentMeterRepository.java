@@ -17,17 +17,32 @@ public interface EquipmentMeterRepository extends JpaRepository<EquipmentMeter, 
     Optional<EquipmentMeter> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
     @Query(value =  """
-            SELECT em.* FROM equipment_meters em 
-            WHERE is_deleted = false
-            AND (:metricType IS NULL OR :metricType = '' OR em.meter_type = :metricType)
-            AND (CAST(:search AS text) IS NULL OR :search = '' OR
-                LOWER(em.name) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
-                LOWER(em.unit) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%'))
-            )
+            SELECT em.* FROM equipment_meters em
+            LEFT JOIN equipment e ON e.id = em.equipment_id AND e.is_deleted = false
+            WHERE em.is_deleted = false
+              AND (:metricType IS NULL OR :metricType = '' OR em.meter_type = :metricType)
+              AND (CAST(:equipmentId AS text) IS NULL OR em.equipment_id = CAST(:equipmentId AS uuid))
+              AND (CAST(:equipmentSearch AS text) IS NULL OR :equipmentSearch = '' OR
+                   LOWER(COALESCE(e.code, '')) LIKE LOWER(CONCAT('%', CAST(:equipmentSearch AS text), '%')) OR
+                   LOWER(COALESCE(e.name, '')) LIKE LOWER(CONCAT('%', CAST(:equipmentSearch AS text), '%')) OR
+                   LOWER(COALESCE(e.inventory_number, '')) LIKE LOWER(CONCAT('%', CAST(:equipmentSearch AS text), '%')) OR
+                   LOWER(COALESCE(e.technical_number, '')) LIKE LOWER(CONCAT('%', CAST(:equipmentSearch AS text), '%')) OR
+                   LOWER(COALESCE(e.serial_number, '')) LIKE LOWER(CONCAT('%', CAST(:equipmentSearch AS text), '%'))
+              )
+              AND (CAST(:search AS text) IS NULL OR :search = '' OR
+                   LOWER(em.name) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(em.unit) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(e.code, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(e.name, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(e.inventory_number, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%'))
+              )
+            ORDER BY em.updated_at DESC
             """, nativeQuery = true)
-    List<EquipmentMeter> findAllByIsDeletedFalseOrderByUpdatedAtDesc(
-            @Param("search")  String search,
-            @Param("metricType") String meterTypeStr
+    List<EquipmentMeter> findAllByFiltersOrderByUpdatedAtDesc(
+            @Param("search") String search,
+            @Param("metricType") String meterTypeStr,
+            @Param("equipmentId") UUID equipmentId,
+            @Param("equipmentSearch") String equipmentSearch
     );
 
     @Query(value = "SELECT * FROM equipment_meters WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)

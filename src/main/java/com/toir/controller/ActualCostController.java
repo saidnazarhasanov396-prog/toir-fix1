@@ -27,8 +27,11 @@ public class ActualCostController {
     public ResponseEntity<Page<ActualCostDto>> pending(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findPending(), page, size)); }
 
     @GetMapping
-    public ResponseEntity<Page<ActualCostDto>> list(@RequestParam UUID workOrderId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findByWorkOrder(workOrderId), page, size));
+    public ResponseEntity<Page<ActualCostDto>> list(@RequestParam(required = false) UUID workOrderId,
+                                                    @RequestParam(required = false) String search,
+                                                    @RequestParam(defaultValue = "0") int page,
+                                                    @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByFilters(workOrderId, search), page, size));
     }
 
     @PostMapping

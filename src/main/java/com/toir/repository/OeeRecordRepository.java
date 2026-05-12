@@ -36,6 +36,13 @@ public interface OeeRecordRepository extends JpaRepository<OeeRecord, UUID> {
     List<OeeRecord> findAllByEquipmentIdAndShiftStartBetweenAndIsDeletedFalseOrderByShiftStartAsc(
             @Param("equipmentId") UUID equipmentId, @Param("from") Instant from, @Param("to") Instant to);
 
+    @Query(value = "SELECT * FROM oee_records WHERE equipment_id IN (:equipmentIds) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<OeeRecord> findAllByEquipmentIdInAndIsDeletedFalseOrderByShiftStartDesc(@Param("equipmentIds") Collection<UUID> equipmentIds);
+
+    @Query(value = "SELECT * FROM oee_records WHERE equipment_id IN (:equipmentIds) AND shift_start BETWEEN :from AND :to AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<OeeRecord> findAllByEquipmentIdInAndShiftStartBetweenAndIsDeletedFalseOrderByShiftStartAsc(
+            @Param("equipmentIds") Collection<UUID> equipmentIds, @Param("from") Instant from, @Param("to") Instant to);
+
     @Query(value = "SELECT * FROM oee_records WHERE shift_start BETWEEN :from AND :to AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<OeeRecord> findAllByShiftStartBetweenAndIsDeletedFalse(@Param("from") Instant from, @Param("to") Instant to);
 }

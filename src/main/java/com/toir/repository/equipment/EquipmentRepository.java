@@ -140,4 +140,20 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                                                   @Param("category") EquipmentCategory category,
                                                   @Param("searchPattern") String searchPattern,
                                                   Pageable pageable);
+
+    @Query("""
+            select e.id
+            from Equipment e
+            where e.isDeleted = false
+              and (
+                    :searchPattern is null
+                    or lower(coalesce(e.code, '')) like :searchPattern
+                    or lower(coalesce(e.name, '')) like :searchPattern
+                    or lower(coalesce(e.inventoryNumber, '')) like :searchPattern
+                    or lower(coalesce(e.technicalNumber, '')) like :searchPattern
+                    or lower(coalesce(e.serialNumber, '')) like :searchPattern
+                  )
+            order by e.updatedAt desc
+            """)
+    List<UUID> findIdsByBusinessSearch(@Param("searchPattern") String searchPattern);
 }

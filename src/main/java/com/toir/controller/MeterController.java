@@ -31,16 +31,22 @@ public class MeterController {
     private final MeterTriggerService triggerService;
 
     @GetMapping("/triggers")
-    public ResponseEntity<Page<MeterTriggerMatch>> triggers(@RequestParam UUID equipmentId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(triggerService.dueTriggers(equipmentId), page, size));
+    public ResponseEntity<Page<MeterTriggerMatch>> triggers(@RequestParam(required = false) UUID equipmentId,
+                                                            @RequestParam(required = false) String equipmentSearch,
+                                                            @RequestParam(defaultValue = "0") int page,
+                                                            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(triggerService.dueTriggers(equipmentId, equipmentSearch), page, size));
     }
 
     @GetMapping
     public ResponseEntity<Page<EquipmentMeterDto>> list(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) MeterType meterType
-            , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.listAll(search,meterType), page, size));
+            @RequestParam(required = false) MeterType meterType,
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String equipmentSearch,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.listAll(search, meterType, equipmentId, equipmentSearch), page, size));
     }
 
 

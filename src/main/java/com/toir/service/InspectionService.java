@@ -32,6 +32,7 @@ public class InspectionService {
     private final InspectionCheckpointRepository checkpointRepo;
     private final InspectionRoundRepository roundRepo;
     private final DefectRepository defectRepo;
+    private final UnitOfMeasurementService unitOfMeasurementService;
     private final AuditBuilderService auditBuilderService;
 
 
@@ -199,7 +200,7 @@ public class InspectionService {
         result.setCheckpointId(r.checkpointId());
         result.setStatus(r.status());
         result.setMeasuredValue(r.measuredValue());
-        result.setMeasuredUnit(r.measuredUnit());
+        result.setMeasuredUnit(unitOfMeasurementService.normalizeOptionalUnitOrNull(r.measuredUnit()));
         result.setComment(r.comment());
         result.setPhotoFileIds(r.photoFileIds());
         round.getResults().add(result);
@@ -333,7 +334,7 @@ public class InspectionService {
         if (cp.checkType() != null) c.setCheckType(cp.checkType());
         c.setExpectedMin(cp.expectedMin());
         c.setExpectedMax(cp.expectedMax());
-        c.setExpectedUnit(cp.expectedUnit());
+        c.setExpectedUnit(unitOfMeasurementService.normalizeOptionalUnitOrNull(cp.expectedUnit()));
         if (cp.mandatory() != null) c.setMandatory(cp.mandatory());
         return c;
     }

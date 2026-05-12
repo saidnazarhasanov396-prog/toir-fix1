@@ -28,12 +28,14 @@ public class OeeController {
     @GetMapping
     public ResponseEntity<Page<OeeRecordDto>> list(
             @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String equipmentSearch,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        if (from != null && to != null) return ResponseEntity.ok(PaginationUtils.page(service.listBetween(equipmentId, from, to), page, size));
+        if (from != null && to != null) return ResponseEntity.ok(PaginationUtils.page(service.listBetween(equipmentId, equipmentSearch, from, to), page, size));
         if (equipmentId != null) return ResponseEntity.ok(PaginationUtils.page(service.listByEquipment(equipmentId), page, size));
+        if (equipmentSearch != null && !equipmentSearch.isBlank()) return ResponseEntity.ok(PaginationUtils.page(service.list(equipmentSearch), page, size));
         return ResponseEntity.ok(PaginationUtils.page(List.of(), page, size));
     }
 
@@ -60,8 +62,9 @@ public class OeeController {
     @GetMapping("/summary")
     public ResponseEntity<OeeSummary> summary(
             @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String equipmentSearch,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
-        return ResponseEntity.ok(service.summary(equipmentId, from, to));
+        return ResponseEntity.ok(service.summary(equipmentId, equipmentSearch, from, to));
     }
 }

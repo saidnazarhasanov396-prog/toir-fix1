@@ -31,7 +31,14 @@ public class ActualCostService {
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findByWorkOrder(UUID workOrderId) {
-        return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId).stream().map(ActualCostDto::from).toList();
+        return findByFilters(workOrderId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ActualCostDto> findByFilters(UUID workOrderId, String search) {
+        return repository.findAllByFiltersOrderByUpdatedAtDesc(workOrderId, search).stream()
+                .map(ActualCostDto::from)
+                .toList();
     }
 
     @Transactional

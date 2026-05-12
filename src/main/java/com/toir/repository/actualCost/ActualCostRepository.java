@@ -32,6 +32,33 @@ public interface ActualCostRepository extends JpaRepository<ActualCost, UUID> {
     @Query(value = "SELECT * FROM actual_costs WHERE work_order_id = cast(:workOrderId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ActualCost> findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("workOrderId") UUID workOrderId);
 
+    @Query(value = """
+            SELECT ac.*
+            FROM actual_costs ac
+            LEFT JOIN work_orders wo ON wo.id = ac.work_order_id AND wo.is_deleted = false
+            LEFT JOIN contractor_works cw ON cw.id = ac.contractor_work_id AND cw.is_deleted = false
+            LEFT JOIN contractors c ON c.id = cw.contractor_id AND c.is_deleted = false
+            LEFT JOIN cost_categories cc ON cc.id = ac.cost_category_id AND cc.is_deleted = false
+            WHERE ac.is_deleted = false
+              AND (CAST(:workOrderId AS text) IS NULL OR ac.work_order_id = CAST(:workOrderId AS uuid))
+              AND (CAST(:search AS text) IS NULL OR :search = '' OR
+                   LOWER(COALESCE(wo.number, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(wo.title, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(c.code, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(c.name, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(cc.code, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(cc.name, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(ac.notes, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(ac.review_comment, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(CAST(ac.status AS text), '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   CAST(ac.amount AS text) LIKE CONCAT('%', CAST(:search AS text), '%') OR
+                   CAST(ac.cost_date AS text) LIKE CONCAT('%', CAST(:search AS text), '%')
+              )
+            ORDER BY ac.updated_at DESC
+            """, nativeQuery = true)
+    List<ActualCost> findAllByFiltersOrderByUpdatedAtDesc(@Param("workOrderId") UUID workOrderId,
+                                                           @Param("search") String search);
+
     @Query(value = "SELECT * FROM actual_costs WHERE status = cast(:status as varchar) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ActualCost> findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("status") ActualCostStatus status);
 }

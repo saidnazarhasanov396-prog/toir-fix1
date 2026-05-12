@@ -31,6 +31,7 @@ public class ConditionReadingService {
     private final EquipmentRepository equipmentRepository;
     private final DefectRepository defectRepository;
     private final WebhookService webhookService;
+    private final UnitOfMeasurementService unitOfMeasurementService;
     private final AuditBuilderService auditBuilderService;
 
 
@@ -59,7 +60,7 @@ public class ConditionReadingService {
         cr.setEquipmentId(eq.getId());
         cr.setParameter(r.parameter());
         cr.setValue(r.value());
-        cr.setUnit(r.unit());
+        cr.setUnit(unitOfMeasurementService.normalizeRequiredUnitOrThrow(r.unit(), "condition reading unit"));
         cr.setRecordedAt(r.recordedAt() != null ? r.recordedAt() : Instant.now());
         cr.setRecordedBy(userId);
         cr.setWarnHigh(r.warnHigh());

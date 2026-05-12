@@ -47,4 +47,17 @@ public interface UnitOfMeasurementRepository extends JpaRepository<UnitOfMeasure
               AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
             """, nativeQuery = true)
     long maxSequenceByCodePrefix(@Param("prefix") String prefix);
+
+    @Query("""
+            SELECT u FROM UnitOfMeasurement u
+            WHERE u.isDeleted = false
+              AND (
+                    lower(u.code) = lower(:token)
+                 OR lower(u.name) = lower(:token)
+                 OR (u.nameEn IS NOT NULL AND lower(u.nameEn) = lower(:token))
+                 OR (u.nameUz IS NOT NULL AND lower(u.nameUz) = lower(:token))
+              )
+            ORDER BY u.updatedAt DESC
+            """)
+    List<UnitOfMeasurement> findByTokenIgnoreCase(@Param("token") String token);
 }

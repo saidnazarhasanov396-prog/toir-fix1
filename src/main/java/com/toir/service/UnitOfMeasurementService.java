@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Year;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -25,6 +26,24 @@ public class UnitOfMeasurementService {
     @Transactional(readOnly = true)
     public List<UnitOfMeasurementDto> findAll(String search) {
         return repository.findAllByIsDeletedFalse(search).stream().map(UnitOfMeasurementDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public String normalizeRequiredUnitOrThrow(String rawUnit, String fieldName) {
+        String normalizedInput = normalizeInput(rawUnit);
+        if (normalizedInput == null) {
+            throw RestException.badRequest(fieldName + " is required");
+        }
+        return normalizeKnownUnitOrThrow(normalizedInput, fieldName);
+    }
+
+    @Transactional(readOnly = true)
+    public String normalizeOptionalUnitOrNull(String rawUnit) {
+        String normalizedInput = normalizeInput(rawUnit);
+        if (normalizedInput == null) {
+            return null;
+        }
+        return normalizeKnownUnitOrThrow(normalizedInput, "unit");
     }
 
     @Transactional
@@ -102,5 +121,23 @@ public class UnitOfMeasurementService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private String normalizeKnownUnitOrThrow(String token, String fieldName) {
+        Optional<UnitOfMeasurement> match = repository.findByTokenIgnoreCase(token).stream().findFirst();
+        if (match.isEmpty()) {
+            throw RestException.badRequest(
+                    "Unknown " + fieldName + ": " + token + ". Use dictionary values from /api/v1/units-of-measurement"
+            );
+        }
+        return match.get().getName();
+    }
+
+    private String normalizeInput(String rawUnit) {
+        if (rawUnit == null) {
+            return null;
+        }
+        String token = rawUnit.trim();
+        return token.isEmpty() ? null : token;
     }
 }
