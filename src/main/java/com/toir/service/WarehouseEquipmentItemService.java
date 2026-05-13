@@ -9,6 +9,7 @@ import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class WarehouseEquipmentItemService {
 
     private final WarehouseRepository warehouseRepository;
     private final EquipmentRepository equipmentRepository;
+    private final DepartmentRepository departmentRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
 
     @Transactional
@@ -89,8 +91,25 @@ public class WarehouseEquipmentItemService {
     @Transactional
     public WarehouseEquipmentItemDto updateStatus(UUID warehouseId,
                                                   UUID equipmentId,
-                                                  WarehouseEquipmentStatus status) {
+                                                  WarehouseEquipmentStatus status,
+                                                  UUID departmentId) {
         WarehouseEquipmentItem item = getWarehouseEquipmentItemOrThrow(warehouseId, equipmentId);
+        if (status == WarehouseEquipmentStatus.INSTALLED) {
+            if (departmentId == null) {
+                throw RestException.badRequest("departmentId is required when status is INSTALLED");
+            }
+            if (item.getStatus() == WarehouseEquipmentStatus.OUT_OF_SERVICE) {
+                throw RestException.badRequest("OUT_OF_SERVICE equipment cannot be installed directly");
+            }
+            departmentRepository.findByIdAndIsDeletedFalse(departmentId)
+                    .orElseThrow(() -> RestException.notFound("Department not found: " + departmentId));
+            Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                    .orElseThrow(() -> RestException.notFound("Equipment not found"));
+            equipment.setDepartmentId(departmentId);
+            equipmentRepository.save(equipment);
+        } else if (departmentId != null) {
+            throw RestException.badRequest("departmentId must be null when status is not INSTALLED");
+        }
         item.setStatus(status);
         WarehouseEquipmentItem saved = warehouseEquipmentItemRepository.save(item);
         return WarehouseEquipmentItemDto.from(saved);

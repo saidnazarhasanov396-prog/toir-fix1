@@ -73,7 +73,14 @@ public class WarehouseController {
     public ResponseEntity<WarehouseEquipmentItemDto> updateEquipmentStatus(@PathVariable UUID warehouseId,
                                                                             @PathVariable UUID equipmentId,
                                                                             @Valid @RequestBody WarehouseEquipmentStatusUpdateRequest request) {
-        return ResponseEntity.ok(warehouseEquipmentItemService.updateStatus(warehouseId, equipmentId, request.status()));
+        return ResponseEntity.ok(
+                warehouseEquipmentItemService.updateStatus(
+                        warehouseId,
+                        equipmentId,
+                        request.status(),
+                        request.departmentId()
+                )
+        );
     }
 
     @DeleteMapping("/{warehouseId}/equipment/{equipmentId}")
