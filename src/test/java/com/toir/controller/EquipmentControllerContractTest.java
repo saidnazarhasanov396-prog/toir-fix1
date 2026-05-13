@@ -14,14 +14,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.List;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -285,6 +288,62 @@ class EquipmentControllerContractTest {
     }
 
     @Test
+    void listWithLocationIdReturnsLocationObject() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID locationId = UUID.randomUUID();
+        EquipmentDto.Ref locationRef = new EquipmentDto.Ref(locationId, "LOC-001", "Main Workshop");
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, locationId, locationRef);
+
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, null, null, false, null, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/equipment"))
+                .andDo(this::assertNoResolvedException)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].locationId").value(locationId.toString()))
+                .andExpect(jsonPath("$.content[0].location.id").value(locationId.toString()))
+                .andExpect(jsonPath("$.content[0].location.code").value("LOC-001"))
+                .andExpect(jsonPath("$.content[0].location.name").value("Main Workshop"));
+    }
+
+    @Test
+    void listWithNullLocationIdReturnsLocationNull() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, null, null);
+
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, null, null, false, null, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/equipment"))
+                .andDo(this::assertNoResolvedException)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].locationId").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].location").value(nullValue()));
+    }
+
+    @Test
+    void listWithMissingLocationRecordDoesNot500() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID missingLocationId = UUID.randomUUID();
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, missingLocationId, null);
+
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, null, null, false, null, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/equipment"))
+                .andDo(this::assertNoResolvedException)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].locationId").value(missingLocationId.toString()))
+                .andExpect(jsonPath("$.content[0].location").value(nullValue()));
+    }
+
+    @Test
     void listShouldSupportBusinessSearchByCode() throws Exception {
         when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, null, null, false, "EQ-2026-0012", 0, 20))
@@ -321,6 +380,14 @@ class EquipmentControllerContractTest {
     }
 
     private EquipmentDto equipmentDto(UUID id, UUID equipmentTypeId, UUID departmentId) {
+        return equipmentDto(id, equipmentTypeId, departmentId, null, null);
+    }
+
+    private EquipmentDto equipmentDto(UUID id,
+                                      UUID equipmentTypeId,
+                                      UUID departmentId,
+                                      UUID locationId,
+                                      EquipmentDto.Ref location) {
         return new EquipmentDto(
                 id,
                 "EQ-2026-0020",
@@ -331,7 +398,7 @@ class EquipmentControllerContractTest {
                 null,
                 equipmentTypeId,
                 departmentId,
-                null,
+                locationId,
                 null,
                 null,
                 null,
@@ -342,7 +409,7 @@ class EquipmentControllerContractTest {
                 null,
                 null,
                 null,
-                null,
+                location,
                 null,
                 null,
                 null

@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
+import com.toir.entity.Department;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
@@ -9,6 +10,7 @@ import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +46,9 @@ class WarehouseEquipmentItemServiceTest {
     EquipmentRepository equipmentRepository;
 
     @Mock
+    DepartmentRepository departmentRepository;
+
+    @Mock
     WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
 
     @InjectMocks
@@ -55,6 +60,7 @@ class WarehouseEquipmentItemServiceTest {
         UUID equipmentId = UUID.randomUUID();
         Warehouse warehouse = activeWarehouse(warehouseId);
         Equipment equipment = equipment(equipmentId);
+        equipment.setDepartmentId(UUID.randomUUID());
 
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
@@ -81,6 +87,8 @@ class WarehouseEquipmentItemServiceTest {
         assertThat(saved.isActive()).isTrue();
         assertThat(saved.isDeleted()).isFalse();
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.RESERVED);
+        assertThat(equipment.getDepartmentId()).isNull();
+        verify(equipmentRepository).save(equipment);
     }
 
     @Test
@@ -148,9 +156,11 @@ class WarehouseEquipmentItemServiceTest {
     void assignExplicitOutOfServiceStatusIsRespected() {
         UUID warehouseId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setDepartmentId(UUID.randomUUID());
 
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(activeWarehouse(warehouseId)));
-        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)).thenReturn(Optional.empty());
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -161,6 +171,8 @@ class WarehouseEquipmentItemServiceTest {
         );
 
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+        assertThat(equipment.getDepartmentId()).isNull();
+        verify(equipmentRepository).save(equipment);
     }
 
     @Test
@@ -282,7 +294,151 @@ class WarehouseEquipmentItemServiceTest {
     }
 
     @Test
-    void statusUpdateSucceeds() {
+    void updateStatusToInstalledRequiresDepartmentId() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        WarehouseEquipmentItem item = new WarehouseEquipmentItem();
+        item.setWarehouseId(warehouseId);
+        item.setEquipmentId(equipmentId);
+        item.setStatus(WarehouseEquipmentStatus.RESERVED);
+        item.setActive(true);
+        item.setDeleted(false);
+
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, equipmentId))
+                .thenReturn(Optional.of(item));
+
+        assertThatThrownBy(() -> service.updateStatus(
+                warehouseId,
+                equipmentId,
+                WarehouseEquipmentStatus.INSTALLED,
+                null
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("departmentId is required when status is INSTALLED");
+    }
+
+    @Test
+    void updateStatusToInstalledWithValidDepartmentSetsEquipmentDepartmentAndStatusInstalled() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+
+        WarehouseEquipmentItem item = new WarehouseEquipmentItem();
+        item.setWarehouseId(warehouseId);
+        item.setEquipmentId(equipmentId);
+        item.setStatus(WarehouseEquipmentStatus.RESERVED);
+        item.setActive(true);
+        item.setDeleted(false);
+
+        Equipment equipment = equipment(equipmentId);
+        equipment.setDepartmentId(null);
+
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, equipmentId))
+                .thenReturn(Optional.of(item));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(equipment));
+        when(equipmentRepository.save(any(Equipment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        WarehouseEquipmentItemDto result = service.updateStatus(
+                warehouseId,
+                equipmentId,
+                WarehouseEquipmentStatus.INSTALLED,
+                departmentId
+        );
+
+        assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.INSTALLED);
+        assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.INSTALLED);
+        assertThat(equipment.getDepartmentId()).isEqualTo(departmentId);
+        verify(equipmentRepository).save(equipment);
+        verify(warehouseEquipmentItemRepository).save(item);
+    }
+
+    @Test
+    void updateStatusToInstalledWithUnknownDepartment() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+
+        WarehouseEquipmentItem item = new WarehouseEquipmentItem();
+        item.setWarehouseId(warehouseId);
+        item.setEquipmentId(equipmentId);
+        item.setStatus(WarehouseEquipmentStatus.AVAILABLE);
+        item.setActive(true);
+        item.setDeleted(false);
+
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, equipmentId))
+                .thenReturn(Optional.of(item));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updateStatus(
+                warehouseId,
+                equipmentId,
+                WarehouseEquipmentStatus.INSTALLED,
+                departmentId
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Department not found: " + departmentId);
+    }
+
+    @Test
+    void updateStatusToInstalledFromOutOfServiceRejected() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        WarehouseEquipmentItem item = new WarehouseEquipmentItem();
+        item.setWarehouseId(warehouseId);
+        item.setEquipmentId(equipmentId);
+        item.setStatus(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+        item.setActive(true);
+        item.setDeleted(false);
+
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, equipmentId))
+                .thenReturn(Optional.of(item));
+
+        assertThatThrownBy(() -> service.updateStatus(
+                warehouseId,
+                equipmentId,
+                WarehouseEquipmentStatus.INSTALLED,
+                UUID.randomUUID()
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("OUT_OF_SERVICE equipment cannot be installed directly");
+    }
+
+    @Test
+    void updateStatusNonInstalledWithDepartmentIdRejected() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        WarehouseEquipmentItem item = new WarehouseEquipmentItem();
+        item.setWarehouseId(warehouseId);
+        item.setEquipmentId(equipmentId);
+        item.setStatus(WarehouseEquipmentStatus.RESERVED);
+        item.setActive(true);
+        item.setDeleted(false);
+
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, equipmentId))
+                .thenReturn(Optional.of(item));
+
+        assertThatThrownBy(() -> service.updateStatus(
+                warehouseId,
+                equipmentId,
+                WarehouseEquipmentStatus.AVAILABLE,
+                UUID.randomUUID()
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("departmentId must be null when status is not INSTALLED");
+    }
+
+    @Test
+    void updateStatusAvailableWithoutDepartmentStillWorks() {
         UUID warehouseId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
 
@@ -301,11 +457,58 @@ class WarehouseEquipmentItemServiceTest {
         WarehouseEquipmentItemDto result = service.updateStatus(
                 warehouseId,
                 equipmentId,
-                WarehouseEquipmentStatus.AVAILABLE
+                WarehouseEquipmentStatus.AVAILABLE,
+                null
         );
 
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.AVAILABLE);
         verify(warehouseEquipmentItemRepository).save(item);
+    }
+
+    @Test
+    void updateStatusOutOfServiceWithoutDepartmentStillWorks() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        WarehouseEquipmentItem item = new WarehouseEquipmentItem();
+        item.setWarehouseId(warehouseId);
+        item.setEquipmentId(equipmentId);
+        item.setStatus(WarehouseEquipmentStatus.RESERVED);
+        item.setActive(true);
+        item.setDeleted(false);
+
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, equipmentId))
+                .thenReturn(Optional.of(item));
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        WarehouseEquipmentItemDto result = service.updateStatus(
+                warehouseId,
+                equipmentId,
+                WarehouseEquipmentStatus.OUT_OF_SERVICE,
+                null
+        );
+
+        assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+        verify(warehouseEquipmentItemRepository).save(item);
+    }
+
+    @Test
+    void updateStatusWarehouseItemNotFound() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, equipmentId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updateStatus(
+                warehouseId,
+                equipmentId,
+                WarehouseEquipmentStatus.AVAILABLE,
+                null
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Warehouse equipment item not found");
     }
 
     @Test
@@ -359,6 +562,8 @@ class WarehouseEquipmentItemServiceTest {
         UUID equipmentId = UUID.randomUUID();
         UUID sourceWarehouseId = UUID.randomUUID();
         UUID targetWarehouseId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setDepartmentId(UUID.randomUUID());
 
         WarehouseEquipmentItem existing = new WarehouseEquipmentItem();
         existing.setWarehouseId(sourceWarehouseId);
@@ -370,7 +575,7 @@ class WarehouseEquipmentItemServiceTest {
         when(warehouseRepository.findByIdAndIsDeletedFalse(targetWarehouseId))
                 .thenReturn(Optional.of(activeWarehouse(targetWarehouseId)));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
-                .thenReturn(Optional.of(equipment(equipmentId)));
+                .thenReturn(Optional.of(equipment));
         when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId))
                 .thenReturn(Optional.of(existing));
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
@@ -397,17 +602,21 @@ class WarehouseEquipmentItemServiceTest {
         assertThat(secondSave.isActive()).isTrue();
         assertThat(secondSave.isDeleted()).isFalse();
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+        assertThat(equipment.getDepartmentId()).isNull();
+        verify(equipmentRepository).save(equipment);
     }
 
     @Test
     void transferCreatesOutOfServiceAssignmentWhenNoPreviousActiveAssignmentExists() {
         UUID equipmentId = UUID.randomUUID();
         UUID targetWarehouseId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setDepartmentId(UUID.randomUUID());
 
         when(warehouseRepository.findByIdAndIsDeletedFalse(targetWarehouseId))
                 .thenReturn(Optional.of(activeWarehouse(targetWarehouseId)));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
-                .thenReturn(Optional.of(equipment(equipmentId)));
+                .thenReturn(Optional.of(equipment));
         when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId))
                 .thenReturn(Optional.empty());
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
@@ -428,6 +637,8 @@ class WarehouseEquipmentItemServiceTest {
         assertThat(saved.isActive()).isTrue();
         assertThat(saved.isDeleted()).isFalse();
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+        assertThat(equipment.getDepartmentId()).isNull();
+        verify(equipmentRepository).save(equipment);
     }
 
     private Warehouse activeWarehouse(UUID warehouseId) {
@@ -435,6 +646,12 @@ class WarehouseEquipmentItemServiceTest {
         warehouse.setId(warehouseId);
         warehouse.setActive(true);
         return warehouse;
+    }
+
+    private Department department(UUID departmentId) {
+        Department department = new Department();
+        department.setId(departmentId);
+        return department;
     }
 
     private Equipment equipment(UUID equipmentId) {

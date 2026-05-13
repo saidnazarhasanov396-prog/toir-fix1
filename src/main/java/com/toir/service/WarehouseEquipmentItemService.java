@@ -2,12 +2,14 @@ package com.toir.service;
 
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class WarehouseEquipmentItemService {
 
     private final WarehouseRepository warehouseRepository;
     private final EquipmentRepository equipmentRepository;
+    private final DepartmentRepository departmentRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
 
     @Transactional
@@ -35,7 +38,7 @@ public class WarehouseEquipmentItemService {
             throw RestException.badRequest("Warehouse is not active");
         }
 
-        equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found"));
 
         warehouseEquipmentItemRepository.findActiveByEquipmentId(request.equipmentId())
@@ -51,6 +54,9 @@ public class WarehouseEquipmentItemService {
                     );
                     throw RestException.conflict("Equipment is already assigned to warehouse " + existing.getWarehouseId());
                 });
+
+        equipment.setDepartmentId(null);
+        equipmentRepository.save(equipment);
 
         WarehouseEquipmentItem entity = new WarehouseEquipmentItem();
         entity.setWarehouseId(warehouseId);
@@ -85,8 +91,25 @@ public class WarehouseEquipmentItemService {
     @Transactional
     public WarehouseEquipmentItemDto updateStatus(UUID warehouseId,
                                                   UUID equipmentId,
-                                                  WarehouseEquipmentStatus status) {
+                                                  WarehouseEquipmentStatus status,
+                                                  UUID departmentId) {
         WarehouseEquipmentItem item = getWarehouseEquipmentItemOrThrow(warehouseId, equipmentId);
+        if (status == WarehouseEquipmentStatus.INSTALLED) {
+            if (departmentId == null) {
+                throw RestException.badRequest("departmentId is required when status is INSTALLED");
+            }
+            if (item.getStatus() == WarehouseEquipmentStatus.OUT_OF_SERVICE) {
+                throw RestException.badRequest("OUT_OF_SERVICE equipment cannot be installed directly");
+            }
+            departmentRepository.findByIdAndIsDeletedFalse(departmentId)
+                    .orElseThrow(() -> RestException.notFound("Department not found: " + departmentId));
+            Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                    .orElseThrow(() -> RestException.notFound("Equipment not found"));
+            equipment.setDepartmentId(departmentId);
+            equipmentRepository.save(equipment);
+        } else if (departmentId != null) {
+            throw RestException.badRequest("departmentId must be null when status is not INSTALLED");
+        }
         item.setStatus(status);
         WarehouseEquipmentItem saved = warehouseEquipmentItemRepository.save(item);
         return WarehouseEquipmentItemDto.from(saved);
@@ -109,7 +132,7 @@ public class WarehouseEquipmentItemService {
             throw RestException.badRequest("Warehouse is not active");
         }
 
-        equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found"));
 
         warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)
@@ -118,6 +141,9 @@ public class WarehouseEquipmentItemService {
                     existing.setDeleted(true);
                     warehouseEquipmentItemRepository.save(existing);
                 });
+
+        equipment.setDepartmentId(null);
+        equipmentRepository.save(equipment);
 
         WarehouseEquipmentItem entity = new WarehouseEquipmentItem();
         entity.setWarehouseId(targetWarehouseId);

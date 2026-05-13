@@ -9,6 +9,7 @@ import com.toir.entity.Location;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentPassport;
 import com.toir.entity.equipment.EquipmentType;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.AuditAction;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
@@ -208,6 +209,12 @@ public class EquipmentService {
 
         Map<UUID, Department> deptMap = byId(departmentRepository.findAllByIdInAndIsDeletedFalse(deptIds), Department::getId);
         Map<UUID, Location> locMap = byId(locationRepository.findAllByIdInAndIsDeletedFalse(locIds), Location::getId);
+        Set<UUID> unresolvedLocIds = locIds.stream()
+                .filter(id -> !locMap.containsKey(id))
+                .collect(Collectors.toSet());
+        Map<UUID, Warehouse> warehouseLocFallbackMap = unresolvedLocIds.isEmpty()
+                ? Collections.emptyMap()
+                : byId(warehouseRepository.findAllByIdInAndIsDeletedFalse(unresolvedLocIds), Warehouse::getId);
         Map<UUID, EquipmentType> typeMap = byId(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(typeIds), EquipmentType::getId);
         Map<UUID, Equipment> parentMap = byId(repository.findAllByIdInAndIsDeletedFalse(parentIds), Equipment::getId);
         Map<UUID, EquipmentPassport> passportMap = passportRepository
@@ -218,7 +225,7 @@ public class EquipmentService {
                 .map(e -> EquipmentDto.from(
                         e,
                         deptRef(deptMap.get(e.getDepartmentId())),
-                        locRef(locMap.get(e.getLocationId())),
+                        locRef(e.getLocationId(), locMap, warehouseLocFallbackMap),
                         typeRef(typeMap.get(e.getEquipmentTypeId())),
                         parentRef(parentMap.get(e.getParentId())),
                         passportRef(passportMap.get(e.getId()))))
@@ -244,6 +251,20 @@ public class EquipmentService {
 
     private static EquipmentDto.Ref locRef(Location l) {
         return l == null ? null : new EquipmentDto.Ref(l.getId(), l.getCode(), l.getName());
+    }
+
+    private static EquipmentDto.Ref locRef(UUID locationId,
+                                           Map<UUID, Location> locationMap,
+                                           Map<UUID, Warehouse> warehouseMap) {
+        if (locationId == null) {
+            return null;
+        }
+        Location location = locationMap.get(locationId);
+        if (location != null) {
+            return locRef(location);
+        }
+        Warehouse warehouse = warehouseMap.get(locationId);
+        return warehouse == null ? null : new EquipmentDto.Ref(warehouse.getId(), warehouse.getCode(), warehouse.getName());
     }
 
     private static EquipmentDto.Ref typeRef(EquipmentType t) {
