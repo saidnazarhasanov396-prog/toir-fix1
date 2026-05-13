@@ -41,17 +41,14 @@ public interface WarehouseEquipmentItemRepository extends JpaRepository<Warehous
                                                                                                      @Param("equipmentId") UUID equipmentId);
 
     @Query(value = """
-            SELECT EXISTS(
-                SELECT 1
-                FROM warehouse_equipment_items
-                WHERE equipment_id = cast(:equipmentId as uuid)
-                  AND active = true
-                  AND is_deleted = false
-            )
+            SELECT *
+            FROM warehouse_equipment_items
+            WHERE equipment_id = cast(:equipmentId as uuid)
+              AND active = true
+              AND is_deleted = false
+            LIMIT 1
             """, nativeQuery = true)
-    boolean existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
-
-    Optional<WarehouseEquipmentItem> findByEquipmentIdAndActiveTrueAndIsDeletedFalse(UUID equipmentId);
+    Optional<WarehouseEquipmentItem> findActiveByEquipmentId(@Param("equipmentId") UUID equipmentId);
 
     Page<WarehouseEquipmentItem> findByWarehouseIdAndActiveTrueAndIsDeletedFalse(UUID warehouseId, Pageable pageable);
 
