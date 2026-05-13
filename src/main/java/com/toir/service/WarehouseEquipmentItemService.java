@@ -87,6 +87,36 @@ public class WarehouseEquipmentItemService {
         warehouseEquipmentItemRepository.save(item);
     }
 
+    @Transactional
+    public WarehouseEquipmentItemDto transferEquipmentToWarehouse(UUID equipmentId,
+                                                                  UUID targetWarehouseId,
+                                                                  WarehouseEquipmentStatus targetStatus) {
+        Warehouse targetWarehouse = getWarehouseOrThrow(targetWarehouseId);
+        if (!targetWarehouse.isActive()) {
+            throw RestException.badRequest("Warehouse is not active");
+        }
+
+        equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Equipment not found"));
+
+        warehouseEquipmentItemRepository.findByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)
+                .ifPresent(existing -> {
+                    existing.setActive(false);
+                    existing.setDeleted(true);
+                    warehouseEquipmentItemRepository.save(existing);
+                });
+
+        WarehouseEquipmentItem entity = new WarehouseEquipmentItem();
+        entity.setWarehouseId(targetWarehouseId);
+        entity.setEquipmentId(equipmentId);
+        entity.setStatus(targetStatus);
+        entity.setActive(true);
+        entity.setDeleted(false);
+
+        WarehouseEquipmentItem saved = warehouseEquipmentItemRepository.save(entity);
+        return WarehouseEquipmentItemDto.from(saved);
+    }
+
     private Warehouse getWarehouseOrThrow(UUID warehouseId) {
         return warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
                 .orElseThrow(() -> RestException.notFound("Warehouse not found"));

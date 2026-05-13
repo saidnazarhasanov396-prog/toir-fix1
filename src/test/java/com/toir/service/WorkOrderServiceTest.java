@@ -78,6 +78,9 @@ class WorkOrderServiceTest {
     @Mock
     WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
 
+    @Mock
+    WarehouseEquipmentItemService warehouseEquipmentItemService;
+
     @InjectMocks
     WorkOrderService service;
 
@@ -239,6 +242,7 @@ class WorkOrderServiceTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(replacementEquipmentId)).thenReturn(Optional.of(replacementEquipment));
         when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
                 .thenReturn(Optional.of(item));
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.existsActiveReplacementAssignment(eq(replacementEquipmentId), eq(WorkType.REPLACEMENT), any()))
                 .thenReturn(false);
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
@@ -255,6 +259,8 @@ class WorkOrderServiceTest {
         assertThat(result.warehouseId()).isEqualTo(warehouseId);
         assertThat(result.replacementEquipmentId()).isEqualTo(replacementEquipmentId);
         assertThat(result.replacementEquipmentName()).isEqualTo("Replacement Equipment");
+        assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.RESERVED);
+        verify(warehouseEquipmentItemRepository).save(item);
     }
 
     @Test
@@ -396,19 +402,29 @@ class WorkOrderServiceTest {
         UUID workOrderId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
         UUID replacementEquipmentId = UUID.randomUUID();
+        UUID oldEquipmentReturnWarehouseId = UUID.randomUUID();
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.IN_PROGRESS, warehouseId, replacementEquipmentId);
         WarehouseEquipmentItem item = warehouseItem(warehouseId, replacementEquipmentId, WarehouseEquipmentStatus.RESERVED);
+        Warehouse returnWarehouse = new Warehouse();
+        returnWarehouse.setId(oldEquipmentReturnWarehouseId);
+        returnWarehouse.setActive(true);
 
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
                 .thenReturn(Optional.of(item));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(oldEquipmentReturnWarehouseId)).thenReturn(Optional.of(returnWarehouse));
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubLifecycleDtoLookups(workOrder);
 
-        service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary"));
+        service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", oldEquipmentReturnWarehouseId));
 
         assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.INSTALLED);
+        verify(warehouseEquipmentItemService).transferEquipmentToWarehouse(
+                workOrder.getEquipmentId(),
+                oldEquipmentReturnWarehouseId,
+                WarehouseEquipmentStatus.OUT_OF_SERVICE
+        );
     }
 
     @Test
@@ -433,7 +449,7 @@ class WorkOrderServiceTest {
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubLifecycleDtoLookups(workOrder);
 
-        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary"));
+        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
 
         assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
         assertThat(linkedTask.getStatus()).isEqualTo(com.toir.enums.PprTaskStatus.COMPLETED);
@@ -465,7 +481,7 @@ class WorkOrderServiceTest {
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubLifecycleDtoLookups(workOrder);
 
-        service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary"));
+        service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
 
         assertThat(linkedTask.getStatus()).isEqualTo(com.toir.enums.PprTaskStatus.COMPLETED);
         assertThat(plan.getStatus()).isEqualTo(PlanStatus.CLOSED);
@@ -536,7 +552,7 @@ class WorkOrderServiceTest {
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubLifecycleDtoLookups(workOrder);
 
-        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary"));
+        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
 
         assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
         verifyNoInteractions(pprTaskRepository, pprPlanRepository);
@@ -548,9 +564,48 @@ class WorkOrderServiceTest {
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
 
-        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary")))
+        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Only in-progress work orders can be completed");
+    }
+
+    @Test
+    void completeReplacementWorkOrderWithoutReturnWarehouseShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID replacementEquipmentId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.IN_PROGRESS, warehouseId, replacementEquipmentId);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("oldEquipmentReturnWarehouseId is required");
+    }
+
+    @Test
+    void completeReplacementWorkOrderWithUnknownReturnWarehouseShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID replacementEquipmentId = UUID.randomUUID();
+        UUID oldEquipmentReturnWarehouseId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.IN_PROGRESS, warehouseId, replacementEquipmentId);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(oldEquipmentReturnWarehouseId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", oldEquipmentReturnWarehouseId)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Warehouse not found");
+    }
+
+    @Test
+    void completeNonReplacementWithReturnWarehouseShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", UUID.randomUUID())))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("oldEquipmentReturnWarehouseId must be null");
     }
 
     @Test

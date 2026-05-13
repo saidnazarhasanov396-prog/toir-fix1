@@ -1,7 +1,9 @@
 package com.toir.service.equipment;
 
 import com.toir.dto.equipment.EquipmentDto;
-import com.toir.dto.equipment.EquipmentRequest;
+import com.toir.dto.equipment.EquipmentCreateRequest;
+import com.toir.dto.equipment.EquipmentUpdateRequest;
+import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.entity.Department;
 import com.toir.entity.Location;
 import com.toir.entity.equipment.Equipment;
@@ -20,6 +22,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +45,7 @@ public class EquipmentService {
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentPassportRepository passportRepository;
     private final WarehouseRepository warehouseRepository;
+    private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private final AuditBuilderService auditBuilderService;
     private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
@@ -105,8 +109,11 @@ public class EquipmentService {
     }
 
     @Transactional
-    public EquipmentDto create(EquipmentRequest request) {
+    public EquipmentDto create(EquipmentCreateRequest request) {
         validateClientProvidedCode(request.code());
+        validateCreatePlacement(request.departmentId(), request.warehouseId());
+        validateDepartmentExists(request.departmentId());
+        validateWarehouseExists(request.warehouseId());
         if (repository.existsByInventoryNumberAndIsDeletedFalse(request.inventoryNumber())) {
             throw RestException.conflict("Inventory number already exists: " + request.inventoryNumber());
         }
@@ -115,6 +122,12 @@ public class EquipmentService {
         entity.setCode(nextCode());
         apply(entity, request);
         Equipment saved = repository.save(entity);
+        if (request.warehouseId() != null) {
+            warehouseEquipmentItemService.assign(
+                    request.warehouseId(),
+                    new WarehouseEquipmentAssignRequest(saved.getId(), null)
+            );
+        }
 
         auditBuilderService.log(
                 "equipment",
@@ -129,9 +142,10 @@ public class EquipmentService {
     }
 
     @Transactional
-    public EquipmentDto update(UUID id, EquipmentRequest request) {
+    public EquipmentDto update(UUID id, EquipmentUpdateRequest request) {
         Equipment entity = getOrThrow(id);
         validateClientProvidedCode(request.code());
+        validateDepartmentExists(request.departmentId());
 
 
         applyForUpdate(entity, request);
@@ -245,7 +259,7 @@ public class EquipmentService {
                 p.getPassportNumber(), p.getPowerKw(), p.getVoltageV(), p.getPressureBar());
     }
 
-    private void apply(Equipment entity, EquipmentRequest request) {
+    private void apply(Equipment entity, EquipmentCreateRequest request) {
         entity.setName(request.name());
         entity.setInventoryNumber(request.inventoryNumber());
         entity.setTechnicalNumber(request.technicalNumber());
@@ -271,6 +285,28 @@ public class EquipmentService {
         }
     }
 
+    private void validateCreatePlacement(UUID departmentId, UUID warehouseId) {
+        if (departmentId == null && warehouseId == null) {
+            throw RestException.badRequest("departmentId or warehouseId is required");
+        }
+    }
+
+    private void validateDepartmentExists(UUID departmentId) {
+        if (departmentId == null) {
+            return;
+        }
+        departmentRepository.findByIdAndIsDeletedFalse(departmentId)
+                .orElseThrow(() -> RestException.notFound("Department not found: " + departmentId));
+    }
+
+    private void validateWarehouseExists(UUID warehouseId) {
+        if (warehouseId == null) {
+            return;
+        }
+        warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
+                .orElseThrow(() -> RestException.notFound("Warehouse not found: " + warehouseId));
+    }
+
     private String nextCode() {
         int year = Year.now().getValue();
         String codePrefix = "EQ-" + year + "-";
@@ -287,7 +323,7 @@ public class EquipmentService {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
     }
 
-    private void applyForUpdate(Equipment entity, EquipmentRequest request) {
+    private void applyForUpdate(Equipment entity, EquipmentUpdateRequest request) {
         entity.setName(request.name() != null ? request.name() : entity.getName());
         entity.setInventoryNumber(request.inventoryNumber()  != null ? request.inventoryNumber() : entity.getInventoryNumber());
         entity.setTechnicalNumber(request.technicalNumber() != null ? request.technicalNumber() : entity.getTechnicalNumber());

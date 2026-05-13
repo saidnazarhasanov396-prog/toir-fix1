@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -257,6 +258,82 @@ class WarehouseEquipmentItemServiceTest {
 
         assertThat(item.isActive()).isFalse();
         assertThat(item.isDeleted()).isTrue();
+    }
+
+    @Test
+    void transferDeactivatesPreviousAssignmentAndCreatesTargetOutOfServiceAssignment() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID sourceWarehouseId = UUID.randomUUID();
+        UUID targetWarehouseId = UUID.randomUUID();
+
+        WarehouseEquipmentItem existing = new WarehouseEquipmentItem();
+        existing.setWarehouseId(sourceWarehouseId);
+        existing.setEquipmentId(equipmentId);
+        existing.setStatus(WarehouseEquipmentStatus.INSTALLED);
+        existing.setActive(true);
+        existing.setDeleted(false);
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(targetWarehouseId))
+                .thenReturn(Optional.of(activeWarehouse(targetWarehouseId)));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(equipment(equipmentId)));
+        when(warehouseEquipmentItemRepository.findByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(existing));
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        WarehouseEquipmentItemDto result = service.transferEquipmentToWarehouse(
+                equipmentId,
+                targetWarehouseId,
+                WarehouseEquipmentStatus.OUT_OF_SERVICE
+        );
+
+        ArgumentCaptor<WarehouseEquipmentItem> captor = ArgumentCaptor.forClass(WarehouseEquipmentItem.class);
+        verify(warehouseEquipmentItemRepository, times(2)).save(captor.capture());
+        WarehouseEquipmentItem firstSave = captor.getAllValues().get(0);
+        WarehouseEquipmentItem secondSave = captor.getAllValues().get(1);
+
+        assertThat(firstSave.getEquipmentId()).isEqualTo(equipmentId);
+        assertThat(firstSave.isActive()).isFalse();
+        assertThat(firstSave.isDeleted()).isTrue();
+
+        assertThat(secondSave.getEquipmentId()).isEqualTo(equipmentId);
+        assertThat(secondSave.getWarehouseId()).isEqualTo(targetWarehouseId);
+        assertThat(secondSave.getStatus()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+        assertThat(secondSave.isActive()).isTrue();
+        assertThat(secondSave.isDeleted()).isFalse();
+        assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+    }
+
+    @Test
+    void transferCreatesOutOfServiceAssignmentWhenNoPreviousActiveAssignmentExists() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID targetWarehouseId = UUID.randomUUID();
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(targetWarehouseId))
+                .thenReturn(Optional.of(activeWarehouse(targetWarehouseId)));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(equipment(equipmentId)));
+        when(warehouseEquipmentItemRepository.findByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.empty());
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        WarehouseEquipmentItemDto result = service.transferEquipmentToWarehouse(
+                equipmentId,
+                targetWarehouseId,
+                WarehouseEquipmentStatus.OUT_OF_SERVICE
+        );
+
+        ArgumentCaptor<WarehouseEquipmentItem> captor = ArgumentCaptor.forClass(WarehouseEquipmentItem.class);
+        verify(warehouseEquipmentItemRepository).save(captor.capture());
+        WarehouseEquipmentItem saved = captor.getValue();
+        assertThat(saved.getEquipmentId()).isEqualTo(equipmentId);
+        assertThat(saved.getWarehouseId()).isEqualTo(targetWarehouseId);
+        assertThat(saved.getStatus()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+        assertThat(saved.isActive()).isTrue();
+        assertThat(saved.isDeleted()).isFalse();
+        assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
     }
 
     private Warehouse activeWarehouse(UUID warehouseId) {

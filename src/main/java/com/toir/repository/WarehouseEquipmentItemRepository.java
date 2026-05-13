@@ -42,6 +42,8 @@ public interface WarehouseEquipmentItemRepository extends JpaRepository<Warehous
 
     boolean existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(UUID equipmentId);
 
+    Optional<WarehouseEquipmentItem> findByEquipmentIdAndActiveTrueAndIsDeletedFalse(UUID equipmentId);
+
     Page<WarehouseEquipmentItem> findByWarehouseIdAndActiveTrueAndIsDeletedFalse(UUID warehouseId, Pageable pageable);
 
     Page<WarehouseEquipmentItem> findByWarehouseIdAndStatusAndActiveTrueAndIsDeletedFalse(UUID warehouseId,

@@ -1,7 +1,11 @@
 package com.toir.service.equipment;
 
 import com.toir.dto.equipment.EquipmentDto;
-import com.toir.dto.equipment.EquipmentRequest;
+import com.toir.dto.equipment.EquipmentCreateRequest;
+import com.toir.dto.equipment.EquipmentUpdateRequest;
+import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
+import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
+import com.toir.entity.Department;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.EquipmentCategory;
@@ -16,6 +20,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +33,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
 import java.time.Year;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,6 +46,7 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -62,6 +69,9 @@ class EquipmentServiceTest {
 
     @Mock
     WarehouseRepository warehouseRepository;
+
+    @Mock
+    WarehouseEquipmentItemService warehouseEquipmentItemService;
 
     @Mock
     AuditBuilderService auditBuilderService;
@@ -352,32 +362,124 @@ class EquipmentServiceTest {
     }
 
     @Test
-    void createWithoutCodeGeneratesBackendCodeAndReturnsIt() {
-        int year = Year.now().getValue();
-        String expectedCode = "EQ-" + year + "-0020";
-
-        EquipmentRequest request = createRequest(null, "INV-NEW-1");
-        stubEnrichment();
-        when(repository.existsByInventoryNumberAndIsDeletedFalse("INV-NEW-1")).thenReturn(false);
-        when(repository.maxSequenceByCodePrefix("EQ-" + year + "-")).thenReturn(19L);
-        when(repository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
-        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> {
-            Equipment entity = invocation.getArgument(0);
-            entity.setId(UUID.randomUUID());
-            return entity;
-        });
+    void createWithDepartmentIdOnlyCreatesEquipmentWithoutWarehouseAssignment() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequest(null, "INV-NEW-1", departmentId, null);
+        String expectedCode = stubCreateFlow("INV-NEW-1");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
 
         EquipmentDto created = service.create(request);
 
         assertThat(created.code()).isEqualTo(expectedCode);
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
-        assertThat(entityCaptor.getValue().getCode()).isEqualTo(expectedCode);
+        assertThat(entityCaptor.getValue().getDepartmentId()).isEqualTo(departmentId);
+        verifyNoInteractions(warehouseEquipmentItemService);
+    }
+
+    @Test
+    void createWithWarehouseIdOnlyCreatesEquipmentAndAssignsAvailableWarehouseItem() {
+        UUID warehouseId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequest(null, "INV-NEW-2", null, warehouseId);
+        String expectedCode = stubCreateFlow("INV-NEW-2");
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(warehouseEquipmentItemService.assign(eq(warehouseId), any(WarehouseEquipmentAssignRequest.class)))
+                .thenReturn(new WarehouseEquipmentItemDto(
+                        UUID.randomUUID(),
+                        warehouseId,
+                        UUID.randomUUID(),
+                        WarehouseEquipmentStatus.AVAILABLE,
+                        true,
+                        Instant.now()
+                ));
+
+        EquipmentDto created = service.create(request);
+
+        assertThat(created.code()).isEqualTo(expectedCode);
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        Equipment saved = entityCaptor.getValue();
+        assertThat(saved.getDepartmentId()).isNull();
+
+        ArgumentCaptor<WarehouseEquipmentAssignRequest> assignCaptor =
+                ArgumentCaptor.forClass(WarehouseEquipmentAssignRequest.class);
+        verify(warehouseEquipmentItemService).assign(eq(warehouseId), assignCaptor.capture());
+        assertThat(assignCaptor.getValue().equipmentId()).isEqualTo(saved.getId());
+        assertThat(assignCaptor.getValue().status()).isNull();
+    }
+
+    @Test
+    void createWithBothCreatesEquipmentAndWarehouseAssignment() {
+        UUID departmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequest(null, "INV-NEW-3", departmentId, warehouseId);
+        stubCreateFlow("INV-NEW-3");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(warehouseEquipmentItemService.assign(eq(warehouseId), any(WarehouseEquipmentAssignRequest.class)))
+                .thenReturn(new WarehouseEquipmentItemDto(
+                        UUID.randomUUID(),
+                        warehouseId,
+                        UUID.randomUUID(),
+                        WarehouseEquipmentStatus.AVAILABLE,
+                        true,
+                        Instant.now()
+                ));
+
+        service.create(request);
+
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getDepartmentId()).isEqualTo(departmentId);
+        verify(warehouseEquipmentItemService).assign(eq(warehouseId), any(WarehouseEquipmentAssignRequest.class));
+    }
+
+    @Test
+    void createWithNeitherThrowsBadRequest() {
+        EquipmentCreateRequest request = createRequest(null, "INV-NEW-4", null, null);
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("departmentId or warehouseId is required");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createWithInvalidDepartmentThrowsNotFound() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequest(null, "INV-NEW-5", departmentId, null);
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Department not found: " + departmentId);
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createWithInvalidWarehouseThrowsNotFound() {
+        UUID warehouseId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequest(null, "INV-NEW-6", null, warehouseId);
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Warehouse not found: " + warehouseId);
+
+        verify(repository, never()).save(any());
     }
 
     @Test
     void createWithClientProvidedCodeShouldFailBadRequest() {
-        EquipmentRequest request = createRequest("EQ-2026-0017", "INV-NEW-2");
+        EquipmentCreateRequest request = createRequest("EQ-2026-0017", "INV-NEW-7", UUID.randomUUID(), null);
 
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOf(RestException.class)
@@ -387,14 +489,149 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void assignmentFailureShouldPropagateAndSkipAuditLogging() {
+        UUID warehouseId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequest(null, "INV-NEW-8", null, warehouseId);
+        stubCreateFlowWithoutEnrichment("INV-NEW-8");
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(warehouseEquipmentItemService.assign(eq(warehouseId), any(WarehouseEquipmentAssignRequest.class)))
+                .thenThrow(RestException.conflict("Equipment is already assigned to another warehouse"));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("already assigned to another warehouse");
+
+        verify(repository).save(any(Equipment.class));
+        verify(auditBuilderService, never()).log(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void updateWithClientProvidedCodeShouldFailBadRequest() {
         UUID id = UUID.randomUUID();
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(equipment("EQ-2026-0001")));
-        EquipmentRequest request = updateRequestWithCode("EQ-2026-0002");
+        EquipmentUpdateRequest request = updateRequestWithCode("EQ-2026-0002");
 
         assertThatThrownBy(() -> service.update(id, request))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Equipment code is generated by system and must not be provided");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateWithoutDepartmentIdPreservesExistingNullableDepartment() {
+        UUID id = UUID.randomUUID();
+        Equipment existing = equipment("EQ-2026-0003");
+        existing.setId(id);
+        existing.setDepartmentId(null);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+        EquipmentUpdateRequest request = new EquipmentUpdateRequest(
+                null,
+                "Updated Name",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        EquipmentDto updated = service.update(id, request);
+
+        assertThat(updated.name()).isEqualTo("Updated Name");
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getDepartmentId()).isNull();
+        verify(departmentRepository, never()).findByIdAndIsDeletedFalse(any());
+    }
+
+    @Test
+    void updateWithDepartmentIdValidatesAndApplies() {
+        UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment existing = equipment("EQ-2026-0004");
+        existing.setId(id);
+        existing.setDepartmentId(null);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+        EquipmentUpdateRequest request = new EquipmentUpdateRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        EquipmentDto updated = service.update(id, request);
+
+        assertThat(updated.departmentId()).isEqualTo(departmentId);
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getDepartmentId()).isEqualTo(departmentId);
+        verify(departmentRepository).findByIdAndIsDeletedFalse(departmentId);
+    }
+
+    @Test
+    void updateWithInvalidDepartmentIdThrowsNotFound() {
+        UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment existing = equipment("EQ-2026-0005");
+        existing.setId(id);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.empty());
+        EquipmentUpdateRequest request = new EquipmentUpdateRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThatThrownBy(() -> service.update(id, request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Department not found: " + departmentId);
 
         verify(repository, never()).save(any());
     }
@@ -412,8 +649,8 @@ class EquipmentServiceTest {
         return equipment;
     }
 
-    private EquipmentRequest createRequest(String code, String inventoryNumber) {
-        return new EquipmentRequest(
+    private EquipmentCreateRequest createRequest(String code, String inventoryNumber, UUID departmentId, UUID warehouseId) {
+        return new EquipmentCreateRequest(
                 code,
                 "Compressor",
                 inventoryNumber,
@@ -421,7 +658,8 @@ class EquipmentServiceTest {
                 "SN-1",
                 "Model X",
                 UUID.randomUUID(),
-                UUID.randomUUID(),
+                departmentId,
+                warehouseId,
                 null,
                 null,
                 null,
@@ -435,8 +673,44 @@ class EquipmentServiceTest {
         );
     }
 
-    private EquipmentRequest updateRequestWithCode(String code) {
-        return new EquipmentRequest(
+    private String stubCreateFlow(String inventoryNumber) {
+        int year = Year.now().getValue();
+        String expectedCode = "EQ-" + year + "-0020";
+        stubEnrichment();
+        when(repository.existsByInventoryNumberAndIsDeletedFalse(inventoryNumber)).thenReturn(false);
+        when(repository.maxSequenceByCodePrefix("EQ-" + year + "-")).thenReturn(19L);
+        when(repository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment entity = invocation.getArgument(0);
+            entity.setId(UUID.randomUUID());
+            return entity;
+        });
+        return expectedCode;
+    }
+
+    private void stubCreateFlowWithoutEnrichment(String inventoryNumber) {
+        int year = Year.now().getValue();
+        String expectedCode = "EQ-" + year + "-0020";
+        when(repository.existsByInventoryNumberAndIsDeletedFalse(inventoryNumber)).thenReturn(false);
+        when(repository.maxSequenceByCodePrefix("EQ-" + year + "-")).thenReturn(19L);
+        when(repository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment entity = invocation.getArgument(0);
+            entity.setId(UUID.randomUUID());
+            return entity;
+        });
+    }
+
+    private Department department(UUID id) {
+        Department department = new Department();
+        department.setId(id);
+        department.setCode("DEP-001");
+        department.setName("Main department");
+        return department;
+    }
+
+    private EquipmentUpdateRequest updateRequestWithCode(String code) {
+        return new EquipmentUpdateRequest(
                 code,
                 null,
                 null,

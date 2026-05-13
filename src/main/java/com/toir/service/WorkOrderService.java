@@ -55,6 +55,7 @@ public class WorkOrderService {
     private final RepairRequestRepository repairRequestRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
+    private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
 
@@ -104,6 +105,7 @@ public class WorkOrderService {
         if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Work order number already exists: " + request.number());
         }
+        reserveReplacementEquipmentOnCreate(request, effectiveWorkType);
         WorkOrder entity = new WorkOrder();
         entity.setNumber(request.number());
         entity.setTitle(request.title());
@@ -196,9 +198,17 @@ public class WorkOrderService {
         if (request.summary() != null && !request.summary().isBlank()) {
             entity.setSummary(request.summary());
         }
+        validateCompleteRequestForReplacement(entity, request);
         entity.setStatus(WorkOrderStatus.COMPLETED);
         entity.setCompletedAt(Instant.now());
         updateReplacementEquipmentStatus(entity, WarehouseEquipmentStatus.INSTALLED);
+        if (isReplacementWorkOrder(entity)) {
+            warehouseEquipmentItemService.transferEquipmentToWarehouse(
+                    entity.getEquipmentId(),
+                    request.oldEquipmentReturnWarehouseId(),
+                    WarehouseEquipmentStatus.OUT_OF_SERVICE
+            );
+        }
         completeLinkedPprTask(entity);
 
         WorkOrder saved = repository.save(entity);
@@ -447,6 +457,37 @@ public class WorkOrderService {
         }
         if (request.warehouseId() != null || request.replacementEquipmentId() != null) {
             throw RestException.badRequest("warehouseId and replacementEquipmentId must be null when workType is not REPLACEMENT");
+        }
+    }
+
+    private void reserveReplacementEquipmentOnCreate(WorkOrderRequest request, WorkType effectiveWorkType) {
+        if (effectiveWorkType != WorkType.REPLACEMENT) {
+            return;
+        }
+        WarehouseEquipmentItem item = warehouseEquipmentItemRepository
+                .findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
+                        request.warehouseId(),
+                        request.replacementEquipmentId()
+                )
+                .orElseThrow(() -> RestException.badRequest("Replacement equipment does not belong to selected warehouse"));
+        if (item.getStatus() != WarehouseEquipmentStatus.AVAILABLE) {
+            throw RestException.badRequest("Replacement equipment must be AVAILABLE");
+        }
+        item.setStatus(WarehouseEquipmentStatus.RESERVED);
+        warehouseEquipmentItemRepository.save(item);
+    }
+
+    private void validateCompleteRequestForReplacement(WorkOrder entity, CompleteWorkOrderRequest request) {
+        if (isReplacementWorkOrder(entity)) {
+            if (request.oldEquipmentReturnWarehouseId() == null) {
+                throw RestException.badRequest("oldEquipmentReturnWarehouseId is required when workType is REPLACEMENT");
+            }
+            warehouseRepository.findByIdAndIsDeletedFalse(request.oldEquipmentReturnWarehouseId())
+                    .orElseThrow(() -> RestException.notFound("Warehouse not found: " + request.oldEquipmentReturnWarehouseId()));
+            return;
+        }
+        if (request.oldEquipmentReturnWarehouseId() != null) {
+            throw RestException.badRequest("oldEquipmentReturnWarehouseId must be null when workType is not REPLACEMENT");
         }
     }
 

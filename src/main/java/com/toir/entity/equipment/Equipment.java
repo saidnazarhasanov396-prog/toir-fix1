@@ -38,7 +38,7 @@ public class Equipment extends BaseEntity {
     @Column(name = "equipment_type_id", nullable = false)
     private UUID equipmentTypeId;
 
-    @Column(name = "department_id", nullable = false)
+    @Column(name = "department_id")
     private UUID departmentId;
 
     @Column(name = "location_id")
