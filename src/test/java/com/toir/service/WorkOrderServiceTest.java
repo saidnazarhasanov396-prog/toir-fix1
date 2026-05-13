@@ -404,7 +404,12 @@ class WorkOrderServiceTest {
         UUID replacementEquipmentId = UUID.randomUUID();
         UUID oldEquipmentReturnWarehouseId = UUID.randomUUID();
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.IN_PROGRESS, warehouseId, replacementEquipmentId);
+        UUID workOrderDepartmentId = UUID.randomUUID();
+        workOrder.setDepartmentId(workOrderDepartmentId);
         WarehouseEquipmentItem item = warehouseItem(warehouseId, replacementEquipmentId, WarehouseEquipmentStatus.RESERVED);
+        Equipment replacementEquipment = new Equipment();
+        replacementEquipment.setId(replacementEquipmentId);
+        replacementEquipment.setDepartmentId(UUID.randomUUID());
         Warehouse returnWarehouse = new Warehouse();
         returnWarehouse.setId(oldEquipmentReturnWarehouseId);
         returnWarehouse.setActive(true);
@@ -413,6 +418,8 @@ class WorkOrderServiceTest {
         when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
                 .thenReturn(Optional.of(item));
         when(warehouseRepository.findByIdAndIsDeletedFalse(oldEquipmentReturnWarehouseId)).thenReturn(Optional.of(returnWarehouse));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(replacementEquipmentId)).thenReturn(Optional.of(replacementEquipment));
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubLifecycleDtoLookups(workOrder);
@@ -420,6 +427,8 @@ class WorkOrderServiceTest {
         service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", oldEquipmentReturnWarehouseId));
 
         assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.INSTALLED);
+        assertThat(replacementEquipment.getDepartmentId()).isEqualTo(workOrderDepartmentId);
+        verify(equipmentRepository).save(replacementEquipment);
         verify(warehouseEquipmentItemService).transferEquipmentToWarehouse(
                 workOrder.getEquipmentId(),
                 oldEquipmentReturnWarehouseId,

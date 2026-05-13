@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.WarehouseEquipmentStatus;
@@ -35,7 +36,7 @@ public class WarehouseEquipmentItemService {
             throw RestException.badRequest("Warehouse is not active");
         }
 
-        equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found"));
 
         warehouseEquipmentItemRepository.findActiveByEquipmentId(request.equipmentId())
@@ -51,6 +52,9 @@ public class WarehouseEquipmentItemService {
                     );
                     throw RestException.conflict("Equipment is already assigned to warehouse " + existing.getWarehouseId());
                 });
+
+        equipment.setDepartmentId(null);
+        equipmentRepository.save(equipment);
 
         WarehouseEquipmentItem entity = new WarehouseEquipmentItem();
         entity.setWarehouseId(warehouseId);
@@ -109,7 +113,7 @@ public class WarehouseEquipmentItemService {
             throw RestException.badRequest("Warehouse is not active");
         }
 
-        equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found"));
 
         warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)
@@ -118,6 +122,9 @@ public class WarehouseEquipmentItemService {
                     existing.setDeleted(true);
                     warehouseEquipmentItemRepository.save(existing);
                 });
+
+        equipment.setDepartmentId(null);
+        equipmentRepository.save(equipment);
 
         WarehouseEquipmentItem entity = new WarehouseEquipmentItem();
         entity.setWarehouseId(targetWarehouseId);

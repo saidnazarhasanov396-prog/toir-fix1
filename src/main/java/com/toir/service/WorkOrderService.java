@@ -203,6 +203,7 @@ public class WorkOrderService {
         entity.setCompletedAt(Instant.now());
         updateReplacementEquipmentStatus(entity, WarehouseEquipmentStatus.INSTALLED);
         if (isReplacementWorkOrder(entity)) {
+            assignReplacementEquipmentToWorkOrderDepartment(entity);
             warehouseEquipmentItemService.transferEquipmentToWarehouse(
                     entity.getEquipmentId(),
                     request.oldEquipmentReturnWarehouseId(),
@@ -489,6 +490,13 @@ public class WorkOrderService {
         if (request.oldEquipmentReturnWarehouseId() != null) {
             throw RestException.badRequest("oldEquipmentReturnWarehouseId must be null when workType is not REPLACEMENT");
         }
+    }
+
+    private void assignReplacementEquipmentToWorkOrderDepartment(WorkOrder workOrder) {
+        Equipment replacementEquipment = equipmentRepository.findByIdAndIsDeletedFalse(workOrder.getReplacementEquipmentId())
+                .orElseThrow(() -> RestException.notFound("Replacement equipment not found: " + workOrder.getReplacementEquipmentId()));
+        replacementEquipment.setDepartmentId(workOrder.getDepartmentId());
+        equipmentRepository.save(replacementEquipment);
     }
 
     private WorkOrderDto toDto(WorkOrder entity) {

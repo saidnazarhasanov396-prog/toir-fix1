@@ -6,6 +6,7 @@ import com.toir.dto.equipment.EquipmentUpdateRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
 import com.toir.entity.Department;
+import com.toir.entity.Location;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.EquipmentCategory;
@@ -139,6 +140,108 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void enrichPopulatesLocationRef() {
+        UUID locationId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-LOC-1");
+        equipment.setLocationId(locationId);
+
+        Location location = new Location();
+        location.setId(locationId);
+        location.setCode("LOC-001");
+        location.setName("Main Workshop");
+
+        stubEnrichment();
+        when(repository.search(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1));
+        when(locationRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of(location));
+
+        Page<EquipmentDto> result = service.search(null, null, null, null, null, false, null, 0, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        EquipmentDto dto = result.getContent().getFirst();
+        assertThat(dto.locationId()).isEqualTo(locationId);
+        assertThat(dto.location()).isNotNull();
+        assertThat(dto.location().id()).isEqualTo(locationId);
+        assertThat(dto.location().code()).isEqualTo("LOC-001");
+        assertThat(dto.location().name()).isEqualTo("Main Workshop");
+    }
+
+    @Test
+    void enrichAvoidsFailureWhenLocationMissing() {
+        UUID locationId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-LOC-2");
+        equipment.setLocationId(locationId);
+
+        stubEnrichment();
+        when(repository.search(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1));
+        when(locationRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
+        stubWarehouseLocationFallback(List.of());
+
+        Page<EquipmentDto> result = service.search(null, null, null, null, null, false, null, 0, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().locationId()).isEqualTo(locationId);
+        assertThat(result.getContent().getFirst().location()).isNull();
+    }
+
+    @Test
+    void enrichFallsBackToWarehouseWhenLocationIdMatchesWarehouse() {
+        UUID legacyWarehouseId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-LOC-3");
+        equipment.setLocationId(legacyWarehouseId);
+
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(legacyWarehouseId);
+        warehouse.setCode("WH-001");
+        warehouse.setName("Spare Parts Warehouse");
+
+        stubEnrichment();
+        when(repository.search(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1));
+        when(locationRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
+        stubWarehouseLocationFallback(List.of(warehouse));
+
+        Page<EquipmentDto> result = service.search(null, null, null, null, null, false, null, 0, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        EquipmentDto dto = result.getContent().getFirst();
+        assertThat(dto.locationId()).isEqualTo(legacyWarehouseId);
+        assertThat(dto.location()).isNotNull();
+        assertThat(dto.location().id()).isEqualTo(legacyWarehouseId);
+        assertThat(dto.location().code()).isEqualTo("WH-001");
+        assertThat(dto.location().name()).isEqualTo("Spare Parts Warehouse");
+    }
+
+    @Test
+    void findByIdPopulatesLocationRef() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID locationId = UUID.randomUUID();
+
+        Equipment equipment = equipment("EQ-LOC-4");
+        equipment.setId(equipmentId);
+        equipment.setLocationId(locationId);
+
+        Location location = new Location();
+        location.setId(locationId);
+        location.setCode("LOC-010");
+        location.setName("Compressor Zone");
+
+        stubEnrichment();
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(locationRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of(location));
+
+        EquipmentDto dto = service.findById(equipmentId);
+
+        assertThat(dto.id()).isEqualTo(equipmentId);
+        assertThat(dto.locationId()).isEqualTo(locationId);
+        assertThat(dto.location()).isNotNull();
+        assertThat(dto.location().id()).isEqualTo(locationId);
+        assertThat(dto.location().code()).isEqualTo("LOC-010");
+        assertThat(dto.location().name()).isEqualTo("Compressor Zone");
+    }
+
+    @Test
     void availableForReplacementWithoutWarehouseIdFails() {
         assertThatThrownBy(() -> service.search(
                 null, null, null, null, null, true, null, 0, 20
@@ -150,13 +253,20 @@ class EquipmentServiceTest {
     @Test
     void availableForReplacementReturnsOnlyAvailableFromSelectedWarehouse() {
         UUID warehouseId = UUID.randomUUID();
+        UUID locationId = UUID.randomUUID();
         Warehouse warehouse = new Warehouse();
         warehouse.setId(warehouseId);
         Equipment equipment = equipment("EQ-2");
+        equipment.setLocationId(locationId);
+        Location location = new Location();
+        location.setId(locationId);
+        location.setCode("LOC-200");
+        location.setName("Replacement Yard");
         Page<Equipment> page = new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1);
 
         stubEnrichment();
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(locationRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of(location));
         when(repository.searchAvailableForReplacement(
                 eq(warehouseId),
                 eq(WarehouseEquipmentStatus.AVAILABLE),
@@ -171,6 +281,9 @@ class EquipmentServiceTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().getFirst().code()).isEqualTo("EQ-2");
+        assertThat(result.getContent().getFirst().location()).isNotNull();
+        assertThat(result.getContent().getFirst().location().id()).isEqualTo(locationId);
+        assertThat(result.getContent().getFirst().location().name()).isEqualTo("Replacement Yard");
     }
 
     @Test
@@ -738,5 +851,9 @@ class EquipmentServiceTest {
         when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
         when(repository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
         when(passportRepository.findAllByEquipmentIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
+    }
+
+    private void stubWarehouseLocationFallback(List<Warehouse> warehouses) {
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(warehouses);
     }
 }
