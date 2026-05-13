@@ -11,6 +11,8 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class WarehouseEquipmentItemService {
+    private static final Logger log = LoggerFactory.getLogger(WarehouseEquipmentItemService.class);
 
     private final WarehouseRepository warehouseRepository;
     private final EquipmentRepository equipmentRepository;
@@ -35,9 +38,19 @@ public class WarehouseEquipmentItemService {
         equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found"));
 
-        if (warehouseEquipmentItemRepository.existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(request.equipmentId())) {
-            throw RestException.conflict("Equipment is already assigned to another warehouse");
-        }
+        warehouseEquipmentItemRepository.findActiveByEquipmentId(request.equipmentId())
+                .ifPresent(existing -> {
+                    log.warn(
+                            "Warehouse equipment assignment conflict: itemId={}, equipmentId={}, warehouseId={}, status={}, active={}, isDeleted={}",
+                            existing.getId(),
+                            existing.getEquipmentId(),
+                            existing.getWarehouseId(),
+                            existing.getStatus(),
+                            existing.isActive(),
+                            existing.isDeleted()
+                    );
+                    throw RestException.conflict("Equipment is already assigned to warehouse " + existing.getWarehouseId());
+                });
 
         WarehouseEquipmentItem entity = new WarehouseEquipmentItem();
         entity.setWarehouseId(warehouseId);
@@ -99,7 +112,7 @@ public class WarehouseEquipmentItemService {
         equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found"));
 
-        warehouseEquipmentItemRepository.findByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)
+        warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)
                 .ifPresent(existing -> {
                     existing.setActive(false);
                     existing.setDeleted(true);

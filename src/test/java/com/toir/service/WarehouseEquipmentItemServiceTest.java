@@ -58,7 +58,7 @@ class WarehouseEquipmentItemServiceTest {
 
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(warehouseEquipmentItemRepository.existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(false);
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)).thenReturn(Optional.empty());
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
                 .thenAnswer(invocation -> {
                     WarehouseEquipmentItem item = invocation.getArgument(0);
@@ -90,7 +90,7 @@ class WarehouseEquipmentItemServiceTest {
 
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(activeWarehouse(warehouseId)));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
-        when(warehouseEquipmentItemRepository.existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(false);
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)).thenReturn(Optional.empty());
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -110,7 +110,7 @@ class WarehouseEquipmentItemServiceTest {
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(activeWarehouse(warehouseId)));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
         // Historical row is inactive, so active+non-deleted existence check must be false.
-        when(warehouseEquipmentItemRepository.existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(false);
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)).thenReturn(Optional.empty());
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -131,7 +131,7 @@ class WarehouseEquipmentItemServiceTest {
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(activeWarehouse(warehouseId)));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
         // Historical row is soft-deleted, so active+non-deleted existence check must be false.
-        when(warehouseEquipmentItemRepository.existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(false);
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)).thenReturn(Optional.empty());
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -151,7 +151,7 @@ class WarehouseEquipmentItemServiceTest {
 
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(activeWarehouse(warehouseId)));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
-        when(warehouseEquipmentItemRepository.existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(false);
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)).thenReturn(Optional.empty());
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -215,14 +215,47 @@ class WarehouseEquipmentItemServiceTest {
         UUID equipmentId = UUID.randomUUID();
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(activeWarehouse(warehouseId)));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
-        when(warehouseEquipmentItemRepository.existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(true);
+        UUID assignedWarehouseId = UUID.randomUUID();
+        WarehouseEquipmentItem existingAssignment = new WarehouseEquipmentItem();
+        existingAssignment.setWarehouseId(assignedWarehouseId);
+        existingAssignment.setEquipmentId(equipmentId);
+        existingAssignment.setStatus(WarehouseEquipmentStatus.AVAILABLE);
+        existingAssignment.setActive(true);
+        existingAssignment.setDeleted(false);
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)).thenReturn(Optional.of(existingAssignment));
 
         assertThatThrownBy(() -> service.assign(
                 warehouseId,
                 new WarehouseEquipmentAssignRequest(equipmentId, WarehouseEquipmentStatus.AVAILABLE)
         ))
                 .isInstanceOf(RestException.class)
-                .hasMessage("Equipment is already assigned to another warehouse");
+                .hasMessageContaining("Equipment is already assigned to warehouse")
+                .hasMessageContaining(assignedWarehouseId.toString());
+    }
+
+    @Test
+    void assignFailsIfEquipmentAlreadyAssignedEvenWhenAssignedWarehouseIsInactive() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID inactiveAssignedWarehouseId = UUID.randomUUID();
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(activeWarehouse(warehouseId)));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+
+        WarehouseEquipmentItem existingAssignment = new WarehouseEquipmentItem();
+        existingAssignment.setWarehouseId(inactiveAssignedWarehouseId);
+        existingAssignment.setEquipmentId(equipmentId);
+        existingAssignment.setStatus(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+        existingAssignment.setActive(true);
+        existingAssignment.setDeleted(false);
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)).thenReturn(Optional.of(existingAssignment));
+
+        assertThatThrownBy(() -> service.assign(
+                warehouseId,
+                new WarehouseEquipmentAssignRequest(equipmentId, WarehouseEquipmentStatus.AVAILABLE)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Equipment is already assigned to warehouse")
+                .hasMessageContaining(inactiveAssignedWarehouseId.toString());
     }
 
     @Test
@@ -338,7 +371,7 @@ class WarehouseEquipmentItemServiceTest {
                 .thenReturn(Optional.of(activeWarehouse(targetWarehouseId)));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
                 .thenReturn(Optional.of(equipment(equipmentId)));
-        when(warehouseEquipmentItemRepository.findByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId))
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId))
                 .thenReturn(Optional.of(existing));
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -375,7 +408,7 @@ class WarehouseEquipmentItemServiceTest {
                 .thenReturn(Optional.of(activeWarehouse(targetWarehouseId)));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
                 .thenReturn(Optional.of(equipment(equipmentId)));
-        when(warehouseEquipmentItemRepository.findByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId))
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId))
                 .thenReturn(Optional.empty());
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
