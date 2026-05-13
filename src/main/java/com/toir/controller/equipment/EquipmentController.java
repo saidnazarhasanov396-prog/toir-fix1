@@ -1,10 +1,12 @@
 package com.toir.controller.equipment;
+import com.toir.dto.equipment.EquipmentCreateRequest;
 import com.toir.dto.equipment.EquipmentDto;
-import com.toir.dto.equipment.EquipmentRequest;
+import com.toir.dto.equipment.EquipmentUpdateRequest;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -63,12 +65,18 @@ public class EquipmentController {
     }
 
     @PostMapping
-    public ResponseEntity<EquipmentDto> create(@Valid @RequestBody EquipmentRequest request) {
+    @Operation(
+            summary = "Create equipment",
+            description = "At least one of departmentId or warehouseId is required. " +
+                    "If warehouseId is provided, the created equipment is assigned in warehouse equipment as AVAILABLE. " +
+                    "Equipment code is system-generated and must not be provided by client."
+    )
+    public ResponseEntity<EquipmentDto> create(@Valid @RequestBody EquipmentCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<EquipmentDto> update(@PathVariable UUID id, @Valid @RequestBody EquipmentRequest request) {
+    public ResponseEntity<EquipmentDto> update(@PathVariable UUID id, @Valid @RequestBody EquipmentUpdateRequest request) {
         return ResponseEntity.ok(service.update(id, request));
     }
 

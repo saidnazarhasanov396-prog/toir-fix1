@@ -53,36 +53,11 @@ class EquipmentControllerContractTest {
     }
 
     @Test
-    void createWithoutCodeReturnsCreatedWithGeneratedCode() throws Exception {
+    void createWithDepartmentIdOnlyReturnsCreated() throws Exception {
         UUID id = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
-        EquipmentDto dto = new EquipmentDto(
-                id,
-                "EQ-2026-0020",
-                "Compressor A",
-                "INV-1",
-                null,
-                null,
-                null,
-                equipmentTypeId,
-                departmentId,
-                null,
-                null,
-                null,
-                null,
-                null,
-                EquipmentStatus.ACTIVE,
-                EquipmentCategory.PRODUCTION_EQUIPMENT,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        );
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, departmentId);
         when(service.create(any())).thenReturn(dto);
 
         mockMvc.perform(post("/api/v1/equipment")
@@ -101,6 +76,111 @@ class EquipmentControllerContractTest {
     }
 
     @Test
+    void createWithWarehouseIdOnlyReturnsCreated() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, null);
+        when(service.create(any())).thenReturn(dto);
+
+        mockMvc.perform(post("/api/v1/equipment")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Compressor A",
+                                  "inventoryNumber": "INV-2",
+                                  "equipmentTypeId": "%s",
+                                  "warehouseId": "%s"
+                                }
+                                """.formatted(equipmentTypeId, warehouseId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(id.toString()));
+    }
+
+    @Test
+    void createWithBothDepartmentAndWarehouseReturnsCreated() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, departmentId);
+        when(service.create(any())).thenReturn(dto);
+
+        mockMvc.perform(post("/api/v1/equipment")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Compressor A",
+                                  "inventoryNumber": "INV-3",
+                                  "equipmentTypeId": "%s",
+                                  "departmentId": "%s",
+                                  "warehouseId": "%s"
+                                }
+                                """.formatted(equipmentTypeId, departmentId, warehouseId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.departmentId").value(departmentId.toString()));
+    }
+
+    @Test
+    void createWithNeitherDepartmentNorWarehouseReturnsBadRequest() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        when(service.create(any())).thenThrow(RestException.badRequest("departmentId or warehouseId is required"));
+
+        mockMvc.perform(post("/api/v1/equipment")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Compressor A",
+                                  "inventoryNumber": "INV-4",
+                                  "equipmentTypeId": "%s"
+                                }
+                                """.formatted(equipmentTypeId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("departmentId or warehouseId is required"));
+    }
+
+    @Test
+    void createWithInvalidWarehouseIdReturnsNotFound() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        when(service.create(any())).thenThrow(RestException.notFound("Warehouse not found: " + warehouseId));
+
+        mockMvc.perform(post("/api/v1/equipment")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Compressor A",
+                                  "inventoryNumber": "INV-5",
+                                  "equipmentTypeId": "%s",
+                                  "warehouseId": "%s"
+                                }
+                                """.formatted(equipmentTypeId, warehouseId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Warehouse not found: " + warehouseId));
+    }
+
+    @Test
+    void createWithInvalidDepartmentIdReturnsNotFound() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(service.create(any())).thenThrow(RestException.notFound("Department not found: " + departmentId));
+
+        mockMvc.perform(post("/api/v1/equipment")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Compressor A",
+                                  "inventoryNumber": "INV-6",
+                                  "equipmentTypeId": "%s",
+                                  "departmentId": "%s"
+                                }
+                                """.formatted(equipmentTypeId, departmentId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Department not found: " + departmentId));
+    }
+
+    @Test
     void createWithClientProvidedCodeReturnsBadRequest() throws Exception {
         UUID equipmentTypeId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
@@ -112,13 +192,74 @@ class EquipmentControllerContractTest {
                                 {
                                   "code": "EQ-2026-0017",
                                   "name": "Compressor A",
-                                  "inventoryNumber": "INV-2",
+                                  "inventoryNumber": "INV-7",
                                   "equipmentTypeId": "%s",
                                   "departmentId": "%s"
                                 }
                                 """.formatted(equipmentTypeId, departmentId)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Equipment code is generated by system and must not be provided"));
+    }
+
+    @Test
+    void updateWarehouseOnlyEquipmentWithoutDepartmentIdReturnsSuccess() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, null);
+        when(service.update(eq(id), any())).thenReturn(dto);
+
+        mockMvc.perform(put("/api/v1/equipment/{id}", id)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Compressor A Updated",
+                                  "inventoryNumber": "INV-2",
+                                  "equipmentTypeId": "%s"
+                                }
+                                """.formatted(equipmentTypeId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.code").value("EQ-2026-0020"));
+    }
+
+    @Test
+    void updateWithDepartmentIdReturnsSuccess() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, departmentId);
+        when(service.update(eq(id), any())).thenReturn(dto);
+
+        mockMvc.perform(put("/api/v1/equipment/{id}", id)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Compressor A Updated",
+                                  "inventoryNumber": "INV-3",
+                                  "equipmentTypeId": "%s",
+                                  "departmentId": "%s"
+                                }
+                                """.formatted(equipmentTypeId, departmentId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.departmentId").value(departmentId.toString()));
+    }
+
+    @Test
+    void updateWithInvalidDepartmentIdReturnsNotFound() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(service.update(eq(id), any())).thenThrow(RestException.notFound("Department not found: " + departmentId));
+
+        mockMvc.perform(put("/api/v1/equipment/{id}", id)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "departmentId": "%s"
+                                }
+                                """.formatted(departmentId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Department not found: " + departmentId));
     }
 
     @Test
@@ -177,6 +318,35 @@ class EquipmentControllerContractTest {
         assertNull(result.getResolvedException());
 
         verify(service).search(null, null, null, null, null, false, "compressor", 0, 20);
+    }
+
+    private EquipmentDto equipmentDto(UUID id, UUID equipmentTypeId, UUID departmentId) {
+        return new EquipmentDto(
+                id,
+                "EQ-2026-0020",
+                "Compressor A",
+                "INV-1",
+                null,
+                null,
+                null,
+                equipmentTypeId,
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     private void assertNoResolvedException(MvcResult result) {
