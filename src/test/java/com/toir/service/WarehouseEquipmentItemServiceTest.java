@@ -103,6 +103,67 @@ class WarehouseEquipmentItemServiceTest {
     }
 
     @Test
+    void assignSucceedsWhenOnlyInactiveHistoricalRowExists() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(activeWarehouse(warehouseId)));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+        // Historical row is inactive, so active+non-deleted existence check must be false.
+        when(warehouseEquipmentItemRepository.existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(false);
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        WarehouseEquipmentItemDto result = service.assign(
+                warehouseId,
+                new WarehouseEquipmentAssignRequest(equipmentId, null)
+        );
+
+        assertThat(result.equipmentId()).isEqualTo(equipmentId);
+        assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.AVAILABLE);
+    }
+
+    @Test
+    void assignSucceedsWhenOnlyDeletedHistoricalRowExists() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(activeWarehouse(warehouseId)));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+        // Historical row is soft-deleted, so active+non-deleted existence check must be false.
+        when(warehouseEquipmentItemRepository.existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(false);
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        WarehouseEquipmentItemDto result = service.assign(
+                warehouseId,
+                new WarehouseEquipmentAssignRequest(equipmentId, null)
+        );
+
+        assertThat(result.equipmentId()).isEqualTo(equipmentId);
+        assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.AVAILABLE);
+    }
+
+    @Test
+    void assignExplicitOutOfServiceStatusIsRespected() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(activeWarehouse(warehouseId)));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+        when(warehouseEquipmentItemRepository.existsByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(false);
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        WarehouseEquipmentItemDto result = service.assign(
+                warehouseId,
+                new WarehouseEquipmentAssignRequest(equipmentId, WarehouseEquipmentStatus.OUT_OF_SERVICE)
+        );
+
+        assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+    }
+
+    @Test
     void assignFailsIfWarehouseNotFound() {
         UUID warehouseId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
