@@ -4,6 +4,8 @@ import com.toir.controller.equipment.EquipmentController;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.PlacementType;
+import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.security.SecurityScope;
@@ -209,7 +211,7 @@ class EquipmentControllerContractTest {
     void updateWarehouseOnlyEquipmentWithoutDepartmentIdReturnsSuccess() throws Exception {
         UUID id = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
-        EquipmentDto dto = equipmentDto(id, equipmentTypeId, null);
+        EquipmentDto dto = equipmentDto(id, "EQ-2026-0020", equipmentTypeId, null);
         when(service.update(eq(id), any())).thenReturn(dto);
 
         mockMvc.perform(put("/api/v1/equipment/{id}", id)
@@ -342,6 +344,114 @@ class EquipmentControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].locationId").value(missingLocationId.toString()))
                 .andExpect(jsonPath("$.content[0].location").value(nullValue()));
+    }
+
+    @Test
+    void listResponseIncludesPlacementObjectForDepartmentEquipment() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID locationId = UUID.randomUUID();
+        EquipmentDto.Ref departmentRef = new EquipmentDto.Ref(departmentId, "DEP-001", "Main Department");
+        EquipmentDto.Ref locationRef = new EquipmentDto.Ref(locationId, "LOC-001", "Main Workshop");
+        EquipmentDto.PlacementRef placement = new EquipmentDto.PlacementRef(
+                PlacementType.DEPARTMENT,
+                departmentRef,
+                null,
+                null,
+                locationRef
+        );
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, departmentId, locationId, locationRef, departmentRef, placement);
+
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, null, null, false, null, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/equipment"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].placement.type").value("DEPARTMENT"))
+                .andExpect(jsonPath("$.content[0].placement.department.id").value(departmentId.toString()))
+                .andExpect(jsonPath("$.content[0].placement.warehouse").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].placement.warehouseStatus").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].placement.location.id").value(locationId.toString()));
+    }
+
+    @Test
+    void listResponseIncludesPlacementObjectForWarehouseEquipment() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        EquipmentDto.Ref warehouseRef = new EquipmentDto.Ref(warehouseId, "WH-001", "Main Warehouse");
+        EquipmentDto.PlacementRef placement = new EquipmentDto.PlacementRef(
+                PlacementType.WAREHOUSE,
+                null,
+                warehouseRef,
+                WarehouseEquipmentStatus.AVAILABLE,
+                warehouseRef
+        );
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, warehouseId, warehouseRef, null, placement);
+
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, null, null, false, null, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/equipment"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].placement.type").value("WAREHOUSE"))
+                .andExpect(jsonPath("$.content[0].placement.department").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].placement.warehouse.id").value(warehouseId.toString()))
+                .andExpect(jsonPath("$.content[0].placement.warehouseStatus").value("AVAILABLE"))
+                .andExpect(jsonPath("$.content[0].placement.location.id").value(warehouseId.toString()));
+    }
+
+    @Test
+    void detailResponseIncludesPlacementObject() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        EquipmentDto.Ref departmentRef = new EquipmentDto.Ref(departmentId, "DEP-010", "Assembly");
+        EquipmentDto.PlacementRef placement = new EquipmentDto.PlacementRef(
+                PlacementType.DEPARTMENT,
+                departmentRef,
+                null,
+                null,
+                null
+        );
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, departmentId, null, null, departmentRef, placement);
+        when(service.findById(id)).thenReturn(dto);
+
+        mockMvc.perform(get("/api/v1/equipment/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.placement.type").value("DEPARTMENT"))
+                .andExpect(jsonPath("$.placement.department.id").value(departmentId.toString()))
+                .andExpect(jsonPath("$.placement.warehouse").value(nullValue()))
+                .andExpect(jsonPath("$.placement.warehouseStatus").value(nullValue()));
+    }
+
+    @Test
+    void listResponsePlacementUnknownIsStable() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        EquipmentDto.PlacementRef placement = new EquipmentDto.PlacementRef(
+                PlacementType.UNKNOWN,
+                null,
+                null,
+                null,
+                null
+        );
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, null, null, null, placement);
+
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, null, null, false, null, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/equipment"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].placement.type").value("UNKNOWN"))
+                .andExpect(jsonPath("$.content[0].placement.department").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].placement.warehouse").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].placement.warehouseStatus").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].placement.location").value(nullValue()));
     }
 
     @Test
@@ -483,7 +593,11 @@ class EquipmentControllerContractTest {
     }
 
     private EquipmentDto equipmentDto(UUID id, UUID equipmentTypeId, UUID departmentId) {
-        return equipmentDto(id, equipmentTypeId, departmentId, null, null);
+        return equipmentDto(id, "EQ-2026-0020", equipmentTypeId, departmentId);
+    }
+
+    private EquipmentDto equipmentDto(UUID id, String code, UUID equipmentTypeId, UUID departmentId) {
+        return equipmentDto(id, code, equipmentTypeId, departmentId, null, null, null, null);
     }
 
     private EquipmentDto equipmentDto(UUID id,
@@ -491,9 +605,30 @@ class EquipmentControllerContractTest {
                                       UUID departmentId,
                                       UUID locationId,
                                       EquipmentDto.Ref location) {
+        return equipmentDto(id, "EQ-2026-0020", equipmentTypeId, departmentId, locationId, location, null, null);
+    }
+
+    private EquipmentDto equipmentDto(UUID id,
+                                      UUID equipmentTypeId,
+                                      UUID departmentId,
+                                      UUID locationId,
+                                      EquipmentDto.Ref location,
+                                      EquipmentDto.Ref departmentRef,
+                                      EquipmentDto.PlacementRef placement) {
+        return equipmentDto(id, "EQ-2026-0020", equipmentTypeId, departmentId, locationId, location, departmentRef, placement);
+    }
+
+    private EquipmentDto equipmentDto(UUID id,
+                                      String code,
+                                      UUID equipmentTypeId,
+                                      UUID departmentId,
+                                      UUID locationId,
+                                      EquipmentDto.Ref location,
+                                      EquipmentDto.Ref departmentRef,
+                                      EquipmentDto.PlacementRef placement) {
         return new EquipmentDto(
                 id,
-                "EQ-2026-0020",
+                code,
                 "Compressor A",
                 "INV-1",
                 null,
@@ -511,11 +646,12 @@ class EquipmentControllerContractTest {
                 null,
                 null,
                 null,
-                null,
+                departmentRef,
                 location,
                 null,
                 null,
-                null
+                null,
+                placement
         );
     }
 

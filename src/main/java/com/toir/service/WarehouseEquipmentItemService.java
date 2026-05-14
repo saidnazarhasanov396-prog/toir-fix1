@@ -137,6 +137,7 @@ public class WarehouseEquipmentItemService {
                 .orElseThrow(() -> RestException.notFound("Equipment not found"));
 
         equipment.setDepartmentId(null);
+        equipment.setLocationId(targetWarehouseId);
         equipmentRepository.save(equipment);
 
         WarehouseEquipmentItem existing = warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId).orElse(null);

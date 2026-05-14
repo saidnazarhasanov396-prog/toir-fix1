@@ -15,6 +15,7 @@ import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.AuditAction;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
@@ -227,9 +228,20 @@ public class EquipmentService {
         Set<UUID> unresolvedLocIds = locIds.stream()
                 .filter(id -> !locMap.containsKey(id))
                 .collect(Collectors.toSet());
-        Map<UUID, Warehouse> warehouseLocFallbackMap = unresolvedLocIds.isEmpty()
+        Map<UUID, WarehouseEquipmentItem> activeWarehouseItemMap = byId(
+                warehouseEquipmentItemRepository.findActiveByEquipmentIds(equipmentIds),
+                WarehouseEquipmentItem::getEquipmentId
+        );
+        Set<UUID> warehouseIdsToLoad = new HashSet<>(unresolvedLocIds);
+        warehouseIdsToLoad.addAll(
+                activeWarehouseItemMap.values().stream()
+                        .map(WarehouseEquipmentItem::getWarehouseId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet())
+        );
+        Map<UUID, Warehouse> warehouseMap = warehouseIdsToLoad.isEmpty()
                 ? Collections.emptyMap()
-                : byId(warehouseRepository.findAllByIdInAndIsDeletedFalse(unresolvedLocIds), Warehouse::getId);
+                : byId(warehouseRepository.findAllByIdInAndIsDeletedFalse(warehouseIdsToLoad), Warehouse::getId);
         Map<UUID, EquipmentType> typeMap = byId(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(typeIds), EquipmentType::getId);
         Map<UUID, Equipment> parentMap = byId(repository.findAllByIdInAndIsDeletedFalse(parentIds), Equipment::getId);
         Map<UUID, EquipmentPassport> passportMap = passportRepository
@@ -237,13 +249,30 @@ public class EquipmentService {
                 .collect(Collectors.toMap(EquipmentPassport::getEquipmentId, Function.identity(), (a, b) -> a));
 
         return items.stream()
-                .map(e -> EquipmentDto.from(
-                        e,
-                        deptRef(deptMap.get(e.getDepartmentId())),
-                        locRef(e.getLocationId(), locMap, warehouseLocFallbackMap),
-                        typeRef(typeMap.get(e.getEquipmentTypeId())),
-                        parentRef(parentMap.get(e.getParentId())),
-                        passportRef(passportMap.get(e.getId()))))
+                .map(e -> {
+                    EquipmentDto.Ref departmentRef = deptRef(deptMap.get(e.getDepartmentId()));
+                    EquipmentDto.Ref locationRef = locRef(e.getLocationId(), locMap, warehouseMap);
+                    WarehouseEquipmentItem activeWarehouseItem = activeWarehouseItemMap.get(e.getId());
+                    EquipmentDto.Ref warehouseRef = warehouseRef(
+                            activeWarehouseItem == null ? null : warehouseMap.get(activeWarehouseItem.getWarehouseId())
+                    );
+                    EquipmentDto.PlacementRef placement = placementRef(
+                            e,
+                            departmentRef,
+                            warehouseRef,
+                            activeWarehouseItem,
+                            locationRef
+                    );
+                    return EquipmentDto.from(
+                            e,
+                            departmentRef,
+                            locationRef,
+                            typeRef(typeMap.get(e.getEquipmentTypeId())),
+                            parentRef(parentMap.get(e.getParentId())),
+                            passportRef(passportMap.get(e.getId())),
+                            placement
+                    );
+                })
                 .toList();
     }
 
@@ -266,6 +295,10 @@ public class EquipmentService {
 
     private static EquipmentDto.Ref locRef(Location l) {
         return l == null ? null : new EquipmentDto.Ref(l.getId(), l.getCode(), l.getName());
+    }
+
+    private static EquipmentDto.Ref warehouseRef(Warehouse warehouse) {
+        return warehouse == null ? null : new EquipmentDto.Ref(warehouse.getId(), warehouse.getCode(), warehouse.getName());
     }
 
     private static EquipmentDto.Ref locRef(UUID locationId,
@@ -293,6 +326,56 @@ public class EquipmentService {
     private static EquipmentDto.PassportRef passportRef(EquipmentPassport p) {
         return p == null ? null : new EquipmentDto.PassportRef(
                 p.getPassportNumber(), p.getPowerKw(), p.getVoltageV(), p.getPressureBar());
+    }
+
+    private static EquipmentDto.PlacementRef placementRef(Equipment equipment,
+                                                          EquipmentDto.Ref departmentRef,
+                                                          EquipmentDto.Ref warehouseRef,
+                                                          WarehouseEquipmentItem activeWarehouseItem,
+                                                          EquipmentDto.Ref locationRef) {
+        if (equipment.getDepartmentId() != null) {
+            if (activeWarehouseItem == null) {
+                return new EquipmentDto.PlacementRef(
+                        PlacementType.DEPARTMENT,
+                        departmentRef,
+                        null,
+                        null,
+                        locationRef
+                );
+            }
+            return new EquipmentDto.PlacementRef(
+                    PlacementType.DEPARTMENT,
+                    departmentRef,
+                    warehouseRef,
+                    activeWarehouseItem.getStatus(),
+                    locationRef
+            );
+        }
+
+        if (activeWarehouseItem != null) {
+            EquipmentDto.Ref placementLocation = locationRef;
+            if (warehouseRef != null && (
+                    Objects.equals(equipment.getLocationId(), activeWarehouseItem.getWarehouseId())
+                            || (locationRef != null && Objects.equals(locationRef.id(), activeWarehouseItem.getWarehouseId()))
+            )) {
+                placementLocation = warehouseRef;
+            }
+            return new EquipmentDto.PlacementRef(
+                    PlacementType.WAREHOUSE,
+                    null,
+                    warehouseRef,
+                    activeWarehouseItem.getStatus(),
+                    placementLocation
+            );
+        }
+
+        return new EquipmentDto.PlacementRef(
+                PlacementType.UNKNOWN,
+                null,
+                null,
+                null,
+                locationRef
+        );
     }
 
     private void apply(Equipment entity, EquipmentCreateRequest request) {

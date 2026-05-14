@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -49,6 +51,15 @@ public interface WarehouseEquipmentItemRepository extends JpaRepository<Warehous
             LIMIT 1
             """, nativeQuery = true)
     Optional<WarehouseEquipmentItem> findActiveByEquipmentId(@Param("equipmentId") UUID equipmentId);
+
+    @Query(value = """
+            SELECT *
+            FROM warehouse_equipment_items
+            WHERE equipment_id IN (:equipmentIds)
+              AND active = true
+              AND is_deleted = false
+            """, nativeQuery = true)
+    List<WarehouseEquipmentItem> findActiveByEquipmentIds(@Param("equipmentIds") Collection<UUID> equipmentIds);
 
     Page<WarehouseEquipmentItem> findByWarehouseIdAndActiveTrueAndIsDeletedFalse(UUID warehouseId, Pageable pageable);
 

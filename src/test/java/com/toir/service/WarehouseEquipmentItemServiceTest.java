@@ -609,6 +609,7 @@ class WarehouseEquipmentItemServiceTest {
         assertThat(secondSave.isDeleted()).isFalse();
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
         assertThat(equipment.getDepartmentId()).isNull();
+        assertThat(equipment.getLocationId()).isEqualTo(targetWarehouseId);
         verify(equipmentRepository).save(equipment);
     }
 
@@ -645,6 +646,7 @@ class WarehouseEquipmentItemServiceTest {
         assertThat(result.warehouseId()).isEqualTo(warehouseId);
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
         assertThat(equipment.getDepartmentId()).isNull();
+        assertThat(equipment.getLocationId()).isEqualTo(warehouseId);
         verify(warehouseEquipmentItemRepository).save(existing);
         verify(warehouseEquipmentItemRepository, never()).flush();
         verify(equipmentRepository).save(equipment);
@@ -682,6 +684,7 @@ class WarehouseEquipmentItemServiceTest {
         assertThat(saved.isDeleted()).isFalse();
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
         assertThat(equipment.getDepartmentId()).isNull();
+        assertThat(equipment.getLocationId()).isEqualTo(targetWarehouseId);
         verify(warehouseEquipmentItemRepository, never()).flush();
         verify(equipmentRepository).save(equipment);
     }
