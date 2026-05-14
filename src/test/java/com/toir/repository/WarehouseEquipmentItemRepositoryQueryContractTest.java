@@ -22,4 +22,17 @@ class WarehouseEquipmentItemRepositoryQueryContractTest {
         assertThat(query.value()).contains("active = true");
         assertThat(query.value()).contains("is_deleted = false");
     }
+
+    @Test
+    void findActiveByEquipmentIdsQueryFiltersOnlyActiveAndNonDeletedRows() {
+        Method method = Arrays.stream(WarehouseEquipmentItemRepository.class.getMethods())
+                .filter(m -> m.getName().equals("findActiveByEquipmentIds"))
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+        assertThat(query.value()).contains("active = true");
+        assertThat(query.value()).contains("is_deleted = false");
+    }
 }
