@@ -32,6 +32,7 @@ import static org.mockito.Mockito.when;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -377,6 +378,108 @@ class EquipmentControllerContractTest {
         assertNull(result.getResolvedException());
 
         verify(service).search(null, null, null, null, null, false, "compressor", 0, 20);
+    }
+
+    @Test
+    void patchPlacementWarehouseSuccess() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, warehouseId,
+                new EquipmentDto.Ref(warehouseId, "WH-001", "Main Warehouse"));
+        when(service.updatePlacement(eq(id), any())).thenReturn(dto);
+
+        mockMvc.perform(patch("/api/v1/equipment/{id}/placement", id)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "targetType": "WAREHOUSE",
+                                  "warehouseId": "%s"
+                                }
+                                """.formatted(warehouseId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.departmentId").value(nullValue()))
+                .andExpect(jsonPath("$.locationId").value(warehouseId.toString()));
+    }
+
+    @Test
+    void patchPlacementDepartmentSuccess() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, departmentId, null, null);
+        when(service.updatePlacement(eq(id), any())).thenReturn(dto);
+
+        mockMvc.perform(patch("/api/v1/equipment/{id}/placement", id)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "targetType": "DEPARTMENT",
+                                  "departmentId": "%s"
+                                }
+                                """.formatted(departmentId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.departmentId").value(departmentId.toString()))
+                .andExpect(jsonPath("$.locationId").value(nullValue()));
+    }
+
+    @Test
+    void patchPlacementInvalidMixedPayloadReturnsBadRequest() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(service.updatePlacement(eq(id), any()))
+                .thenThrow(RestException.badRequest("warehouseId and departmentId cannot both be provided"));
+
+        mockMvc.perform(patch("/api/v1/equipment/{id}/placement", id)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "targetType": "WAREHOUSE",
+                                  "warehouseId": "%s",
+                                  "departmentId": "%s"
+                                }
+                                """.formatted(UUID.randomUUID(), UUID.randomUUID())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("warehouseId and departmentId cannot both be provided"));
+    }
+
+    @Test
+    void patchPlacementInvalidWarehouseReturnsNotFound() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        when(service.updatePlacement(eq(id), any()))
+                .thenThrow(RestException.notFound("Warehouse not found: " + warehouseId));
+
+        mockMvc.perform(patch("/api/v1/equipment/{id}/placement", id)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "targetType": "WAREHOUSE",
+                                  "warehouseId": "%s"
+                                }
+                                """.formatted(warehouseId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Warehouse not found: " + warehouseId));
+    }
+
+    @Test
+    void patchPlacementInvalidDepartmentReturnsNotFound() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(service.updatePlacement(eq(id), any()))
+                .thenThrow(RestException.notFound("Department not found: " + departmentId));
+
+        mockMvc.perform(patch("/api/v1/equipment/{id}/placement", id)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "targetType": "DEPARTMENT",
+                                  "departmentId": "%s"
+                                }
+                                """.formatted(departmentId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Department not found: " + departmentId));
     }
 
     private EquipmentDto equipmentDto(UUID id, UUID equipmentTypeId, UUID departmentId) {

@@ -2,6 +2,7 @@ package com.toir.service.equipment;
 
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentCreateRequest;
+import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.equipment.EquipmentUpdateRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.entity.Department;
@@ -10,13 +11,16 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentPassport;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.warehouse.Warehouse;
+import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.AuditAction;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.PlacementTargetType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
+import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.department.DepartmentRepository;
@@ -46,6 +50,7 @@ public class EquipmentService {
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentPassportRepository passportRepository;
     private final WarehouseRepository warehouseRepository;
+    private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private final AuditBuilderService auditBuilderService;
     private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
@@ -163,6 +168,16 @@ public class EquipmentService {
                 entity,
                 saved);
         return enrich(List.of(saved)).getFirst();
+    }
+
+    @Transactional
+    public EquipmentDto updatePlacement(UUID id, EquipmentPlacementRequest request) {
+        Equipment equipment = getOrThrow(id);
+        validatePlacementRequest(request);
+        if (request.targetType() == PlacementTargetType.WAREHOUSE) {
+            return moveToWarehouse(equipment, request);
+        }
+        return moveToDepartment(equipment, request);
     }
 
     @Transactional
@@ -298,6 +313,86 @@ public class EquipmentService {
         entity.setCommissionedAt(request.commissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil());
         entity.setDescription(request.description());
+    }
+
+    private EquipmentDto moveToWarehouse(Equipment equipment, EquipmentPlacementRequest request) {
+        WarehouseEquipmentStatus targetStatus = resolveWarehousePlacementStatus(request.warehouseStatus());
+        warehouseEquipmentItemService.transferEquipmentToWarehouse(
+                equipment.getId(),
+                request.warehouseId(),
+                targetStatus
+        );
+        equipment.setDepartmentId(null);
+        equipment.setLocationId(request.warehouseId());
+        Equipment saved = repository.save(equipment);
+        return enrich(List.of(saved)).getFirst();
+    }
+
+    private EquipmentDto moveToDepartment(Equipment equipment, EquipmentPlacementRequest request) {
+        UUID departmentId = request.departmentId();
+        WarehouseEquipmentItem activeWarehouseItem = warehouseEquipmentItemRepository.findActiveByEquipmentId(equipment.getId())
+                .orElseThrow(() -> RestException.badRequest("Active warehouse assignment is required for DEPARTMENT target"));
+        if (activeWarehouseItem.getStatus() == WarehouseEquipmentStatus.OUT_OF_SERVICE) {
+            throw RestException.badRequest("OUT_OF_SERVICE equipment cannot be installed directly");
+        }
+        warehouseEquipmentItemService.updateStatus(
+                activeWarehouseItem.getWarehouseId(),
+                equipment.getId(),
+                WarehouseEquipmentStatus.INSTALLED,
+                departmentId
+        );
+        equipment.setDepartmentId(departmentId);
+        if (Objects.equals(equipment.getLocationId(), activeWarehouseItem.getWarehouseId())) {
+            equipment.setLocationId(null);
+        }
+        Equipment saved = repository.save(equipment);
+        return enrich(List.of(saved)).getFirst();
+    }
+
+    private void validatePlacementRequest(EquipmentPlacementRequest request) {
+        if (request == null) {
+            throw RestException.badRequest("Placement request is required");
+        }
+        if (request.targetType() == null) {
+            throw RestException.badRequest("targetType is required");
+        }
+        if (request.warehouseId() != null && request.departmentId() != null) {
+            throw RestException.badRequest("warehouseId and departmentId cannot both be provided");
+        }
+
+        if (request.targetType() == PlacementTargetType.WAREHOUSE) {
+            if (request.warehouseId() == null) {
+                throw RestException.badRequest("warehouseId is required when targetType is WAREHOUSE");
+            }
+            if (request.departmentId() != null) {
+                throw RestException.badRequest("departmentId must be null when targetType is WAREHOUSE");
+            }
+            resolveWarehousePlacementStatus(request.warehouseStatus());
+            validateWarehouseExists(request.warehouseId());
+            return;
+        }
+
+        if (request.departmentId() == null) {
+            throw RestException.badRequest("departmentId is required when targetType is DEPARTMENT");
+        }
+        if (request.warehouseId() != null) {
+            throw RestException.badRequest("warehouseId must be null when targetType is DEPARTMENT");
+        }
+        if (request.warehouseStatus() != null) {
+            throw RestException.badRequest("warehouseStatus must be null when targetType is DEPARTMENT");
+        }
+        validateDepartmentExists(request.departmentId());
+    }
+
+    private WarehouseEquipmentStatus resolveWarehousePlacementStatus(WarehouseEquipmentStatus warehouseStatus) {
+        if (warehouseStatus == null) {
+            return WarehouseEquipmentStatus.AVAILABLE;
+        }
+        if (warehouseStatus != WarehouseEquipmentStatus.AVAILABLE
+                && warehouseStatus != WarehouseEquipmentStatus.OUT_OF_SERVICE) {
+            throw RestException.badRequest("warehouseStatus for WAREHOUSE target must be AVAILABLE or OUT_OF_SERVICE");
+        }
+        return warehouseStatus;
     }
 
     private void validateClientProvidedCode(String code) {

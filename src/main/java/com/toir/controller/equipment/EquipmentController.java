@@ -1,6 +1,7 @@
 package com.toir.controller.equipment;
 import com.toir.dto.equipment.EquipmentCreateRequest;
 import com.toir.dto.equipment.EquipmentDto;
+import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.equipment.EquipmentUpdateRequest;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
@@ -78,6 +79,18 @@ public class EquipmentController {
     @PutMapping("/{id}")
     public ResponseEntity<EquipmentDto> update(@PathVariable UUID id, @Valid @RequestBody EquipmentUpdateRequest request) {
         return ResponseEntity.ok(service.update(id, request));
+    }
+
+    @PatchMapping("/{id}/placement")
+    @Operation(
+            summary = "Move equipment between warehouse and department",
+            description = "Preferred frontend endpoint for equipment placement movement. " +
+                    "Use targetType=WAREHOUSE to move equipment into warehouse inventory, " +
+                    "or targetType=DEPARTMENT to install into a department."
+    )
+    public ResponseEntity<EquipmentDto> updatePlacement(@PathVariable UUID id,
+                                                         @Valid @RequestBody EquipmentPlacementRequest request) {
+        return ResponseEntity.ok(service.updatePlacement(id, request));
     }
 
     @DeleteMapping("/{id}")

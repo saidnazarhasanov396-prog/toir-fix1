@@ -2,6 +2,7 @@ package com.toir.service.equipment;
 
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentCreateRequest;
+import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.equipment.EquipmentUpdateRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
@@ -9,12 +10,15 @@ import com.toir.entity.Department;
 import com.toir.entity.Location;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.warehouse.Warehouse;
+import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.PlacementTargetType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
+import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.department.DepartmentRepository;
@@ -73,6 +77,9 @@ class EquipmentServiceTest {
 
     @Mock
     WarehouseEquipmentItemService warehouseEquipmentItemService;
+
+    @Mock
+    WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
 
     @Mock
     AuditBuilderService auditBuilderService;
@@ -747,6 +754,295 @@ class EquipmentServiceTest {
                 .hasMessageContaining("Department not found: " + departmentId);
 
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void moveWithNullTargetTypeRejected400() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-0");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(null, null, null, null)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("targetType is required");
+    }
+
+    @Test
+    void moveDepartmentEquipmentToWarehouseDefaultAvailable() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-1");
+        equipment.setId(equipmentId);
+        equipment.setDepartmentId(UUID.randomUUID());
+        equipment.setLocationId(null);
+
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        warehouse.setCode("WH-001");
+        warehouse.setName("Main Warehouse");
+
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+        stubWarehouseLocationFallback(List.of(warehouse));
+
+        EquipmentDto updated = service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(PlacementTargetType.WAREHOUSE, warehouseId, null, null)
+        );
+
+        assertThat(updated.departmentId()).isNull();
+        assertThat(updated.locationId()).isEqualTo(warehouseId);
+        verify(warehouseEquipmentItemService).transferEquipmentToWarehouse(
+                equipmentId,
+                warehouseId,
+                WarehouseEquipmentStatus.AVAILABLE
+        );
+    }
+
+    @Test
+    void moveDepartmentEquipmentToWarehouseOutOfService() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-2");
+        equipment.setId(equipmentId);
+        equipment.setDepartmentId(UUID.randomUUID());
+
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        warehouse.setCode("WH-002");
+        warehouse.setName("Reserve Warehouse");
+
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+        stubWarehouseLocationFallback(List.of(warehouse));
+
+        EquipmentDto updated = service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(
+                        PlacementTargetType.WAREHOUSE,
+                        warehouseId,
+                        null,
+                        WarehouseEquipmentStatus.OUT_OF_SERVICE
+                )
+        );
+
+        assertThat(updated.departmentId()).isNull();
+        assertThat(updated.locationId()).isEqualTo(warehouseId);
+        verify(warehouseEquipmentItemService).transferEquipmentToWarehouse(
+                equipmentId,
+                warehouseId,
+                WarehouseEquipmentStatus.OUT_OF_SERVICE
+        );
+    }
+
+    @Test
+    void moveWarehouseEquipmentToDepartment() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-3");
+        equipment.setId(equipmentId);
+        equipment.setDepartmentId(null);
+        equipment.setLocationId(warehouseId);
+
+        WarehouseEquipmentItem activeItem = new WarehouseEquipmentItem();
+        activeItem.setWarehouseId(warehouseId);
+        activeItem.setEquipmentId(equipmentId);
+        activeItem.setStatus(WarehouseEquipmentStatus.AVAILABLE);
+        activeItem.setActive(true);
+        activeItem.setDeleted(false);
+
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)).thenReturn(Optional.of(activeItem));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+
+        EquipmentDto updated = service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(PlacementTargetType.DEPARTMENT, null, departmentId, null)
+        );
+
+        assertThat(updated.departmentId()).isEqualTo(departmentId);
+        assertThat(updated.locationId()).isNull();
+        verify(warehouseEquipmentItemService).updateStatus(
+                warehouseId,
+                equipmentId,
+                WarehouseEquipmentStatus.INSTALLED,
+                departmentId
+        );
+    }
+
+    @Test
+    void moveWarehouseOutOfServiceEquipmentToDepartmentRejected() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-4");
+        equipment.setId(equipmentId);
+
+        WarehouseEquipmentItem activeItem = new WarehouseEquipmentItem();
+        activeItem.setWarehouseId(warehouseId);
+        activeItem.setEquipmentId(equipmentId);
+        activeItem.setStatus(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+        activeItem.setActive(true);
+        activeItem.setDeleted(false);
+
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)).thenReturn(Optional.of(activeItem));
+
+        assertThatThrownBy(() -> service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(PlacementTargetType.DEPARTMENT, null, departmentId, null)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("OUT_OF_SERVICE equipment cannot be installed directly");
+    }
+
+    @Test
+    void moveToWarehouseWithInvalidWarehouseReturns404() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-5");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(PlacementTargetType.WAREHOUSE, warehouseId, null, null)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Warehouse not found: " + warehouseId);
+    }
+
+    @Test
+    void moveToDepartmentWithInvalidDepartmentReturns404() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-6");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(PlacementTargetType.DEPARTMENT, null, departmentId, null)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Department not found: " + departmentId);
+    }
+
+    @Test
+    void moveToWarehouseWithDepartmentIdRejected400() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-7");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(
+                        PlacementTargetType.WAREHOUSE,
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        null
+                )
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("warehouseId and departmentId cannot both be provided");
+    }
+
+    @Test
+    void moveToDepartmentWithWarehouseIdRejected400() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-8");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(
+                        PlacementTargetType.DEPARTMENT,
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        null
+                )
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("warehouseId and departmentId cannot both be provided");
+    }
+
+    @Test
+    void moveToDepartmentWithWarehouseStatusRejected400() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-9");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(
+                        PlacementTargetType.DEPARTMENT,
+                        null,
+                        departmentId,
+                        WarehouseEquipmentStatus.AVAILABLE
+                )
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("warehouseStatus must be null when targetType is DEPARTMENT");
+    }
+
+    @Test
+    void moveToWarehouseWithUnsupportedWarehouseStatusRejected400() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-10");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(
+                        PlacementTargetType.WAREHOUSE,
+                        warehouseId,
+                        null,
+                        WarehouseEquipmentStatus.RESERVED
+                )
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("warehouseStatus for WAREHOUSE target must be AVAILABLE or OUT_OF_SERVICE");
+    }
+
+    @Test
+    void moveToWarehouseWithInstalledWarehouseStatusRejected400() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-11");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(
+                        PlacementTargetType.WAREHOUSE,
+                        warehouseId,
+                        null,
+                        WarehouseEquipmentStatus.INSTALLED
+                )
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("warehouseStatus for WAREHOUSE target must be AVAILABLE or OUT_OF_SERVICE");
     }
 
     private Equipment equipment(String code) {
