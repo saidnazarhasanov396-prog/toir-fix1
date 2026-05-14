@@ -19,6 +19,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -135,15 +136,23 @@ public class WarehouseEquipmentItemService {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found"));
 
-        warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)
-                .ifPresent(existing -> {
-                    existing.setActive(false);
-                    existing.setDeleted(true);
-                    warehouseEquipmentItemRepository.save(existing);
-                });
-
         equipment.setDepartmentId(null);
         equipmentRepository.save(equipment);
+
+        WarehouseEquipmentItem existing = warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId).orElse(null);
+        if (existing != null) {
+            if (Objects.equals(existing.getWarehouseId(), targetWarehouseId)) {
+                existing.setStatus(targetStatus);
+                WarehouseEquipmentItem saved = warehouseEquipmentItemRepository.save(existing);
+                return WarehouseEquipmentItemDto.from(saved);
+            }
+
+            existing.setActive(false);
+            existing.setDeleted(true);
+            warehouseEquipmentItemRepository.save(existing);
+            // Force UPDATE before INSERT to satisfy uq_warehouse_equipment_items_active_equipment.
+            warehouseEquipmentItemRepository.flush();
+        }
 
         WarehouseEquipmentItem entity = new WarehouseEquipmentItem();
         entity.setWarehouseId(targetWarehouseId);
