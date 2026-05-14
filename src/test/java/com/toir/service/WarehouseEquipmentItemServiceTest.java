@@ -15,6 +15,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -32,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -591,6 +593,10 @@ class WarehouseEquipmentItemServiceTest {
         verify(warehouseEquipmentItemRepository, times(2)).save(captor.capture());
         WarehouseEquipmentItem firstSave = captor.getAllValues().get(0);
         WarehouseEquipmentItem secondSave = captor.getAllValues().get(1);
+        InOrder inOrder = inOrder(warehouseEquipmentItemRepository);
+        inOrder.verify(warehouseEquipmentItemRepository).save(existing);
+        inOrder.verify(warehouseEquipmentItemRepository).flush();
+        inOrder.verify(warehouseEquipmentItemRepository).save(any(WarehouseEquipmentItem.class));
 
         assertThat(firstSave.getEquipmentId()).isEqualTo(equipmentId);
         assertThat(firstSave.isActive()).isFalse();
@@ -603,6 +609,44 @@ class WarehouseEquipmentItemServiceTest {
         assertThat(secondSave.isDeleted()).isFalse();
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
         assertThat(equipment.getDepartmentId()).isNull();
+        verify(equipmentRepository).save(equipment);
+    }
+
+    @Test
+    void transferSameWarehouseUpdatesStatusWithoutCreatingNewAssignment() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setDepartmentId(UUID.randomUUID());
+
+        WarehouseEquipmentItem existing = new WarehouseEquipmentItem();
+        existing.setWarehouseId(warehouseId);
+        existing.setEquipmentId(equipmentId);
+        existing.setStatus(WarehouseEquipmentStatus.AVAILABLE);
+        existing.setActive(true);
+        existing.setDeleted(false);
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId))
+                .thenReturn(Optional.of(activeWarehouse(warehouseId)));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(equipment));
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId))
+                .thenReturn(Optional.of(existing));
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        WarehouseEquipmentItemDto result = service.transferEquipmentToWarehouse(
+                equipmentId,
+                warehouseId,
+                WarehouseEquipmentStatus.OUT_OF_SERVICE
+        );
+
+        assertThat(existing.getStatus()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+        assertThat(result.warehouseId()).isEqualTo(warehouseId);
+        assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
+        assertThat(equipment.getDepartmentId()).isNull();
+        verify(warehouseEquipmentItemRepository).save(existing);
+        verify(warehouseEquipmentItemRepository, never()).flush();
         verify(equipmentRepository).save(equipment);
     }
 
@@ -638,6 +682,7 @@ class WarehouseEquipmentItemServiceTest {
         assertThat(saved.isDeleted()).isFalse();
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
         assertThat(equipment.getDepartmentId()).isNull();
+        verify(warehouseEquipmentItemRepository, never()).flush();
         verify(equipmentRepository).save(equipment);
     }
 
