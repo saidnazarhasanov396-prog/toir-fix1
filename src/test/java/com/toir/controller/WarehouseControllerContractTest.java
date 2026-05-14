@@ -3,7 +3,6 @@ package com.toir.controller;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.GlobalExceptionHandler;
-import com.toir.exception.RestException;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.service.WarehouseService;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,16 +10,23 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -43,138 +49,61 @@ class WarehouseControllerContractTest {
     }
 
     @Test
-    void patchInstallWithoutDepartmentIdReturnsBadRequest() throws Exception {
+    void getWarehouseEquipmentReturnsPagedItems() throws Exception {
         UUID warehouseId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
-        when(warehouseEquipmentItemService.updateStatus(
-                eq(warehouseId),
-                eq(equipmentId),
-                eq(WarehouseEquipmentStatus.INSTALLED),
-                isNull()
-        )).thenThrow(RestException.badRequest("departmentId is required when status is INSTALLED"));
-
-        mockMvc.perform(patch("/api/v1/warehouses/{warehouseId}/equipment/{equipmentId}/status", warehouseId, equipmentId)
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "status": "INSTALLED"
-                                }
-                                """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("departmentId is required when status is INSTALLED"));
-    }
-
-    @Test
-    void patchInstallWithInvalidDepartmentIdReturnsNotFound() throws Exception {
-        UUID warehouseId = UUID.randomUUID();
-        UUID equipmentId = UUID.randomUUID();
-        UUID departmentId = UUID.randomUUID();
-        when(warehouseEquipmentItemService.updateStatus(
-                eq(warehouseId),
-                eq(equipmentId),
-                eq(WarehouseEquipmentStatus.INSTALLED),
-                eq(departmentId)
-        )).thenThrow(RestException.notFound("Department not found: " + departmentId));
-
-        mockMvc.perform(patch("/api/v1/warehouses/{warehouseId}/equipment/{equipmentId}/status", warehouseId, equipmentId)
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "status": "INSTALLED",
-                                  "departmentId": "%s"
-                                }
-                                """.formatted(departmentId)))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("Department not found: " + departmentId));
-    }
-
-    @Test
-    void patchInstallWithValidDepartmentIdReturnsOk() throws Exception {
-        UUID warehouseId = UUID.randomUUID();
-        UUID equipmentId = UUID.randomUUID();
-        UUID departmentId = UUID.randomUUID();
-        WarehouseEquipmentItemDto response = new WarehouseEquipmentItemDto(
-                UUID.randomUUID(),
-                warehouseId,
-                equipmentId,
-                WarehouseEquipmentStatus.INSTALLED,
-                true,
-                Instant.now()
-        );
-        when(warehouseEquipmentItemService.updateStatus(
-                eq(warehouseId),
-                eq(equipmentId),
-                eq(WarehouseEquipmentStatus.INSTALLED),
-                eq(departmentId)
-        )).thenReturn(response);
-
-        mockMvc.perform(patch("/api/v1/warehouses/{warehouseId}/equipment/{equipmentId}/status", warehouseId, equipmentId)
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "status": "INSTALLED",
-                                  "departmentId": "%s"
-                                }
-                                """.formatted(departmentId)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.warehouseId").value(warehouseId.toString()))
-                .andExpect(jsonPath("$.equipmentId").value(equipmentId.toString()))
-                .andExpect(jsonPath("$.status").value("INSTALLED"));
-    }
-
-    @Test
-    void patchNonInstalledWithDepartmentIdReturnsBadRequest() throws Exception {
-        UUID warehouseId = UUID.randomUUID();
-        UUID equipmentId = UUID.randomUUID();
-        UUID departmentId = UUID.randomUUID();
-        when(warehouseEquipmentItemService.updateStatus(
-                eq(warehouseId),
-                eq(equipmentId),
-                eq(WarehouseEquipmentStatus.AVAILABLE),
-                eq(departmentId)
-        )).thenThrow(RestException.badRequest("departmentId must be null when status is not INSTALLED"));
-
-        mockMvc.perform(patch("/api/v1/warehouses/{warehouseId}/equipment/{equipmentId}/status", warehouseId, equipmentId)
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "status": "AVAILABLE",
-                                  "departmentId": "%s"
-                                }
-                                """.formatted(departmentId)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("departmentId must be null when status is not INSTALLED"));
-    }
-
-    @Test
-    void patchAvailableWithoutDepartmentIdReturnsOk() throws Exception {
-        UUID warehouseId = UUID.randomUUID();
-        UUID equipmentId = UUID.randomUUID();
-        WarehouseEquipmentItemDto response = new WarehouseEquipmentItemDto(
-                UUID.randomUUID(),
+        WarehouseEquipmentItemDto item = new WarehouseEquipmentItemDto(
+                itemId,
                 warehouseId,
                 equipmentId,
                 WarehouseEquipmentStatus.AVAILABLE,
                 true,
                 Instant.now()
         );
-        when(warehouseEquipmentItemService.updateStatus(
+        Page<WarehouseEquipmentItemDto> page = new PageImpl<>(List.of(item), PageRequest.of(0, 20), 1);
+        when(warehouseEquipmentItemService.list(
                 eq(warehouseId),
-                eq(equipmentId),
-                eq(WarehouseEquipmentStatus.AVAILABLE),
-                isNull()
-        )).thenReturn(response);
+                isNull(),
+                eq(0),
+                eq(20)
+        )).thenReturn(page);
 
-        mockMvc.perform(patch("/api/v1/warehouses/{warehouseId}/equipment/{equipmentId}/status", warehouseId, equipmentId)
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "status": "AVAILABLE"
-                                }
-                                """))
+        mockMvc.perform(get("/api/v1/warehouses/{warehouseId}/equipment", warehouseId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.warehouseId").value(warehouseId.toString()))
-                .andExpect(jsonPath("$.equipmentId").value(equipmentId.toString()))
-                .andExpect(jsonPath("$.status").value("AVAILABLE"));
+                .andExpect(jsonPath("$.content[0].id").value(itemId.toString()))
+                .andExpect(jsonPath("$.content[0].warehouseId").value(warehouseId.toString()))
+                .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.content[0].status").value("AVAILABLE"))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void getWarehouseEquipmentSanitizesPageAndSizeAndForwardsStatusFilter() throws Exception {
+        UUID warehouseId = UUID.randomUUID();
+        when(warehouseEquipmentItemService.list(
+                eq(warehouseId),
+                eq(WarehouseEquipmentStatus.OUT_OF_SERVICE),
+                eq(0),
+                eq(1)
+        )).thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 1), 0));
+
+        MvcResult result = mockMvc.perform(get("/api/v1/warehouses/{warehouseId}/equipment", warehouseId)
+                        .param("status", "OUT_OF_SERVICE")
+                        .param("page", "-5")
+                        .param("size", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andReturn();
+
+        assertThat(result.getResolvedException()).isNull();
+
+        verify(warehouseEquipmentItemService).list(
+                eq(warehouseId),
+                eq(WarehouseEquipmentStatus.OUT_OF_SERVICE),
+                eq(0),
+                eq(1)
+        );
     }
 }
