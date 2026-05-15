@@ -76,6 +76,12 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
     @Query(value = "SELECT * FROM defects WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Defect> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
+    @Query(value = "SELECT * FROM defects WHERE repair_request_id = :repairRequestId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<Defect> findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("repairRequestId") UUID repairRequestId);
+
+    @Query(value = "SELECT * FROM defects WHERE repair_request_id IN (:repairRequestIds) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<Defect> findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("repairRequestIds") Collection<UUID> repairRequestIds);
+
     @Query(value = "SELECT COUNT(*) FROM defects WHERE status = :status AND is_deleted = false", nativeQuery = true)
     long countByStatusAndIsDeletedFalse(@Param("status") String status);
 }

@@ -1,5 +1,6 @@
 package com.toir.dto.defect;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -10,8 +11,7 @@ public record DefectRequest(
         @NotBlank String title,
         @NotBlank String description,
         @NotNull UUID equipmentId,
-        UUID requestId,
-        UUID workOrderId,
+        @JsonAlias("requestId") UUID repairRequestId,
         String category,
         String severity,
         String failureReason,

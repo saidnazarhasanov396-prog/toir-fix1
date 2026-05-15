@@ -1,6 +1,9 @@
 package com.toir.dto.defect;
 
+import com.toir.dto.triad.RepairRequestBriefDto;
+import com.toir.dto.triad.WorkOrderBriefDto;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import com.toir.enums.DefectStatus;
@@ -12,8 +15,8 @@ public record DefectResponse(
         String description,
         UUID equipmentId,
         String equipmentName,
+        UUID repairRequestId,
         UUID requestId,
-        UUID workOrderId,
         String category,
         String severity,
         String failureReason,
@@ -21,9 +24,18 @@ public record DefectResponse(
         DefectStatus status,
         Instant detectedAt,
         Instant resolvedAt,
-        int recurrenceCount
+        int recurrenceCount,
+        RepairRequestBriefDto repairRequest,
+        List<WorkOrderBriefDto> linkedWorkOrders
 ) {
-    public static DefectResponse from(DefectDto dto, String equipmentName) {
+    public DefectResponse {
+        linkedWorkOrders = linkedWorkOrders == null ? List.of() : List.copyOf(linkedWorkOrders);
+    }
+
+    public static DefectResponse from(DefectDto dto,
+                                      String equipmentName,
+                                      RepairRequestBriefDto repairRequest,
+                                      List<WorkOrderBriefDto> linkedWorkOrders) {
         return new DefectResponse(
                 dto.id(),
                 dto.code(),
@@ -31,8 +43,8 @@ public record DefectResponse(
                 dto.description(),
                 dto.equipmentId(),
                 equipmentName,
-                dto.requestId(),
-                dto.workOrderId(),
+                dto.repairRequestId(),
+                dto.repairRequestId(),
                 dto.category(),
                 dto.severity(),
                 dto.failureReason(),
@@ -40,7 +52,9 @@ public record DefectResponse(
                 dto.status(),
                 dto.detectedAt(),
                 dto.resolvedAt(),
-                dto.recurrenceCount()
+                dto.recurrenceCount(),
+                repairRequest,
+                linkedWorkOrders
         );
     }
 }

@@ -83,7 +83,6 @@ public class DefectController {
         a.setKind("LESSON_LEARNED");
         a.setEquipmentId(d.getEquipmentId());
         a.setDefectId(d.getId());
-        a.setWorkOrderId(d.getWorkOrderId());
         a.setProblem(d.getDescription() != null ? d.getDescription() : d.getTitle());
         a.setRootCause(
                 d.getRootCause() != null

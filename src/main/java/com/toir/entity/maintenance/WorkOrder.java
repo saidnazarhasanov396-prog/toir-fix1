@@ -37,6 +37,9 @@ public class WorkOrder extends BaseEntity {
     @Column(name = "repair_request_id")
     private UUID repairRequestId;
 
+    @Column(name = "defect_id")
+    private UUID defectId;
+
     @Column(name = "ppr_task_id")
     private UUID pprTaskId;
 

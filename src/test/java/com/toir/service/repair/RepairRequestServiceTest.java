@@ -1,10 +1,19 @@
 package com.toir.service.repair;
 
 import com.toir.dto.repairrequest.RepairRequestDto;
+import com.toir.entity.defects.Defect;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.enums.DefectStatus;
+import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkOrderType;
+import com.toir.enums.WorkType;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
@@ -17,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +50,12 @@ class RepairRequestServiceTest {
 
     @Mock
     UserRepository userRepository;
+
+    @Mock
+    DefectRepository defectRepository;
+
+    @Mock
+    WorkOrderRepository workOrderRepository;
 
     @Mock
     AuditBuilderService auditBuilderService;
@@ -118,6 +134,57 @@ class RepairRequestServiceTest {
         assertThat(result.clarificationReason()).isEqualTo("Clarification reason");
     }
 
+    @Test
+    void detailIncludesLinkedDefects() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        stubDtoLookups(entity);
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(defect(id)));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of());
+
+        RepairRequestDto result = service.findById(id);
+
+        assertThat(result.linkedDefects()).hasSize(1);
+        assertThat(result.linkedDefects().getFirst().code()).isEqualTo("DEF-2026-1001");
+    }
+
+    @Test
+    void detailIncludesLinkedWorkOrders() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        stubDtoLookups(entity);
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(workOrder(id)));
+
+        RepairRequestDto result = service.findById(id);
+
+        assertThat(result.linkedWorkOrders()).hasSize(1);
+        assertThat(result.linkedWorkOrders().getFirst().number()).isEqualTo("WO-2026-1001");
+    }
+
+    @Test
+    void detailWithNoLinksReturnsEmptyArrays() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of());
+        stubDtoLookups(entity);
+
+        RepairRequestDto result = service.findById(id);
+
+        assertThat(result.linkedDefects()).isEmpty();
+        assertThat(result.linkedWorkOrders()).isEmpty();
+    }
+
     private void stubFindSaveAndDtoLookups(UUID id, RepairRequest entity) {
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
         when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -128,6 +195,10 @@ class RepairRequestServiceTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(entity.getEquipmentId())).thenReturn(Optional.empty());
         when(departmentRepository.findByIdAndIsDeletedFalse(entity.getDepartmentId())).thenReturn(Optional.empty());
         when(userRepository.findByIdAndIsDeletedFalse(entity.getReporterId())).thenReturn(Optional.empty());
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(entity.getId()))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(entity.getId()))
+                .thenReturn(List.of());
     }
 
     private RepairRequest repairRequest(UUID id) {
@@ -141,5 +212,31 @@ class RepairRequestServiceTest {
         entity.setReporterId(UUID.randomUUID());
         entity.setStatus(RequestStatus.OPEN);
         return entity;
+    }
+
+    private Defect defect(UUID repairRequestId) {
+        Defect defect = new Defect();
+        defect.setId(UUID.randomUUID());
+        defect.setCode("DEF-2026-1001");
+        defect.setTitle("Leak");
+        defect.setRepairRequestId(repairRequestId);
+        defect.setStatus(DefectStatus.OPEN);
+        defect.setSeverity("HIGH");
+        return defect;
+    }
+
+    private WorkOrder workOrder(UUID repairRequestId) {
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(UUID.randomUUID());
+        workOrder.setNumber("WO-2026-1001");
+        workOrder.setRepairRequestId(repairRequestId);
+        workOrder.setStatus(WorkOrderStatus.APPROVED);
+        workOrder.setWorkType(WorkType.REPAIR);
+        workOrder.setPriority(PriorityLevel.MEDIUM);
+        workOrder.setType(WorkOrderType.PLANNED);
+        workOrder.setEquipmentId(UUID.randomUUID());
+        workOrder.setDepartmentId(UUID.randomUUID());
+        workOrder.setCreatedById(UUID.randomUUID());
+        return workOrder;
     }
 }

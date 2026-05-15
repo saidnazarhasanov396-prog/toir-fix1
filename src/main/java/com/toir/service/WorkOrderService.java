@@ -1,7 +1,9 @@
 package com.toir.service;
 
 import com.toir.dto.workorder.*;
+import com.toir.dto.triad.TriadLinkMapper;
 import com.toir.entity.Department;
+import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.PprPlan;
@@ -14,6 +16,7 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
@@ -30,14 +33,18 @@ import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -53,40 +60,43 @@ public class WorkOrderService {
     private final PprPlanRepository pprPlanRepository;
     private final PprTaskRepository pprTaskRepository;
     private final RepairRequestRepository repairRequestRepository;
+    private final DefectRepository defectRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
+    private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_WORK_ORDER_CREATE =
+            EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
 
 
     @Transactional(readOnly = true)
     public List<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId) {
-        return repository.search(status, departmentId, equipmentId).stream()
-                .map(this::toDto)
-                .toList();
+        return toDtos(repository.search(status, departmentId, equipmentId));
     }
 
     @Transactional(readOnly = true)
     public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
         var pageable = PaginationUtils.pageRequest(page, pageSize);
-        return repository.searchPaginated(
+        Page<WorkOrder> resultPage = repository.searchPaginated(
                 status,
                 departmentId,
                 equipmentId,
                 search,
                 pageable
-        ).map(this::toDto);
+        );
+        return toDtoPage(resultPage);
     }
 
     @Transactional(readOnly = true)
     public Page<WorkOrderDto> mobileFeed(UUID departmentId, UUID equipmentId, String search, int page, int pageSize) {
-        return repository.searchMobileFeed(
+        Page<WorkOrder> resultPage = repository.searchMobileFeed(
                 departmentId,
                 equipmentId,
                 search,
                 PaginationUtils.pageRequest(page, pageSize)
-        ).map(this::toDto);
+        );
+        return toDtoPage(resultPage);
     }
 
     @Transactional(readOnly = true)
@@ -105,6 +115,7 @@ public class WorkOrderService {
         if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Work order number already exists: " + request.number());
         }
+        validateCreateRelations(request);
         reserveReplacementEquipmentOnCreate(request, effectiveWorkType);
         WorkOrder entity = new WorkOrder();
         entity.setNumber(request.number());
@@ -112,6 +123,7 @@ public class WorkOrderService {
         entity.setEquipmentId(request.equipmentId());
         entity.setDepartmentId(request.departmentId());
         entity.setRepairRequestId(request.repairRequestId());
+        entity.setDefectId(request.defectId());
         entity.setPprTaskId(request.pprTaskId());
         entity.setContractorId(request.contractorId());
         entity.setType(request.type());
@@ -380,6 +392,32 @@ public class WorkOrderService {
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + id));
     }
 
+    private void validateCreateRelations(WorkOrderRequest request) {
+        if (request.repairRequestId() != null) {
+            RepairRequest repairRequest = repairRequestRepository.findByIdAndIsDeletedFalse(request.repairRequestId())
+                    .orElseThrow(() -> RestException.notFound("Repair request not found: " + request.repairRequestId()));
+            if (DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_WORK_ORDER_CREATE.contains(repairRequest.getStatus())) {
+                throw RestException.badRequest(
+                        "Cannot create work order for repair request in status " + repairRequest.getStatus());
+            }
+        }
+
+        if (request.defectId() == null) {
+            return;
+        }
+        Defect defect = defectRepository.findByIdAndIsDeletedFalse(request.defectId())
+                .orElseThrow(() -> RestException.notFound("Defect not found: " + request.defectId()));
+
+        if (request.repairRequestId() == null) {
+            return;
+        }
+        UUID defectRepairRequestId = defect.getRepairRequestId();
+        if (defectRepairRequestId != null && !defectRepairRequestId.equals(request.repairRequestId())) {
+            throw RestException.badRequest(
+                    "Defect " + request.defectId() + " belongs to a different repair request");
+        }
+    }
+
     void ensureReplacementEquipmentReservedOnStart(WorkOrder workOrder) {
         if (!isReplacementWorkOrder(workOrder)) {
             return;
@@ -500,6 +538,16 @@ public class WorkOrderService {
     }
 
     private WorkOrderDto toDto(WorkOrder entity) {
+        RepairRequest linkedRepairRequest = entity.getRepairRequestId() == null
+                ? null
+                : repairRequestRepository.findByIdAndIsDeletedFalse(entity.getRepairRequestId()).orElse(null);
+        Defect linkedDefect = entity.getDefectId() == null
+                ? null
+                : defectRepository.findByIdAndIsDeletedFalse(entity.getDefectId()).orElse(null);
+        return toDto(entity, linkedRepairRequest, linkedDefect);
+    }
+
+    private WorkOrderDto toDto(WorkOrder entity, RepairRequest linkedRepairRequest, Defect linkedDefect) {
         String equipmentName = equipmentRepository.findById(entity.getEquipmentId())
                 .map(Equipment::getName)
                 .orElse(null);
@@ -514,14 +562,59 @@ public class WorkOrderService {
         return new WorkOrderDto(
                 entity.getId(), entity.getNumber(), entity.getTitle(), entity.getEquipmentId(), entity.getDepartmentId(),
                 equipmentName, departmentName,
-                entity.getRepairRequestId(), entity.getPprTaskId(), entity.getContractorId(),
+                entity.getRepairRequestId(), entity.getDefectId(), entity.getPprTaskId(), entity.getContractorId(),
                 entity.getStatus(), entity.getType(), entity.getWorkType(), entity.getPriority(),
                 entity.getStartPlannedAt(), entity.getEndPlannedAt(), entity.getStartedAt(), entity.getCompletedAt(),
                 entity.getSummary(), entity.getResult(), entity.getClosureNotes(),
                 entity.getCreatedById(), entity.getApprovedById(),
                 entity.getWarehouseId(), entity.getReplacementEquipmentId(), replacementEquipmentName,
-                entity.getTasks().stream().map(WorkOrderTaskDto::from).toList()
+                entity.getTasks().stream().map(WorkOrderTaskDto::from).toList(),
+                TriadLinkMapper.toRepairRequestBrief(linkedRepairRequest),
+                TriadLinkMapper.toDefectBrief(linkedDefect)
         );
+    }
+
+    private List<WorkOrderDto> toDtos(List<WorkOrder> entities) {
+        if (entities.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> repairRequestIds = entities.stream()
+                .map(WorkOrder::getRepairRequestId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        Map<UUID, RepairRequest> repairRequestById = repairRequestIds.isEmpty()
+                ? Map.of()
+                : repairRequestRepository.findAllByIdInAndIsDeletedFalse(repairRequestIds)
+                .stream()
+                .collect(Collectors.toMap(RepairRequest::getId, Function.identity()));
+
+        List<UUID> defectIds = entities.stream()
+                .map(WorkOrder::getDefectId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        Map<UUID, Defect> defectById = defectIds.isEmpty()
+                ? Map.of()
+                : defectRepository.findAllByIdInAndIsDeletedFalse(defectIds)
+                .stream()
+                .collect(Collectors.toMap(Defect::getId, Function.identity()));
+
+        return entities.stream()
+                .map(entity -> toDto(
+                        entity,
+                        repairRequestById.get(entity.getRepairRequestId()),
+                        defectById.get(entity.getDefectId())
+                ))
+                .toList();
+    }
+
+    private Page<WorkOrderDto> toDtoPage(Page<WorkOrder> page) {
+        if (page.isEmpty()) {
+            return new PageImpl<>(List.of(), page.getPageable(), page.getTotalElements());
+        }
+        return new PageImpl<>(toDtos(page.getContent()), page.getPageable(), page.getTotalElements());
     }
 }
 

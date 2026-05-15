@@ -41,6 +41,15 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     @Query(value = "SELECT * FROM work_orders WHERE repair_request_id = cast(:repairRequestId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<WorkOrder> findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("repairRequestId") UUID repairRequestId);
 
+    @Query(value = "SELECT * FROM work_orders WHERE defect_id = cast(:defectId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<WorkOrder> findAllByDefectIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("defectId") UUID defectId);
+
+    @Query(value = "SELECT * FROM work_orders WHERE repair_request_id IN (:repairRequestIds) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<WorkOrder> findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("repairRequestIds") Collection<UUID> repairRequestIds);
+
+    @Query(value = "SELECT * FROM work_orders WHERE defect_id IN (:defectIds) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<WorkOrder> findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("defectIds") Collection<UUID> defectIds);
+
     @Query("SELECT w FROM WorkOrder w WHERE w.isDeleted = false " +
             "AND (:status IS NULL OR w.status = :status) " +
             "AND (:departmentId IS NULL OR w.departmentId = :departmentId) " +
