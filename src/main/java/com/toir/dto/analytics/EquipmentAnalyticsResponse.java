@@ -8,6 +8,11 @@ import java.util.UUID;
 
 public record EquipmentAnalyticsResponse(
         String equipmentId,
+        long requestCount,
+        long defectCount,
+        long workOrderCount,
+        double downtimeHours,
+        double totalCost,
         double mtbfHours,
         double mttrHours,
         double availability,

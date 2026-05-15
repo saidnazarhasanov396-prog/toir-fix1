@@ -24,6 +24,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.enums.RequestStatus;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +50,7 @@ public class AnalyticsService {
     private final ReliabilityMetricRepository reliabilityMetricRepository;
     private final EquipmentRepository equipmentRepository;
     private final DepartmentRepository departmentRepository;
+    private final ActualCostRepository actualCostRepository;
 
 
     @Transactional
@@ -271,6 +273,21 @@ public class AnalyticsService {
         equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> com.toir.exception.RestException.notFound("Equipment not found: " + equipmentId));
 
+        List<RepairRequest> requests = repairRequestRepository.search(null, null, equipmentId);
+        if (requests == null) {
+            requests = List.of();
+        }
+
+        List<Defect> defects = defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
+        if (defects == null) {
+            defects = List.of();
+        }
+
+        List<WorkOrder> workOrders = workOrderRepository.search(null, null, equipmentId);
+        if (workOrders == null) {
+            workOrders = List.of();
+        }
+
         List<ReliabilityMetric> metrics = reliabilityMetricRepository
                 .findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(equipmentId);
         if (metrics == null) {
@@ -289,6 +306,8 @@ public class AnalyticsService {
                 .filter(Objects::nonNull)
                 .mapToInt(Integer::intValue)
                 .sum();
+        double downtimeHours = downtimeMinutes / 60.0;
+        double totalCost = actualCostRepository.sumAmountByEquipmentId(equipmentId);
 
         List<EquipmentAnalyticsResponse.DowntimeRow> downtimeRows = downtimes.stream()
                 .map(d -> new EquipmentAnalyticsResponse.DowntimeRow(
@@ -303,6 +322,11 @@ public class AnalyticsService {
 
         return new EquipmentAnalyticsResponse(
                 equipmentId.toString(),
+                requests.size(),
+                defects.size(),
+                workOrders.size(),
+                downtimeHours,
+                totalCost,
                 latest != null && latest.getMtbfHours() != null ? latest.getMtbfHours() : 0,
                 latest != null && latest.getMttrHours() != null ? latest.getMttrHours() : 0,
                 latest != null && latest.getAvailability() != null ? latest.getAvailability() : 0,

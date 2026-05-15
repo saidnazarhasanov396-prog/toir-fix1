@@ -61,4 +61,18 @@ public interface ActualCostRepository extends JpaRepository<ActualCost, UUID> {
 
     @Query(value = "SELECT * FROM actual_costs WHERE status = cast(:status as varchar) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ActualCost> findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("status") ActualCostStatus status);
+
+    @Query(value = """
+            SELECT COALESCE(SUM(ac.amount), 0)
+            FROM actual_costs ac
+            LEFT JOIN work_orders wo ON wo.id = ac.work_order_id
+            LEFT JOIN repair_requests rr ON rr.id = ac.repair_request_id
+            WHERE ac.is_deleted = false
+              AND (
+                  (wo.is_deleted = false AND wo.equipment_id = CAST(:equipmentId AS uuid))
+                  OR
+                  (rr.is_deleted = false AND rr.equipment_id = CAST(:equipmentId AS uuid))
+              )
+            """, nativeQuery = true)
+    double sumAmountByEquipmentId(@Param("equipmentId") UUID equipmentId);
 }

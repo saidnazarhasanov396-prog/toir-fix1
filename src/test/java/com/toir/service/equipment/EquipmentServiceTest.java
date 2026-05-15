@@ -2,30 +2,43 @@ package com.toir.service.equipment;
 
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentCreateRequest;
+import com.toir.dto.equipment.EquipmentDetailDto;
 import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.equipment.EquipmentUpdateRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
 import com.toir.entity.Department;
+import com.toir.entity.DowntimeEvent;
 import com.toir.entity.Location;
+import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
+import com.toir.enums.DefectStatus;
+import com.toir.enums.DowntimeType;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
+import com.toir.enums.RequestStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseEquipmentItemRepository;
+import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.WarehouseRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -81,6 +94,18 @@ class EquipmentServiceTest {
 
     @Mock
     WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
+
+    @Mock
+    RepairRequestRepository repairRequestRepository;
+
+    @Mock
+    DefectRepository defectRepository;
+
+    @Mock
+    WorkOrderRepository workOrderRepository;
+
+    @Mock
+    DowntimeEventRepository downtimeEventRepository;
 
     @Mock
     AuditBuilderService auditBuilderService;
@@ -247,6 +272,162 @@ class EquipmentServiceTest {
         assertThat(dto.location().id()).isEqualTo(locationId);
         assertThat(dto.location().code()).isEqualTo("LOC-010");
         assertThat(dto.location().name()).isEqualTo("Compressor Zone");
+    }
+
+    @Test
+    void findByIdDetailReturnsRelatedRepairRequests() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-DETAIL-RR");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        stubEnrichment();
+
+        RepairRequest request = RepairRequest.builder()
+                .number("RR-001")
+                .title("Seal leak")
+                .description("Detected leak on pump")
+                .equipmentId(equipmentId)
+                .departmentId(UUID.randomUUID())
+                .reporterId(UUID.randomUUID())
+                .status(RequestStatus.OPEN)
+                .build();
+        request.setId(UUID.randomUUID());
+        request.setDetectedAt(Instant.parse("2026-05-01T10:00:00Z"));
+
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of(request));
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId)).thenReturn(List.of());
+
+        EquipmentDetailDto detail = service.findDetailById(equipmentId);
+
+        assertThat(detail.repairRequests()).hasSize(1);
+        assertThat(detail.repairRequests().getFirst().number()).isEqualTo("RR-001");
+        assertThat(detail.repairRequests().getFirst().title()).isEqualTo("Seal leak");
+    }
+
+    @Test
+    void findByIdDetailReturnsRelatedDefects() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-DETAIL-DEF");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        stubEnrichment();
+
+        Defect defect = Defect.builder()
+                .code("DEF-001")
+                .title("Bearing overheating")
+                .description("Temperature threshold exceeded")
+                .equipmentId(equipmentId)
+                .status(DefectStatus.OPEN)
+                .build();
+        defect.setId(UUID.randomUUID());
+        defect.setDetectedAt(Instant.parse("2026-05-02T09:00:00Z"));
+
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of(defect));
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId)).thenReturn(List.of());
+
+        EquipmentDetailDto detail = service.findDetailById(equipmentId);
+
+        assertThat(detail.defects()).hasSize(1);
+        assertThat(detail.defects().getFirst().code()).isEqualTo("DEF-001");
+        assertThat(detail.defects().getFirst().title()).isEqualTo("Bearing overheating");
+    }
+
+    @Test
+    void findByIdDetailReturnsRelatedWorkOrders() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-DETAIL-WO");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        stubEnrichment();
+
+        WorkOrder workOrder = WorkOrder.builder()
+                .number("WO-001")
+                .title("Replace bearing")
+                .equipmentId(equipmentId)
+                .departmentId(UUID.randomUUID())
+                .createdById(UUID.randomUUID())
+                .type(WorkOrderType.DEFECT)
+                .status(WorkOrderStatus.IN_PROGRESS)
+                .summary("Bearing replacement in progress")
+                .build();
+        workOrder.setId(UUID.randomUUID());
+
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of(workOrder));
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId)).thenReturn(List.of());
+
+        EquipmentDetailDto detail = service.findDetailById(equipmentId);
+
+        assertThat(detail.workOrders()).hasSize(1);
+        assertThat(detail.workOrders().getFirst().number()).isEqualTo("WO-001");
+        assertThat(detail.workOrders().getFirst().title()).isEqualTo("Replace bearing");
+    }
+
+    @Test
+    void findByIdDetailReturnsRelatedDowntimeEvents() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-DETAIL-DT");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        stubEnrichment();
+
+        DowntimeEvent downtime = DowntimeEvent.builder()
+                .equipmentId(equipmentId)
+                .departmentId(UUID.randomUUID())
+                .startAt(Instant.parse("2026-05-03T08:00:00Z"))
+                .endAt(Instant.parse("2026-05-03T09:00:00Z"))
+                .durationMinutes(60)
+                .type(DowntimeType.EMERGENCY)
+                .description("Unexpected stop")
+                .build();
+        downtime.setId(UUID.randomUUID());
+
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId)).thenReturn(List.of(downtime));
+
+        EquipmentDetailDto detail = service.findDetailById(equipmentId);
+
+        assertThat(detail.downtimeEvents()).hasSize(1);
+        assertThat(detail.downtimeEvents().getFirst().durationMinutes()).isEqualTo(60);
+        assertThat(detail.downtimeEvents().getFirst().description()).isEqualTo("Unexpected stop");
+    }
+
+    @Test
+    void findByIdDetailWithNoRelatedDataReturnsEmptyArrays() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-DETAIL-EMPTY");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        stubEnrichment();
+
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId)).thenReturn(List.of());
+
+        EquipmentDetailDto detail = service.findDetailById(equipmentId);
+
+        assertThat(detail.repairRequests()).isNotNull().isEmpty();
+        assertThat(detail.defects()).isNotNull().isEmpty();
+        assertThat(detail.workOrders()).isNotNull().isEmpty();
+        assertThat(detail.downtimeEvents()).isNotNull().isEmpty();
+    }
+
+    @Test
+    void findByIdDetailUnknownEquipmentReturns404() {
+        UUID equipmentId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findDetailById(equipmentId))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Equipment not found");
     }
 
     @Test
