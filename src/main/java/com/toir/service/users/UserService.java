@@ -12,8 +12,11 @@ import com.toir.exception.RestException;
 import com.toir.repository.users.RoleRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.Hibernate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +39,26 @@ public class UserService {
         return userRepository.findAllWithRolesAndIsDeletedFalse().stream()
                 .map(UserDto::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<UserDto> search(String search, int page, int size) {
+        String normalizedSearch = normalizeSearch(search);
+        Page<UUID> idsPage = userRepository.searchIds(normalizedSearch, PaginationUtils.pageRequest(page, size));
+        if (idsPage.isEmpty()) {
+            return Page.empty(idsPage.getPageable());
+        }
+
+        Map<UUID, User> usersById = userRepository.findAllWithRolesByIdInAndIsDeletedFalse(idsPage.getContent()).stream()
+                .collect(HashMap::new, (map, user) -> map.put(user.getId(), user), HashMap::putAll);
+
+        List<UserDto> content = idsPage.getContent().stream()
+                .map(usersById::get)
+                .filter(Objects::nonNull)
+                .map(UserDto::from)
+                .toList();
+
+        return new PageImpl<>(content, idsPage.getPageable(), idsPage.getTotalElements());
     }
 
     @Transactional(readOnly = true)
@@ -209,6 +232,12 @@ public class UserService {
             throw RestException.badRequest("One or more roles not found");
         }
         return found;
+    }
+
+    private String normalizeSearch(String search) {
+        if (search == null) return null;
+        String trimmed = search.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
 
