@@ -5,7 +5,6 @@ import com.toir.dto.user.UpdateUserRequest;
 import com.toir.dto.user.UserDto;
 import com.toir.security.RequiresAdmin;
 import com.toir.service.users.UserService;
-import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
@@ -27,8 +26,10 @@ public class UserController {
     private final UserService service;
 
     @GetMapping
-    public ResponseEntity<Page<UserDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size));
+    public ResponseEntity<Page<UserDto>> list(@RequestParam(required = false) String search,
+                                              @RequestParam(defaultValue = "0") int page,
+                                              @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(service.search(search, page, size));
     }
 
     @GetMapping("/{id}")

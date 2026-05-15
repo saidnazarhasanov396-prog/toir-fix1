@@ -35,6 +35,7 @@ import com.toir.service.users.UserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.data.domain.Page;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -48,6 +49,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -137,6 +139,7 @@ class RbacSensitiveModulesSecurityTest {
     private static Stream<String> adminOnlyEndpoints() {
         return Stream.of(
                 "/api/v1/users?page=0&size=1",
+                "/api/v1/users?search=ali&page=0&size=1",
                 "/api/v1/roles?page=0&size=1",
                 "/api/v1/audit-log?page=0&size=1"
         );
@@ -198,7 +201,7 @@ class RbacSensitiveModulesSecurityTest {
     @Test
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void adminCanAccessUsersEndpoint() throws Exception {
-        when(userService.findAll()).thenReturn(List.of());
+        when(userService.search(any(), anyInt(), anyInt())).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/v1/users?page=0&size=1"))
                 .andExpect(status().isOk());
