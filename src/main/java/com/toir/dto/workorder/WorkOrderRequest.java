@@ -15,6 +15,7 @@ public record WorkOrderRequest(
         @NotNull UUID equipmentId,
         @NotNull UUID departmentId,
         UUID repairRequestId,
+        UUID defectId,
         UUID pprTaskId,
         UUID contractorId,
         @NotNull WorkOrderType type,

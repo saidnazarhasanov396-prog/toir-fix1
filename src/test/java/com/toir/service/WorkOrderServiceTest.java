@@ -7,12 +7,15 @@ import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.entity.Department;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
+import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PriorityLevel;
+import com.toir.enums.RequestStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -24,6 +27,7 @@ import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.util.AuditBuilderService;
@@ -33,6 +37,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
@@ -42,6 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
@@ -71,6 +77,9 @@ class WorkOrderServiceTest {
 
     @Mock
     RepairRequestRepository repairRequestRepository;
+
+    @Mock
+    DefectRepository defectRepository;
 
     @Mock
     WarehouseRepository warehouseRepository;
@@ -103,7 +112,11 @@ class WorkOrderServiceTest {
         ArgumentCaptor<com.toir.entity.maintenance.WorkOrder> captor = ArgumentCaptor.forClass(com.toir.entity.maintenance.WorkOrder.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getWorkType()).isEqualTo(WorkType.REPAIR);
+        assertThat(captor.getValue().getRepairRequestId()).isNull();
+        assertThat(captor.getValue().getDefectId()).isNull();
         assertThat(result.workType()).isEqualTo(WorkType.REPAIR);
+        assertThat(result.repairRequestId()).isNull();
+        assertThat(result.defectId()).isNull();
     }
 
     @Test
@@ -125,6 +138,235 @@ class WorkOrderServiceTest {
         assertThat(result.warehouseId()).isNull();
         assertThat(result.replacementEquipmentId()).isNull();
         assertThat(result.workType()).isEqualTo(WorkType.REPAIR);
+    }
+
+    @Test
+    void createWithoutRepairRequestAndDefectKeepsExistingBehavior() {
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        WorkOrderRequest request = requestWithLinks(null, null);
+        mockSuccessfulCreateDependencies(request);
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.repairRequestId()).isNull();
+        assertThat(result.defectId()).isNull();
+        verifyNoInteractions(repairRequestRepository, defectRepository);
+    }
+
+    @Test
+    void createWithValidRepairRequestSucceeds() {
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, null);
+        mockSuccessfulCreateDependencies(request);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN)));
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.repairRequestId()).isEqualTo(repairRequestId);
+        assertThat(result.repairRequest()).isNotNull();
+        assertThat(result.repairRequest().id()).isEqualTo(repairRequestId);
+        verify(repairRequestRepository, atLeastOnce()).findByIdAndIsDeletedFalse(repairRequestId);
+    }
+
+    @Test
+    void createWithUnknownRepairRequestReturns404() {
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, null);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(ex.getMessage()).contains("Repair request not found");
+                });
+    }
+
+    @Test
+    void createWithRejectedRepairRequestReturns400() {
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, null);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.REJECTED)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Cannot create work order for repair request");
+                });
+    }
+
+    @Test
+    void createWithValidDefectSucceeds() {
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        UUID defectId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(null, defectId);
+        mockSuccessfulCreateDependencies(request);
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId))
+                .thenReturn(Optional.of(defect(defectId, null)));
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.defectId()).isEqualTo(defectId);
+        assertThat(result.repairRequestId()).isNull();
+        assertThat(result.defect()).isNotNull();
+        assertThat(result.defect().id()).isEqualTo(defectId);
+        verify(defectRepository, atLeastOnce()).findByIdAndIsDeletedFalse(defectId);
+    }
+
+    @Test
+    void createWithUnknownDefectReturns404() {
+        UUID defectId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(null, defectId);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(ex.getMessage()).contains("Defect not found");
+                });
+    }
+
+    @Test
+    void createWithRepairRequestAndMatchingDefectSucceeds() {
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        UUID repairRequestId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, defectId);
+        mockSuccessfulCreateDependencies(request);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN)));
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId))
+                .thenReturn(Optional.of(defect(defectId, repairRequestId)));
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.repairRequestId()).isEqualTo(repairRequestId);
+        assertThat(result.defectId()).isEqualTo(defectId);
+    }
+
+    @Test
+    void createWithRepairRequestAndDifferentDefectRequestReturns400() {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID otherRepairRequestId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, defectId);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN)));
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId))
+                .thenReturn(Optional.of(defect(defectId, otherRepairRequestId)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("belongs to a different repair request");
+                });
+    }
+
+    @Test
+    void responseIncludesRepairRequestObject() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        workOrder.setRepairRequestId(repairRequestId);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN)));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.findById(workOrderId);
+
+        assertThat(response.repairRequest()).isNotNull();
+        assertThat(response.repairRequest().id()).isEqualTo(repairRequestId);
+        assertThat(response.repairRequest().number()).isEqualTo("RR-2026-1001");
+    }
+
+    @Test
+    void responseIncludesDefectObject() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        workOrder.setDefectId(defectId);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId))
+                .thenReturn(Optional.of(defect(defectId, null)));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.findById(workOrderId);
+
+        assertThat(response.defect()).isNotNull();
+        assertThat(response.defect().id()).isEqualTo(defectId);
+        assertThat(response.defect().code()).isEqualTo("DEF-2026-1001");
+    }
+
+    @Test
+    void responseWithoutLinksReturnsNullObjects() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.findById(workOrderId);
+
+        assertThat(response.repairRequest()).isNull();
+        assertThat(response.defect()).isNull();
+    }
+
+    @Test
+    void listBatchEnrichmentDoesNotNPlusOne() {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        WorkOrder first = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        first.setRepairRequestId(repairRequestId);
+        first.setDefectId(defectId);
+        WorkOrder second = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        second.setRepairRequestId(repairRequestId);
+        second.setDefectId(defectId);
+
+        when(repository.search(null, null, null)).thenReturn(java.util.List.of(first, second));
+        when(repairRequestRepository.findAllByIdInAndIsDeletedFalse(java.util.List.of(repairRequestId)))
+                .thenReturn(java.util.List.of(repairRequest(repairRequestId, RequestStatus.OPEN)));
+        when(defectRepository.findAllByIdInAndIsDeletedFalse(java.util.List.of(defectId)))
+                .thenReturn(java.util.List.of(defect(defectId, repairRequestId)));
+        stubLifecycleDtoLookups(first);
+        stubLifecycleDtoLookups(second);
+
+        java.util.List<WorkOrderDto> results = service.search(null, null, null);
+
+        assertThat(results).hasSize(2);
+        assertThat(results).allSatisfy(dto -> {
+            assertThat(dto.repairRequest()).isNotNull();
+            assertThat(dto.defect()).isNotNull();
+        });
+        verify(repairRequestRepository).findAllByIdInAndIsDeletedFalse(java.util.List.of(repairRequestId));
+        verify(defectRepository).findAllByIdInAndIsDeletedFalse(java.util.List.of(defectId));
+        verify(repairRequestRepository, never()).findByIdAndIsDeletedFalse(repairRequestId);
+        verify(defectRepository, never()).findByIdAndIsDeletedFalse(defectId);
     }
 
     @Test
@@ -756,6 +998,7 @@ class WorkOrderServiceTest {
                 null,
                 null,
                 null,
+                null,
                 type,
                 workType,
                 warehouseId,
@@ -766,6 +1009,51 @@ class WorkOrderServiceTest {
                 UUID.randomUUID(),
                 "summary"
         );
+    }
+
+    private WorkOrderRequest requestWithLinks(UUID repairRequestId, UUID defectId) {
+        WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        return new WorkOrderRequest(
+                base.number(),
+                base.title(),
+                base.equipmentId(),
+                base.departmentId(),
+                repairRequestId,
+                defectId,
+                base.pprTaskId(),
+                base.contractorId(),
+                base.type(),
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                base.startPlannedAt(),
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary()
+        );
+    }
+
+    private RepairRequest repairRequest(UUID id, RequestStatus status) {
+        RepairRequest repairRequest = new RepairRequest();
+        repairRequest.setId(id);
+        repairRequest.setNumber("RR-2026-1001");
+        repairRequest.setPriority(PriorityLevel.MEDIUM);
+        repairRequest.setTitle("Repair request");
+        repairRequest.setDescription("Short description");
+        repairRequest.setStatus(status);
+        return repairRequest;
+    }
+
+    private Defect defect(UUID id, UUID repairRequestId) {
+        Defect defect = new Defect();
+        defect.setId(id);
+        defect.setCode("DEF-2026-1001");
+        defect.setTitle("Leak");
+        defect.setStatus(com.toir.enums.DefectStatus.OPEN);
+        defect.setSeverity("HIGH");
+        defect.setRepairRequestId(repairRequestId);
+        return defect;
     }
 
     private void mockSuccessfulCreateDependencies(WorkOrderRequest request) {

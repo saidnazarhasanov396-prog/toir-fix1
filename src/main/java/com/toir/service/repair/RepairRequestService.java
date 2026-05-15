@@ -1,11 +1,18 @@
 package com.toir.service.repair;
 import com.toir.entity.*;
+import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.User;
+import com.toir.dto.triad.DefectBriefDto;
+import com.toir.dto.triad.TriadLinkMapper;
+import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.repair.RepairRequestRepository;
@@ -21,11 +28,15 @@ import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +47,8 @@ public class RepairRequestService {
     private final DepartmentRepository departmentRepository;
     private final LocationRepository locationRepository;
     private final UserRepository userRepository;
+    private final DefectRepository defectRepository;
+    private final WorkOrderRepository workOrderRepository;
     private final AuditBuilderService auditBuilderService;
 
 
@@ -45,19 +58,20 @@ public class RepairRequestService {
 
         String statusStr = (status != null) ? status.name() : null;
         String priorityStr = (priority != null) ? priority.name() : null;
-        return repository.searchPaginated(
+        Page<RepairRequest> resultPage = repository.searchPaginated(
                 statusStr,
                 departmentId,
                 equipmentId,
                 search,
                 priorityStr,
                 pageable
-        ).map(this::toDto);
+        );
+        return toDtoPage(resultPage);
     }
 
     @Transactional(readOnly = true)
     public RepairRequestDto findById(UUID id) {
-        return toDto(getOrThrow(id));
+        return toDtoWithLinks(getOrThrow(id));
     }
 
     @Transactional
@@ -89,7 +103,7 @@ public class RepairRequestService {
                 saved
         );
 
-        return toDto(saved);
+        return toDtoWithLinks(saved);
     }
 
     @Transactional
@@ -110,7 +124,7 @@ public class RepairRequestService {
                 entity,
                 save
         );
-        return toDto(entity);
+        return toDtoWithLinks(entity);
     }
 
 
@@ -135,7 +149,7 @@ public class RepairRequestService {
                 entity,
                 save
         );
-        return toDto(entity);
+        return toDtoWithLinks(entity);
     }
 
     @Transactional
@@ -163,7 +177,7 @@ public class RepairRequestService {
                 entity,
                 save
         );
-        return toDto(entity);
+        return toDtoWithLinks(entity);
     }
 
     @Transactional
@@ -189,7 +203,7 @@ public class RepairRequestService {
                 save
         );
 
-        return toDto(entity);
+        return toDtoWithLinks(entity);
     }
 
 
@@ -224,10 +238,12 @@ public class RepairRequestService {
                 entity,
                 save
         );
-        return toDto(entity);
+        return toDtoWithLinks(entity);
     }
 
-    private RepairRequestDto toDto(RepairRequest r) {
+    private RepairRequestDto toDto(RepairRequest r,
+                                   List<DefectBriefDto> linkedDefects,
+                                   List<WorkOrderBriefDto> linkedWorkOrders) {
         String equipmentName = equipmentRepository.findByIdAndIsDeletedFalse(r.getEquipmentId())
                 .map(Equipment::getName)
                 .orElse(null);
@@ -262,8 +278,56 @@ public class RepairRequestService {
                 r.getReactedAt(),
                 r.getRejectionReason(),
                 r.getClarificationReason(),
-                r.getCloseResult()
+                r.getCloseResult(),
+                linkedDefects,
+                linkedWorkOrders
         );
+    }
+
+    private RepairRequestDto toDtoWithLinks(RepairRequest repairRequest) {
+        List<DefectBriefDto> linkedDefects = defectRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequest.getId())
+                .stream()
+                .map(TriadLinkMapper::toDefectBrief)
+                .toList();
+        List<WorkOrderBriefDto> linkedWorkOrders = workOrderRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequest.getId())
+                .stream()
+                .map(TriadLinkMapper::toWorkOrderBrief)
+                .toList();
+        return toDto(repairRequest, linkedDefects, linkedWorkOrders);
+    }
+
+    private Page<RepairRequestDto> toDtoPage(Page<RepairRequest> page) {
+        if (page.isEmpty()) {
+            return new PageImpl<>(List.of(), page.getPageable(), page.getTotalElements());
+        }
+        List<RepairRequest> requests = page.getContent();
+        List<UUID> requestIds = requests.stream().map(RepairRequest::getId).toList();
+
+        Map<UUID, List<DefectBriefDto>> defectsByRequestId = defectRepository
+                .findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(requestIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        Defect::getRepairRequestId,
+                        Collectors.mapping(TriadLinkMapper::toDefectBrief, Collectors.toList())
+                ));
+        Map<UUID, List<WorkOrderBriefDto>> workOrdersByRequestId = workOrderRepository
+                .findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(requestIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        WorkOrder::getRepairRequestId,
+                        Collectors.mapping(TriadLinkMapper::toWorkOrderBrief, Collectors.toList())
+                ));
+
+        List<RepairRequestDto> dtos = requests.stream()
+                .map(request -> toDto(
+                        request,
+                        defectsByRequestId.getOrDefault(request.getId(), List.of()),
+                        workOrdersByRequestId.getOrDefault(request.getId(), List.of())
+                ))
+                .toList();
+        return new PageImpl<>(dtos, page.getPageable(), page.getTotalElements());
     }
 
     private RepairRequest getOrThrow(UUID id) {

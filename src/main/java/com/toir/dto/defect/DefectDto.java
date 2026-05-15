@@ -12,8 +12,7 @@ public record DefectDto(
         String title,
         String description,
         UUID equipmentId,
-        UUID requestId,
-        UUID workOrderId,
+        UUID repairRequestId,
         String category,
         String severity,
         String failureReason,
@@ -26,7 +25,7 @@ public record DefectDto(
     public static DefectDto from(Defect d) {
         return new DefectDto(
                 d.getId(), d.getCode(), d.getTitle(), d.getDescription(),
-                d.getEquipmentId(), d.getRequestId(), d.getWorkOrderId(),
+                d.getEquipmentId(), d.getRepairRequestId(),
                 d.getCategory(), d.getSeverity(), d.getFailureReason(), d.getRootCause(),
                 d.getStatus(), d.getDetectedAt(), d.getResolvedAt(), d.getRecurrenceCount()
         );

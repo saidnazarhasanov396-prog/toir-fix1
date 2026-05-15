@@ -4,6 +4,8 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
+import com.toir.dto.triad.DefectBriefDto;
+import com.toir.dto.triad.RepairRequestBriefDto;
 
 import java.time.Instant;
 import java.util.List;
@@ -18,6 +20,7 @@ public record WorkOrderDto(
         String equipmentName,
         String departmentName,
         UUID repairRequestId,
+        UUID defectId,
         UUID pprTaskId,
         UUID contractorId,
         WorkOrderStatus status,
@@ -36,7 +39,9 @@ public record WorkOrderDto(
         UUID warehouseId,
         UUID replacementEquipmentId,
         String replacementEquipmentName,
-        List<WorkOrderTaskDto> tasks
+        List<WorkOrderTaskDto> tasks,
+        RepairRequestBriefDto repairRequest,
+        DefectBriefDto defect
 ) {
 //    public static WorkOrderDto from(WorkOrder w) {
 //        return new WorkOrderDto(
