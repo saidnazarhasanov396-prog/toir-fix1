@@ -1,14 +1,21 @@
 package com.toir.service;
 
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
+import com.toir.entity.DowntimeEvent;
+import com.toir.entity.ReliabilityMetric;
+import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.DowntimeType;
 import com.toir.exception.RestException;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ReliabilityMetricRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -19,6 +26,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -55,11 +64,14 @@ class AnalyticsServiceTest {
     @Mock
     DepartmentRepository departmentRepository;
 
+    @Mock
+    ActualCostRepository actualCostRepository;
+
     @InjectMocks
     AnalyticsService service;
 
     @Test
-    void unknownEquipmentReturnsNotFound() {
+    void analyticsForUnknownEquipmentReturns404() {
         UUID equipmentId = UUID.randomUUID();
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.empty());
 
@@ -69,17 +81,121 @@ class AnalyticsServiceTest {
     }
 
     @Test
-    void existingEquipmentWithNoDowntimeReturnsStableEmptyArrays() {
+    void analyticsForEquipmentReturnsRequestDefectWorkOrderCounts() {
         UUID equipmentId = UUID.randomUUID();
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of(
+                new RepairRequest(),
+                new RepairRequest()
+        ));
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(eq(equipmentId))).thenReturn(List.of(
+                new Defect(),
+                new Defect(),
+                new Defect()
+        ));
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of(
+                new WorkOrder(),
+                new WorkOrder(),
+                new WorkOrder(),
+                new WorkOrder()
+        ));
         when(reliabilityMetricRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(eq(equipmentId)))
                 .thenReturn(List.of());
         when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(eq(equipmentId)))
                 .thenReturn(List.of());
+        when(actualCostRepository.sumAmountByEquipmentId(equipmentId)).thenReturn(0.0);
+
+        EquipmentAnalyticsResponse response = service.equipmentAnalytics(equipmentId);
+
+        assertThat(response.requestCount()).isEqualTo(2);
+        assertThat(response.defectCount()).isEqualTo(3);
+        assertThat(response.workOrderCount()).isEqualTo(4);
+    }
+
+    @Test
+    void analyticsForEquipmentReturnsDowntimeHours() {
+        UUID equipmentId = UUID.randomUUID();
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(eq(equipmentId))).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(eq(equipmentId)))
+                .thenReturn(List.of(ReliabilityMetric.builder()
+                        .equipmentId(equipmentId)
+                        .metricDate(LocalDate.of(2026, 5, 1))
+                        .mtbfHours(10.0)
+                        .mttrHours(2.0)
+                        .availability(95.0)
+                        .build()));
+        DowntimeEvent firstDowntime = DowntimeEvent.builder()
+                .equipmentId(equipmentId)
+                .departmentId(UUID.randomUUID())
+                .startAt(Instant.parse("2026-05-01T10:00:00Z"))
+                .endAt(Instant.parse("2026-05-01T10:30:00Z"))
+                .durationMinutes(30)
+                .type(DowntimeType.EMERGENCY)
+                .description("Stop 1")
+                .build();
+        firstDowntime.setId(UUID.randomUUID());
+        DowntimeEvent secondDowntime = DowntimeEvent.builder()
+                .equipmentId(equipmentId)
+                .departmentId(UUID.randomUUID())
+                .startAt(Instant.parse("2026-05-02T10:00:00Z"))
+                .endAt(Instant.parse("2026-05-02T11:30:00Z"))
+                .durationMinutes(90)
+                .type(DowntimeType.EMERGENCY)
+                .description("Stop 2")
+                .build();
+        secondDowntime.setId(UUID.randomUUID());
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(eq(equipmentId)))
+                .thenReturn(List.of(firstDowntime, secondDowntime));
+        when(actualCostRepository.sumAmountByEquipmentId(equipmentId)).thenReturn(0.0);
+
+        EquipmentAnalyticsResponse response = service.equipmentAnalytics(equipmentId);
+
+        assertThat(response.downtimeMinutes()).isEqualTo(120);
+        assertThat(response.downtimeHours()).isEqualTo(2.0);
+    }
+
+    @Test
+    void analyticsForEquipmentReturnsTotalCost() {
+        UUID equipmentId = UUID.randomUUID();
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(eq(equipmentId))).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(eq(equipmentId)))
+                .thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(eq(equipmentId)))
+                .thenReturn(List.of());
+        when(actualCostRepository.sumAmountByEquipmentId(equipmentId)).thenReturn(1250.75);
+
+        EquipmentAnalyticsResponse response = service.equipmentAnalytics(equipmentId);
+
+        assertThat(response.totalCost()).isEqualTo(1250.75);
+    }
+
+    @Test
+    void analyticsForEquipmentWithNoDataReturnsZerosAndEmptyLists() {
+        UUID equipmentId = UUID.randomUUID();
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(eq(equipmentId))).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(eq(equipmentId)))
+                .thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(eq(equipmentId)))
+                .thenReturn(List.of());
+        when(actualCostRepository.sumAmountByEquipmentId(equipmentId)).thenReturn(0.0);
 
         EquipmentAnalyticsResponse response = service.equipmentAnalytics(equipmentId);
 
         assertThat(response.equipmentId()).isEqualTo(equipmentId.toString());
+        assertThat(response.requestCount()).isZero();
+        assertThat(response.defectCount()).isZero();
+        assertThat(response.workOrderCount()).isZero();
+        assertThat(response.downtimeHours()).isZero();
+        assertThat(response.totalCost()).isZero();
         assertThat(response.history()).isEmpty();
         assertThat(response.downtimes()).isEmpty();
         assertThat(response.events()).isEmpty();
@@ -87,16 +203,23 @@ class AnalyticsServiceTest {
     }
 
     @Test
-    void nullRepositoryListsAreNormalizedToEmptyArrays() {
+    void existingDowntimeHistoryArraysRemainNonNull() {
         UUID equipmentId = UUID.randomUUID();
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(null);
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(eq(equipmentId))).thenReturn(null);
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(null);
         when(reliabilityMetricRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(eq(equipmentId)))
                 .thenReturn(null);
         when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(eq(equipmentId)))
                 .thenReturn(null);
+        when(actualCostRepository.sumAmountByEquipmentId(equipmentId)).thenReturn(0.0);
 
         EquipmentAnalyticsResponse response = service.equipmentAnalytics(equipmentId);
 
+        assertThat(response.requestCount()).isZero();
+        assertThat(response.defectCount()).isZero();
+        assertThat(response.workOrderCount()).isZero();
         assertThat(response.history()).isNotNull().isEmpty();
         assertThat(response.downtimes()).isNotNull().isEmpty();
         assertThat(response.events()).isNotNull().isEmpty();
@@ -115,4 +238,3 @@ class AnalyticsServiceTest {
         return equipment;
     }
 }
-

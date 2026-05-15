@@ -5,7 +5,6 @@ import com.toir.service.CalibrationService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -24,8 +23,14 @@ public class CalibrationController {
 
     @GetMapping("/calibration-records")
     public ResponseEntity<Page<CalibrationRecordDto>> list(
-            @RequestParam(required = false) String search
-    , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        if (equipmentId != null) {
+            return ResponseEntity.ok(PaginationUtils.page(service.findForEquipment(equipmentId), page, size));
+        }
         return ResponseEntity.ok(PaginationUtils.page(service.findAll(search), page, size));
     }
 

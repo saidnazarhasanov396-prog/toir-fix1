@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.controller.equipment.EquipmentController;
+import com.toir.dto.equipment.EquipmentDetailDto;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
@@ -405,7 +406,7 @@ class EquipmentControllerContractTest {
     }
 
     @Test
-    void detailResponseIncludesPlacementObject() throws Exception {
+    void detailResponseIncludesRelatedArrays() throws Exception {
         UUID id = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
@@ -417,15 +418,87 @@ class EquipmentControllerContractTest {
                 null,
                 null
         );
-        EquipmentDto dto = equipmentDto(id, equipmentTypeId, departmentId, null, null, departmentRef, placement);
-        when(service.findById(id)).thenReturn(dto);
+        EquipmentDto equipment = equipmentDto(id, equipmentTypeId, departmentId, null, null, departmentRef, placement);
+        EquipmentDetailDto detail = new EquipmentDetailDto(
+                equipment,
+                List.of(new EquipmentDetailDto.RepairRequestShortDto(
+                        UUID.randomUUID(),
+                        "RR-001",
+                        "Seal leak",
+                        null,
+                        null,
+                        "Detected leak"
+                )),
+                List.of(new EquipmentDetailDto.DefectShortDto(
+                        UUID.randomUUID(),
+                        "DEF-001",
+                        "Bearing overheating",
+                        null,
+                        null,
+                        "Temperature high"
+                )),
+                List.of(new EquipmentDetailDto.WorkOrderShortDto(
+                        UUID.randomUUID(),
+                        "WO-001",
+                        "Bearing replacement",
+                        null,
+                        null,
+                        null,
+                        "Replace bearing"
+                )),
+                List.of(new EquipmentDetailDto.DowntimeEventShortDto(
+                        UUID.randomUUID(),
+                        null,
+                        null,
+                        45,
+                        null,
+                        "Unexpected stop"
+                ))
+        );
+        when(service.findDetailById(id)).thenReturn(detail);
 
         mockMvc.perform(get("/api/v1/equipment/{id}", id))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.placement.type").value("DEPARTMENT"))
-                .andExpect(jsonPath("$.placement.department.id").value(departmentId.toString()))
-                .andExpect(jsonPath("$.placement.warehouse").value(nullValue()))
-                .andExpect(jsonPath("$.placement.warehouseStatus").value(nullValue()));
+                .andExpect(jsonPath("$.equipment.placement.type").value("DEPARTMENT"))
+                .andExpect(jsonPath("$.equipment.placement.department.id").value(departmentId.toString()))
+                .andExpect(jsonPath("$.repairRequests").isArray())
+                .andExpect(jsonPath("$.repairRequests.length()").value(1))
+                .andExpect(jsonPath("$.defects").isArray())
+                .andExpect(jsonPath("$.defects.length()").value(1))
+                .andExpect(jsonPath("$.workOrders").isArray())
+                .andExpect(jsonPath("$.workOrders.length()").value(1))
+                .andExpect(jsonPath("$.downtimeEvents").isArray())
+                .andExpect(jsonPath("$.downtimeEvents.length()").value(1));
+    }
+
+    @Test
+    void detailResponseRelatedArraysAreEmptyNotNull() throws Exception {
+        UUID id = UUID.randomUUID();
+        EquipmentDto equipment = equipmentDto(id, UUID.randomUUID(), null);
+        EquipmentDetailDto detail = new EquipmentDetailDto(equipment, List.of(), List.of(), List.of(), List.of());
+        when(service.findDetailById(id)).thenReturn(detail);
+
+        mockMvc.perform(get("/api/v1/equipment/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.repairRequests").isArray())
+                .andExpect(jsonPath("$.repairRequests.length()").value(0))
+                .andExpect(jsonPath("$.defects").isArray())
+                .andExpect(jsonPath("$.defects.length()").value(0))
+                .andExpect(jsonPath("$.workOrders").isArray())
+                .andExpect(jsonPath("$.workOrders.length()").value(0))
+                .andExpect(jsonPath("$.downtimeEvents").isArray())
+                .andExpect(jsonPath("$.downtimeEvents.length()").value(0));
+    }
+
+    @Test
+    void detailUnknownEquipmentReturns404() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(service.findDetailById(id))
+                .thenThrow(RestException.notFound("Equipment not found: " + id));
+
+        mockMvc.perform(get("/api/v1/equipment/{id}", id))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Equipment not found: " + id));
     }
 
     @Test

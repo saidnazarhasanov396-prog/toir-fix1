@@ -1,6 +1,7 @@
 package com.toir.service;
 import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.entity.RcmSnapshot;
+import com.toir.exception.RestException;
 import com.toir.repository.RcmSnapshotRepository;
 
 import com.toir.entity.equipment.CriticalityClass;
@@ -81,6 +82,8 @@ public class RcmService {
     }
 
     public List<RcmSnapshot> historyFor(UUID equipmentId) {
+        equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
         return snapshotRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByCapturedAtDesc(equipmentId);
     }
 

@@ -1,5 +1,6 @@
 package com.toir.controller.equipment;
 import com.toir.dto.equipment.EquipmentCreateRequest;
+import com.toir.dto.equipment.EquipmentDetailDto;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.equipment.EquipmentUpdateRequest;
@@ -54,7 +55,9 @@ public class EquipmentController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<EquipmentDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
+    public ResponseEntity<EquipmentDetailDto> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.findDetailById(id));
+    }
 
     @GetMapping("/{id}/children")
     public ResponseEntity<Page<EquipmentDto>> children(

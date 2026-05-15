@@ -16,10 +16,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class CalibrationService {
+
+    private static final Pattern CERTIFICATE_ALLOWED_PATTERN = Pattern.compile("^[A-Za-z0-9/_-]+$");
+    private static final Pattern CERTIFICATE_HAS_LETTER_PATTERN = Pattern.compile(".*[A-Za-z].*");
+    private static final Pattern CERTIFICATE_HAS_DIGIT_PATTERN = Pattern.compile(".*\\d.*");
 
     private final CalibrationRecordRepository repo;
     private final EquipmentRepository equipmentRepository;
@@ -27,6 +32,7 @@ public class CalibrationService {
 
     @Transactional(readOnly = true)
     public List<CalibrationRecordDto> findForEquipment(UUID equipmentId) {
+        ensureEquipmentExists(equipmentId);
         return repo.findAllByEquipmentIdAndIsDeletedFalseOrderByPerformedAtDesc(equipmentId).stream()
                 .map(CalibrationRecordDto::from).toList();
     }
@@ -45,12 +51,11 @@ public class CalibrationService {
 
     @Transactional
     public CalibrationRecordDto create(CalibrationRecordRequest r) {
-        if (!equipmentRepository.existsByIdAndIsDeletedFalse(r.equipmentId())) {
-            throw RestException.notFound("Equipment not found: " + r.equipmentId());
-        }
+        String certificateNumber = normalizeAndValidateCertificateNumber(r.certificateNumber());
+        ensureEquipmentExists(r.equipmentId());
         CalibrationRecord c = new CalibrationRecord();
         c.setEquipmentId(r.equipmentId());
-        c.setCertificateNumber(r.certificateNumber());
+        c.setCertificateNumber(certificateNumber);
         c.setPerformedBy(r.performedBy());
         c.setPerformedAt(r.performedAt());
         c.setNextDueAt(r.nextDueAt());
@@ -80,11 +85,10 @@ public class CalibrationService {
     public CalibrationRecordDto update(UUID id, CalibrationRecordRequest r) {
         CalibrationRecord c = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Calibration record not found: " + id));
-        if (!equipmentRepository.existsByIdAndIsDeletedFalse(r.equipmentId())) {
-            throw RestException.notFound("Equipment not found: " + r.equipmentId());
-        }
+        String certificateNumber = normalizeAndValidateCertificateNumber(r.certificateNumber());
+        ensureEquipmentExists(r.equipmentId());
         c.setEquipmentId(r.equipmentId());
-        c.setCertificateNumber(r.certificateNumber());
+        c.setCertificateNumber(certificateNumber);
         c.setPerformedBy(r.performedBy());
         c.setPerformedAt(r.performedAt());
         c.setNextDueAt(r.nextDueAt());
@@ -133,5 +137,29 @@ public class CalibrationService {
                 .filter(c -> !c.isDeleted())
                 .map(CalibrationRecordDto::from)
                 .orElseThrow(() -> RestException.notFound("Calibration record not found: " + id));
+    }
+
+    private void ensureEquipmentExists(UUID equipmentId) {
+        if (!equipmentRepository.existsByIdAndIsDeletedFalse(equipmentId)) {
+            throw RestException.notFound("Equipment not found: " + equipmentId);
+        }
+    }
+
+    private String normalizeAndValidateCertificateNumber(String certificateNumber) {
+        if (certificateNumber == null || certificateNumber.isBlank()) {
+            throw RestException.badRequest("certificateNumber is required");
+        }
+        String normalized = certificateNumber.trim();
+        if (normalized.length() < 3 || normalized.length() > 64) {
+            throw RestException.badRequest("certificateNumber length must be between 3 and 64");
+        }
+        if (!CERTIFICATE_ALLOWED_PATTERN.matcher(normalized).matches()) {
+            throw RestException.badRequest("certificateNumber contains invalid characters");
+        }
+        if (!CERTIFICATE_HAS_LETTER_PATTERN.matcher(normalized).matches()
+                || !CERTIFICATE_HAS_DIGIT_PATTERN.matcher(normalized).matches()) {
+            throw RestException.badRequest("certificateNumber must contain at least one letter and one digit");
+        }
+        return normalized;
     }
 }

@@ -38,11 +38,16 @@ class EquipmentAnalyticsControllerContractTest {
     }
 
     @Test
-    void analyticsForExistingEquipmentWithNoDowntimeReturns200WithEmptyArrays() throws Exception {
+    void analyticsForEquipmentWithNoDataReturnsZerosAndEmptyLists() throws Exception {
         UUID equipmentId = UUID.randomUUID();
         when(service.equipmentAnalytics(equipmentId)).thenReturn(
                 new EquipmentAnalyticsResponse(
                         equipmentId.toString(),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                         0,
                         0,
                         0,
@@ -55,6 +60,11 @@ class EquipmentAnalyticsControllerContractTest {
 
         mockMvc.perform(get("/api/v1/analytics/equipment/{equipmentId}", equipmentId))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestCount").value(0))
+                .andExpect(jsonPath("$.defectCount").value(0))
+                .andExpect(jsonPath("$.workOrderCount").value(0))
+                .andExpect(jsonPath("$.downtimeHours").value(0))
+                .andExpect(jsonPath("$.totalCost").value(0))
                 .andExpect(jsonPath("$.history").isArray())
                 .andExpect(jsonPath("$.history.length()").value(0))
                 .andExpect(jsonPath("$.downtimes").isArray())
@@ -69,6 +79,11 @@ class EquipmentAnalyticsControllerContractTest {
         when(service.equipmentAnalytics(equipmentId)).thenReturn(
                 new EquipmentAnalyticsResponse(
                         equipmentId.toString(),
+                        4,
+                        2,
+                        3,
+                        5.5,
+                        230.75,
                         12.5,
                         3.2,
                         97.7,
@@ -82,27 +97,31 @@ class EquipmentAnalyticsControllerContractTest {
         mockMvc.perform(get("/api/v1/downtime-analytics/equipment/{equipmentId}", equipmentId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.requestCount").value(4))
+                .andExpect(jsonPath("$.defectCount").value(2))
+                .andExpect(jsonPath("$.workOrderCount").value(3))
+                .andExpect(jsonPath("$.downtimeHours").value(5.5))
+                .andExpect(jsonPath("$.totalCost").value(230.75))
                 .andExpect(jsonPath("$.history").isArray())
                 .andExpect(jsonPath("$.downtimes").isArray())
                 .andExpect(jsonPath("$.events").isArray());
     }
 
     @Test
-    void unknownEquipmentReturns404() throws Exception {
+    void analyticsForUnknownEquipmentReturns404() throws Exception {
         UUID equipmentId = UUID.randomUUID();
         when(service.equipmentAnalytics(equipmentId))
                 .thenThrow(RestException.notFound("Equipment not found: " + equipmentId));
 
-        mockMvc.perform(get("/api/v1/downtime-analytics/equipment/{equipmentId}", equipmentId))
+        mockMvc.perform(get("/api/v1/analytics/equipment/{equipmentId}", equipmentId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").exists());
     }
 
     @Test
     void invalidUuidReturns400() throws Exception {
-        mockMvc.perform(get("/api/v1/downtime-analytics/equipment/{equipmentId}", "not-a-uuid"))
+        mockMvc.perform(get("/api/v1/analytics/equipment/{equipmentId}", "not-a-uuid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").exists());
     }
 }
-

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -16,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -24,11 +26,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 @ExtendWith(MockitoExtension.class)
@@ -129,6 +134,26 @@ class KnowledgeControllerContractTest {
     }
 
     @Test
+    void listReturnsUtf8CyrillicText() throws Exception {
+        String expectedTitle = "Дефект насоса: перегрев";
+        when(service.list(isNull(), isNull(), isNull(), eq(0), eq(10)))
+                .thenReturn(page(List.of(dto(null, "LESSON_LEARNED", expectedTitle)), 0, 10, 1));
+
+        MvcResult result = mockMvc.perform(get("/api/v1/knowledge")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.content[0].title").value(expectedTitle))
+                .andReturn();
+
+        String utf8Body = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertTrue(utf8Body.contains(expectedTitle));
+        assertFalse(utf8Body.contains("Ð"));
+        assertNull(result.getResolvedException());
+    }
+
+    @Test
     void diagnosticOldUnpagedStubTriggers500WithUnsupportedOperationException() throws Exception {
         when(service.list(isNull(), isNull(), isNull(), eq(0), eq(10)))
                 .thenReturn(new PageImpl<>(List.of(dto(null, "LESSON_LEARNED"))));
@@ -164,10 +189,14 @@ class KnowledgeControllerContractTest {
     }
 
     private KnowledgeArticleDto dto(UUID equipmentId, String kind) {
+        return dto(equipmentId, kind, "Bearing failure lesson");
+    }
+
+    private KnowledgeArticleDto dto(UUID equipmentId, String kind, String title) {
         return new KnowledgeArticleDto(
                 UUID.randomUUID(),
                 "KB-01",
-                "Bearing failure lesson",
+                title,
                 kind,
                 null,
                 equipmentId,

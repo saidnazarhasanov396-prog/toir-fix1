@@ -1,5 +1,6 @@
 package com.toir.controller;
 import com.toir.dto.rcm.EquipmentRiskScore;
+import com.toir.dto.rcm.RcmSnapshotCaptureResponse;
 import com.toir.entity.RcmSnapshot;
 import com.toir.service.RcmAutoPlannerService;
 import com.toir.service.RcmService;
@@ -33,14 +34,14 @@ public class RcmController {
     }
 
     @PostMapping("/snapshot")
-    public ResponseEntity<Page<RcmSnapshot>> capture(@RequestParam(defaultValue = "0") int page,
-                                                     @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.captureSnapshot(), page, size));
+    public ResponseEntity<RcmSnapshotCaptureResponse> capture() {
+        List<RcmSnapshot> items = service.captureSnapshot();
+        return ResponseEntity.ok(new RcmSnapshotCaptureResponse(items.size(), items));
     }
 
     @GetMapping("/snapshot/{equipmentId}")
-    public ResponseEntity<Page<RcmSnapshot>> history(@PathVariable UUID equipmentId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.historyFor(equipmentId), page, size));
+    public ResponseEntity<List<RcmSnapshot>> history(@PathVariable UUID equipmentId) {
+        return ResponseEntity.ok(service.historyFor(equipmentId));
     }
 
     @PostMapping("/auto-plan")

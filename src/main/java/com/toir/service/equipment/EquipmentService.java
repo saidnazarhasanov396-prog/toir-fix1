@@ -2,14 +2,19 @@ package com.toir.service.equipment;
 
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentCreateRequest;
+import com.toir.dto.equipment.EquipmentDetailDto;
 import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.equipment.EquipmentUpdateRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.entity.Department;
+import com.toir.entity.DowntimeEvent;
 import com.toir.entity.Location;
+import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentPassport;
 import com.toir.entity.equipment.EquipmentType;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.AuditAction;
@@ -22,12 +27,16 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseEquipmentItemRepository;
+import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.LocationRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -52,6 +61,10 @@ public class EquipmentService {
     private final EquipmentPassportRepository passportRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
+    private final RepairRequestRepository repairRequestRepository;
+    private final DefectRepository defectRepository;
+    private final WorkOrderRepository workOrderRepository;
+    private final DowntimeEventRepository downtimeEventRepository;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private final AuditBuilderService auditBuilderService;
     private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
@@ -107,6 +120,81 @@ public class EquipmentService {
     @Transactional(readOnly = true)
     public EquipmentDto findById(UUID id) {
         return enrich(List.of(getOrThrow(id))).getFirst();
+    }
+
+    @Transactional(readOnly = true)
+    public EquipmentDetailDto findDetailById(UUID id) {
+        EquipmentDto equipment = findById(id);
+
+        List<RepairRequest> repairRequestEntities = repairRequestRepository.search(null, null, id);
+        if (repairRequestEntities == null) {
+            repairRequestEntities = List.of();
+        }
+        List<EquipmentDetailDto.RepairRequestShortDto> repairRequests = repairRequestEntities.stream()
+                .map(r -> new EquipmentDetailDto.RepairRequestShortDto(
+                        r.getId(),
+                        r.getNumber(),
+                        r.getTitle(),
+                        r.getStatus(),
+                        r.getDetectedAt(),
+                        r.getDescription()
+                ))
+                .toList();
+
+        List<Defect> defectEntities = defectRepository.findAllByEquipmentIdAndIsDeletedFalse(id);
+        if (defectEntities == null) {
+            defectEntities = List.of();
+        }
+        List<EquipmentDetailDto.DefectShortDto> defects = defectEntities.stream()
+                .map(d -> new EquipmentDetailDto.DefectShortDto(
+                        d.getId(),
+                        d.getCode(),
+                        d.getTitle(),
+                        d.getStatus(),
+                        d.getDetectedAt(),
+                        d.getDescription()
+                ))
+                .toList();
+
+        List<WorkOrder> workOrderEntities = workOrderRepository.search(null, null, id);
+        if (workOrderEntities == null) {
+            workOrderEntities = List.of();
+        }
+        List<EquipmentDetailDto.WorkOrderShortDto> workOrders = workOrderEntities.stream()
+                .map(w -> new EquipmentDetailDto.WorkOrderShortDto(
+                        w.getId(),
+                        w.getNumber(),
+                        w.getTitle(),
+                        w.getStatus(),
+                        w.getStartedAt(),
+                        w.getCompletedAt(),
+                        w.getSummary()
+                ))
+                .toList();
+
+        List<DowntimeEvent> downtimeEventEntities = downtimeEventRepository
+                .findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(id);
+        if (downtimeEventEntities == null) {
+            downtimeEventEntities = List.of();
+        }
+        List<EquipmentDetailDto.DowntimeEventShortDto> downtimeEvents = downtimeEventEntities.stream()
+                .map(d -> new EquipmentDetailDto.DowntimeEventShortDto(
+                        d.getId(),
+                        d.getStartAt(),
+                        d.getEndAt(),
+                        d.getDurationMinutes(),
+                        d.getType(),
+                        d.getDescription()
+                ))
+                .toList();
+
+        return new EquipmentDetailDto(
+                equipment,
+                repairRequests,
+                defects,
+                workOrders,
+                downtimeEvents
+        );
     }
 
     @Transactional(readOnly = true)
