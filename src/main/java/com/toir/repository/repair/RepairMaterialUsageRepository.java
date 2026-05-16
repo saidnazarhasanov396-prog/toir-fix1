@@ -1,6 +1,7 @@
 package com.toir.repository.repair;
 
 import com.toir.entity.repair.RepairMaterialUsage;
+import com.toir.repository.projection.WorkOrderCountProjection;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -30,4 +31,13 @@ public interface RepairMaterialUsageRepository extends JpaRepository<RepairMater
 
     @Query(value = "SELECT * FROM repair_material_usages WHERE work_order_id = :workOrderId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<RepairMaterialUsage> findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("workOrderId") UUID workOrderId);
+
+    @Query("""
+            select u.workOrderId as workOrderId, count(u) as count
+            from RepairMaterialUsage u
+            where u.isDeleted = false
+              and u.workOrderId in :workOrderIds
+            group by u.workOrderId
+            """)
+    List<WorkOrderCountProjection> countByWorkOrderIds(@Param("workOrderIds") Collection<UUID> workOrderIds);
 }

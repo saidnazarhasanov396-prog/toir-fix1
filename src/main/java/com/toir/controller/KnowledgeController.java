@@ -28,7 +28,14 @@ public class KnowledgeController {
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(service.list(equipmentId, equipmentTypeId, kind, page, size));
+
+        return ResponseEntity.ok(service.list(
+                equipmentId,
+                equipmentTypeId,
+                kind,
+                page,
+                size
+        ));
     }
 
     @GetMapping("/{id}")

@@ -125,6 +125,25 @@ class WorkOrderControllerContractTest {
     }
 
     @Test
+    void detailResponseIncludesOperationsMaterialsCounts() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrderDto response = workOrderDto(
+                workOrderId,
+                WorkOrderStatus.PLANNED,
+                repairRequestBrief(),
+                defectBrief(),
+                2,
+                4
+        );
+        when(service.findById(workOrderId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/work-orders/{id}", workOrderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.operationsCount").value(2))
+                .andExpect(jsonPath("$.materialsCount").value(4));
+    }
+
+    @Test
     void listWithBlankSearchReturns200() throws Exception {
         WorkOrderDto dto = workOrderDto(UUID.randomUUID(), null, null);
         when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
@@ -137,6 +156,29 @@ class WorkOrderControllerContractTest {
                         .param("search", ""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(dto.id().toString()));
+    }
+
+    @Test
+    void listResponseIncludesOperationsMaterialsCounts() throws Exception {
+        WorkOrderDto dto = workOrderDto(
+                UUID.randomUUID(),
+                WorkOrderStatus.PLANNED,
+                null,
+                null,
+                3,
+                1
+        );
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, 0, 10, ""))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/v1/work-orders")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("search", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].operationsCount").value(3))
+                .andExpect(jsonPath("$.content[0].materialsCount").value(1));
     }
 
     @Test
@@ -344,7 +386,9 @@ class WorkOrderControllerContractTest {
                 "Replacement Equipment",
                 List.of(),
                 null,
-                null
+                null,
+                0,
+                0
         );
         when(service.complete(eq(workOrderId), any())).thenReturn(response);
 
@@ -405,6 +449,15 @@ class WorkOrderControllerContractTest {
                                       WorkOrderStatus status,
                                       RepairRequestBriefDto repairRequest,
                                       DefectBriefDto defect) {
+        return workOrderDto(id, status, repairRequest, defect, 0, 0);
+    }
+
+    private WorkOrderDto workOrderDto(UUID id,
+                                      WorkOrderStatus status,
+                                      RepairRequestBriefDto repairRequest,
+                                      DefectBriefDto defect,
+                                      int operationsCount,
+                                      int materialsCount) {
         return new WorkOrderDto(
                 id,
                 "WO-2026-1001",
@@ -435,7 +488,9 @@ class WorkOrderControllerContractTest {
                 null,
                 List.of(),
                 repairRequest,
-                defect
+                defect,
+                operationsCount,
+                materialsCount
         );
     }
 
@@ -474,7 +529,9 @@ class WorkOrderControllerContractTest {
                 null,
                 List.of(),
                 repairRequest,
-                defect
+                defect,
+                0,
+                0
         );
     }
 

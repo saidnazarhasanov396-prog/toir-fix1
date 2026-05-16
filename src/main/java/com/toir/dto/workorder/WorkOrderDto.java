@@ -41,7 +41,9 @@ public record WorkOrderDto(
         String replacementEquipmentName,
         List<WorkOrderTaskDto> tasks,
         RepairRequestBriefDto repairRequest,
-        DefectBriefDto defect
+        DefectBriefDto defect,
+        int operationsCount,
+        int materialsCount
 ) {
 //    public static WorkOrderDto from(WorkOrder w) {
 //        return new WorkOrderDto(

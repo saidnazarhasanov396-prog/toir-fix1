@@ -27,9 +27,12 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.WorkExecutionRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.projection.WorkOrderCountProjection;
+import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -43,6 +46,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -83,6 +87,12 @@ class WorkOrderServiceTest {
 
     @Mock
     DefectRepository defectRepository;
+
+    @Mock
+    WorkExecutionRepository workExecutionRepository;
+
+    @Mock
+    RepairMaterialUsageRepository repairMaterialUsageRepository;
 
     @Mock
     WarehouseRepository warehouseRepository;
@@ -341,6 +351,23 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void detailIncludesOperationsAndMaterialsCounts() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(workExecutionRepository.countByWorkOrderIds(List.of(workOrderId)))
+                .thenReturn(List.of(countProjection(workOrderId, 2)));
+        when(repairMaterialUsageRepository.countByWorkOrderIds(List.of(workOrderId)))
+                .thenReturn(List.of(countProjection(workOrderId, 4)));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.findById(workOrderId);
+
+        assertThat(response.operationsCount()).isEqualTo(2);
+        assertThat(response.materialsCount()).isEqualTo(4);
+    }
+
+    @Test
     void listBatchEnrichmentDoesNotNPlusOne() {
         UUID repairRequestId = UUID.randomUUID();
         UUID defectId = UUID.randomUUID();
@@ -352,6 +379,10 @@ class WorkOrderServiceTest {
         second.setDefectId(defectId);
 
         when(repository.search(null, null, null)).thenReturn(java.util.List.of(first, second));
+        when(workExecutionRepository.countByWorkOrderIds(List.of(first.getId(), second.getId())))
+                .thenReturn(List.of());
+        when(repairMaterialUsageRepository.countByWorkOrderIds(List.of(first.getId(), second.getId())))
+                .thenReturn(List.of());
         when(repairRequestRepository.findAllByIdInAndIsDeletedFalse(java.util.List.of(repairRequestId)))
                 .thenReturn(java.util.List.of(repairRequest(repairRequestId, RequestStatus.OPEN)));
         when(defectRepository.findAllByIdInAndIsDeletedFalse(java.util.List.of(defectId)))
@@ -373,6 +404,63 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void listIncludesOperationsAndMaterialsCounts() {
+        WorkOrder workOrder = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        when(repository.searchPaginated(null, null, null, null, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(workOrder), PageRequest.of(0, 10), 1));
+        when(workExecutionRepository.countByWorkOrderIds(List.of(workOrder.getId())))
+                .thenReturn(List.of(countProjection(workOrder.getId(), 3)));
+        when(repairMaterialUsageRepository.countByWorkOrderIds(List.of(workOrder.getId())))
+                .thenReturn(List.of(countProjection(workOrder.getId(), 5)));
+        stubLifecycleDtoLookups(workOrder);
+
+        org.springframework.data.domain.Page<WorkOrderDto> result =
+                service.search(null, null, null, 0, 10, null);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().operationsCount()).isEqualTo(3);
+        assertThat(result.getContent().getFirst().materialsCount()).isEqualTo(5);
+    }
+
+    @Test
+    void listReturnsZeroCountsWhenNoOperationsOrMaterials() {
+        WorkOrder workOrder = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        when(repository.searchPaginated(null, null, null, null, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(workOrder), PageRequest.of(0, 10), 1));
+        when(workExecutionRepository.countByWorkOrderIds(List.of(workOrder.getId())))
+                .thenReturn(List.of());
+        when(repairMaterialUsageRepository.countByWorkOrderIds(List.of(workOrder.getId())))
+                .thenReturn(List.of());
+        stubLifecycleDtoLookups(workOrder);
+
+        org.springframework.data.domain.Page<WorkOrderDto> result =
+                service.search(null, null, null, 0, 10, null);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().operationsCount()).isZero();
+        assertThat(result.getContent().getFirst().materialsCount()).isZero();
+    }
+
+    @Test
+    void listBatchLoadsOperationAndMaterialCountsOnce() {
+        WorkOrder first = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        WorkOrder second = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        when(repository.search(null, null, null)).thenReturn(List.of(first, second));
+        when(workExecutionRepository.countByWorkOrderIds(List.of(first.getId(), second.getId())))
+                .thenReturn(List.of());
+        when(repairMaterialUsageRepository.countByWorkOrderIds(List.of(first.getId(), second.getId())))
+                .thenReturn(List.of());
+        stubLifecycleDtoLookups(first);
+        stubLifecycleDtoLookups(second);
+
+        List<WorkOrderDto> result = service.search(null, null, null);
+
+        assertThat(result).hasSize(2);
+        verify(workExecutionRepository).countByWorkOrderIds(List.of(first.getId(), second.getId()));
+        verify(repairMaterialUsageRepository).countByWorkOrderIds(List.of(first.getId(), second.getId()));
+    }
+
+    @Test
     void listEnrichmentNullSafeForMissingLinks() {
         UUID repairRequestId = UUID.randomUUID();
         UUID defectId = UUID.randomUUID();
@@ -382,6 +470,10 @@ class WorkOrderServiceTest {
 
         when(repository.searchPaginated(null, null, null, null, PageRequest.of(0, 10)))
                 .thenReturn(new PageImpl<>(java.util.List.of(workOrder), PageRequest.of(0, 10), 1));
+        when(workExecutionRepository.countByWorkOrderIds(List.of(workOrder.getId())))
+                .thenReturn(List.of());
+        when(repairMaterialUsageRepository.countByWorkOrderIds(List.of(workOrder.getId())))
+                .thenReturn(List.of());
         when(repairRequestRepository.findAllByIdInAndIsDeletedFalse(java.util.List.of(repairRequestId)))
                 .thenReturn(java.util.List.of());
         when(defectRepository.findAllByIdInAndIsDeletedFalse(java.util.List.of(defectId)))
@@ -401,10 +493,35 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void workOrderWithoutIdDefaultsCountsToZero() {
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setNumber("WO-NO-ID");
+        workOrder.setTitle("No id");
+        workOrder.setEquipmentId(UUID.randomUUID());
+        workOrder.setDepartmentId(UUID.randomUUID());
+        workOrder.setStatus(WorkOrderStatus.APPROVED);
+        workOrder.setType(WorkOrderType.PLANNED);
+        workOrder.setWorkType(WorkType.REPAIR);
+        when(repository.search(null, null, null)).thenReturn(List.of(workOrder));
+        stubLifecycleDtoLookups(workOrder);
+
+        List<WorkOrderDto> result = service.search(null, null, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().operationsCount()).isZero();
+        assertThat(result.getFirst().materialsCount()).isZero();
+        verifyNoInteractions(workExecutionRepository, repairMaterialUsageRepository);
+    }
+
+    @Test
     void listBlankSearchDoesNotFail() {
         WorkOrder workOrder = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
         when(repository.searchPaginated(eq(null), eq(null), eq(null), eq(null), eq(PageRequest.of(0, 10))))
                 .thenReturn(new PageImpl<>(java.util.List.of(workOrder), PageRequest.of(0, 10), 1));
+        when(workExecutionRepository.countByWorkOrderIds(List.of(workOrder.getId())))
+                .thenReturn(List.of());
+        when(repairMaterialUsageRepository.countByWorkOrderIds(List.of(workOrder.getId())))
+                .thenReturn(List.of());
         stubLifecycleDtoLookups(workOrder);
 
         org.springframework.data.domain.Page<WorkOrderDto> result =
@@ -1329,6 +1446,20 @@ class WorkOrderServiceTest {
         assertThatThrownBy(() -> service.start(workOrderId))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Replacement equipment item not found in selected warehouse");
+    }
+
+    private WorkOrderCountProjection countProjection(UUID workOrderId, long count) {
+        return new WorkOrderCountProjection() {
+            @Override
+            public UUID getWorkOrderId() {
+                return workOrderId;
+            }
+
+            @Override
+            public long getCount() {
+                return count;
+            }
+        };
     }
 
     private PprPlan pprPlan(UUID id, PlanStatus status) {
