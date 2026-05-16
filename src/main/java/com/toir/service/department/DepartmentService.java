@@ -25,7 +25,8 @@ public class DepartmentService {
 
     @Transactional(readOnly = true)
     public List<DepartmentDto> findAll(DepartmentType type, String search) {
-        return repository.findAllByIsDeletedFalseAndByType(type, search).stream()
+        String normalizedSearch = normalizeSearch(search);
+        return repository.findAllByIsDeletedFalseAndByType(type, normalizedSearch).stream()
                 .map(DepartmentDto::from)
                 .toList();
     }
@@ -42,6 +43,7 @@ public class DepartmentService {
         }
         Department entity = new Department();
         apply(entity, request);
+        entity.setDeleted(false);
         Department created = repository.save(entity);
 
         auditBuilderService.log(
@@ -108,5 +110,13 @@ public class DepartmentService {
         entity.setType(request.type());
         entity.setParentId(request.parentId());
         entity.setDescription(request.description());
+    }
+
+    private String normalizeSearch(String search) {
+        if (search == null) {
+            return null;
+        }
+        String trimmed = search.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

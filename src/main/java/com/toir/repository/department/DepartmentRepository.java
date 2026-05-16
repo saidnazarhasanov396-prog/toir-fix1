@@ -42,13 +42,15 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID> {
               and (:type is null or d.type = :type)
               and (
                     :search is null
-                    or :search = ''
-                    or lower(d.name) like lower(concat('%', :search, '%'))
-                    or lower(d.nameEn) like lower(concat('%', :search, '%'))
-                    or lower(d.nameUz) like lower(concat('%', :search, '%'))
-                    or lower(d.description) like lower(concat('%', :search, '%'))
+                    or trim(:search) = ''
+                    or lower(coalesce(d.code, '')) like lower(concat('%', :search, '%'))
+                    or lower(coalesce(d.name, '')) like lower(concat('%', :search, '%'))
+                    or lower(coalesce(d.nameEn, '')) like lower(concat('%', :search, '%'))
+                    or lower(coalesce(d.nameUz, '')) like lower(concat('%', :search, '%'))
+                    or lower(coalesce(d.description, '')) like lower(concat('%', :search, '%'))
                   )
             order by d.updatedAt desc
             """)
-    List<Department> findAllByIsDeletedFalseAndByType(DepartmentType type, String search);
+    List<Department> findAllByIsDeletedFalseAndByType(@Param("type") DepartmentType type,
+                                                      @Param("search") String search);
 }
