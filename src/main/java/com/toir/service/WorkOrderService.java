@@ -18,6 +18,7 @@ import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.enums.DefectStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
@@ -64,8 +65,16 @@ public class WorkOrderService {
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
-    private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
+    private static final Set<WorkOrderStatus> TERMINAL_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
+    private static final Set<WorkOrderStatus> ACTIVE_WORK_ORDER_STATUSES =
+            EnumSet.of(WorkOrderStatus.DRAFT, WorkOrderStatus.PLANNED, WorkOrderStatus.APPROVED, WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.SUSPENDED);
+    private static final Set<RequestStatus> TERMINAL_REPAIR_REQUEST_STATUSES =
+            EnumSet.of(RequestStatus.REJECTED, RequestStatus.COMPLETED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
+    private static final Set<DefectStatus> TERMINAL_DEFECT_STATUSES =
+            EnumSet.of(DefectStatus.RESOLVED, DefectStatus.CLOSED, DefectStatus.CANCELLED);
+    private static final Set<DefectStatus> RESOLVED_OR_CLOSED_DEFECT_STATUSES =
+            EnumSet.of(DefectStatus.RESOLVED, DefectStatus.CLOSED);
     private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_WORK_ORDER_CREATE =
             EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
 
@@ -184,6 +193,7 @@ public class WorkOrderService {
         ensureReplacementEquipmentReservedOnStart(entity);
 
         WorkOrder saved = repository.save(entity);
+        syncLinkedOnStart(saved);
 
         auditBuilderService.log(
                 "work_order",
@@ -194,7 +204,7 @@ public class WorkOrderService {
                 entity,
                 saved);
 
-        return toDto(entity);
+        return toDto(saved);
     }
 
     @Transactional
@@ -225,6 +235,7 @@ public class WorkOrderService {
         completeLinkedPprTask(entity);
 
         WorkOrder saved = repository.save(entity);
+        syncLinkedOnComplete(saved);
 
         auditBuilderService.log(
                 "work_order",
@@ -234,7 +245,7 @@ public class WorkOrderService {
                 "Завершён наряд " + saved.getNumber(),
                 entity,
                 saved);
-        return toDto(entity);
+        return toDto(saved);
     }
 
     @Transactional
@@ -252,9 +263,9 @@ public class WorkOrderService {
         entity.setCompletedAt(Instant.now());
         updateReplacementEquipmentStatus(entity, WarehouseEquipmentStatus.INSTALLED);
         completeLinkedPprTask(entity);
-        closeLinkedRepairRequestIfReady(entity, request.result());
 
         WorkOrder saved = repository.save(entity);
+        syncLinkedOnClose(saved, request.result());
 
         auditBuilderService.log(
                 "work_order",
@@ -266,7 +277,7 @@ public class WorkOrderService {
                 null);
 
 
-        return toDto(entity);
+        return toDto(saved);
     }
 
     @Transactional
@@ -347,44 +358,222 @@ public class WorkOrderService {
         );
     }
 
-    private void closeLinkedRepairRequestIfReady(WorkOrder workOrder, String closeResult) {
+    private void syncLinkedOnStart(WorkOrder workOrder) {
+        syncRepairRequestOnStart(workOrder);
+        syncDefectOnStart(workOrder);
+    }
+
+    private void syncLinkedOnComplete(WorkOrder workOrder) {
+        syncDefectOnComplete(workOrder);
+        syncRepairRequestOnComplete(workOrder);
+    }
+
+    private void syncLinkedOnClose(WorkOrder workOrder, String closeResult) {
+        syncDefectOnClose(workOrder);
+        syncRepairRequestOnClose(workOrder, closeResult);
+    }
+
+    private void syncRepairRequestOnStart(WorkOrder workOrder) {
         if (workOrder.getRepairRequestId() == null) {
             return;
         }
-        List<WorkOrder> linkedWorkOrders = repository
-                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrder.getRepairRequestId());
-        if (linkedWorkOrders.isEmpty()) {
-            return;
-        }
-        boolean allTerminal = linkedWorkOrders.stream().allMatch(this::isTerminal);
-        if (!allTerminal) {
-            return;
-        }
-        RepairRequest request = repairRequestRepository.findByIdAndIsDeletedFalse(workOrder.getRepairRequestId())
-                .orElseThrow(() -> RestException.notFound("Repair request not found: " + workOrder.getRepairRequestId()));
-        if (request.getStatus() == RequestStatus.CLOSED || request.getStatus() == RequestStatus.CANCELLED) {
-            return;
-        }
-        request.setStatus(RequestStatus.CLOSED);
-        request.setActualCompletionAt(Instant.now());
-        request.setCloseResult(closeResult);
-
-        RepairRequest saved = repairRequestRepository.save(request);
-
-        auditBuilderService.log(
-                "repair_request",
-                saved.getId().toString(),
-                AuditAction.CLOSE,
-                AuditModule.REPAIR_REQUEST,
-                "Заявка " + saved.getNumber() + " закрыта после закрытия связанных нарядов",
-                request,
-                saved
-        );
+        repairRequestRepository.findByIdAndIsDeletedFalse(workOrder.getRepairRequestId())
+                .ifPresent(request -> {
+                    if (TERMINAL_REPAIR_REQUEST_STATUSES.contains(request.getStatus())) {
+                        return;
+                    }
+                    if (request.getStatus() == RequestStatus.IN_PROGRESS) {
+                        return;
+                    }
+                    request.setStatus(RequestStatus.IN_PROGRESS);
+                    RepairRequest saved = repairRequestRepository.save(request);
+                    auditBuilderService.log(
+                            "repair_request",
+                            saved.getId().toString(),
+                            AuditAction.UPDATE,
+                            AuditModule.REPAIR_REQUEST,
+                            "Repair request moved to IN_PROGRESS from linked work order start",
+                            request,
+                            saved
+                    );
+                });
     }
 
-    private boolean isTerminal(WorkOrder workOrder) {
-        return workOrder.getStatus() == WorkOrderStatus.CLOSED
-                || workOrder.getStatus() == WorkOrderStatus.CANCELLED;
+    private void syncDefectOnStart(WorkOrder workOrder) {
+        if (workOrder.getDefectId() == null) {
+            return;
+        }
+        defectRepository.findByIdAndIsDeletedFalse(workOrder.getDefectId())
+                .ifPresent(defect -> {
+                    if (TERMINAL_DEFECT_STATUSES.contains(defect.getStatus())) {
+                        return;
+                    }
+                    if (defect.getStatus() == DefectStatus.IN_PROGRESS) {
+                        return;
+                    }
+                    defect.setStatus(DefectStatus.IN_PROGRESS);
+                    Defect saved = defectRepository.save(defect);
+                    auditBuilderService.log(
+                            "defect",
+                            saved.getId().toString(),
+                            AuditAction.UPDATE,
+                            AuditModule.DEFECT,
+                            "Defect moved to IN_PROGRESS from linked work order start",
+                            defect,
+                            saved
+                    );
+                });
+    }
+
+    private void syncDefectOnComplete(WorkOrder workOrder) {
+        if (workOrder.getDefectId() == null) {
+            return;
+        }
+        defectRepository.findByIdAndIsDeletedFalse(workOrder.getDefectId())
+                .ifPresent(defect -> {
+                    if (TERMINAL_DEFECT_STATUSES.contains(defect.getStatus())) {
+                        return;
+                    }
+                    if (hasActiveWorkOrderForDefect(defect.getId())) {
+                        return;
+                    }
+                    defect.setStatus(DefectStatus.RESOLVED);
+                    defect.setResolvedAt(Instant.now());
+                    Defect saved = defectRepository.save(defect);
+                    auditBuilderService.log(
+                            "defect",
+                            saved.getId().toString(),
+                            AuditAction.UPDATE,
+                            AuditModule.DEFECT,
+                            "Defect resolved after linked work orders became non-active",
+                            defect,
+                            saved
+                    );
+                });
+    }
+
+    private void syncRepairRequestOnComplete(WorkOrder workOrder) {
+        if (workOrder.getRepairRequestId() == null) {
+            return;
+        }
+        repairRequestRepository.findByIdAndIsDeletedFalse(workOrder.getRepairRequestId())
+                .ifPresent(request -> {
+                    if (!allWorkOrdersTerminalForRepairRequest(request.getId())) {
+                        return;
+                    }
+                    if (!allDefectsResolvedOrClosedForRepairRequest(request.getId())) {
+                        return;
+                    }
+                    if (TERMINAL_REPAIR_REQUEST_STATUSES.contains(request.getStatus())) {
+                        return;
+                    }
+                    request.setStatus(RequestStatus.COMPLETED);
+                    RepairRequest saved = repairRequestRepository.save(request);
+                    auditBuilderService.log(
+                            "repair_request",
+                            saved.getId().toString(),
+                            AuditAction.UPDATE,
+                            AuditModule.REPAIR_REQUEST,
+                            "Repair request moved to COMPLETED after linked work order completion",
+                            request,
+                            saved
+                    );
+                });
+    }
+
+    private void syncDefectOnClose(WorkOrder workOrder) {
+        if (workOrder.getDefectId() == null) {
+            return;
+        }
+        defectRepository.findByIdAndIsDeletedFalse(workOrder.getDefectId())
+                .ifPresent(defect -> {
+                    if (!allWorkOrdersTerminalForDefect(defect.getId())) {
+                        return;
+                    }
+                    if (defect.getStatus() == DefectStatus.CLOSED) {
+                        return;
+                    }
+                    if (defect.getStatus() != DefectStatus.RESOLVED) {
+                        return;
+                    }
+                    defect.setStatus(DefectStatus.CLOSED);
+                    Defect saved = defectRepository.save(defect);
+                    auditBuilderService.log(
+                            "defect",
+                            saved.getId().toString(),
+                            AuditAction.CLOSE,
+                            AuditModule.DEFECT,
+                            "Defect closed after linked work orders reached terminal state",
+                            defect,
+                            saved
+                    );
+                });
+    }
+
+    private void syncRepairRequestOnClose(WorkOrder workOrder, String closeResult) {
+        if (workOrder.getRepairRequestId() == null) {
+            return;
+        }
+        repairRequestRepository.findByIdAndIsDeletedFalse(workOrder.getRepairRequestId())
+                .ifPresent(request -> {
+                    if (!allWorkOrdersTerminalForRepairRequest(request.getId())) {
+                        return;
+                    }
+                    if (!allDefectsResolvedOrClosedForRepairRequest(request.getId())) {
+                        return;
+                    }
+                    if (request.getStatus() == RequestStatus.CLOSED
+                            || request.getStatus() == RequestStatus.CANCELLED
+                            || request.getStatus() == RequestStatus.REJECTED) {
+                        return;
+                    }
+                    request.setStatus(RequestStatus.CLOSED);
+                    request.setActualCompletionAt(Instant.now());
+                    request.setCloseResult(closeResult);
+                    RepairRequest saved = repairRequestRepository.save(request);
+                    auditBuilderService.log(
+                            "repair_request",
+                            saved.getId().toString(),
+                            AuditAction.CLOSE,
+                            AuditModule.REPAIR_REQUEST,
+                            "Заявка " + saved.getNumber() + " закрыта после закрытия связанных нарядов",
+                            request,
+                            saved
+                    );
+                });
+    }
+
+    private boolean hasActiveWorkOrderForDefect(UUID defectId) {
+        List<WorkOrder> linkedWorkOrders = repository.findAllByDefectIdAndIsDeletedFalseOrderByUpdatedAtDesc(defectId);
+        return linkedWorkOrders.stream()
+                .anyMatch(linkedWorkOrder -> ACTIVE_WORK_ORDER_STATUSES.contains(linkedWorkOrder.getStatus()));
+    }
+
+    private boolean allWorkOrdersTerminalForRepairRequest(UUID repairRequestId) {
+        List<WorkOrder> linkedWorkOrders = repository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId);
+        if (linkedWorkOrders.isEmpty()) {
+            return false;
+        }
+        return linkedWorkOrders.stream()
+                .allMatch(linkedWorkOrder -> TERMINAL_WORK_ORDER_STATUSES.contains(linkedWorkOrder.getStatus()));
+    }
+
+    private boolean allWorkOrdersTerminalForDefect(UUID defectId) {
+        List<WorkOrder> linkedWorkOrders = repository
+                .findAllByDefectIdAndIsDeletedFalseOrderByUpdatedAtDesc(defectId);
+        if (linkedWorkOrders.isEmpty()) {
+            return false;
+        }
+        return linkedWorkOrders.stream()
+                .allMatch(linkedWorkOrder -> TERMINAL_WORK_ORDER_STATUSES.contains(linkedWorkOrder.getStatus()));
+    }
+
+    private boolean allDefectsResolvedOrClosedForRepairRequest(UUID repairRequestId) {
+        List<Defect> linkedDefects = defectRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId);
+        return linkedDefects.stream()
+                .allMatch(defect -> RESOLVED_OR_CLOSED_DEFECT_STATUSES.contains(defect.getStatus()));
     }
 
     private WorkOrder getOrThrow(UUID id) {
@@ -488,7 +677,7 @@ public class WorkOrderService {
             if (repository.existsActiveReplacementAssignment(
                     request.replacementEquipmentId(),
                     WorkType.REPLACEMENT,
-                    FINAL_WORK_ORDER_STATUSES
+                    TERMINAL_WORK_ORDER_STATUSES
             )) {
                 throw RestException.conflict("Replacement equipment is already assigned to another active work order");
             }
@@ -617,4 +806,3 @@ public class WorkOrderService {
         return new PageImpl<>(toDtos(page.getContent()), page.getPageable(), page.getTotalElements());
     }
 }
-
