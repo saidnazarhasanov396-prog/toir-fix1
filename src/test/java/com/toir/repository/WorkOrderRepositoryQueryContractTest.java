@@ -41,4 +41,36 @@ class WorkOrderRepositoryQueryContractTest {
         assertThat(sql).contains("is_deleted = false");
         assertThat(sql).contains("order by updated_at desc");
     }
+
+    @Test
+    void searchPaginatedQueryMustTreatBlankSearchAsNoFilter() {
+        Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
+                .filter(m -> m.getName().equals("searchPaginated"))
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+
+        String sql = query.value().toLowerCase();
+        String countSql = query.countQuery().toLowerCase();
+
+        assertThat(sql).contains("nullif(trim(cast(:search as varchar)), '') is null");
+        assertThat(countSql).contains("nullif(trim(cast(:search as varchar)), '') is null");
+    }
+
+    @Test
+    void searchPaginatedQueryMustProjectDefectIdSafely() {
+        Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
+                .filter(m -> m.getName().equals("searchPaginated"))
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+
+        String sql = query.value().toLowerCase();
+        assertThat(sql).contains("to_jsonb(w)->>'defect_id'");
+        assertThat(sql).contains("as defect_id");
+    }
 }

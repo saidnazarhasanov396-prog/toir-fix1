@@ -38,6 +38,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -368,6 +370,48 @@ class WorkOrderServiceTest {
         verify(defectRepository).findAllByIdInAndIsDeletedFalse(java.util.List.of(defectId));
         verify(repairRequestRepository, never()).findByIdAndIsDeletedFalse(repairRequestId);
         verify(defectRepository, never()).findByIdAndIsDeletedFalse(defectId);
+    }
+
+    @Test
+    void listEnrichmentNullSafeForMissingLinks() {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        workOrder.setRepairRequestId(repairRequestId);
+        workOrder.setDefectId(defectId);
+
+        when(repository.searchPaginated(null, null, null, null, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(java.util.List.of(workOrder), PageRequest.of(0, 10), 1));
+        when(repairRequestRepository.findAllByIdInAndIsDeletedFalse(java.util.List.of(repairRequestId)))
+                .thenReturn(java.util.List.of());
+        when(defectRepository.findAllByIdInAndIsDeletedFalse(java.util.List.of(defectId)))
+                .thenReturn(java.util.List.of());
+        stubLifecycleDtoLookups(workOrder);
+
+        org.springframework.data.domain.Page<WorkOrderDto> result =
+                service.search(null, null, null, 0, 10, null);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent()).hasSize(1);
+        WorkOrderDto dto = result.getContent().get(0);
+        assertThat(dto.repairRequestId()).isEqualTo(repairRequestId);
+        assertThat(dto.defectId()).isEqualTo(defectId);
+        assertThat(dto.repairRequest()).isNull();
+        assertThat(dto.defect()).isNull();
+    }
+
+    @Test
+    void listBlankSearchDoesNotFail() {
+        WorkOrder workOrder = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        when(repository.searchPaginated(eq(null), eq(null), eq(null), eq(null), eq(PageRequest.of(0, 10))))
+                .thenReturn(new PageImpl<>(java.util.List.of(workOrder), PageRequest.of(0, 10), 1));
+        stubLifecycleDtoLookups(workOrder);
+
+        org.springframework.data.domain.Page<WorkOrderDto> result =
+                service.search(null, null, null, 0, 10, "   ");
+
+        assertThat(result.getContent()).hasSize(1);
+        verify(repository).searchPaginated(eq(null), eq(null), eq(null), eq(null), eq(PageRequest.of(0, 10)));
     }
 
     @Test
