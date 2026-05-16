@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.dto.knowledge.KnowledgeArticleDto;
 import com.toir.entity.KnowledgeArticle;
+import com.toir.exception.RestException;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.KnowledgeService;
 import org.junit.jupiter.api.BeforeEach;
@@ -137,15 +138,15 @@ class KnowledgeControllerContractTest {
     }
 
     @Test
-    void createKnowledgeWithTagsReturns200OrCreated() throws Exception {
-        KnowledgeArticle created = articleEntity("KB-POST-1", List.of("pump", "seal"));
+    void createKnowledgeGeneratesCode() throws Exception {
+        KnowledgeArticle created = articleEntity("LL-2026-0001", List.of("pump", "seal"));
         when(service.create(any(KnowledgeArticle.class))).thenReturn(created);
 
         mockMvc.perform(post("/api/v1/knowledge")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "code": "KB-POST-1",
+                                  "code": "LL-001",
                                   "title": "Pump seal lesson",
                                   "kind": "LESSON_LEARNED",
                                   "problem": "Leakage",
@@ -155,10 +156,93 @@ class KnowledgeControllerContractTest {
                                 }
                                 """))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.code").value("KB-POST-1"))
+                .andExpect(jsonPath("$.code").value("LL-2026-0001"))
                 .andExpect(jsonPath("$.tags").isArray())
                 .andExpect(jsonPath("$.tags[0]").value("pump"))
                 .andExpect(jsonPath("$.tags[1]").value("seal"));
+    }
+
+    @Test
+    void createKnowledgeWithTagsStillReturnsTagsArray() throws Exception {
+        KnowledgeArticle created = articleEntity("LL-2026-0002", List.of("pump", "seal"));
+        when(service.create(any(KnowledgeArticle.class))).thenReturn(created);
+
+        mockMvc.perform(post("/api/v1/knowledge")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Another lesson",
+                                  "kind": "LESSON_LEARNED",
+                                  "problem": "Leakage",
+                                  "rootCause": "Seal wear",
+                                  "solution": "Replace seal",
+                                  "tags": ["pump", "seal"]
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("LL-2026-0002"))
+                .andExpect(jsonPath("$.tags").isArray());
+    }
+
+    @Test
+    void createKnowledgeSecondTimeDoesNotReuseLL001() throws Exception {
+        KnowledgeArticle first = articleEntity("LL-2026-0003", List.of("pump"));
+        KnowledgeArticle second = articleEntity("LL-2026-0004", List.of("pump"));
+        when(service.create(any(KnowledgeArticle.class))).thenReturn(first, second);
+
+        mockMvc.perform(post("/api/v1/knowledge")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "code": "LL-001",
+                                  "title": "Repeated payload",
+                                  "kind": "LESSON_LEARNED",
+                                  "problem": "Problem",
+                                  "rootCause": "Cause",
+                                  "solution": "Fix",
+                                  "tags": ["pump"]
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("LL-2026-0003"));
+
+        mockMvc.perform(post("/api/v1/knowledge")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "code": "LL-001",
+                                  "title": "Repeated payload",
+                                  "kind": "LESSON_LEARNED",
+                                  "problem": "Problem",
+                                  "rootCause": "Cause",
+                                  "solution": "Fix",
+                                  "tags": ["pump"]
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("LL-2026-0004"));
+    }
+
+    @Test
+    void createDuplicateCodeDoesNotReturn500() throws Exception {
+        when(service.create(any(KnowledgeArticle.class)))
+                .thenThrow(RestException.conflict("Article code already exists"));
+
+        mockMvc.perform(post("/api/v1/knowledge")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "code": "LL-001",
+                                  "title": "Repeated payload",
+                                  "kind": "LESSON_LEARNED",
+                                  "problem": "Problem",
+                                  "rootCause": "Cause",
+                                  "solution": "Fix",
+                                  "tags": ["pump"]
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Article code already exists"));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.toir.repository.equipment;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.repository.Query;
 
 import java.lang.reflect.Method;
@@ -9,6 +10,8 @@ import java.util.Arrays;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class EquipmentRepositoryQueryContractTest {
+
+
 
     @Test
     void availableForReplacementQueryRequiresActiveNonDeletedWarehouseEquipmentItems() {
@@ -22,4 +25,6 @@ class EquipmentRepositoryQueryContractTest {
         assertThat(query.value()).contains("wei.active = true");
         assertThat(query.value()).contains("wei.isDeleted = false");
     }
+
+
 }

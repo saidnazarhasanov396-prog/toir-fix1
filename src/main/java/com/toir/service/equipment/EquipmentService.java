@@ -1,10 +1,7 @@
 package com.toir.service.equipment;
 
-import com.toir.dto.equipment.EquipmentDto;
-import com.toir.dto.equipment.EquipmentCreateRequest;
-import com.toir.dto.equipment.EquipmentDetailDto;
-import com.toir.dto.equipment.EquipmentPlacementRequest;
-import com.toir.dto.equipment.EquipmentUpdateRequest;
+import com.toir.dto.equipment.*;
+import com.toir.repository.equipment.EquipmentStatsProjection;
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
@@ -654,5 +651,44 @@ public class EquipmentService {
                     .orElseThrow(() -> RestException.notFound("Parent equipment not found: " + finalCurrentParentId));
             currentParentId = currentParent.getParentId();
         }
+    }
+
+    @Transactional(readOnly = true)
+    public EquipmentStatsResponse getEquipmentStats(
+            String search,
+            EquipmentCategory category,
+            UUID departmentId,
+            UUID equipmentTypeId
+    ) {
+        String searchPattern = toSearchPattern(search);
+
+        EquipmentStatsProjection stats = repository.getEquipmentStats(
+                searchPattern,
+                category,
+                departmentId,
+                equipmentTypeId,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.DECOMMISSIONED
+        );
+
+        return new EquipmentStatsResponse(
+                safe(stats.getTotalInRegistry()),
+                safe(stats.getActive()),
+                safe(stats.getInRepair()),
+                safe(stats.getDecommissioned())
+        );
+    }
+
+    private String toSearchPattern(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+
+        return "%" + search.trim().toLowerCase() + "%";
+    }
+
+    private long safe(Long value) {
+        return value == null ? 0L : value;
     }
 }

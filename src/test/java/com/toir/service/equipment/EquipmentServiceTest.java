@@ -50,6 +50,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import com.toir.dto.equipment.EquipmentStatsResponse;
+import com.toir.repository.equipment.EquipmentStatsProjection;
 
 import java.time.Year;
 import java.time.Instant;
@@ -1425,6 +1427,162 @@ class EquipmentServiceTest {
         ))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("warehouseStatus for WAREHOUSE target must be AVAILABLE or OUT_OF_SERVICE");
+    }
+
+
+    @Test
+    void getEquipmentStatsWithoutFiltersReturnsStats() {
+        EquipmentStatsProjection projection = statsProjection(50L, 9L, 3L, 1L);
+
+        when(repository.getEquipmentStats(
+                null,
+                null,
+                null,
+                null,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.DECOMMISSIONED
+        )).thenReturn(projection);
+
+        EquipmentStatsResponse result = service.getEquipmentStats(null, null, null, null);
+
+        assertThat(result.totalInRegistry()).isEqualTo(50);
+        assertThat(result.active()).isEqualTo(9);
+        assertThat(result.inRepair()).isEqualTo(3);
+        assertThat(result.decommissioned()).isEqualTo(1);
+
+        verify(repository).getEquipmentStats(
+                null,
+                null,
+                null,
+                null,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.DECOMMISSIONED
+        );
+    }
+
+    @Test
+    void getEquipmentStatsWithFiltersPassesNormalizedSearchPatternAndEnums() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+
+        EquipmentStatsProjection projection = statsProjection(12L, 8L, 2L, 2L);
+
+        when(repository.getEquipmentStats(
+                "%pump-42%",
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                departmentId,
+                equipmentTypeId,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.DECOMMISSIONED
+        )).thenReturn(projection);
+
+        EquipmentStatsResponse result = service.getEquipmentStats(
+                "  PuMp-42  ",
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                departmentId,
+                equipmentTypeId
+        );
+
+        assertThat(result.totalInRegistry()).isEqualTo(12);
+        assertThat(result.active()).isEqualTo(8);
+        assertThat(result.inRepair()).isEqualTo(2);
+        assertThat(result.decommissioned()).isEqualTo(2);
+
+        verify(repository).getEquipmentStats(
+                "%pump-42%",
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                departmentId,
+                equipmentTypeId,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.DECOMMISSIONED
+        );
+    }
+
+    @Test
+    void getEquipmentStatsWithBlankSearchPassesNullPattern() {
+        EquipmentStatsProjection projection = statsProjection(10L, 7L, 2L, 1L);
+
+        when(repository.getEquipmentStats(
+                null,
+                null,
+                null,
+                null,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.DECOMMISSIONED
+        )).thenReturn(projection);
+
+        EquipmentStatsResponse result = service.getEquipmentStats("   ", null, null, null);
+
+        assertThat(result.totalInRegistry()).isEqualTo(10);
+        assertThat(result.active()).isEqualTo(7);
+        assertThat(result.inRepair()).isEqualTo(2);
+        assertThat(result.decommissioned()).isEqualTo(1);
+
+        verify(repository).getEquipmentStats(
+                null,
+                null,
+                null,
+                null,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.DECOMMISSIONED
+        );
+    }
+
+    @Test
+    void getEquipmentStatsMapsNullProjectionValuesToZero() {
+        EquipmentStatsProjection projection = statsProjection(null, null, null, null);
+
+        when(repository.getEquipmentStats(
+                null,
+                null,
+                null,
+                null,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.DECOMMISSIONED
+        )).thenReturn(projection);
+
+        EquipmentStatsResponse result = service.getEquipmentStats(null, null, null, null);
+
+        assertThat(result.totalInRegistry()).isZero();
+        assertThat(result.active()).isZero();
+        assertThat(result.inRepair()).isZero();
+        assertThat(result.decommissioned()).isZero();
+    }
+
+    private EquipmentStatsProjection statsProjection(
+            Long totalInRegistry,
+            Long active,
+            Long inRepair,
+            Long decommissioned
+    ) {
+        return new EquipmentStatsProjection() {
+            @Override
+            public Long getTotalInRegistry() {
+                return totalInRegistry;
+            }
+
+            @Override
+            public Long getActive() {
+                return active;
+            }
+
+            @Override
+            public Long getInRepair() {
+                return inRepair;
+            }
+
+            @Override
+            public Long getDecommissioned() {
+                return decommissioned;
+            }
+        };
     }
 
     private Equipment equipment(String code) {
