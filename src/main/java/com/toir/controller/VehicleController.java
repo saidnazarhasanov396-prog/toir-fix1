@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleRequest;
+import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.dto.vehicle.VehicleSummaryDto;
 import com.toir.enums.EquipmentStatus;
 import com.toir.security.SecurityScope;
@@ -48,6 +49,17 @@ public class VehicleController {
                 search,
                 page,
                 size
+        ));
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<VehicleStatsResponse> stats(
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String search
+    ) {
+        return ResponseEntity.ok(service.getStats(
+                securityScope.enforceDepartmentScope(departmentId),
+                search
         ));
     }
 

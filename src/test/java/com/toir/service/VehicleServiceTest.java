@@ -3,6 +3,7 @@ package com.toir.service;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleRequest;
+import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.dto.vehicle.VehicleSummaryDto;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.VehicleDetails;
@@ -12,6 +13,7 @@ import com.toir.enums.VehicleType;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.VehicleDetailsRepository;
+import com.toir.repository.projection.VehicleStatsProjection;
 import com.toir.service.equipment.EquipmentService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -344,9 +346,153 @@ class VehicleServiceTest {
         Page<VehicleSummaryDto> result = service.list(null, null, null, 1, 20);
 
         assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).equipmentId()).isEqualTo(completeId);
+        assertThat(result.getContent().getFirst().equipmentId()).isEqualTo(completeId);
         assertThat(result.getTotalElements()).isEqualTo(2);
     }
+
+    @Test
+    void getStatsWithoutFiltersReturnsVehicleStats() {
+        VehicleStatsProjection projection = statsProjection(11L, 9L, 1L, 1L);
+
+        when(vehicleDetailsRepository.getVehicleStats(
+                null,
+                EquipmentCategory.VEHICLE,
+                null,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.OUT_OF_SERVICE
+        )).thenReturn(projection);
+
+        VehicleStatsResponse result = service.getStats(null, null);
+
+        assertThat(result.total()).isEqualTo(11);
+        assertThat(result.active()).isEqualTo(9);
+        assertThat(result.inRepair()).isEqualTo(1);
+        assertThat(result.outOfService()).isEqualTo(1);
+
+        verify(vehicleDetailsRepository).getVehicleStats(
+                null,
+                EquipmentCategory.VEHICLE,
+                null,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.OUT_OF_SERVICE
+        );
+    }
+
+    @Test
+    void getStatsWithFiltersPassesDepartmentAndNormalizedSearchPattern() {
+        UUID departmentId = UUID.randomUUID();
+
+        VehicleStatsProjection projection = statsProjection(4L, 3L, 1L, 0L);
+
+        when(vehicleDetailsRepository.getVehicleStats(
+                departmentId,
+                EquipmentCategory.VEHICLE,
+                "%kamaz%",
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.OUT_OF_SERVICE
+        )).thenReturn(projection);
+
+        VehicleStatsResponse result = service.getStats(departmentId, "  KaMaZ  ");
+
+        assertThat(result.total()).isEqualTo(4);
+        assertThat(result.active()).isEqualTo(3);
+        assertThat(result.inRepair()).isEqualTo(1);
+        assertThat(result.outOfService()).isZero();
+
+        verify(vehicleDetailsRepository).getVehicleStats(
+                departmentId,
+                EquipmentCategory.VEHICLE,
+                "%kamaz%",
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.OUT_OF_SERVICE
+        );
+    }
+
+    @Test
+    void getStatsWithBlankSearchPassesNullSearchPattern() {
+        VehicleStatsProjection projection = statsProjection(7L, 6L, 0L, 1L);
+
+        when(vehicleDetailsRepository.getVehicleStats(
+                null,
+                EquipmentCategory.VEHICLE,
+                null,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.OUT_OF_SERVICE
+        )).thenReturn(projection);
+
+        VehicleStatsResponse result = service.getStats(null, "   ");
+
+        assertThat(result.total()).isEqualTo(7);
+        assertThat(result.active()).isEqualTo(6);
+        assertThat(result.inRepair()).isZero();
+        assertThat(result.outOfService()).isEqualTo(1);
+
+        verify(vehicleDetailsRepository).getVehicleStats(
+                null,
+                EquipmentCategory.VEHICLE,
+                null,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.OUT_OF_SERVICE
+        );
+    }
+
+    @Test
+    void getStatsMapsNullProjectionValuesToZero() {
+        VehicleStatsProjection projection = statsProjection(null, null, null, null);
+
+        when(vehicleDetailsRepository.getVehicleStats(
+                null,
+                EquipmentCategory.VEHICLE,
+                null,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.OUT_OF_SERVICE
+        )).thenReturn(projection);
+
+        VehicleStatsResponse result = service.getStats(null, null);
+
+        assertThat(result.total()).isZero();
+        assertThat(result.active()).isZero();
+        assertThat(result.inRepair()).isZero();
+        assertThat(result.outOfService()).isZero();
+    }
+
+    private VehicleStatsProjection statsProjection(
+            Long total,
+            Long active,
+            Long inRepair,
+            Long outOfService
+    ) {
+        return new VehicleStatsProjection() {
+            @Override
+            public Long getTotal() {
+                return total;
+            }
+
+            @Override
+            public Long getActive() {
+                return active;
+            }
+
+            @Override
+            public Long getInRepair() {
+                return inRepair;
+            }
+
+            @Override
+            public Long getOutOfService() {
+                return outOfService;
+            }
+        };
+    }
+
+
 
     private static VehicleRequest fullRequest(String code, String name, String inventoryNumber, String plateNumber, String vin) {
         return new VehicleRequest(
