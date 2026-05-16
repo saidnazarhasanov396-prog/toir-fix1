@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.dto.knowledge.KnowledgeArticleDto;
+import com.toir.entity.KnowledgeArticle;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.KnowledgeService;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,10 +23,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -134,6 +137,55 @@ class KnowledgeControllerContractTest {
     }
 
     @Test
+    void createKnowledgeWithTagsReturns200OrCreated() throws Exception {
+        KnowledgeArticle created = articleEntity("KB-POST-1", List.of("pump", "seal"));
+        when(service.create(any(KnowledgeArticle.class))).thenReturn(created);
+
+        mockMvc.perform(post("/api/v1/knowledge")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "code": "KB-POST-1",
+                                  "title": "Pump seal lesson",
+                                  "kind": "LESSON_LEARNED",
+                                  "problem": "Leakage",
+                                  "rootCause": "Seal wear",
+                                  "solution": "Replace seal",
+                                  "tags": ["pump", "seal"]
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("KB-POST-1"))
+                .andExpect(jsonPath("$.tags").isArray())
+                .andExpect(jsonPath("$.tags[0]").value("pump"))
+                .andExpect(jsonPath("$.tags[1]").value("seal"));
+    }
+
+    @Test
+    void createKnowledgeWithNullTagsReturnsStableResponse() throws Exception {
+        KnowledgeArticle created = articleEntity("KB-POST-2", List.of());
+        when(service.create(any(KnowledgeArticle.class))).thenReturn(created);
+
+        mockMvc.perform(post("/api/v1/knowledge")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "code": "KB-POST-2",
+                                  "title": "Null tags lesson",
+                                  "kind": "KB",
+                                  "problem": "Problem",
+                                  "rootCause": "Cause",
+                                  "solution": "Fix",
+                                  "tags": null
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("KB-POST-2"))
+                .andExpect(jsonPath("$.tags").isArray())
+                .andExpect(jsonPath("$.tags.length()").value(0));
+    }
+
+    @Test
     void listReturnsUtf8CyrillicText() throws Exception {
         String expectedTitle = "Дефект насоса: перегрев";
         when(service.list(isNull(), isNull(), isNull(), eq(0), eq(10)))
@@ -151,6 +203,40 @@ class KnowledgeControllerContractTest {
         assertTrue(utf8Body.contains(expectedTitle));
         assertFalse(utf8Body.contains("Ð"));
         assertNull(result.getResolvedException());
+    }
+
+    @Test
+    void listReturnsTagsAsArrayNotString() throws Exception {
+        KnowledgeArticleDto taggedDto = new KnowledgeArticleDto(
+                UUID.randomUUID(),
+                "KB-LIST-1",
+                "List article",
+                "KB",
+                null,
+                null,
+                null,
+                null,
+                "Problem",
+                "Cause",
+                "Solution",
+                "Preventive",
+                List.of("pump", "seal"),
+                null,
+                0,
+                Instant.now(),
+                Instant.now(),
+                false
+        );
+        when(service.list(isNull(), isNull(), isNull(), eq(0), eq(10)))
+                .thenReturn(page(List.of(taggedDto), 0, 10, 1));
+
+        mockMvc.perform(get("/api/v1/knowledge")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].tags").isArray())
+                .andExpect(jsonPath("$.content[0].tags[0]").value("pump"))
+                .andExpect(jsonPath("$.content[0].tags[1]").value("seal"));
     }
 
     @Test
@@ -213,5 +299,17 @@ class KnowledgeControllerContractTest {
                 Instant.now(),
                 false
         );
+    }
+
+    private KnowledgeArticle articleEntity(String code, List<String> tags) {
+        KnowledgeArticle article = new KnowledgeArticle();
+        article.setCode(code);
+        article.setTitle("Article");
+        article.setKind("LESSON_LEARNED");
+        article.setProblem("Problem");
+        article.setRootCause("Cause");
+        article.setSolution("Solution");
+        article.setTags(tags);
+        return article;
     }
 }
