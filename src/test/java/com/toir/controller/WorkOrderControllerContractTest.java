@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -120,6 +122,73 @@ class WorkOrderControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.repairRequest").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.defect").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void listWithBlankSearchReturns200() throws Exception {
+        WorkOrderDto dto = workOrderDto(UUID.randomUUID(), null, null);
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, 0, 10, ""))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/v1/work-orders")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("search", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(dto.id().toString()));
+    }
+
+    @Test
+    void listWithMissingLinkedRepairRequestReturnsNullObject() throws Exception {
+        UUID missingRepairRequestId = UUID.randomUUID();
+        WorkOrderDto dto = workOrderDtoWithIds(UUID.randomUUID(), missingRepairRequestId, null, null, null);
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, 0, 10, ""))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/v1/work-orders")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("search", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].repairRequestId").value(missingRepairRequestId.toString()))
+                .andExpect(jsonPath("$.content[0].repairRequest").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void listWithMissingLinkedDefectReturnsNullObject() throws Exception {
+        UUID missingDefectId = UUID.randomUUID();
+        WorkOrderDto dto = workOrderDtoWithIds(UUID.randomUUID(), null, missingDefectId, null, null);
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, 0, 10, ""))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/v1/work-orders")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("search", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].defectId").value(missingDefectId.toString()))
+                .andExpect(jsonPath("$.content[0].defect").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void listWithNoDataReturnsStablePage() throws Exception {
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, 0, 10, ""))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
+
+        mockMvc.perform(get("/api/v1/work-orders")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("search", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content", org.hamcrest.Matchers.hasSize(0)))
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.size").value(10))
+                .andExpect(jsonPath("$.number").value(0));
     }
 
     @Test
@@ -349,6 +418,45 @@ class WorkOrderControllerContractTest {
                 null,
                 null,
                 status,
+                WorkOrderType.PLANNED,
+                WorkType.REPAIR,
+                PriorityLevel.MEDIUM,
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                null,
+                null,
+                "summary",
+                null,
+                null,
+                UUID.randomUUID(),
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                repairRequest,
+                defect
+        );
+    }
+
+    private WorkOrderDto workOrderDtoWithIds(UUID id,
+                                             UUID repairRequestId,
+                                             UUID defectId,
+                                             RepairRequestBriefDto repairRequest,
+                                             DefectBriefDto defect) {
+        return new WorkOrderDto(
+                id,
+                "WO-2026-1001",
+                "Planned repair",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "Pump #1",
+                "Maintenance",
+                repairRequestId,
+                defectId,
+                null,
+                null,
+                WorkOrderStatus.PLANNED,
                 WorkOrderType.PLANNED,
                 WorkType.REPAIR,
                 PriorityLevel.MEDIUM,

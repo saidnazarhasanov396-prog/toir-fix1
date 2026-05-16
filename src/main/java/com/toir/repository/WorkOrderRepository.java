@@ -59,27 +59,64 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
                            @Param("equipmentId") UUID equipmentId);
 
     @Query(nativeQuery = true, value = """
-            select * from work_orders w where
-            w.is_deleted = false
-            and (cast(:status as varchar) is null or w.status = cast(:status as varchar)) 
-            and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid)) 
-            and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid)) 
-            and (cast(:search as varchar) is null or lower(w.number) like lower(concat('%', cast(:search as varchar), '%')) 
-            or lower(w.title) like lower(concat('%', cast(:search as varchar), '%')) 
-            or lower(w.summary) like lower(concat('%', cast(:search as varchar), '%')) 
-            or lower(w.result) like lower(concat('%', cast(:search as varchar), '%')) 
-            or lower(w.closure_notes) like lower(concat('%', cast(:search as varchar), '%'))) 
+            select
+                w.id,
+                w.created_at,
+                w.updated_at,
+                w.is_deleted,
+                w.number,
+                w.title,
+                w.equipment_id,
+                w.department_id,
+                nullif(to_jsonb(w)->>'repair_request_id', '')::uuid as repair_request_id,
+                nullif(to_jsonb(w)->>'defect_id', '')::uuid as defect_id,
+                w.ppr_task_id,
+                w.contractor_id,
+                nullif(to_jsonb(w)->>'warehouse_id', '')::uuid as warehouse_id,
+                nullif(to_jsonb(w)->>'replacement_equipment_id', '')::uuid as replacement_equipment_id,
+                w.status,
+                w.type,
+                coalesce(nullif(to_jsonb(w)->>'work_type', ''), 'REPAIR') as work_type,
+                w.priority,
+                w.start_planned_at,
+                w.end_planned_at,
+                w.started_at,
+                w.completed_at,
+                w.summary,
+                w.result,
+                to_jsonb(w)->>'closure_notes' as closure_notes,
+                w.created_by_id,
+                w.approved_by_id
+            from work_orders w
+            where
+                w.is_deleted = false
+                and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
+                and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+                and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
+                and (
+                    nullif(trim(cast(:search as varchar)), '') is null
+                    or lower(coalesce(to_jsonb(w)->>'number', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'title', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'summary', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'result', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'closure_notes', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                )
             order by w.updated_at desc""", countQuery = """
-            select count(*) from work_orders w where
-            w.is_deleted = false
-            and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
-            and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
-            and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
-            and (cast(:search as varchar) is null or lower(w.number) like lower(concat('%', cast(:search as varchar), '%'))
-            or lower(w.title) like lower(concat('%', cast(:search as varchar), '%'))
-            or lower(w.summary) like lower(concat('%', cast(:search as varchar), '%'))
-            or lower(w.result) like lower(concat('%', cast(:search as varchar), '%'))
-            or lower(w.closure_notes) like lower(concat('%', cast(:search as varchar), '%')))""")
+            select count(*)
+            from work_orders w
+            where
+                w.is_deleted = false
+                and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
+                and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+                and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
+                and (
+                    nullif(trim(cast(:search as varchar)), '') is null
+                    or lower(coalesce(to_jsonb(w)->>'number', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'title', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'summary', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'result', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'closure_notes', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                )""")
     Page<WorkOrder> searchPaginated(@Param("status") WorkOrderStatus status,
                                     @Param("departmentId") UUID departmentId,
                                     @Param("equipmentId") UUID equipmentId,

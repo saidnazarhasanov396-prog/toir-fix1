@@ -87,11 +87,12 @@ public class WorkOrderService {
     @Transactional(readOnly = true)
     public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
         var pageable = PaginationUtils.pageRequest(page, pageSize);
+        String normalizedSearch = normalizeSearch(search);
         Page<WorkOrder> resultPage = repository.searchPaginated(
                 status,
                 departmentId,
                 equipmentId,
-                search,
+                normalizedSearch,
                 pageable
         );
         return toDtoPage(resultPage);
@@ -793,10 +794,24 @@ public class WorkOrderService {
         return entities.stream()
                 .map(entity -> toDto(
                         entity,
-                        repairRequestById.get(entity.getRepairRequestId()),
-                        defectById.get(entity.getDefectId())
+                        resolveRepairRequestBrief(entity.getRepairRequestId(), repairRequestById),
+                        resolveDefectBrief(entity.getDefectId(), defectById)
                 ))
                 .toList();
+    }
+
+    private RepairRequest resolveRepairRequestBrief(UUID repairRequestId, Map<UUID, RepairRequest> repairRequestById) {
+        if (repairRequestId == null) {
+            return null;
+        }
+        return repairRequestById.get(repairRequestId);
+    }
+
+    private Defect resolveDefectBrief(UUID defectId, Map<UUID, Defect> defectById) {
+        if (defectId == null) {
+            return null;
+        }
+        return defectById.get(defectId);
     }
 
     private Page<WorkOrderDto> toDtoPage(Page<WorkOrder> page) {
@@ -804,5 +819,13 @@ public class WorkOrderService {
             return new PageImpl<>(List.of(), page.getPageable(), page.getTotalElements());
         }
         return new PageImpl<>(toDtos(page.getContent()), page.getPageable(), page.getTotalElements());
+    }
+
+    private String normalizeSearch(String search) {
+        if (search == null) {
+            return null;
+        }
+        String trimmed = search.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
