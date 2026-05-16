@@ -1,9 +1,5 @@
 package com.toir.controller.equipment;
-import com.toir.dto.equipment.EquipmentCreateRequest;
-import com.toir.dto.equipment.EquipmentDetailDto;
-import com.toir.dto.equipment.EquipmentDto;
-import com.toir.dto.equipment.EquipmentPlacementRequest;
-import com.toir.dto.equipment.EquipmentUpdateRequest;
+import com.toir.dto.equipment.*;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.security.SecurityScope;
@@ -57,6 +53,23 @@ public class EquipmentController {
     @GetMapping("/{id}")
     public ResponseEntity<EquipmentDetailDto> get(@PathVariable UUID id) {
         return ResponseEntity.ok(service.findDetailById(id));
+    }
+
+    @GetMapping("/stats")
+    public EquipmentStatsResponse getEquipmentStats(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) EquipmentCategory category,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID equipmentTypeId
+    ) {
+        UUID scopedDepartmentId = securityScope.enforceDepartmentScope(departmentId);
+
+        return service.getEquipmentStats(
+                search,
+                category,
+                scopedDepartmentId,
+                equipmentTypeId
+        );
     }
 
     @GetMapping("/{id}/children")

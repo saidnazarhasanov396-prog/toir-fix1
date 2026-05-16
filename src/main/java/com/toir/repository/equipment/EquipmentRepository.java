@@ -156,4 +156,37 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
             order by e.updatedAt desc
             """)
     List<UUID> findIdsByBusinessSearch(@Param("searchPattern") String searchPattern);
+
+    @Query("""
+    select
+        count(e.id) as totalInRegistry,
+
+        coalesce(sum(case when e.status = :activeStatus then 1 else 0 end), 0) as active,
+
+        coalesce(sum(case when e.status = :inRepairStatus then 1 else 0 end), 0) as inRepair,
+
+        coalesce(sum(case when e.status = :decommissionedStatus then 1 else 0 end), 0) as decommissioned
+
+    from Equipment e
+    where e.isDeleted = false
+      and (:category is null or e.category = :category)
+      and (:departmentId is null or e.departmentId = :departmentId)
+      and (:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId)
+      and (
+          :searchPattern is null
+          or lower(e.code) like :searchPattern
+          or lower(e.name) like :searchPattern
+          or lower(e.inventoryNumber) like :searchPattern
+      )
+""")
+    EquipmentStatsProjection getEquipmentStats(
+            @Param("searchPattern") String searchPattern,
+            @Param("category") EquipmentCategory category,
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentTypeId") UUID equipmentTypeId,
+            @Param("activeStatus") EquipmentStatus activeStatus,
+            @Param("inRepairStatus") EquipmentStatus inRepairStatus,
+            @Param("decommissionedStatus") EquipmentStatus decommissionedStatus
+    );
+
 }

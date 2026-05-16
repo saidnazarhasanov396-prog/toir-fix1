@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.dto.knowledge.KnowledgeArticleDto;
 import com.toir.entity.KnowledgeArticle;
+import com.toir.exception.RestException;
 import com.toir.repository.KnowledgeArticleRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -9,14 +10,19 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -97,30 +103,107 @@ class KnowledgeServiceTest {
 
     @Test
     void createNormalizesNullTagsToEmptyList() {
+        int year = Year.now().getValue();
+        String expectedCode = "LL-" + year + "-0001";
         KnowledgeArticle article = article("KB-C1", "Create article");
+        article.setCode(null);
         article.setTags(null);
-        when(repository.existsByCodeAndIsDeletedFalse("KB-C1")).thenReturn(false);
+        when(repository.maxSequenceByCodePrefix("LL-" + year + "-")).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
         when(repository.save(any(KnowledgeArticle.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         KnowledgeArticle created = service.create(article);
 
         ArgumentCaptor<KnowledgeArticle> captor = ArgumentCaptor.forClass(KnowledgeArticle.class);
         verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getCode()).isEqualTo(expectedCode);
         assertThat(captor.getValue().getTags()).isNotNull().isEmpty();
         assertThat(created.getTags()).isNotNull().isEmpty();
     }
 
     @Test
-    void createKeepsTagsList() {
+    void createGeneratesUniqueCodeWhenCodeMissing() {
+        int year = Year.now().getValue();
+        String expectedCode = "LL-" + year + "-0001";
         KnowledgeArticle article = article("KB-C2", "Tagged article");
+        article.setCode(null);
+        when(repository.maxSequenceByCodePrefix("LL-" + year + "-")).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(repository.save(any(KnowledgeArticle.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        KnowledgeArticle created = service.create(article);
+
+        assertThat(created.getCode()).isEqualTo(expectedCode);
+    }
+
+    @Test
+    void createDoesNotReuseExistingCode() {
+        int year = Year.now().getValue();
+        String firstCandidate = "LL-" + year + "-0001";
+        String secondCandidate = "LL-" + year + "-0002";
+        KnowledgeArticle article = article("KB-C3", "Tagged article");
+        article.setCode(null);
+        when(repository.maxSequenceByCodePrefix("LL-" + year + "-")).thenReturn(0L);
+        when(repository.existsByCode(firstCandidate)).thenReturn(true);
+        when(repository.existsByCode(secondCandidate)).thenReturn(false);
+        when(repository.save(any(KnowledgeArticle.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        KnowledgeArticle created = service.create(article);
+
+        assertThat(created.getCode()).isEqualTo(secondCandidate);
+    }
+
+    @Test
+    void createIgnoresClientProvidedCodeIfThatIsChosen() {
+        int year = Year.now().getValue();
+        String generatedCode = "LL-" + year + "-0010";
+        KnowledgeArticle article = article("KB-C4", "Client code article");
+        article.setCode("LL-001");
+        when(repository.maxSequenceByCodePrefix("LL-" + year + "-")).thenReturn(9L);
+        when(repository.existsByCode(generatedCode)).thenReturn(false);
+        when(repository.save(any(KnowledgeArticle.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        KnowledgeArticle created = service.create(article);
+
+        assertThat(created.getCode()).isEqualTo(generatedCode);
+        assertThat(created.getCode()).isNotEqualTo("LL-001");
+    }
+
+    @Test
+    void createDuplicateClientCodeReturns409IfClientCodeIsSupported() {
+        int year = Year.now().getValue();
+        when(repository.maxSequenceByCodePrefix("LL-" + year + "-")).thenReturn(0L);
+        when(repository.existsByCode(anyString())).thenReturn(false);
+        when(repository.save(any(KnowledgeArticle.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "duplicate key value violates unique constraint \"knowledge_articles_code_key\""));
+
+        KnowledgeArticle article = article("KB-C5", "Duplicate conflict");
+        article.setCode("LL-001");
+
+        assertThatThrownBy(() -> service.create(article))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).contains("Could not generate unique knowledge article code");
+                });
+    }
+
+    @Test
+    void createKeepsTagsListStillWorks() {
+        int year = Year.now().getValue();
+        String expectedCode = "LL-" + year + "-0001";
+        KnowledgeArticle article = article("KB-C6", "Tagged article");
         article.setTags(List.of("pump", "seal"));
-        when(repository.existsByCodeAndIsDeletedFalse("KB-C2")).thenReturn(false);
+        article.setCode(null);
+        when(repository.maxSequenceByCodePrefix("LL-" + year + "-")).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
         when(repository.save(any(KnowledgeArticle.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         KnowledgeArticle created = service.create(article);
 
         ArgumentCaptor<KnowledgeArticle> captor = ArgumentCaptor.forClass(KnowledgeArticle.class);
         verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getCode()).isEqualTo(expectedCode);
         assertThat(captor.getValue().getTags()).containsExactly("pump", "seal");
         assertThat(created.getTags()).containsExactly("pump", "seal");
     }

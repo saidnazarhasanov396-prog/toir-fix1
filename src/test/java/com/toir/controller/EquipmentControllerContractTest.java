@@ -23,6 +23,7 @@ import org.springframework.core.NestedExceptionUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import com.toir.dto.equipment.EquipmentStatsResponse;
 
 import java.util.List;
 import java.util.UUID;
@@ -663,6 +664,70 @@ class EquipmentControllerContractTest {
                                 """.formatted(departmentId)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Department not found: " + departmentId));
+    }
+
+    @Test
+    void statsWithoutFiltersReturnsEquipmentStats() throws Exception {
+        EquipmentStatsResponse response = new EquipmentStatsResponse(
+                50,
+                9,
+                3,
+                1
+        );
+
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.getEquipmentStats(null, null, null, null)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/equipment/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalInRegistry").value(50))
+                .andExpect(jsonPath("$.active").value(9))
+                .andExpect(jsonPath("$.inRepair").value(3))
+                .andExpect(jsonPath("$.decommissioned").value(1));
+
+        verify(securityScope).enforceDepartmentScope(null);
+        verify(service).getEquipmentStats(null, null, null, null);
+    }
+
+    @Test
+    void statsWithFiltersPassesParamsToService() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID scopedDepartmentId = departmentId;
+        UUID equipmentTypeId = UUID.randomUUID();
+
+        EquipmentStatsResponse response = new EquipmentStatsResponse(
+                12,
+                8,
+                2,
+                2
+        );
+
+        when(securityScope.enforceDepartmentScope(departmentId)).thenReturn(scopedDepartmentId);
+        when(service.getEquipmentStats(
+                "pump",
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                scopedDepartmentId,
+                equipmentTypeId
+        )).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/equipment/stats")
+                        .param("search", "pump")
+                        .param("category", "PRODUCTION_EQUIPMENT")
+                        .param("departmentId", departmentId.toString())
+                        .param("equipmentTypeId", equipmentTypeId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalInRegistry").value(12))
+                .andExpect(jsonPath("$.active").value(8))
+                .andExpect(jsonPath("$.inRepair").value(2))
+                .andExpect(jsonPath("$.decommissioned").value(2));
+
+        verify(securityScope).enforceDepartmentScope(departmentId);
+        verify(service).getEquipmentStats(
+                "pump",
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                scopedDepartmentId,
+                equipmentTypeId
+        );
     }
 
     private EquipmentDto equipmentDto(UUID id, UUID equipmentTypeId, UUID departmentId) {
