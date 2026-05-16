@@ -23,6 +23,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
@@ -183,6 +185,77 @@ class RepairRequestServiceTest {
 
         assertThat(result.linkedDefects()).isEmpty();
         assertThat(result.linkedWorkOrders()).isEmpty();
+    }
+
+    @Test
+    void findByIdMapsEquipmentDepartmentReporterIds() {
+        UUID id = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID reporterId = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setEquipmentId(equipmentId);
+        entity.setDepartmentId(departmentId);
+        entity.setReporterId(reporterId);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        stubDtoLookups(entity);
+
+        RepairRequestDto result = service.findById(id);
+
+        assertThat(result.equipmentId()).isEqualTo(equipmentId);
+        assertThat(result.departmentId()).isEqualTo(departmentId);
+        assertThat(result.reporterId()).isEqualTo(reporterId);
+    }
+
+    @Test
+    void findAllMapsEquipmentDepartmentReporterIds() {
+        UUID id = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID reporterId = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setEquipmentId(equipmentId);
+        entity.setDepartmentId(departmentId);
+        entity.setReporterId(reporterId);
+        when(repository.searchPaginated(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(entity)));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.empty());
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.empty());
+        when(userRepository.findByIdAndIsDeletedFalse(reporterId)).thenReturn(Optional.empty());
+        when(defectRepository.findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(id)))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(id)))
+                .thenReturn(List.of());
+
+        Page<RepairRequestDto> result = service.search(null, null, null, null, 0, 20, null);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().equipmentId()).isEqualTo(equipmentId);
+        assertThat(result.getContent().getFirst().departmentId()).isEqualTo(departmentId);
+        assertThat(result.getContent().getFirst().reporterId()).isEqualTo(reporterId);
+    }
+
+    @Test
+    void findByIdWithNullableIdsReturnsNulls() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setEquipmentId(null);
+        entity.setDepartmentId(null);
+        entity.setReporterId(null);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of());
+
+        RepairRequestDto result = service.findById(id);
+
+        assertThat(result.equipmentId()).isNull();
+        assertThat(result.departmentId()).isNull();
+        assertThat(result.reporterId()).isNull();
+        assertThat(result.equipmentName()).isNull();
+        assertThat(result.departmentName()).isNull();
+        assertThat(result.reporterName()).isNull();
     }
 
     private void stubFindSaveAndDtoLookups(UUID id, RepairRequest entity) {

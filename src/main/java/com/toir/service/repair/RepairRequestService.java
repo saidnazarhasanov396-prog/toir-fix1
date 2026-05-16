@@ -244,17 +244,20 @@ public class RepairRequestService {
     private RepairRequestDto toDto(RepairRequest r,
                                    List<DefectBriefDto> linkedDefects,
                                    List<WorkOrderBriefDto> linkedWorkOrders) {
-        String equipmentName = equipmentRepository.findByIdAndIsDeletedFalse(r.getEquipmentId())
+        String equipmentName = r.getEquipmentId() == null ? null
+                : equipmentRepository.findByIdAndIsDeletedFalse(r.getEquipmentId())
                 .map(Equipment::getName)
                 .orElse(null);
-        String departmentName = departmentRepository.findByIdAndIsDeletedFalse(r.getDepartmentId())
+        String departmentName = r.getDepartmentId() == null ? null
+                : departmentRepository.findByIdAndIsDeletedFalse(r.getDepartmentId())
                 .map(Department::getName)
                 .orElse(null);
         String locationName = r.getLocationId() == null ? null
                 : locationRepository.findByIdAndIsDeletedFalse(r.getLocationId())
                 .map(Location::getName)
                 .orElse(null);
-        String reporterName = userRepository.findByIdAndIsDeletedFalse(r.getReporterId())
+        String reporterName = r.getReporterId() == null ? null
+                : userRepository.findByIdAndIsDeletedFalse(r.getReporterId())
                 .map(User::getFullName)
                 .orElse(null);
 
@@ -263,9 +266,12 @@ public class RepairRequestService {
                 r.getNumber(),
                 r.getTitle(),
                 r.getDescription(),
+                r.getEquipmentId(),
                 equipmentName,
+                r.getDepartmentId(),
                 departmentName,
                 locationName,
+                r.getReporterId(),
                 reporterName,
                 r.getAssignedToId(),
                 r.getPriority(),

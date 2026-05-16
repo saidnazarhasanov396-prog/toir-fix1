@@ -3,6 +3,7 @@ package com.toir.service;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleRequest;
+import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.dto.vehicle.VehicleSummaryDto;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.VehicleDetails;
@@ -13,6 +14,7 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.projection.VehicleStatsProjection;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -60,6 +62,28 @@ public class VehicleService {
                 .toList();
         return new FixedTotalPage<>(items, enrichedEquipmentPage.getPageable(), enrichedEquipmentPage.getTotalElements());
     }
+
+    @Transactional(readOnly = true)
+    public VehicleStatsResponse getStats(UUID departmentId, String search) {
+        String searchPattern = toSearchPattern(search);
+
+        VehicleStatsProjection stats = vehicleDetailsRepository.getVehicleStats(
+                departmentId,
+                EquipmentCategory.VEHICLE,
+                searchPattern,
+                EquipmentStatus.ACTIVE,
+                EquipmentStatus.IN_REPAIR,
+                EquipmentStatus.OUT_OF_SERVICE
+        );
+
+        return new VehicleStatsResponse(
+                safe(stats.getTotal()),
+                safe(stats.getActive()),
+                safe(stats.getInRepair()),
+                safe(stats.getOutOfService())
+        );
+    }
+
 
     @Transactional(readOnly = true)
     public VehicleDetailDto findByEquipmentId(UUID equipmentId) {
@@ -352,5 +376,17 @@ public class VehicleService {
             }
             return new FixedTotalPage<>(mapped, pageable, totalElements);
         }
+    }
+
+    private String toSearchPattern(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+
+        return "%" + search.trim().toLowerCase() + "%";
+    }
+
+    private long safe(Long value) {
+        return value == null ? 0L : value;
     }
 }
