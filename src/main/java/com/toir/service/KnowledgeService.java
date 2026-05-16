@@ -10,6 +10,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -60,6 +62,7 @@ public class KnowledgeService {
         if (article.getKind() == null) {
             article.setKind("LESSON_LEARNED");
         }
+        article.setTags(normalizeTags(article.getTags()));
         return repository.save(article);
     }
 
@@ -77,7 +80,7 @@ public class KnowledgeService {
         existing.setRootCause(patch.getRootCause());
         existing.setSolution(patch.getSolution());
         existing.setPreventiveActions(patch.getPreventiveActions());
-        existing.setTags(patch.getTags());
+        existing.setTags(normalizeTags(patch.getTags()));
         return existing;
     }
 
@@ -87,5 +90,9 @@ public class KnowledgeService {
                 .orElseThrow(() -> RestException.notFound("Article not found: " + id));
         entity.setDeleted(true);
         repository.save(entity);
+    }
+
+    private List<String> normalizeTags(List<String> tags) {
+        return tags == null ? new ArrayList<>() : new ArrayList<>(tags);
     }
 }

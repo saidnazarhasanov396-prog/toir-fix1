@@ -1,9 +1,11 @@
 package com.toir.entity;
 
-import com.toir.persistence.StringListJsonConverter;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -55,9 +57,10 @@ public class KnowledgeArticle extends BaseEntity {
     @Column(name = "preventive_actions", columnDefinition = "text")
     private String preventiveActions;
 
-    @Convert(converter = StringListJsonConverter.class)
-    @Column(columnDefinition = "jsonb")
-    private List<String> tags;
+    @Builder.Default
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "tags", columnDefinition = "jsonb")
+    private List<String> tags = new ArrayList<>();
 
     @Column(name = "author_id")
     private UUID authorId;

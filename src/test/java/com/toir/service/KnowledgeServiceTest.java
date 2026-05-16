@@ -5,6 +5,7 @@ import com.toir.entity.KnowledgeArticle;
 import com.toir.repository.KnowledgeArticleRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -91,6 +93,36 @@ class KnowledgeServiceTest {
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().get(0).kind()).isEqualTo("PROCEDURE");
         verify(repository).findAllByKindAndIsDeletedFalse("PROCEDURE");
+    }
+
+    @Test
+    void createNormalizesNullTagsToEmptyList() {
+        KnowledgeArticle article = article("KB-C1", "Create article");
+        article.setTags(null);
+        when(repository.existsByCodeAndIsDeletedFalse("KB-C1")).thenReturn(false);
+        when(repository.save(any(KnowledgeArticle.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        KnowledgeArticle created = service.create(article);
+
+        ArgumentCaptor<KnowledgeArticle> captor = ArgumentCaptor.forClass(KnowledgeArticle.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getTags()).isNotNull().isEmpty();
+        assertThat(created.getTags()).isNotNull().isEmpty();
+    }
+
+    @Test
+    void createKeepsTagsList() {
+        KnowledgeArticle article = article("KB-C2", "Tagged article");
+        article.setTags(List.of("pump", "seal"));
+        when(repository.existsByCodeAndIsDeletedFalse("KB-C2")).thenReturn(false);
+        when(repository.save(any(KnowledgeArticle.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        KnowledgeArticle created = service.create(article);
+
+        ArgumentCaptor<KnowledgeArticle> captor = ArgumentCaptor.forClass(KnowledgeArticle.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getTags()).containsExactly("pump", "seal");
+        assertThat(created.getTags()).containsExactly("pump", "seal");
     }
 
     private KnowledgeArticle article(String code, String title) {
