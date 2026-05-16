@@ -123,6 +123,88 @@ class WorkOrderControllerContractTest {
     }
 
     @Test
+    void startResponseShowsSyncedRepairRequestStatus() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrderDto response = workOrderDto(
+                workOrderId,
+                WorkOrderStatus.IN_PROGRESS,
+                repairRequestBrief(RequestStatus.IN_PROGRESS),
+                defectBrief(DefectStatus.OPEN)
+        );
+        when(service.start(workOrderId)).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/work-orders/{id}/start", workOrderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.repairRequest.status").value("IN_PROGRESS"));
+    }
+
+    @Test
+    void startResponseShowsSyncedDefectStatus() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrderDto response = workOrderDto(
+                workOrderId,
+                WorkOrderStatus.IN_PROGRESS,
+                repairRequestBrief(RequestStatus.OPEN),
+                defectBrief(DefectStatus.IN_PROGRESS)
+        );
+        when(service.start(workOrderId)).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/work-orders/{id}/start", workOrderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.defect.status").value("IN_PROGRESS"));
+    }
+
+    @Test
+    void completeResponseShowsResolvedDefectWhenEligible() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrderDto response = workOrderDto(
+                workOrderId,
+                WorkOrderStatus.COMPLETED,
+                repairRequestBrief(RequestStatus.OPEN),
+                defectBrief(DefectStatus.RESOLVED)
+        );
+        when(service.complete(eq(workOrderId), any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/work-orders/{id}/complete", workOrderId)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "result": "done",
+                                  "summary": "summary"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.defect.status").value("RESOLVED"));
+    }
+
+    @Test
+    void closeResponseShowsClosedRepairRequestWhenEligible() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrderDto response = workOrderDto(
+                workOrderId,
+                WorkOrderStatus.CLOSED,
+                repairRequestBrief(RequestStatus.CLOSED),
+                defectBrief(DefectStatus.CLOSED)
+        );
+        when(service.close(eq(workOrderId), any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/work-orders/{id}/close", workOrderId)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "result": "closed",
+                                  "closureNotes": "notes"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CLOSED"))
+                .andExpect(jsonPath("$.repairRequest.status").value("CLOSED"));
+    }
+
+    @Test
     void completeReplacementWithoutOldEquipmentReturnWarehouseIdReturnsBadRequest() throws Exception {
         UUID workOrderId = UUID.randomUUID();
         when(service.complete(eq(workOrderId), any()))
@@ -247,6 +329,13 @@ class WorkOrderControllerContractTest {
     }
 
     private WorkOrderDto workOrderDto(UUID id, RepairRequestBriefDto repairRequest, DefectBriefDto defect) {
+        return workOrderDto(id, WorkOrderStatus.PLANNED, repairRequest, defect);
+    }
+
+    private WorkOrderDto workOrderDto(UUID id,
+                                      WorkOrderStatus status,
+                                      RepairRequestBriefDto repairRequest,
+                                      DefectBriefDto defect) {
         return new WorkOrderDto(
                 id,
                 "WO-2026-1001",
@@ -259,7 +348,7 @@ class WorkOrderControllerContractTest {
                 defect == null ? null : defect.id(),
                 null,
                 null,
-                WorkOrderStatus.PLANNED,
+                status,
                 WorkOrderType.PLANNED,
                 WorkType.REPAIR,
                 PriorityLevel.MEDIUM,
@@ -282,10 +371,14 @@ class WorkOrderControllerContractTest {
     }
 
     private RepairRequestBriefDto repairRequestBrief() {
+        return repairRequestBrief(RequestStatus.OPEN);
+    }
+
+    private RepairRequestBriefDto repairRequestBrief(RequestStatus status) {
         return new RepairRequestBriefDto(
                 UUID.randomUUID(),
                 "RR-2026-1001",
-                RequestStatus.OPEN,
+                status,
                 PriorityLevel.MEDIUM,
                 "Repair request",
                 "Short description"
@@ -293,11 +386,15 @@ class WorkOrderControllerContractTest {
     }
 
     private DefectBriefDto defectBrief() {
+        return defectBrief(DefectStatus.OPEN);
+    }
+
+    private DefectBriefDto defectBrief(DefectStatus status) {
         return new DefectBriefDto(
                 UUID.randomUUID(),
                 "DEF-2026-1001",
                 "Leak",
-                DefectStatus.OPEN,
+                status,
                 "HIGH",
                 Instant.now()
         );

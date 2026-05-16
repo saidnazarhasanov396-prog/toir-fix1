@@ -14,6 +14,7 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.PlanStatus;
+import com.toir.enums.DefectStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
@@ -618,6 +619,94 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void startWithLinkedRepairRequestMovesRequestToInProgress() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        workOrder.setRepairRequestId(repairRequestId);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.OPEN);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId)).thenReturn(Optional.of(repairRequest));
+        when(repairRequestRepository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.start(workOrderId);
+
+        assertThat(response.status()).isEqualTo(WorkOrderStatus.IN_PROGRESS);
+        assertThat(repairRequest.getStatus()).isEqualTo(RequestStatus.IN_PROGRESS);
+        assertThat(response.repairRequest()).isNotNull();
+        assertThat(response.repairRequest().status()).isEqualTo(RequestStatus.IN_PROGRESS);
+        verify(repairRequestRepository).save(repairRequest);
+    }
+
+    @Test
+    void startWithLinkedDefectMovesDefectToInProgress() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        workOrder.setDefectId(defectId);
+        Defect defect = defect(defectId, null, DefectStatus.OPEN);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(defectRepository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.start(workOrderId);
+
+        assertThat(response.status()).isEqualTo(WorkOrderStatus.IN_PROGRESS);
+        assertThat(defect.getStatus()).isEqualTo(DefectStatus.IN_PROGRESS);
+        assertThat(response.defect()).isNotNull();
+        assertThat(response.defect().status()).isEqualTo(DefectStatus.IN_PROGRESS);
+        verify(defectRepository).save(defect);
+    }
+
+    @Test
+    void startDoesNotReopenClosedRepairRequest() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        workOrder.setRepairRequestId(repairRequestId);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.CLOSED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId)).thenReturn(Optional.of(repairRequest));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.start(workOrderId);
+
+        assertThat(repairRequest.getStatus()).isEqualTo(RequestStatus.CLOSED);
+        assertThat(response.repairRequest()).isNotNull();
+        assertThat(response.repairRequest().status()).isEqualTo(RequestStatus.CLOSED);
+        verify(repairRequestRepository, never()).save(any(RepairRequest.class));
+    }
+
+    @Test
+    void startDoesNotReopenClosedDefect() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        workOrder.setDefectId(defectId);
+        Defect defect = defect(defectId, null, DefectStatus.CLOSED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.start(workOrderId);
+
+        assertThat(defect.getStatus()).isEqualTo(DefectStatus.CLOSED);
+        assertThat(response.defect()).isNotNull();
+        assertThat(response.defect().status()).isEqualTo(DefectStatus.CLOSED);
+        verify(defectRepository, never()).save(any(Defect.class));
+    }
+
+    @Test
     void startFromDraftShouldFail() {
         UUID workOrderId = UUID.randomUUID();
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
@@ -676,6 +765,127 @@ class WorkOrderServiceTest {
                 oldEquipmentReturnWarehouseId,
                 WarehouseEquipmentStatus.OUT_OF_SERVICE
         );
+    }
+
+    @Test
+    void completeResolvesDefectWhenNoActiveLinkedWorkOrdersRemain() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setDefectId(defectId);
+        Defect defect = defect(defectId, null, DefectStatus.IN_PROGRESS);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.findAllByDefectIdAndIsDeletedFalseOrderByUpdatedAtDesc(defectId))
+                .thenReturn(java.util.List.of(workOrder));
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(defectRepository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
+
+        assertThat(response.status()).isEqualTo(WorkOrderStatus.COMPLETED);
+        assertThat(defect.getStatus()).isEqualTo(DefectStatus.RESOLVED);
+        assertThat(defect.getResolvedAt()).isNotNull();
+        assertThat(response.defect()).isNotNull();
+        assertThat(response.defect().status()).isEqualTo(DefectStatus.RESOLVED);
+        verify(defectRepository).save(defect);
+    }
+
+    @Test
+    void completeDoesNotResolveDefectWhenAnotherActiveLinkedWorkOrderExists() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setDefectId(defectId);
+        WorkOrder anotherActiveWorkOrder = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        anotherActiveWorkOrder.setDefectId(defectId);
+        Defect defect = defect(defectId, null, DefectStatus.IN_PROGRESS);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.findAllByDefectIdAndIsDeletedFalseOrderByUpdatedAtDesc(defectId))
+                .thenReturn(java.util.List.of(workOrder, anotherActiveWorkOrder));
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
+
+        assertThat(response.status()).isEqualTo(WorkOrderStatus.COMPLETED);
+        assertThat(defect.getStatus()).isEqualTo(DefectStatus.IN_PROGRESS);
+        assertThat(defect.getResolvedAt()).isNull();
+        assertThat(response.defect()).isNotNull();
+        assertThat(response.defect().status()).isEqualTo(DefectStatus.IN_PROGRESS);
+        verify(defectRepository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void completeMovesRepairRequestToCompletedWhenAllWorkOrdersDoneAndDefectsResolved() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setRepairRequestId(repairRequestId);
+        workOrder.setDefectId(defectId);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.OPEN);
+        Defect defect = defect(defectId, repairRequestId, DefectStatus.IN_PROGRESS);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.findAllByDefectIdAndIsDeletedFalseOrderByUpdatedAtDesc(defectId))
+                .thenReturn(java.util.List.of(workOrder));
+        when(repository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId))
+                .thenReturn(java.util.List.of(workOrder));
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId)).thenReturn(Optional.of(repairRequest));
+        when(repairRequestRepository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId))
+                .thenReturn(java.util.List.of(defect));
+        when(defectRepository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
+
+        assertThat(defect.getStatus()).isEqualTo(DefectStatus.RESOLVED);
+        assertThat(repairRequest.getStatus()).isEqualTo(RequestStatus.COMPLETED);
+        assertThat(response.repairRequest()).isNotNull();
+        assertThat(response.repairRequest().status()).isEqualTo(RequestStatus.COMPLETED);
+        verify(repairRequestRepository).save(repairRequest);
+    }
+
+    @Test
+    void completeDoesNotCompleteRepairRequestWhenAnyDefectStillOpen() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        UUID linkedDefectId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setRepairRequestId(repairRequestId);
+        workOrder.setDefectId(linkedDefectId);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.OPEN);
+        Defect linkedDefect = defect(linkedDefectId, repairRequestId, DefectStatus.IN_PROGRESS);
+        Defect stillOpenDefect = defect(UUID.randomUUID(), repairRequestId, DefectStatus.OPEN);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.findAllByDefectIdAndIsDeletedFalseOrderByUpdatedAtDesc(linkedDefectId))
+                .thenReturn(java.util.List.of(workOrder));
+        when(repository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId))
+                .thenReturn(java.util.List.of(workOrder));
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId)).thenReturn(Optional.of(repairRequest));
+        when(defectRepository.findByIdAndIsDeletedFalse(linkedDefectId)).thenReturn(Optional.of(linkedDefect));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId))
+                .thenReturn(java.util.List.of(linkedDefect, stillOpenDefect));
+        when(defectRepository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
+
+        assertThat(linkedDefect.getStatus()).isEqualTo(DefectStatus.RESOLVED);
+        assertThat(repairRequest.getStatus()).isEqualTo(RequestStatus.OPEN);
+        assertThat(response.repairRequest()).isNotNull();
+        assertThat(response.repairRequest().status()).isEqualTo(RequestStatus.OPEN);
+        verify(repairRequestRepository, never()).save(any(RepairRequest.class));
     }
 
     @Test
@@ -915,6 +1125,122 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void closeClosesDefectWhenAllLinkedWorkOrdersTerminalAndDefectResolved() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        workOrder.setDefectId(defectId);
+        Defect defect = defect(defectId, null, DefectStatus.RESOLVED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.findAllByDefectIdAndIsDeletedFalseOrderByUpdatedAtDesc(defectId))
+                .thenReturn(java.util.List.of(workOrder));
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(defectRepository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes"));
+
+        assertThat(response.status()).isEqualTo(WorkOrderStatus.CLOSED);
+        assertThat(defect.getStatus()).isEqualTo(DefectStatus.CLOSED);
+        assertThat(response.defect()).isNotNull();
+        assertThat(response.defect().status()).isEqualTo(DefectStatus.CLOSED);
+        verify(defectRepository).save(defect);
+    }
+
+    @Test
+    void closeDoesNotCloseRepairRequestWhenAnyDefectStillOpen() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        UUID linkedDefectId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        workOrder.setRepairRequestId(repairRequestId);
+        workOrder.setDefectId(linkedDefectId);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.OPEN);
+        Defect linkedDefect = defect(linkedDefectId, repairRequestId, DefectStatus.RESOLVED);
+        Defect stillOpenDefect = defect(UUID.randomUUID(), repairRequestId, DefectStatus.OPEN);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.findAllByDefectIdAndIsDeletedFalseOrderByUpdatedAtDesc(linkedDefectId))
+                .thenReturn(java.util.List.of(workOrder));
+        when(repository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId))
+                .thenReturn(java.util.List.of(workOrder));
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId)).thenReturn(Optional.of(repairRequest));
+        when(defectRepository.findByIdAndIsDeletedFalse(linkedDefectId)).thenReturn(Optional.of(linkedDefect));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId))
+                .thenReturn(java.util.List.of(linkedDefect, stillOpenDefect));
+        when(defectRepository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes"));
+
+        assertThat(linkedDefect.getStatus()).isEqualTo(DefectStatus.CLOSED);
+        assertThat(repairRequest.getStatus()).isEqualTo(RequestStatus.OPEN);
+        assertThat(response.repairRequest()).isNotNull();
+        assertThat(response.repairRequest().status()).isEqualTo(RequestStatus.OPEN);
+        verify(repairRequestRepository, never()).save(any(RepairRequest.class));
+    }
+
+    @Test
+    void closeClosesRepairRequestWhenAllWorkOrdersTerminalAndAllDefectsResolvedOrClosed() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        UUID linkedDefectId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        workOrder.setRepairRequestId(repairRequestId);
+        workOrder.setDefectId(linkedDefectId);
+        WorkOrder completedSibling = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        completedSibling.setRepairRequestId(repairRequestId);
+        WorkOrder cancelledSibling = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.CANCELLED, null, null);
+        cancelledSibling.setRepairRequestId(repairRequestId);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.IN_PROGRESS);
+        Defect linkedDefect = defect(linkedDefectId, repairRequestId, DefectStatus.RESOLVED);
+        Defect alreadyClosedDefect = defect(UUID.randomUUID(), repairRequestId, DefectStatus.CLOSED);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.findAllByDefectIdAndIsDeletedFalseOrderByUpdatedAtDesc(linkedDefectId))
+                .thenReturn(java.util.List.of(workOrder));
+        when(repository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId))
+                .thenReturn(java.util.List.of(workOrder, completedSibling, cancelledSibling));
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId)).thenReturn(Optional.of(repairRequest));
+        when(repairRequestRepository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(defectRepository.findByIdAndIsDeletedFalse(linkedDefectId)).thenReturn(Optional.of(linkedDefect));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId))
+                .thenReturn(java.util.List.of(linkedDefect, alreadyClosedDefect));
+        when(defectRepository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes"));
+
+        assertThat(linkedDefect.getStatus()).isEqualTo(DefectStatus.CLOSED);
+        assertThat(repairRequest.getStatus()).isEqualTo(RequestStatus.CLOSED);
+        assertThat(repairRequest.getCloseResult()).isEqualTo("closed");
+        assertThat(repairRequest.getActualCompletionAt()).isNotNull();
+        assertThat(response.repairRequest()).isNotNull();
+        assertThat(response.repairRequest().status()).isEqualTo(RequestStatus.CLOSED);
+        verify(repairRequestRepository).save(repairRequest);
+    }
+
+    @Test
+    void workOrderWithoutLinksStillWorks() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.start(workOrderId);
+
+        assertThat(response.status()).isEqualTo(WorkOrderStatus.IN_PROGRESS);
+        assertThat(response.repairRequest()).isNull();
+        assertThat(response.defect()).isNull();
+    }
+
+    @Test
     void nonReplacementLifecycleShouldNotChangeWarehouseEquipmentItemStatus() {
         UUID workOrderId = UUID.randomUUID();
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
@@ -1046,11 +1372,15 @@ class WorkOrderServiceTest {
     }
 
     private Defect defect(UUID id, UUID repairRequestId) {
+        return defect(id, repairRequestId, DefectStatus.OPEN);
+    }
+
+    private Defect defect(UUID id, UUID repairRequestId, DefectStatus status) {
         Defect defect = new Defect();
         defect.setId(id);
         defect.setCode("DEF-2026-1001");
         defect.setTitle("Leak");
-        defect.setStatus(com.toir.enums.DefectStatus.OPEN);
+        defect.setStatus(status);
         defect.setSeverity("HIGH");
         defect.setRepairRequestId(repairRequestId);
         return defect;
