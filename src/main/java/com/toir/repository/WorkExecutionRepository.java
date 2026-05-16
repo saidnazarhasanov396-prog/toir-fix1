@@ -1,6 +1,7 @@
 package com.toir.repository;
 
 import com.toir.entity.WorkExecution;
+import com.toir.repository.projection.WorkOrderCountProjection;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -32,6 +33,15 @@ public interface WorkExecutionRepository extends JpaRepository<WorkExecution, UU
 
     @Query(value = "SELECT * FROM work_executions WHERE work_order_id = :workOrderId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<WorkExecution> findAllByWorkOrderIdAndIsDeletedFalseOrderByStartedAtAsc(@Param("workOrderId") UUID workOrderId);
+
+    @Query("""
+            select e.workOrderId as workOrderId, count(e) as count
+            from WorkExecution e
+            where e.isDeleted = false
+              and e.workOrderId in :workOrderIds
+            group by e.workOrderId
+            """)
+    List<WorkOrderCountProjection> countByWorkOrderIds(@Param("workOrderIds") Collection<UUID> workOrderIds);
 
     @Query(value = """
             SELECT * FROM work_executions

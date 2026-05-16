@@ -17,7 +17,9 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.WorkExecutionRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
@@ -62,6 +64,8 @@ public class WorkOrderService {
     private final PprTaskRepository pprTaskRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final DefectRepository defectRepository;
+    private final WorkExecutionRepository workExecutionRepository;
+    private final RepairMaterialUsageRepository repairMaterialUsageRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
@@ -734,10 +738,26 @@ public class WorkOrderService {
         Defect linkedDefect = entity.getDefectId() == null
                 ? null
                 : defectRepository.findByIdAndIsDeletedFalse(entity.getDefectId()).orElse(null);
-        return toDto(entity, linkedRepairRequest, linkedDefect);
+        Map<UUID, Integer> operationsCountByWorkOrderId = loadOperationsCountMap(entity.getId() == null
+                ? List.of()
+                : List.of(entity.getId()));
+        Map<UUID, Integer> materialsCountByWorkOrderId = loadMaterialsCountMap(entity.getId() == null
+                ? List.of()
+                : List.of(entity.getId()));
+        return toDto(
+                entity,
+                linkedRepairRequest,
+                linkedDefect,
+                resolveCount(entity.getId(), operationsCountByWorkOrderId),
+                resolveCount(entity.getId(), materialsCountByWorkOrderId)
+        );
     }
 
-    private WorkOrderDto toDto(WorkOrder entity, RepairRequest linkedRepairRequest, Defect linkedDefect) {
+    private WorkOrderDto toDto(WorkOrder entity,
+                               RepairRequest linkedRepairRequest,
+                               Defect linkedDefect,
+                               int operationsCount,
+                               int materialsCount) {
         String equipmentName = equipmentRepository.findById(entity.getEquipmentId())
                 .map(Equipment::getName)
                 .orElse(null);
@@ -760,7 +780,9 @@ public class WorkOrderService {
                 entity.getWarehouseId(), entity.getReplacementEquipmentId(), replacementEquipmentName,
                 entity.getTasks().stream().map(WorkOrderTaskDto::from).toList(),
                 TriadLinkMapper.toRepairRequestBrief(linkedRepairRequest),
-                TriadLinkMapper.toDefectBrief(linkedDefect)
+                TriadLinkMapper.toDefectBrief(linkedDefect),
+                operationsCount,
+                materialsCount
         );
     }
 
@@ -768,6 +790,14 @@ public class WorkOrderService {
         if (entities.isEmpty()) {
             return List.of();
         }
+
+        List<UUID> workOrderIds = entities.stream()
+                .map(WorkOrder::getId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        Map<UUID, Integer> operationsCountByWorkOrderId = loadOperationsCountMap(workOrderIds);
+        Map<UUID, Integer> materialsCountByWorkOrderId = loadMaterialsCountMap(workOrderIds);
 
         List<UUID> repairRequestIds = entities.stream()
                 .map(WorkOrder::getRepairRequestId)
@@ -795,9 +825,44 @@ public class WorkOrderService {
                 .map(entity -> toDto(
                         entity,
                         resolveRepairRequestBrief(entity.getRepairRequestId(), repairRequestById),
-                        resolveDefectBrief(entity.getDefectId(), defectById)
+                        resolveDefectBrief(entity.getDefectId(), defectById),
+                        resolveCount(entity.getId(), operationsCountByWorkOrderId),
+                        resolveCount(entity.getId(), materialsCountByWorkOrderId)
                 ))
                 .toList();
+    }
+
+    private Map<UUID, Integer> loadOperationsCountMap(List<UUID> workOrderIds) {
+        if (workOrderIds.isEmpty()) {
+            return Map.of();
+        }
+        return workExecutionRepository.countByWorkOrderIds(workOrderIds).stream()
+                .collect(Collectors.toMap(
+                        projection -> projection.getWorkOrderId(),
+                        projection -> safeCount(projection.getCount())
+                ));
+    }
+
+    private Map<UUID, Integer> loadMaterialsCountMap(List<UUID> workOrderIds) {
+        if (workOrderIds.isEmpty()) {
+            return Map.of();
+        }
+        return repairMaterialUsageRepository.countByWorkOrderIds(workOrderIds).stream()
+                .collect(Collectors.toMap(
+                        projection -> projection.getWorkOrderId(),
+                        projection -> safeCount(projection.getCount())
+                ));
+    }
+
+    private int resolveCount(UUID workOrderId, Map<UUID, Integer> countByWorkOrderId) {
+        if (workOrderId == null) {
+            return 0;
+        }
+        return countByWorkOrderId.getOrDefault(workOrderId, 0);
+    }
+
+    private int safeCount(long count) {
+        return count > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) count;
     }
 
     private RepairRequest resolveRepairRequestBrief(UUID repairRequestId, Map<UUID, RepairRequest> repairRequestById) {
