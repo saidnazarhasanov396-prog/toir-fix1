@@ -65,15 +65,15 @@ class DepartmentServiceTest {
     @Test
     void searchFindsCreatedDepartment() {
         Department department = department("UI-E2E-20260516052136", "Workshop");
-        when(repository.findAllByIsDeletedFalseAndByType(null, "workshop"))
+        when(repository.findAllByIsDeletedFalseAndByType(null, "%ui-e2e%"))
                 .thenReturn(List.of(department));
 
-        List<DepartmentDto> results = service.findAll(null, "workshop");
+        List<DepartmentDto> results = service.findAll(null, "UI-E2E");
 
         assertThat(results).hasSize(1);
         assertThat(results.getFirst().code()).isEqualTo("UI-E2E-20260516052136");
         assertThat(results.getFirst().name()).isEqualTo("Workshop");
-        verify(repository).findAllByIsDeletedFalseAndByType(null, "workshop");
+        verify(repository).findAllByIsDeletedFalseAndByType(null, "%ui-e2e%");
     }
 
     @Test
@@ -82,10 +82,34 @@ class DepartmentServiceTest {
         when(repository.findAllByIsDeletedFalseAndByType(null, null))
                 .thenReturn(List.of(department));
 
+        List<DepartmentDto> results = service.findAll(null, "");
+
+        assertThat(results).hasSize(1);
+        verify(repository).findAllByIsDeletedFalseAndByType(null, null);
+    }
+
+    @Test
+    void whitespaceSearchFallbackWorks() {
+        Department department = department("UI-E2E-20260516052136", "Workshop");
+        when(repository.findAllByIsDeletedFalseAndByType(null, null))
+                .thenReturn(List.of(department));
+
         List<DepartmentDto> results = service.findAll(null, "   ");
 
         assertThat(results).hasSize(1);
         verify(repository).findAllByIsDeletedFalseAndByType(null, null);
+    }
+
+    @Test
+    void searchBuildsLowercasePattern() {
+        Department department = department("UI-E2E-20260516052136", "Workshop");
+        when(repository.findAllByIsDeletedFalseAndByType(null, "%workshop%"))
+                .thenReturn(List.of(department));
+
+        List<DepartmentDto> results = service.findAll(null, "  WoRkShOp  ");
+
+        assertThat(results).hasSize(1);
+        verify(repository).findAllByIsDeletedFalseAndByType(null, "%workshop%");
     }
 
     private Department department(String code, String name) {
@@ -98,4 +122,3 @@ class DepartmentServiceTest {
         return department;
     }
 }
-

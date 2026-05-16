@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -26,7 +27,8 @@ public class DepartmentService {
     @Transactional(readOnly = true)
     public List<DepartmentDto> findAll(DepartmentType type, String search) {
         String normalizedSearch = normalizeSearch(search);
-        return repository.findAllByIsDeletedFalseAndByType(type, normalizedSearch).stream()
+        String searchPattern = buildSearchPattern(normalizedSearch);
+        return repository.findAllByIsDeletedFalseAndByType(type, searchPattern).stream()
                 .map(DepartmentDto::from)
                 .toList();
     }
@@ -117,6 +119,10 @@ public class DepartmentService {
             return null;
         }
         String trimmed = search.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+        return trimmed.isEmpty() ? null : trimmed.toLowerCase(Locale.ROOT);
+    }
+
+    private String buildSearchPattern(String normalizedSearch) {
+        return normalizedSearch == null ? null : "%" + normalizedSearch + "%";
     }
 }

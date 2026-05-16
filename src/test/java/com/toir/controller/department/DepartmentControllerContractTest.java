@@ -86,12 +86,26 @@ class DepartmentControllerContractTest {
     }
 
     @Test
-    void listWithBlankSearchDoesNotHideCreatedDepartment() throws Exception {
+    void listWithBlankSearchReturns200() throws Exception {
         DepartmentDto created = departmentDto("UI-E2E-20260516052136", "Workshop");
         when(service.findAll(null, "")).thenReturn(List.of(created));
 
         mockMvc.perform(get("/api/v1/departments")
                         .param("search", "")
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].name").value("Workshop"))
+                .andExpect(jsonPath("$.content[0].code").value("UI-E2E-20260516052136"));
+    }
+
+    @Test
+    void listWithWhitespaceSearchReturns200() throws Exception {
+        DepartmentDto created = departmentDto("UI-E2E-20260516052136", "Workshop");
+        when(service.findAll(null, "   ")).thenReturn(List.of(created));
+
+        mockMvc.perform(get("/api/v1/departments")
+                        .param("search", "   ")
                         .param("page", "0")
                         .param("size", "20"))
                 .andExpect(status().isOk())
@@ -112,4 +126,3 @@ class DepartmentControllerContractTest {
         );
     }
 }
-
