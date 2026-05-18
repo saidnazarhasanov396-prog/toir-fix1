@@ -2,9 +2,12 @@ package com.toir.service.department;
 
 import com.toir.dto.department.DepartmentDto;
 import com.toir.dto.department.DepartmentRequest;
+import com.toir.dto.hr.EmployeeDto;
 import com.toir.entity.Department;
+import com.toir.entity.users.Employee;
 import com.toir.enums.DepartmentType;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,7 +17,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +35,9 @@ class DepartmentServiceTest {
 
     @Mock
     AuditBuilderService auditBuilderService;
+
+    @Mock
+    EmployeeRepository employeeRepository;
 
     @InjectMocks
     DepartmentService service;
@@ -110,6 +118,57 @@ class DepartmentServiceTest {
 
         assertThat(results).hasSize(1);
         verify(repository).findAllByIsDeletedFalseAndByType(null, "%workshop%");
+    }
+
+    @Test
+    void findEmployeesByDepartmentReturnsEmployeesForExistingDepartment() {
+        UUID departmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+
+        Department department = new Department();
+        department.setId(departmentId);
+        department.setCode("DEP-001");
+        department.setName("Mechanical");
+        department.setType(DepartmentType.ADMINISTRATION);
+        department.setDeleted(false);
+
+        Employee employee = getEmployee(employeeId, departmentId);
+
+        when(repository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department));
+        when(employeeRepository.findAllByDepartmentIdAndIsDeletedFalse(departmentId))
+                .thenReturn(List.of(employee));
+
+        List<EmployeeDto> result = service.findEmployeesByDepartment(departmentId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().id()).isEqualTo(employeeId);
+        assertThat(result.getFirst().personnelNumber()).isEqualTo("EMP-001");
+        assertThat(result.getFirst().firstName()).isEqualTo("Ali");
+        assertThat(result.getFirst().lastName()).isEqualTo("Valiyev");
+        assertThat(result.getFirst().departmentId()).isEqualTo(departmentId);
+        assertThat(result.getFirst().active()).isTrue();
+
+        verify(repository).findByIdAndIsDeletedFalse(departmentId);
+        verify(employeeRepository).findAllByDepartmentIdAndIsDeletedFalse(departmentId);
+    }
+
+    private static Employee getEmployee(UUID employeeId, UUID departmentId) {
+        Employee employee = new Employee();
+        employee.setId(employeeId);
+        employee.setPersonnelNumber("EMP-001");
+        employee.setFirstName("Ali");
+        employee.setLastName("Valiyev");
+        employee.setMiddleName("Akmalovich");
+        employee.setPosition("Engineer");
+        employee.setDepartmentId(departmentId);
+        employee.setHireDate(LocalDate.of(2025, 1, 10));
+        employee.setGrade("A");
+        employee.setPhone("+998901112233");
+        employee.setEmail("ali@example.com");
+        employee.setActive(true);
+        employee.setDeleted(false);
+        return employee;
     }
 
     private Department department(String code, String name) {

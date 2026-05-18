@@ -2,12 +2,14 @@ package com.toir.service.department;
 
 import com.toir.dto.department.DepartmentDto;
 import com.toir.dto.department.DepartmentRequest;
+import com.toir.dto.hr.EmployeeDto;
 import com.toir.entity.Department;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.DepartmentType;
 import com.toir.exception.RestException;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,7 @@ public class DepartmentService {
 
     private final DepartmentRepository repository;
     private final AuditBuilderService auditBuilderService;
+    private final EmployeeRepository employeeRepository;
 
     @Transactional(readOnly = true)
     public List<DepartmentDto> findAll(DepartmentType type, String search) {
@@ -30,6 +33,16 @@ public class DepartmentService {
         String searchPattern = buildSearchPattern(normalizedSearch);
         return repository.findAllByIsDeletedFalseAndByType(type, searchPattern).stream()
                 .map(DepartmentDto::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<EmployeeDto> findEmployeesByDepartment(UUID departmentId) {
+        getOrThrow(departmentId);
+
+        return employeeRepository.findAllByDepartmentIdAndIsDeletedFalse(departmentId)
+                .stream()
+                .map(EmployeeDto::from)
                 .toList();
     }
 

@@ -1,6 +1,7 @@
 package com.toir.controller.department;
 import com.toir.dto.department.DepartmentDto;
 import com.toir.dto.department.DepartmentRequest;
+import com.toir.dto.hr.EmployeeDto;
 import com.toir.enums.DepartmentType;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.department.DepartmentService;
@@ -8,6 +9,7 @@ import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
+import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -31,6 +33,13 @@ public class DepartmentController {
             @RequestParam(required = false, defaultValue = "") String search
     , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(service.findAll(type,search), page, size));
+    }
+
+    @GetMapping("/{departmentId}/employees")
+    public ResponseEntity<List<EmployeeDto>> getEmployeesByDepartment(
+            @PathVariable UUID departmentId
+    ) {
+        return ResponseEntity.ok(service.findEmployeesByDepartment(departmentId));
     }
 
     @GetMapping("/{id}")

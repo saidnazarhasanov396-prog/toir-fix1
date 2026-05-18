@@ -1,6 +1,7 @@
 package com.toir.controller.department;
 
 import com.toir.dto.department.DepartmentDto;
+import com.toir.dto.hr.EmployeeDto;
 import com.toir.enums.DepartmentType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.department.DepartmentService;
@@ -12,9 +13,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -56,6 +59,45 @@ class DepartmentControllerContractTest {
                 .andExpect(jsonPath("$.code").value("UI-E2E-20260516052136"))
                 .andExpect(jsonPath("$.name").value("Workshop"))
                 .andExpect(jsonPath("$.type").value("WORKSHOP"));
+    }
+
+    @Test
+    void getEmployeesByDepartmentReturnsEmployees() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+
+        EmployeeDto employee = new EmployeeDto(
+                employeeId,
+                "EMP-001",
+                "Ali",
+                "Valiyev",
+                "Akmalovich",
+                "Engineer",
+                departmentId,
+                null,
+                null,
+                LocalDate.of(2025, 1, 10),
+                null,
+                "A",
+                "+998901112233",
+                "ali@example.com",
+                true
+        );
+
+        when(service.findEmployeesByDepartment(departmentId))
+                .thenReturn(List.of(employee));
+
+        mockMvc.perform(get("/api/v1/departments/{departmentId}/employees", departmentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(employeeId.toString()))
+                .andExpect(jsonPath("$[0].personnelNumber").value("EMP-001"))
+                .andExpect(jsonPath("$[0].firstName").value("Ali"))
+                .andExpect(jsonPath("$[0].lastName").value("Valiyev"))
+                .andExpect(jsonPath("$[0].position").value("Engineer"))
+                .andExpect(jsonPath("$[0].departmentId").value(departmentId.toString()))
+                .andExpect(jsonPath("$[0].active").value(true));
+
+        verify(service).findEmployeesByDepartment(departmentId);
     }
 
     @Test
