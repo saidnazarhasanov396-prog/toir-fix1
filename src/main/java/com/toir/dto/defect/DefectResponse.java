@@ -26,7 +26,8 @@ public record DefectResponse(
         Instant resolvedAt,
         int recurrenceCount,
         RepairRequestBriefDto repairRequest,
-        List<WorkOrderBriefDto> linkedWorkOrders
+        List<WorkOrderBriefDto> linkedWorkOrders,
+        boolean hasLesson
 ) {
     public DefectResponse {
         linkedWorkOrders = linkedWorkOrders == null ? List.of() : List.copyOf(linkedWorkOrders);
@@ -36,6 +37,14 @@ public record DefectResponse(
                                       String equipmentName,
                                       RepairRequestBriefDto repairRequest,
                                       List<WorkOrderBriefDto> linkedWorkOrders) {
+        return from(dto, equipmentName, repairRequest, linkedWorkOrders, false);
+    }
+
+    public static DefectResponse from(DefectDto dto,
+                                      String equipmentName,
+                                      RepairRequestBriefDto repairRequest,
+                                      List<WorkOrderBriefDto> linkedWorkOrders,
+                                      boolean hasLesson) {
         return new DefectResponse(
                 dto.id(),
                 dto.code(),
@@ -54,7 +63,8 @@ public record DefectResponse(
                 dto.resolvedAt(),
                 dto.recurrenceCount(),
                 repairRequest,
-                linkedWorkOrders
+                linkedWorkOrders,
+                hasLesson
         );
     }
 }

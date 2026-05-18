@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.controller.defects.DefectController;
+import com.toir.dto.defect.DefectDto;
 import com.toir.dto.defect.DefectRequest;
 import com.toir.dto.defect.DefectResponse;
 import com.toir.dto.defect.DefectStatsResponse;
@@ -64,7 +65,7 @@ class DefectControllerContractTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new DefectController(service, defectRepository, knowledgeRepository))
+        mockMvc = MockMvcBuilders.standaloneSetup(new DefectController(service))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -275,7 +276,8 @@ class DefectControllerContractTest {
                 null,
                 0,
                 null,
-                List.of()
+                List.of(),
+                false
         );
         when(service.findById(defectId)).thenReturn(response);
 
@@ -287,26 +289,23 @@ class DefectControllerContractTest {
     }
 
     @Test
-    void createLessonFromDefectCreatesKnowledgeWithValidCyrillicTitle() throws Exception {
+    void createLessonFromDefectReturnsCreatedKnowledgeArticle() throws Exception {
         UUID defectId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
 
-        Defect defect = Defect.builder()
-                .code("DEF-001")
-                .title("Перегрев подшипника")
-                .description("Обнаружен рост температуры узла")
-                .equipmentId(equipmentId)
-                .failureReason("Недостаточная смазка")
-                .build();
-        defect.setId(defectId);
+        KnowledgeArticle article = new KnowledgeArticle();
+        article.setId(UUID.randomUUID());
+        article.setCode("LL-DEF-DEF-001");
+        article.setTitle("Дефект DEF-001: Перегрев подшипника");
+        article.setKind("LESSON_LEARNED");
+        article.setEquipmentId(equipmentId);
+        article.setDefectId(defectId);
+        article.setProblem("Обнаружен рост температуры узла");
+        article.setRootCause("Причина отказа: Недостаточная смазка");
+        article.setSolution("Требуется заполнить по результатам расследования.");
+        article.setPreventiveActions("Требуется заполнить по результатам расследования.");
 
-        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
-        when(knowledgeRepository.existsByCodeAndIsDeletedFalse("LL-DEF-DEF-001")).thenReturn(false);
-        when(knowledgeRepository.save(any(KnowledgeArticle.class))).thenAnswer(invocation -> {
-            KnowledgeArticle article = invocation.getArgument(0);
-            article.setId(UUID.randomUUID());
-            return article;
-        });
+        when(service.createLesson(defectId)).thenReturn(article);
 
         mockMvc.perform(post("/api/v1/defects/{id}/create-lesson", defectId))
                 .andExpect(status().isCreated())
@@ -318,13 +317,7 @@ class DefectControllerContractTest {
                 .andExpect(jsonPath("$.solution", not(containsString("Ð"))))
                 .andExpect(jsonPath("$.preventiveActions", not(containsString("Ð"))));
 
-        ArgumentCaptor<KnowledgeArticle> captor = ArgumentCaptor.forClass(KnowledgeArticle.class);
-        verify(knowledgeRepository).save(captor.capture());
-        KnowledgeArticle saved = captor.getValue();
-        assertTrue(saved.getTitle().startsWith("Дефект "));
-        assertFalse(saved.getTitle().contains("Ð"));
-        assertEquals("Требуется заполнить по результатам расследования.", saved.getSolution());
-        assertEquals("Требуется заполнить по результатам расследования.", saved.getPreventiveActions());
+        verify(service).createLesson(defectId);
     }
 
     private DefectResponse defectResponse(UUID equipmentId, UUID repairRequestId) {
@@ -363,7 +356,7 @@ class DefectControllerContractTest {
                                 Instant.now(),
                                 Instant.now().plusSeconds(3600)
                         )
-                )
+                ), false
         );
     }
 
@@ -450,6 +443,46 @@ class DefectControllerContractTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message")
                         .value("repairRequestId and requestId cannot both be provided with different values"));
+    }
+
+    @Test
+    void getReturnsHasLessonField() throws Exception {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        DefectDto dto = new DefectDto(
+                defectId,
+                "DEF-001",
+                "Pump defect",
+                "Pump problem",
+                equipmentId,
+                null,
+                "MECHANICAL",
+                "HIGH",
+                "Wear",
+                "Bearing wear",
+                DefectStatus.OPEN,
+                Instant.now(),
+                null,
+                0
+        );
+
+        DefectResponse response = DefectResponse.from(
+                dto,
+                "Pump A",
+                null,
+                List.of(),
+                true
+        );
+
+        when(service.findById(defectId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/defects/{id}", defectId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(defectId.toString()))
+                .andExpect(jsonPath("$.hasLesson").value(true));
+
+        verify(service).findById(defectId);
     }
 
 }

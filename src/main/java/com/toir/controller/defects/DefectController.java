@@ -27,8 +27,6 @@ import org.springframework.web.bind.annotation.*;
 public class DefectController {
 
     private final DefectService service;
-    private final DefectRepository defectRepository;
-    private final KnowledgeArticleRepository knowledgeRepository;
 
 
     @GetMapping
@@ -102,27 +100,6 @@ public class DefectController {
     @PostMapping("/{id}/create-lesson")
     @Transactional
     public ResponseEntity<KnowledgeArticle> createLesson(@PathVariable UUID id) {
-        Defect d = defectRepository.findByIdAndIsDeletedFalse(id)
-                .orElseThrow(() -> RestException.notFound("Defect not found: " + id));
-        String code = "LL-DEF-" + d.getCode();
-        if (knowledgeRepository.existsByCodeAndIsDeletedFalse(code)) {
-            throw RestException.conflict("Lesson already exists for defect: " + code);
-        }
-        KnowledgeArticle a = new KnowledgeArticle();
-        a.setCode(code);
-        a.setTitle("Дефект " + d.getCode() + ": " + d.getTitle());
-        a.setKind("LESSON_LEARNED");
-        a.setEquipmentId(d.getEquipmentId());
-        a.setDefectId(d.getId());
-        a.setProblem(d.getDescription() != null ? d.getDescription() : d.getTitle());
-        a.setRootCause(
-                d.getRootCause() != null
-                        ? d.getRootCause()
-                        : (d.getFailureReason() != null
-                                ? "Причина отказа: " + d.getFailureReason()
-                                : "Требуется заполнить по результатам расследования."));
-        a.setSolution("Требуется заполнить по результатам расследования.");
-        a.setPreventiveActions("Требуется заполнить по результатам расследования.");
-        return ResponseEntity.status(HttpStatus.CREATED).body(knowledgeRepository.save(a));
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createLesson(id));
     }
 }

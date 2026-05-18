@@ -3,6 +3,8 @@ package com.toir.service.defects;
 import com.toir.dto.defect.DefectRequest;
 import com.toir.dto.defect.DefectResponse;
 import com.toir.dto.defect.DefectStatsResponse;
+import com.toir.entity.KnowledgeArticle;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.repair.RepairRequest;
@@ -13,6 +15,7 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
+import com.toir.repository.KnowledgeArticleRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -36,6 +39,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -57,6 +61,9 @@ class DefectServiceTest {
 
     @Mock
     WorkOrderRepository workOrderRepository;
+
+    @Mock
+    KnowledgeArticleRepository knowledgeRepository;
 
     @Mock
     AuditBuilderService auditBuilderService;
@@ -406,6 +413,114 @@ class DefectServiceTest {
         assertThat(result.open()).isZero();
         assertThat(result.resolved()).isZero();
         assertThat(result.withRecurrence()).isZero();
+    }
+
+    @Test
+    void createLessonFromDefectCreatesKnowledgeWithValidCyrillicTitle() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        Defect defect = Defect.builder()
+                .code("DEF-001")
+                .title("Перегрев подшипника")
+                .description("Обнаружен рост температуры узла")
+                .equipmentId(equipmentId)
+                .failureReason("Недостаточная смазка")
+                .build();
+        defect.setId(defectId);
+
+        when(repository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(knowledgeRepository.existsByCodeAndIsDeletedFalse("LL-DEF-DEF-001")).thenReturn(false);
+        when(knowledgeRepository.save(any(KnowledgeArticle.class))).thenAnswer(invocation -> {
+            KnowledgeArticle article = invocation.getArgument(0);
+            article.setId(UUID.randomUUID());
+            return article;
+        });
+
+        KnowledgeArticle result = service.createLesson(defectId);
+
+        assertEquals("LL-DEF-DEF-001", result.getCode());
+        assertTrue(result.getTitle().startsWith("Дефект "));
+        assertFalse(result.getTitle().contains("Ð"));
+        assertTrue(result.getRootCause().contains("Причина отказа"));
+        assertFalse(result.getRootCause().contains("Ð"));
+        assertEquals("Требуется заполнить по результатам расследования.", result.getSolution());
+        assertEquals("Требуется заполнить по результатам расследования.", result.getPreventiveActions());
+
+        ArgumentCaptor<KnowledgeArticle> captor = ArgumentCaptor.forClass(KnowledgeArticle.class);
+        verify(knowledgeRepository).save(captor.capture());
+
+        KnowledgeArticle saved = captor.getValue();
+        assertEquals("LL-DEF-DEF-001", saved.getCode());
+        assertEquals("Дефект DEF-001: Перегрев подшипника", saved.getTitle());
+        assertEquals(equipmentId, saved.getEquipmentId());
+        assertEquals(defectId, saved.getDefectId());
+    }
+
+    @Test
+    void findByIdReturnsHasLessonTrueWhenLessonExists() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        Defect defect = new Defect();
+        defect.setId(defectId);
+        defect.setCode("DEF-001");
+        defect.setTitle("Pump defect");
+        defect.setDescription("Pump problem");
+        defect.setEquipmentId(equipmentId);
+        defect.setStatus(DefectStatus.OPEN);
+        defect.setDeleted(false);
+
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setName("Pump A");
+
+        when(repository.findByIdAndIsDeletedFalse(defectId))
+                .thenReturn(Optional.of(defect));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment));
+        when(workOrderRepository.findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(defectId)))
+                .thenReturn(List.of());
+        when(knowledgeRepository.findDefectIdsWithLesson(List.of(defectId), "LESSON_LEARNED"))
+                .thenReturn(List.of(defectId));
+
+        DefectResponse result = service.findById(defectId);
+
+        assertThat(result.hasLesson()).isTrue();
+
+        verify(knowledgeRepository).findDefectIdsWithLesson(List.of(defectId), "LESSON_LEARNED");
+    }
+
+    @Test
+    void findByIdReturnsHasLessonFalseWhenLessonDoesNotExist() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        Defect defect = new Defect();
+        defect.setId(defectId);
+        defect.setCode("DEF-001");
+        defect.setTitle("Pump defect");
+        defect.setDescription("Pump problem");
+        defect.setEquipmentId(equipmentId);
+        defect.setStatus(DefectStatus.OPEN);
+        defect.setDeleted(false);
+
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setName("Pump A");
+
+        when(repository.findByIdAndIsDeletedFalse(defectId))
+                .thenReturn(Optional.of(defect));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment));
+        when(workOrderRepository.findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(defectId)))
+                .thenReturn(List.of());
+        when(knowledgeRepository.findDefectIdsWithLesson(List.of(defectId), "LESSON_LEARNED"))
+                .thenReturn(List.of());
+
+        DefectResponse result = service.findById(defectId);
+
+        assertThat(result.hasLesson()).isFalse();
     }
 
     private DefectStatsProjection statsProjection(
