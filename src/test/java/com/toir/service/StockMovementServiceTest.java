@@ -15,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -102,7 +103,9 @@ class StockMovementServiceTest {
 
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
-        when(repository.save(any(StockMovement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        when(repository.save(any(StockMovement.class)))
+                .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
 
         service.create(request(warehouseId, sparePartId, StockMovementType.ADJUSTMENT, 6));
 
@@ -123,7 +126,9 @@ class StockMovementServiceTest {
 
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
-        when(repository.save(any(StockMovement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        when(repository.save(any(StockMovement.class)))
+                .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
 
         service.create(request(warehouseId, sparePartId, StockMovementType.ISSUE, 5));
 
@@ -157,5 +162,10 @@ class StockMovementServiceTest {
         stock.setReservedQty(reservedQty);
         stock.setMinQty(0);
         return stock;
+    }
+
+    private StockMovement saveWithId(StockMovement movement) {
+        ReflectionTestUtils.setField(movement, "id", UUID.randomUUID());
+        return movement;
     }
 }

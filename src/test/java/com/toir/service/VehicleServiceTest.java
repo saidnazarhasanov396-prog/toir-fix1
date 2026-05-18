@@ -24,6 +24,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -32,10 +35,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class VehicleServiceTest {
@@ -51,6 +52,14 @@ class VehicleServiceTest {
 
     @InjectMocks
     VehicleService service;
+
+    @Mock
+    AuditBuilderService auditBuilderService;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(service, "auditBuilderService", auditBuilderService);
+    }
 
     @Test
     void createVehicleCreatesEquipmentWithVehicleCategoryAndDetails() {
@@ -273,6 +282,7 @@ class VehicleServiceTest {
         Equipment equipment = equipment(equipmentId, "VH-040", "Truck 040", "INV-VH-040");
         VehicleDetails details = details(equipmentId, "01A040AA", "VIN-040");
         VehicleRequest request = fullRequest("VH-041", "Truck 041", "INV-VH-041", "01A041AA", "VIN-041");
+        Equipment updated = updatedEquipment(equipmentId, request);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
@@ -280,7 +290,9 @@ class VehicleServiceTest {
         when(equipmentRepository.findByInventoryNumberAndIsDeletedFalse("INV-VH-041")).thenReturn(Optional.empty());
         when(vehicleDetailsRepository.findByPlateNumberAndIsDeletedFalse("01A041AA")).thenReturn(Optional.empty());
         when(vehicleDetailsRepository.findByVinAndIsDeletedFalse("VIN-041")).thenReturn(Optional.empty());
-        when(equipmentService.findById(equipmentId)).thenAnswer(invocation -> EquipmentDto.from(equipment));
+        when(equipmentRepository.save(any(Equipment.class))).thenReturn(updated);
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(updated));
 
         VehicleDetailDto result = service.update(equipmentId, request);
 
@@ -296,10 +308,13 @@ class VehicleServiceTest {
         Equipment equipment = equipment(equipmentId, "VH-050", "Truck 050", "INV-VH-050");
         VehicleDetails details = details(equipmentId, "01A050AA", "VIN-050");
         VehicleRequest request = fullRequest("VH-050", "Truck 050", "INV-VH-050", "01A050AA", " ");
+        Equipment updated = updatedEquipment(equipmentId, request);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
-        when(equipmentService.findById(equipmentId)).thenAnswer(invocation -> EquipmentDto.from(equipment));
+        when(equipmentRepository.save(any(Equipment.class))).thenReturn(updated);
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(updated));
 
         VehicleDetailDto result = service.update(equipmentId, request);
 
@@ -314,10 +329,13 @@ class VehicleServiceTest {
         Equipment equipment = equipment(equipmentId, "VH-020", "Truck 020", "INV-VH-020");
         VehicleDetails details = details(equipmentId, "01A020AA", "VIN-020");
         VehicleRequest request = fullRequest("VH-020", "Truck 020 Updated", "INV-VH-020", "01A020AA", "VIN-020");
+        Equipment updated = updatedEquipment(equipmentId, request);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
-        when(equipmentService.findById(equipmentId)).thenAnswer(invocation -> EquipmentDto.from(equipment));
+        when(equipmentRepository.save(any(Equipment.class))).thenReturn(updated);
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(updated));
 
         VehicleDetailDto result = service.update(equipmentId, request);
 
@@ -338,12 +356,26 @@ class VehicleServiceTest {
         VehicleDetails completeDetails = details(completeId, "01A030AA", "VIN-030");
         PageRequest pageRequest = PageRequest.of(0, 20);
 
-        when(equipmentService.search(null, null, null, EquipmentCategory.VEHICLE, null, false, null, 0, 20))
-                .thenReturn(new PageImpl<>(List.of(EquipmentDto.from(complete), EquipmentDto.from(incomplete)), pageRequest, 2));
+        Page<Equipment> equipmentPage = new PageImpl<>(List.of(complete, incomplete), pageRequest, 2);
+        Page<EquipmentDto> enrichedEquipmentPage = new PageImpl<>(
+                List.of(EquipmentDto.from(complete), EquipmentDto.from(incomplete)),
+                pageRequest,
+                2
+        );
+
+        when(vehicleDetailsRepository.searchVehicleEquipment(
+                isNull(),
+                isNull(),
+                eq(EquipmentCategory.VEHICLE),
+                isNull(),
+                eq(pageRequest)
+        )).thenReturn(equipmentPage);
+
+        when(equipmentService.enrich(equipmentPage)).thenReturn(enrichedEquipmentPage);
         when(vehicleDetailsRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(completeId, incompleteId)))
                 .thenReturn(List.of(completeDetails));
 
-        Page<VehicleSummaryDto> result = service.list(null, null, null, 1, 20);
+        Page<VehicleSummaryDto> result = service.list(null, null, null, 0, 20);
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().getFirst().equipmentId()).isEqualTo(completeId);
@@ -550,5 +582,18 @@ class VehicleServiceTest {
         details.setVin(vin);
         details.setVehicleType(VehicleType.TRUCK);
         return details;
+    }
+    private static Equipment updatedEquipment(UUID id, VehicleRequest request) {
+        Equipment equipment = new Equipment();
+        equipment.setId(id);
+        equipment.setCode(request.code());
+        equipment.setName(request.name());
+        equipment.setInventoryNumber(request.inventoryNumber());
+        equipment.setEquipmentTypeId(request.equipmentTypeId());
+        equipment.setDepartmentId(request.departmentId());
+        equipment.setLocationId(request.locationId());
+        equipment.setStatus(request.status());
+        equipment.setCategory(EquipmentCategory.VEHICLE);
+        return equipment;
     }
 }
