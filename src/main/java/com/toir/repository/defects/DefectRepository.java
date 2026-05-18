@@ -36,6 +36,7 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
             select * from defects d where
             d.is_deleted = false
             and (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
+            and (cast(:repairRequestId as varchar) is null or d.repair_request_id = cast(:repairRequestId as uuid))
             and (cast(:search as varchar) is null or lower(d.code) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.title) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.description) like lower(concat('%', cast(:search as varchar), '%'))
@@ -48,6 +49,7 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
             select count(*) from defects d where
             d.is_deleted = false
             and (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
+            and (cast(:repairRequestId as varchar) is null or d.repair_request_id = cast(:repairRequestId as uuid))
             and (cast(:search as varchar) is null or lower(d.code) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.title) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.description) like lower(concat('%', cast(:search as varchar), '%'))
@@ -57,6 +59,7 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
             or lower(d.root_cause) like lower(concat('%', cast(:search as varchar), '%')))
             """)
     Page<Defect> searchPaginated(@Param("equipmentId") UUID equipmentId,
+                                 @Param("repairRequestId") UUID repairRequestId,
                                  @Param("search") String search,
                                  Pageable pageable);
 

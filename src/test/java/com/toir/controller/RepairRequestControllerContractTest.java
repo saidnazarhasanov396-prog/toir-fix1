@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.controller.repair.RepairRequestController;
 import com.toir.dto.repairrequest.RepairRequestDto;
+import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.enums.CriticalityLevel;
@@ -29,6 +30,9 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,6 +54,94 @@ class RepairRequestControllerContractTest {
         mockMvc = MockMvcBuilders.standaloneSetup(new RepairRequestController(service, securityScope))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void listWithEquipmentIdAndApprovedStatusReturnsOnlyMatchingRepairRequests() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
+        when(service.search(RequestStatus.APPROVED, null, equipmentId, null, 0, 100, null))
+                .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
+
+        mockMvc.perform(get("/api/v1/repair-requests")
+                        .param("size", "100")
+                        .param("status", "APPROVED")
+                        .param("equipmentId", equipmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
+
+        verifyNoInteractions(securityScope);
+        verify(service).search(RequestStatus.APPROVED, null, equipmentId, null, 0, 100, null);
+    }
+
+    @Test
+    void listWithEquipmentIdReturnsOnlyMatchingRepairRequests() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
+        when(service.search(null, null, equipmentId, null, 0, 100, null))
+                .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
+
+        mockMvc.perform(get("/api/v1/repair-requests")
+                        .param("size", "100")
+                        .param("equipmentId", equipmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
+
+        verifyNoInteractions(securityScope);
+        verify(service).search(null, null, equipmentId, null, 0, 100, null);
+    }
+
+    @Test
+    void listWithStatusReturnsOnlyMatchingRepairRequests() throws Exception {
+        RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(RequestStatus.APPROVED, null, null, null, 0, 100, null))
+                .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
+
+        mockMvc.perform(get("/api/v1/repair-requests")
+                        .param("size", "100")
+                        .param("status", "APPROVED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
+
+        verify(securityScope).enforceDepartmentScope(null);
+        verify(service).search(RequestStatus.APPROVED, null, null, null, 0, 100, null);
+    }
+
+    @Test
+    void listWithEquipmentIdAndStatusNoMatchesReturnsEmptyPage() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        when(service.search(RequestStatus.APPROVED, null, equipmentId, null, 0, 100, null))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 100), 0));
+
+        mockMvc.perform(get("/api/v1/repair-requests")
+                        .param("size", "100")
+                        .param("status", "APPROVED")
+                        .param("equipmentId", equipmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0));
+
+        verifyNoInteractions(securityScope);
+        verify(service).search(RequestStatus.APPROVED, null, equipmentId, null, 0, 100, null);
+    }
+
+    @Test
+    void listWithoutEquipmentIdKeepsExistingBehavior() throws Exception {
+        UUID scopedDepartmentId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(scopedDepartmentId);
+        when(service.search(null, scopedDepartmentId, null, null, 0, 100, null))
+                .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
+
+        mockMvc.perform(get("/api/v1/repair-requests")
+                        .param("size", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
+
+        verify(securityScope).enforceDepartmentScope(null);
+        verify(service).search(null, scopedDepartmentId, null, null, 0, 100, null);
     }
 
     @Test
@@ -126,6 +218,59 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.equipmentId").value(nullValue()))
                 .andExpect(jsonPath("$.departmentId").value(nullValue()))
                 .andExpect(jsonPath("$.reporterId").value(nullValue()));
+    }
+
+    @Test
+    void statsWithoutFiltersReturnsRepairRequestStats() throws Exception {
+        RepairRequestStatsResponse response = new RepairRequestStatsResponse(
+                24,
+                3,
+                8,
+                12
+        );
+
+        when(securityScope.enforceDepartmentScope(isNull())).thenReturn(null);
+        when(service.getStats(null, null, null)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/repair-requests/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalRequests").value(24))
+                .andExpect(jsonPath("$.emergency").value(3))
+                .andExpect(jsonPath("$.open").value(8))
+                .andExpect(jsonPath("$.withWorkOrder").value(12));
+
+        verify(securityScope).enforceDepartmentScope(null);
+        verify(service).getStats(null, null, null);
+    }
+
+    @Test
+    void statsWithFiltersPassesScopedDepartmentEquipmentAndSearchToService() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID scopedDepartmentId = departmentId;
+        UUID equipmentId = UUID.randomUUID();
+
+        RepairRequestStatsResponse response = new RepairRequestStatsResponse(
+                10,
+                2,
+                4,
+                5
+        );
+
+        when(securityScope.enforceDepartmentScope(departmentId)).thenReturn(scopedDepartmentId);
+        when(service.getStats(scopedDepartmentId, equipmentId, "pump")).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/repair-requests/stats")
+                        .param("departmentId", departmentId.toString())
+                        .param("equipmentId", equipmentId.toString())
+                        .param("search", "pump"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalRequests").value(10))
+                .andExpect(jsonPath("$.emergency").value(2))
+                .andExpect(jsonPath("$.open").value(4))
+                .andExpect(jsonPath("$.withWorkOrder").value(5));
+
+        verify(securityScope).enforceDepartmentScope(departmentId);
+        verify(service).getStats(scopedDepartmentId, equipmentId, "pump");
     }
 
     private RepairRequestDto dtoWithLinks(UUID requestId) {

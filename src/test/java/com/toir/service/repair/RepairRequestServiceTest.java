@@ -1,6 +1,7 @@
 package com.toir.service.repair;
 
 import com.toir.dto.repairrequest.RepairRequestDto;
+import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
@@ -16,6 +17,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.users.UserRepository;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
@@ -33,6 +36,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -64,6 +69,64 @@ class RepairRequestServiceTest {
 
     @InjectMocks
     RepairRequestService service;
+
+    @Test
+    void findAllFiltersByEquipmentId() {
+        UUID equipmentId = UUID.randomUUID();
+        PageRequest pageRequest = PageRequest.of(0, 20);
+        when(repository.searchPaginated(null, null, equipmentId, null, null, pageRequest))
+                .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
+
+        Page<RepairRequestDto> result = service.search(null, null, equipmentId, null, 0, 20, null);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(repository).searchPaginated(eq(null), eq(null), eq(equipmentId), eq(null), eq(null), eq(pageRequest));
+    }
+
+    @Test
+    void findAllFiltersByEquipmentIdAndStatus() {
+        UUID equipmentId = UUID.randomUUID();
+        PageRequest pageRequest = PageRequest.of(0, 20);
+        when(repository.searchPaginated(RequestStatus.APPROVED.name(), null, equipmentId, null, null, pageRequest))
+                .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
+
+        Page<RepairRequestDto> result = service.search(RequestStatus.APPROVED, null, equipmentId, null, 0, 20, null);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(repository).searchPaginated(
+                eq(RequestStatus.APPROVED.name()),
+                eq(null),
+                eq(equipmentId),
+                eq(null),
+                eq(null),
+                eq(pageRequest)
+        );
+    }
+
+    @Test
+    void findAllWithoutEquipmentIdKeepsExistingBehavior() {
+        UUID departmentId = UUID.randomUUID();
+        PageRequest pageRequest = PageRequest.of(0, 20);
+        when(repository.searchPaginated(null, departmentId, null, null, null, pageRequest))
+                .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
+
+        Page<RepairRequestDto> result = service.search(null, departmentId, null, null, 0, 20, null);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(repository).searchPaginated(eq(null), eq(departmentId), eq(null), eq(null), eq(null), eq(pageRequest));
+    }
+
+    @Test
+    void findAllNormalizesBlankSearchToNull() {
+        PageRequest pageRequest = PageRequest.of(0, 20);
+        when(repository.searchPaginated(null, null, null, null, null, pageRequest))
+                .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
+
+        Page<RepairRequestDto> result = service.search(null, null, null, null, 0, 20, "   ");
+
+        assertThat(result.getContent()).isEmpty();
+        verify(repository).searchPaginated(eq(null), eq(null), eq(null), eq(null), eq(null), eq(pageRequest));
+    }
 
     @Test
     void requestClarificationSetsNeedsClarificationAndClarificationReason() {
@@ -256,6 +319,145 @@ class RepairRequestServiceTest {
         assertThat(result.equipmentName()).isNull();
         assertThat(result.departmentName()).isNull();
         assertThat(result.reporterName()).isNull();
+    }
+    @Test
+    void getStatsWithoutFiltersReturnsRepairRequestStats() {
+        RepairRequestStatsProjection projection = statsProjection(24L, 3L, 8L, 12L);
+
+        when(repository.getRepairRequestStats(
+                null,
+                null,
+                null,
+                PriorityLevel.EMERGENCY.name(),
+                RequestStatus.OPEN.name()
+        )).thenReturn(projection);
+
+        RepairRequestStatsResponse result = service.getStats(null, null, null);
+
+        assertThat(result.totalRequests()).isEqualTo(24);
+        assertThat(result.emergency()).isEqualTo(3);
+        assertThat(result.open()).isEqualTo(8);
+        assertThat(result.withWorkOrder()).isEqualTo(12);
+
+        verify(repository).getRepairRequestStats(
+                null,
+                null,
+                null,
+                PriorityLevel.EMERGENCY.name(),
+                RequestStatus.OPEN.name()
+        );
+    }
+
+    @Test
+    void getStatsWithFiltersPassesDepartmentEquipmentAndNormalizedSearchPattern() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        RepairRequestStatsProjection projection = statsProjection(10L, 2L, 4L, 5L);
+
+        when(repository.getRepairRequestStats(
+                departmentId,
+                equipmentId,
+                "%pump%",
+                PriorityLevel.EMERGENCY.name(),
+                RequestStatus.OPEN.name()
+        )).thenReturn(projection);
+
+        RepairRequestStatsResponse result = service.getStats(
+                departmentId,
+                equipmentId,
+                "  PuMp  "
+        );
+
+        assertThat(result.totalRequests()).isEqualTo(10);
+        assertThat(result.emergency()).isEqualTo(2);
+        assertThat(result.open()).isEqualTo(4);
+        assertThat(result.withWorkOrder()).isEqualTo(5);
+
+        verify(repository).getRepairRequestStats(
+                departmentId,
+                equipmentId,
+                "%pump%",
+                PriorityLevel.EMERGENCY.name(),
+                RequestStatus.OPEN.name()
+        );
+    }
+
+    @Test
+    void getStatsWithBlankSearchPassesNullSearchPattern() {
+        RepairRequestStatsProjection projection = statsProjection(7L, 1L, 3L, 2L);
+
+        when(repository.getRepairRequestStats(
+                null,
+                null,
+                null,
+                PriorityLevel.EMERGENCY.name(),
+                RequestStatus.OPEN.name()
+        )).thenReturn(projection);
+
+        RepairRequestStatsResponse result = service.getStats(null, null, "   ");
+
+        assertThat(result.totalRequests()).isEqualTo(7);
+        assertThat(result.emergency()).isEqualTo(1);
+        assertThat(result.open()).isEqualTo(3);
+        assertThat(result.withWorkOrder()).isEqualTo(2);
+
+        verify(repository).getRepairRequestStats(
+                null,
+                null,
+                null,
+                PriorityLevel.EMERGENCY.name(),
+                RequestStatus.OPEN.name()
+        );
+    }
+
+    @Test
+    void getStatsMapsNullProjectionValuesToZero() {
+        RepairRequestStatsProjection projection = statsProjection(null, null, null, null);
+
+        when(repository.getRepairRequestStats(
+                null,
+                null,
+                null,
+                PriorityLevel.EMERGENCY.name(),
+                RequestStatus.OPEN.name()
+        )).thenReturn(projection);
+
+        RepairRequestStatsResponse result = service.getStats(null, null, null);
+
+        assertThat(result.totalRequests()).isZero();
+        assertThat(result.emergency()).isZero();
+        assertThat(result.open()).isZero();
+        assertThat(result.withWorkOrder()).isZero();
+    }
+
+    private RepairRequestStatsProjection statsProjection(
+            Long totalRequests,
+            Long emergency,
+            Long open,
+            Long withWorkOrder
+    ) {
+        return new RepairRequestStatsProjection() {
+            @Override
+            public Long getTotalRequests() {
+                return totalRequests;
+            }
+
+            @Override
+            public Long getEmergency() {
+                return emergency;
+            }
+
+            @Override
+            public Long getOpen() {
+                return open;
+            }
+
+            @Override
+            public Long getWithWorkOrder() {
+                return withWorkOrder;
+            }
+        };
     }
 
     private void stubFindSaveAndDtoLookups(UUID id, RepairRequest entity) {

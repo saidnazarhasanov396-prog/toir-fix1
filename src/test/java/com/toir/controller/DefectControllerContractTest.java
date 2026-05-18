@@ -23,6 +23,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -37,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -63,6 +66,85 @@ class DefectControllerContractTest {
         mockMvc = MockMvcBuilders.standaloneSetup(new DefectController(service, defectRepository, knowledgeRepository))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void listWithRepairRequestIdReturnsOnlyMatchingDefects() throws Exception {
+        UUID repairRequestId = UUID.randomUUID();
+        DefectResponse response = defectResponse(UUID.randomUUID(), repairRequestId);
+        when(service.search(null, repairRequestId, 0, 100, null))
+                .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
+
+        mockMvc.perform(get("/api/v1/defects")
+                        .param("repairRequestId", repairRequestId.toString())
+                        .param("size", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].repairRequestId").value(repairRequestId.toString()))
+                .andExpect(jsonPath("$.content[0].requestId").value(repairRequestId.toString()));
+
+        verify(service).search(null, repairRequestId, 0, 100, null);
+    }
+
+    @Test
+    void listWithRepairRequestIdReturnsEmptyWhenNoMatches() throws Exception {
+        UUID repairRequestId = UUID.randomUUID();
+        when(service.search(null, repairRequestId, 0, 100, null))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 100), 0));
+
+        mockMvc.perform(get("/api/v1/defects")
+                        .param("repairRequestId", repairRequestId.toString())
+                        .param("size", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void listWithoutRepairRequestIdReturnsAllNonDeletedDefects() throws Exception {
+        DefectResponse first = defectResponse(UUID.randomUUID(), UUID.randomUUID());
+        DefectResponse second = defectResponse(UUID.randomUUID(), null);
+        when(service.search(null, null, 0, 100, null))
+                .thenReturn(new PageImpl<>(List.of(first, second), PageRequest.of(0, 100), 2));
+
+        mockMvc.perform(get("/api/v1/defects")
+                        .param("size", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content[0].id").value(first.id().toString()))
+                .andExpect(jsonPath("$.content[1].id").value(second.id().toString()))
+                .andExpect(jsonPath("$.totalElements").value(2));
+
+        verify(service).search(null, null, 0, 100, null);
+    }
+
+    @Test
+    void listWithLegacyRequestIdAliasReturnsOnlyMatchingDefects() throws Exception {
+        UUID repairRequestId = UUID.randomUUID();
+        DefectResponse response = defectResponse(UUID.randomUUID(), repairRequestId);
+        when(service.search(null, repairRequestId, 0, 100, null))
+                .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
+
+        mockMvc.perform(get("/api/v1/defects")
+                        .param("requestId", repairRequestId.toString())
+                        .param("size", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].repairRequestId").value(repairRequestId.toString()))
+                .andExpect(jsonPath("$.content[0].requestId").value(repairRequestId.toString()));
+
+        verify(service).search(null, repairRequestId, 0, 100, null);
+    }
+
+    @Test
+    void listWithConflictingRepairRequestIdAndRequestIdReturnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/defects")
+                        .param("repairRequestId", UUID.randomUUID().toString())
+                        .param("requestId", UUID.randomUUID().toString())
+                        .param("size", "100"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("repairRequestId and requestId cannot both be provided with different values"));
+
+        verifyNoInteractions(service);
     }
 
     @Test
