@@ -3,11 +3,13 @@ package com.toir.dto.defectlist;
 import com.toir.entity.defects.DefectList;
 import com.toir.enums.DefectListStatus;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 public record DefectListDto(
         UUID id,
+        Instant createdAt,
         String code,
         String title,
         UUID equipmentId,
@@ -24,6 +26,7 @@ public record DefectListDto(
     public static DefectListDto from(DefectList d) {
         return new DefectListDto(
                 d.getId(),
+                d.getCreatedAt(),
                 d.getCode(),
                 d.getTitle(),
                 d.getEquipmentId(),
