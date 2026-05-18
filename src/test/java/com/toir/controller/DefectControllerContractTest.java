@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.controller.defects.DefectController;
+import com.toir.dto.defect.DefectDto;
 import com.toir.dto.defect.DefectRequest;
 import com.toir.dto.defect.DefectResponse;
 import com.toir.dto.defect.DefectStatsResponse;
@@ -275,7 +276,8 @@ class DefectControllerContractTest {
                 null,
                 0,
                 null,
-                List.of()
+                List.of(),
+                false
         );
         when(service.findById(defectId)).thenReturn(response);
 
@@ -354,7 +356,7 @@ class DefectControllerContractTest {
                                 Instant.now(),
                                 Instant.now().plusSeconds(3600)
                         )
-                )
+                ), false
         );
     }
 
@@ -441,6 +443,46 @@ class DefectControllerContractTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message")
                         .value("repairRequestId and requestId cannot both be provided with different values"));
+    }
+
+    @Test
+    void getReturnsHasLessonField() throws Exception {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        DefectDto dto = new DefectDto(
+                defectId,
+                "DEF-001",
+                "Pump defect",
+                "Pump problem",
+                equipmentId,
+                null,
+                "MECHANICAL",
+                "HIGH",
+                "Wear",
+                "Bearing wear",
+                DefectStatus.OPEN,
+                Instant.now(),
+                null,
+                0
+        );
+
+        DefectResponse response = DefectResponse.from(
+                dto,
+                "Pump A",
+                null,
+                List.of(),
+                true
+        );
+
+        when(service.findById(defectId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/defects/{id}", defectId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(defectId.toString()))
+                .andExpect(jsonPath("$.hasLesson").value(true));
+
+        verify(service).findById(defectId);
     }
 
 }

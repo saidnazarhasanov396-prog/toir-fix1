@@ -33,11 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.Year;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -53,6 +49,7 @@ public class DefectService {
     private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_DEFECT_LINK =
             EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
     private final KnowledgeArticleRepository knowledgeRepository;
+
 
     @Transactional(readOnly = true)
     public List<DefectResponse> findAll() {
@@ -242,7 +239,7 @@ public class DefectService {
         }
         List<UUID> equipmentIds = defects.stream()
                 .map(Defect::getEquipmentId)
-                .filter(id -> id != null)
+                .filter(Objects::nonNull)
                 .distinct()
                 .toList();
         Map<UUID, String> equipmentNameById = equipmentIds.isEmpty()
@@ -256,6 +253,7 @@ public class DefectService {
                 .filter(id -> id != null)
                 .distinct()
                 .toList();
+
         Map<UUID, RepairRequest> repairRequestById = repairRequestIds.isEmpty()
                 ? Map.of()
                 : repairRequestRepository.findAllByIdInAndIsDeletedFalse(repairRequestIds)
@@ -265,36 +263,29 @@ public class DefectService {
         List<UUID> defectIds = defects.stream()
                 .map(Defect::getId)
                 .toList();
+
+        Set<UUID> defectIdsWithLesson = defectIds.isEmpty()
+                ? Set.of()
+                : Set.copyOf(knowledgeRepository.findDefectIdsWithLesson(
+                defectIds,
+                "LESSON_LEARNED"
+        ));
+
         Map<UUID, List<WorkOrder>> workOrdersByDefectId = workOrderRepository
                 .findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(defectIds)
                 .stream()
                 .collect(Collectors.groupingBy(WorkOrder::getDefectId));
 
         return defects.stream()
-                .map(defect -> toResponse(defect, equipmentNameById, repairRequestById, workOrdersByDefectId))
+                .map(defect -> toResponse(
+                        defect,
+                        equipmentNameById,
+                        repairRequestById,
+                        workOrdersByDefectId,
+                        defectIdsWithLesson))
                 .toList();
     }
 
-    private DefectResponse toResponse(Defect defect,
-                                      Map<UUID, String> equipmentNameById,
-                                      Map<UUID, RepairRequest> repairRequestById,
-                                      Map<UUID, List<WorkOrder>> workOrdersByDefectId) {
-        DefectDto dto = DefectDto.from(defect);
-        RepairRequestBriefDto repairRequest = dto.repairRequestId() == null
-                ? null
-                : TriadLinkMapper.toRepairRequestBrief(repairRequestById.get(dto.repairRequestId()));
-        List<WorkOrderBriefDto> linkedWorkOrders = workOrdersByDefectId
-                .getOrDefault(dto.id(), List.of())
-                .stream()
-                .map(TriadLinkMapper::toWorkOrderBrief)
-                .toList();
-        return DefectResponse.from(
-                dto,
-                equipmentNameById.get(dto.equipmentId()),
-                repairRequest,
-                linkedWorkOrders
-        );
-    }
 
     private String toSearchPattern(String search) {
         if (search == null || search.isBlank()) {
@@ -332,5 +323,39 @@ public class DefectService {
         a.setPreventiveActions("Требуется заполнить по результатам расследования.");
 
         return knowledgeRepository.save(a);
+    }
+
+    private DefectResponse toResponse(Defect defect,
+                                      Map<UUID, String> equipmentNameById,
+                                      Map<UUID, RepairRequest> repairRequestById,
+                                      Map<UUID, List<WorkOrder>> workOrdersByDefectId,
+                                      Set<UUID> defectIdsWithLesson) {
+        DefectDto dto = DefectDto.from(defect);
+
+        RepairRequestBriefDto repairRequest = getBriefDto(dto,repairRequestById);
+        List<WorkOrderBriefDto> linkedWorkOrders = getLinkedWorkOrderBrief(dto,workOrdersByDefectId);
+
+        return DefectResponse.from(
+                dto,
+                equipmentNameById.get(dto.equipmentId()),
+                repairRequest,
+                linkedWorkOrders,
+                defectIdsWithLesson.contains(dto.id())
+        );
+    }
+
+    private RepairRequestBriefDto getBriefDto(DefectDto dto, Map<UUID, RepairRequest> repairRequestById){
+        return dto.repairRequestId() == null
+                ? null
+                : TriadLinkMapper.toRepairRequestBrief(repairRequestById.get(dto.repairRequestId()));
+
+    }
+
+    private List<WorkOrderBriefDto> getLinkedWorkOrderBrief(DefectDto dto, Map<UUID, List<WorkOrder>> workOrdersByDefectId) {
+        return workOrdersByDefectId
+                .getOrDefault(dto.id(), List.of())
+                .stream()
+                .map(TriadLinkMapper::toWorkOrderBrief)
+                .toList();
     }
 }
