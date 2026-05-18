@@ -26,6 +26,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.Year;
+import java.util.Locale;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -49,6 +51,7 @@ public class DefectService {
     private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_DEFECT_LINK =
             EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
     private final KnowledgeArticleRepository knowledgeRepository;
+    private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
 
 
     @Transactional(readOnly = true)
@@ -105,10 +108,7 @@ public class DefectService {
 
     @Transactional
     public DefectResponse create(DefectRequest request) {
-        Defect entity = new Defect();
-        entity.setCode(nextCode());
-        apply(entity, request);
-        Defect saved = repository.save(entity);
+        Defect saved = saveWithGeneratedCode(request);
 
         auditBuilderService.log(
                 "defect",
@@ -197,20 +197,49 @@ public class DefectService {
         entity.setRootCause(request.rootCause());
     }
 
-    private String nextCode() {
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private Defect saveWithGeneratedCode(DefectRequest request) {
         int year = Year.now().getValue();
         String codePrefix = "DEF-" + year + "-";
         long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
-        String code = formatCode("DEF", year, sequence);
-        while (repository.existsByCode(code)) {
-            sequence++;
-            code = formatCode("DEF", year, sequence);
+
+        for (int attempt = 0; attempt < MAX_CODE_GENERATION_ATTEMPTS; attempt++) {
+            String code = formatCode("DEF", year, sequence + attempt);
+            if (repository.existsByCode(code)) {
+                continue;
+            }
+
+            Defect entity = new Defect();
+            entity.setCode(code);
+            apply(entity, request);
+
+            try {
+                return repository.save(entity);
+            } catch (DataIntegrityViolationException ex) {
+                if (isCodeConflict(ex)) {
+                    continue;
+                }
+                throw ex;
+            }
         }
-        return code;
+
+        throw RestException.conflict("Could not generate unique defect code");
     }
 
-    private String formatCode(String prefix, int year, long sequence) {
-        return "%s-%d-%04d".formatted(prefix, year, sequence);
+    private boolean isCodeConflict(DataIntegrityViolationException ex) {
+        Throwable root = ex.getMostSpecificCause();
+        String message = root != null ? root.getMessage() : ex.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("defects_code_key")
+                || (normalized.contains("defects")
+                && normalized.contains("duplicate")
+                && normalized.contains("code"));
     }
 
     private void validateRepairRequestLink(UUID repairRequestId) {

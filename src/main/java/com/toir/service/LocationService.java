@@ -11,12 +11,14 @@ import com.toir.repository.LocationRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Year;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -26,6 +28,7 @@ public class LocationService {
 
     private final LocationRepository repository;
     private final AuditBuilderService auditBuilderService;
+    private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
 
 
     @Transactional(readOnly = true)
@@ -46,10 +49,7 @@ public class LocationService {
 
     @Transactional
     public LocationDto create(LocationRequest request) {
-        Location entity = new Location();
-        entity.setCode(nextCode());
-        apply(entity, request);
-        Location saved = repository.save(entity);
+        Location saved = saveWithGeneratedCode(request);
 
         auditBuilderService.log(
                 "location",
@@ -120,19 +120,48 @@ public class LocationService {
         entity.setDescription(request.description());
     }
 
-    private String nextCode() {
+    private String formatCode(String prefix, int year, long sequence) {
+        return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private Location saveWithGeneratedCode(LocationRequest request) {
         int year = Year.now().getValue();
         String codePrefix = "LOC-" + year + "-";
         long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
-        String code = formatCode("LOC", year, sequence);
-        while (repository.existsByCode(code)) {
-            sequence++;
-            code = formatCode("LOC", year, sequence);
+
+        for (int attempt = 0; attempt < MAX_CODE_GENERATION_ATTEMPTS; attempt++) {
+            String code = formatCode("LOC", year, sequence + attempt);
+            if (repository.existsByCode(code)) {
+                continue;
+            }
+
+            Location entity = new Location();
+            entity.setCode(code);
+            apply(entity, request);
+
+            try {
+                return repository.save(entity);
+            } catch (DataIntegrityViolationException ex) {
+                if (isCodeConflict(ex)) {
+                    continue;
+                }
+                throw ex;
+            }
         }
-        return code;
+
+        throw RestException.conflict("Could not generate unique location code");
     }
 
-    private String formatCode(String prefix, int year, long sequence) {
-        return "%s-%d-%04d".formatted(prefix, year, sequence);
+    private boolean isCodeConflict(DataIntegrityViolationException ex) {
+        Throwable root = ex.getMostSpecificCause();
+        String message = root != null ? root.getMessage() : ex.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("locations_code_key")
+                || (normalized.contains("locations")
+                && normalized.contains("duplicate")
+                && normalized.contains("code"));
     }
 }

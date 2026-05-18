@@ -4,20 +4,23 @@ import com.toir.dto.department.DepartmentDto;
 import com.toir.dto.department.DepartmentRequest;
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.entity.Department;
+import com.toir.entity.users.Brigade;
+import com.toir.entity.users.Employee;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.DepartmentType;
 import com.toir.exception.RestException;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.service.users.HrService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Locale;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +29,7 @@ public class DepartmentService {
     private final DepartmentRepository repository;
     private final AuditBuilderService auditBuilderService;
     private final EmployeeRepository employeeRepository;
+    private final BrigadeRepository brigadeRepository;
 
     @Transactional(readOnly = true)
     public List<DepartmentDto> findAll(DepartmentType type, String search) {
@@ -38,12 +42,36 @@ public class DepartmentService {
 
     @Transactional(readOnly = true)
     public List<EmployeeDto> findEmployeesByDepartment(UUID departmentId) {
-        getOrThrow(departmentId);
+        Department department = getOrThrow(departmentId);
 
-        return employeeRepository.findAllByDepartmentIdAndIsDeletedFalse(departmentId)
+        List<Employee> employees = employeeRepository.findAllByDepartmentIdAndIsDeletedFalse(departmentId);
+
+        List<UUID> brigadeIds = HrService.getBrigadeIds(employees);
+
+        Map<UUID, String> brigadeNameById = brigadeIds.isEmpty()
+                ? Map.of()
+                : brigadeRepository.findAllByIdInAndIsDeletedFalse(brigadeIds)
                 .stream()
-                .map(EmployeeDto::from)
+                .collect(Collectors.toMap(
+                        Brigade::getId,
+                        Brigade::getName,
+                        (a, b) -> a
+                ));
+
+        return employees.stream()
+                .map(employee -> EmployeeDto.from(
+                        employee,
+                        department.getName(),
+                        resolveName(brigadeNameById, employee.getBrigadeId())
+                ))
                 .toList();
+    }
+
+    private String resolveName(Map<UUID, String> namesById, UUID id) {
+        if (id == null) {
+            return null;
+        }
+        return namesById.get(id);
     }
 
     @Transactional(readOnly = true)
