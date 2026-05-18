@@ -7,6 +7,7 @@ import com.toir.dto.defect.DefectStatsResponse;
 import com.toir.dto.triad.RepairRequestBriefDto;
 import com.toir.dto.triad.TriadLinkMapper;
 import com.toir.dto.triad.WorkOrderBriefDto;
+import com.toir.entity.KnowledgeArticle;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
@@ -16,6 +17,7 @@ import com.toir.enums.AuditModule;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.RequestStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.KnowledgeArticleRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -50,6 +52,7 @@ public class DefectService {
     private final AuditBuilderService auditBuilderService;
     private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_DEFECT_LINK =
             EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
+    private final KnowledgeArticleRepository knowledgeRepository;
 
     @Transactional(readOnly = true)
     public List<DefectResponse> findAll() {
@@ -303,5 +306,31 @@ public class DefectService {
 
     private long safe(Long value) {
         return value == null ? 0L : value;
+    }
+
+    public KnowledgeArticle createLesson(UUID id) {
+        Defect d = repository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Defect not found: " + id));
+        String code = "LL-DEF-" + d.getCode();
+        if (knowledgeRepository.existsByCodeAndIsDeletedFalse(code)) {
+            throw RestException.conflict("Lesson already exists for defect: " + code);
+        }
+        KnowledgeArticle a = new KnowledgeArticle();
+        a.setCode(code);
+        a.setTitle("Дефект " + d.getCode() + ": " + d.getTitle());
+        a.setKind("LESSON_LEARNED");
+        a.setEquipmentId(d.getEquipmentId());
+        a.setDefectId(d.getId());
+        a.setProblem(d.getDescription() != null ? d.getDescription() : d.getTitle());
+        a.setRootCause(
+                d.getRootCause() != null
+                        ? d.getRootCause()
+                        : (d.getFailureReason() != null
+                        ? "Причина отказа: " + d.getFailureReason()
+                        : "Требуется заполнить по результатам расследования."));
+        a.setSolution("Требуется заполнить по результатам расследования.");
+        a.setPreventiveActions("Требуется заполнить по результатам расследования.");
+
+        return knowledgeRepository.save(a);
     }
 }
