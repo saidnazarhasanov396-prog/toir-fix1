@@ -1,6 +1,7 @@
 package com.toir.controller.defects;
 import com.toir.dto.defect.DefectRequest;
 import com.toir.dto.defect.DefectResponse;
+import com.toir.dto.defect.DefectStatsResponse;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.exception.RestException;
@@ -42,6 +43,23 @@ public class DefectController {
         UUID resolvedRepairRequestId = resolveRepairRequestIdFilter(repairRequestId, requestIdAlias);
         return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, page, size, search));
     }
+
+    @GetMapping("/stats")
+    public ResponseEntity<DefectStatsResponse> stats(
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) UUID repairRequestId,
+            @RequestParam(name = "requestId", required = false) UUID requestIdAlias,
+            @RequestParam(required = false) String search
+    ) {
+        UUID resolvedRepairRequestId = resolveRepairRequestIdFilter(repairRequestId, requestIdAlias);
+
+        return ResponseEntity.ok(service.getStats(
+                equipmentId,
+                resolvedRepairRequestId,
+                search
+        ));
+    }
+
 
     @GetMapping("/{id}")
     public ResponseEntity<DefectResponse> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }

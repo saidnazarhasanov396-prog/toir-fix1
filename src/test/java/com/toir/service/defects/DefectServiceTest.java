@@ -2,6 +2,7 @@ package com.toir.service.defects;
 
 import com.toir.dto.defect.DefectRequest;
 import com.toir.dto.defect.DefectResponse;
+import com.toir.dto.defect.DefectStatsResponse;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.repair.RepairRequest;
@@ -15,6 +16,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -294,6 +296,148 @@ class DefectServiceTest {
         assertThat(response.repairRequest()).isNull();
         assertThat(response.linkedWorkOrders()).isEmpty();
     }
+
+    @Test
+    void getStatsWithoutFiltersReturnsDefectStats() {
+        DefectStatsProjection projection = statsProjection(50L, 8L, 2L, 0L);
+
+        when(repository.getDefectStats(
+                null,
+                null,
+                null,
+                DefectStatus.OPEN.name(),
+                DefectStatus.RESOLVED.name()
+        )).thenReturn(projection);
+
+        DefectStatsResponse result = service.getStats(null, null, null);
+
+        assertThat(result.totalDefects()).isEqualTo(50);
+        assertThat(result.open()).isEqualTo(8);
+        assertThat(result.resolved()).isEqualTo(2);
+        assertThat(result.withRecurrence()).isZero();
+
+        verify(repository).getDefectStats(
+                null,
+                null,
+                null,
+                DefectStatus.OPEN.name(),
+                DefectStatus.RESOLVED.name()
+        );
+    }
+
+    @Test
+    void getStatsWithFiltersPassesEquipmentRepairRequestAndNormalizedSearchPattern() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+
+        DefectStatsProjection projection = statsProjection(12L, 5L, 3L, 2L);
+
+        when(repository.getDefectStats(
+                equipmentId,
+                repairRequestId,
+                "%pump%",
+                DefectStatus.OPEN.name(),
+                DefectStatus.RESOLVED.name()
+        )).thenReturn(projection);
+
+        DefectStatsResponse result = service.getStats(
+                equipmentId,
+                repairRequestId,
+                "  PuMp  "
+        );
+
+        assertThat(result.totalDefects()).isEqualTo(12);
+        assertThat(result.open()).isEqualTo(5);
+        assertThat(result.resolved()).isEqualTo(3);
+        assertThat(result.withRecurrence()).isEqualTo(2);
+
+        verify(repository).getDefectStats(
+                equipmentId,
+                repairRequestId,
+                "%pump%",
+                DefectStatus.OPEN.name(),
+                DefectStatus.RESOLVED.name()
+        );
+    }
+
+    @Test
+    void getStatsWithBlankSearchPassesNullSearchPattern() {
+        DefectStatsProjection projection = statsProjection(7L, 4L, 1L, 1L);
+
+        when(repository.getDefectStats(
+                null,
+                null,
+                null,
+                DefectStatus.OPEN.name(),
+                DefectStatus.RESOLVED.name()
+        )).thenReturn(projection);
+
+        DefectStatsResponse result = service.getStats(null, null, "   ");
+
+        assertThat(result.totalDefects()).isEqualTo(7);
+        assertThat(result.open()).isEqualTo(4);
+        assertThat(result.resolved()).isEqualTo(1);
+        assertThat(result.withRecurrence()).isEqualTo(1);
+
+        verify(repository).getDefectStats(
+                null,
+                null,
+                null,
+                DefectStatus.OPEN.name(),
+                DefectStatus.RESOLVED.name()
+        );
+    }
+
+    @Test
+    void getStatsMapsNullProjectionValuesToZero() {
+        DefectStatsProjection projection = statsProjection(null, null, null, null);
+
+        when(repository.getDefectStats(
+                null,
+                null,
+                null,
+                DefectStatus.OPEN.name(),
+                DefectStatus.RESOLVED.name()
+        )).thenReturn(projection);
+
+        DefectStatsResponse result = service.getStats(null, null, null);
+
+        assertThat(result.totalDefects()).isZero();
+        assertThat(result.open()).isZero();
+        assertThat(result.resolved()).isZero();
+        assertThat(result.withRecurrence()).isZero();
+    }
+
+    private DefectStatsProjection statsProjection(
+            Long totalDefects,
+            Long open,
+            Long resolved,
+            Long withRecurrence
+    ) {
+        return new DefectStatsProjection() {
+            @Override
+            public Long getTotalDefects() {
+                return totalDefects;
+            }
+
+            @Override
+            public Long getOpen() {
+                return open;
+            }
+
+            @Override
+            public Long getResolved() {
+                return resolved;
+            }
+
+            @Override
+            public Long getWithRecurrence() {
+                return withRecurrence;
+            }
+        };
+    }
+
+
 
     private DefectRequest request(UUID equipmentId, UUID repairRequestId) {
         return new DefectRequest(

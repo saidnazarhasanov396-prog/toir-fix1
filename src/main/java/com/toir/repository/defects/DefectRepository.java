@@ -6,6 +6,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.toir.repository.projection.DefectStatsProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -87,4 +89,44 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
 
     @Query(value = "SELECT COUNT(*) FROM defects WHERE status = :status AND is_deleted = false", nativeQuery = true)
     long countByStatusAndIsDeletedFalse(@Param("status") String status);
+
+
+    @Query(nativeQuery = true, value = """
+        select
+            count(d.id) as totalDefects,
+
+            count(*) filter (
+                where d.status = cast(:openStatus as text)
+            ) as open,
+
+            count(*) filter (
+                where d.status = cast(:resolvedStatus as text)
+            ) as resolved,
+
+            count(*) filter (
+                where d.recurrence_count > 0
+            ) as withRecurrence
+
+        from defects d
+        where d.is_deleted = false
+          and (cast(:equipmentId as uuid) is null or d.equipment_id = cast(:equipmentId as uuid))
+          and (cast(:repairRequestId as uuid) is null or d.repair_request_id = cast(:repairRequestId as uuid))
+          and (
+              cast(:searchPattern as varchar) is null
+              or lower(coalesce(d.code, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(d.title, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(d.description, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(d.category, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(d.severity, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(d.failure_reason, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(d.root_cause, '')) like cast(:searchPattern as varchar)
+          )
+        """)
+    DefectStatsProjection getDefectStats(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("repairRequestId") UUID repairRequestId,
+            @Param("searchPattern") String searchPattern,
+            @Param("openStatus") String openStatus,
+            @Param("resolvedStatus") String resolvedStatus
+    );
 }

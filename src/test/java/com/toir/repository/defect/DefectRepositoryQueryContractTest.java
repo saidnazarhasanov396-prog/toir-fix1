@@ -1,4 +1,4 @@
-package com.toir.repository;
+package com.toir.repository.defect;
 
 import com.toir.repository.defects.DefectRepository;
 import org.junit.jupiter.api.Test;

@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.controller.defects.DefectController;
 import com.toir.dto.defect.DefectRequest;
 import com.toir.dto.defect.DefectResponse;
+import com.toir.dto.defect.DefectStatsResponse;
 import com.toir.dto.triad.RepairRequestBriefDto;
 import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.entity.KnowledgeArticle;
@@ -365,4 +366,90 @@ class DefectControllerContractTest {
                 )
         );
     }
+
+    @Test
+    void statsWithoutFiltersReturnsDefectStats() throws Exception {
+        DefectStatsResponse response = new DefectStatsResponse(
+                50,
+                8,
+                2,
+                0
+        );
+
+        when(service.getStats(null, null, null)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/defects/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalDefects").value(50))
+                .andExpect(jsonPath("$.open").value(8))
+                .andExpect(jsonPath("$.resolved").value(2))
+                .andExpect(jsonPath("$.withRecurrence").value(0));
+
+        verify(service).getStats(null, null, null);
+    }
+
+    @Test
+    void statsWithFiltersPassesEquipmentRepairRequestAndSearchToService() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+
+        DefectStatsResponse response = new DefectStatsResponse(
+                12,
+                5,
+                3,
+                2
+        );
+
+        when(service.getStats(equipmentId, repairRequestId, "pump")).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/defects/stats")
+                        .param("equipmentId", equipmentId.toString())
+                        .param("repairRequestId", repairRequestId.toString())
+                        .param("search", "pump"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalDefects").value(12))
+                .andExpect(jsonPath("$.open").value(5))
+                .andExpect(jsonPath("$.resolved").value(3))
+                .andExpect(jsonPath("$.withRecurrence").value(2));
+
+        verify(service).getStats(equipmentId, repairRequestId, "pump");
+    }
+
+    @Test
+    void statsSupportsRequestIdAliasAsRepairRequestId() throws Exception {
+        UUID requestId = UUID.randomUUID();
+
+        DefectStatsResponse response = new DefectStatsResponse(
+                4,
+                2,
+                1,
+                1
+        );
+
+        when(service.getStats(null, requestId, null)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/defects/stats")
+                        .param("requestId", requestId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalDefects").value(4))
+                .andExpect(jsonPath("$.open").value(2))
+                .andExpect(jsonPath("$.resolved").value(1))
+                .andExpect(jsonPath("$.withRecurrence").value(1));
+
+        verify(service).getStats(null, requestId, null);
+    }
+
+    @Test
+    void statsWithDifferentRepairRequestIdAndRequestIdReturnsBadRequest() throws Exception {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+
+        mockMvc.perform(get("/api/v1/defects/stats")
+                        .param("repairRequestId", repairRequestId.toString())
+                        .param("requestId", requestId.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("repairRequestId and requestId cannot both be provided with different values"));
+    }
+
 }
