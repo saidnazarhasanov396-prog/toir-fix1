@@ -98,4 +98,47 @@ public interface RepairRequestRepository extends JpaRepository<RepairRequest, UU
                                         @Param("search") String search,
                                         @Param("priority") String priority,
                                         Pageable pageable);
+
+
+    @Query(nativeQuery = true, value = """
+        select
+            count(r.id) as totalRequests,
+
+            count(*) filter (
+                where r.priority = cast(:emergencyPriority as text)
+            ) as emergency,
+
+            count(*) filter (
+                where r.status = cast(:openStatus as text)
+            ) as open,
+
+            count(*) filter (
+                where exists (
+                    select 1
+                    from work_orders w
+                    where w.is_deleted = false
+                      and w.repair_request_id = r.id
+                )
+            ) as withWorkOrder
+
+        from repair_requests r
+        where r.is_deleted = false
+          and (cast(:departmentId as uuid) is null or r.department_id = cast(:departmentId as uuid))
+          and (cast(:equipmentId as uuid) is null or r.equipment_id = cast(:equipmentId as uuid))
+          and (
+              cast(:searchPattern as varchar) is null
+              or lower(coalesce(r.number, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(r.title, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(r.description, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(r.rejection_reason, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(r.close_result, '')) like cast(:searchPattern as varchar)
+          )
+        """)
+    RepairRequestStatsProjection getRepairRequestStats(
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId,
+            @Param("searchPattern") String searchPattern,
+            @Param("emergencyPriority") String emergencyPriority,
+            @Param("openStatus") String openStatus
+    );
 }

@@ -33,11 +33,14 @@ public class DefectController {
     @GetMapping
     public ResponseEntity<Page<DefectResponse>> list(
             @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) UUID repairRequestId,
+            @RequestParam(name = "requestId", required = false) UUID requestIdAlias,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String search
     ) {
-        return ResponseEntity.ok(service.search(equipmentId, page, size, search));
+        UUID resolvedRepairRequestId = resolveRepairRequestIdFilter(repairRequestId, requestIdAlias);
+        return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, page, size, search));
     }
 
     @GetMapping("/{id}")
@@ -61,6 +64,16 @@ public class DefectController {
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private UUID resolveRepairRequestIdFilter(UUID repairRequestId, UUID requestIdAlias) {
+        if (repairRequestId == null) {
+            return requestIdAlias;
+        }
+        if (requestIdAlias == null || repairRequestId.equals(requestIdAlias)) {
+            return repairRequestId;
+        }
+        throw RestException.badRequest("repairRequestId and requestId cannot both be provided with different values");
     }
 
     /**

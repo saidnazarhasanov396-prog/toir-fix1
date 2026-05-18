@@ -23,6 +23,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -34,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -58,6 +61,48 @@ class DefectServiceTest {
 
     @InjectMocks
     DefectService service;
+
+    @Test
+    void findAllFiltersByRepairRequestId() {
+        UUID repairRequestId = UUID.randomUUID();
+        PageRequest pageRequest = PageRequest.of(0, 20);
+        when(repository.searchPaginated(null, repairRequestId, null, pageRequest))
+                .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
+
+        var result = service.search(null, repairRequestId, 0, 20, null);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).isEmpty();
+        verify(repository).searchPaginated(eq(null), eq(repairRequestId), eq(null), eq(pageRequest));
+    }
+
+    @Test
+    void findAllWithoutRepairRequestIdKeepsExistingBehavior() {
+        PageRequest pageRequest = PageRequest.of(0, 20);
+        when(repository.searchPaginated(null, null, null, pageRequest))
+                .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
+
+        var result = service.search(null, null, 0, 20, null);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).isEmpty();
+        verify(repository).searchPaginated(eq(null), eq(null), eq(null), eq(pageRequest));
+    }
+
+    @Test
+    void findAllCombinesRepairRequestIdAndSearchIfSearchExists() {
+        UUID repairRequestId = UUID.randomUUID();
+        String search = "leak";
+        PageRequest pageRequest = PageRequest.of(0, 20);
+        when(repository.searchPaginated(null, repairRequestId, search, pageRequest))
+                .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
+
+        var result = service.search(null, repairRequestId, 0, 20, search);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).isEmpty();
+        verify(repository).searchPaginated(eq(null), eq(repairRequestId), eq(search), eq(pageRequest));
+    }
 
     @Test
     void createWithValidRepairRequestSucceeds() {

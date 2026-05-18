@@ -1,4 +1,5 @@
 package com.toir.service.repair;
+import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.entity.*;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
@@ -16,6 +17,7 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.users.UserRepository;
 
 import com.toir.enums.AuditAction;
@@ -58,11 +60,12 @@ public class RepairRequestService {
 
         String statusStr = (status != null) ? status.name() : null;
         String priorityStr = (priority != null) ? priority.name() : null;
+        String normalizedSearch = normalizeSearch(search);
         Page<RepairRequest> resultPage = repository.searchPaginated(
                 statusStr,
                 departmentId,
                 equipmentId,
-                search,
+                normalizedSearch,
                 priorityStr,
                 pageable
         );
@@ -206,6 +209,48 @@ public class RepairRequestService {
         return toDtoWithLinks(entity);
     }
 
+    @Transactional(readOnly = true)
+    public RepairRequestStatsResponse getStats(
+            UUID departmentId,
+            UUID equipmentId,
+            String search
+    ) {
+        String searchPattern = toSearchPattern(search);
+
+        RepairRequestStatsProjection stats = repository.getRepairRequestStats(
+                departmentId,
+                equipmentId,
+                searchPattern,
+                PriorityLevel.EMERGENCY.name(),
+                RequestStatus.OPEN.name()
+        );
+
+        return new RepairRequestStatsResponse(
+                safe(stats.getTotalRequests()),
+                safe(stats.getEmergency()),
+                safe(stats.getOpen()),
+                safe(stats.getWithWorkOrder())
+        );
+    }
+
+    private String toSearchPattern(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+
+        return "%" + search.trim().toLowerCase() + "%";
+    }
+
+    private String normalizeSearch(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+        return search.trim();
+    }
+
+    private long safe(Long value) {
+        return value == null ? 0L : value;
+    }
 
     private void captureReaction(RepairRequest entity, RequestStatus nextStatus) {
         if (entity.getReactedAt() == null
