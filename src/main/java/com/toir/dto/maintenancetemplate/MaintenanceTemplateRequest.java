@@ -8,7 +8,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import java.util.UUID;
 
 public record MaintenanceTemplateRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         String description,
         @NotNull UUID equipmentTypeId,

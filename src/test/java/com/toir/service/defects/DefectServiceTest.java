@@ -30,9 +30,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Year;
 import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
@@ -44,6 +46,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -131,6 +134,8 @@ class DefectServiceTest {
                 .thenReturn(List.of(repairRequest(repairRequestId, RequestStatus.OPEN)));
         when(workOrderRepository.findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(any()))
                 .thenReturn(List.of());
+        when(knowledgeRepository.findDefectIdsWithLesson(any(), eq("LESSON_LEARNED")))
+                .thenReturn(List.of());
 
         DefectResponse response = service.create(request(equipmentId, repairRequestId));
 
@@ -187,6 +192,8 @@ class DefectServiceTest {
         when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
         when(workOrderRepository.findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(any()))
                 .thenReturn(List.of());
+        when(knowledgeRepository.findDefectIdsWithLesson(any(), eq("LESSON_LEARNED")))
+                .thenReturn(List.of());
 
         DefectResponse response = service.create(request(equipmentId, null));
 
@@ -195,6 +202,100 @@ class DefectServiceTest {
         assertThat(defectCaptor.getValue().getRepairRequestId()).isNull();
         assertThat(response.repairRequestId()).isNull();
         assertThat(response.requestId()).isNull();
+    }
+
+    @Test
+    void createWithoutCodeStillGeneratesCode() {
+        UUID equipmentId = UUID.randomUUID();
+        int year = Year.now().getValue();
+        String codePrefix = "DEF-" + year + "-";
+        String expectedCode = "DEF-" + year + "-0001";
+
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(repository.save(any(Defect.class))).thenAnswer(invocation -> {
+            Defect defect = invocation.getArgument(0);
+            ReflectionTestUtils.setField(defect, "id", UUID.randomUUID());
+            return defect;
+        });
+        stubCreateResponseDependencies(equipmentId);
+
+        DefectResponse response = service.create(request(equipmentId, null));
+
+        assertThat(response.code()).isEqualTo(expectedCode);
+        verify(repository).maxSequenceByCodePrefix(codePrefix);
+    }
+
+    @Test
+    void generatedCodeIsUnique() {
+        UUID equipmentId = UUID.randomUUID();
+        int year = Year.now().getValue();
+        String codePrefix = "DEF-" + year + "-";
+        String firstCandidate = "DEF-" + year + "-0001";
+        String secondCandidate = "DEF-" + year + "-0002";
+
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCode(firstCandidate)).thenReturn(true);
+        when(repository.existsByCode(secondCandidate)).thenReturn(false);
+        when(repository.save(any(Defect.class))).thenAnswer(invocation -> {
+            Defect defect = invocation.getArgument(0);
+            ReflectionTestUtils.setField(defect, "id", UUID.randomUUID());
+            return defect;
+        });
+        stubCreateResponseDependencies(equipmentId);
+
+        DefectResponse response = service.create(request(equipmentId, null));
+
+        assertThat(response.code()).isEqualTo(secondCandidate);
+        verify(repository).existsByCode(firstCandidate);
+        verify(repository).existsByCode(secondCandidate);
+    }
+
+    @Test
+    void duplicateCodeDoesNotReturn500() {
+        UUID equipmentId = UUID.randomUUID();
+        int year = Year.now().getValue();
+        String codePrefix = "DEF-" + year + "-";
+        String firstCandidate = "DEF-" + year + "-0001";
+        String secondCandidate = "DEF-" + year + "-0002";
+
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCode(firstCandidate)).thenReturn(false);
+        when(repository.existsByCode(secondCandidate)).thenReturn(false);
+        when(repository.save(any(Defect.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "duplicate key value violates unique constraint \"defects_code_key\""))
+                .thenAnswer(invocation -> {
+                    Defect defect = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(defect, "id", UUID.randomUUID());
+                    return defect;
+                });
+        stubCreateResponseDependencies(equipmentId);
+
+        DefectResponse response = service.create(request(equipmentId, null));
+
+        assertThat(response.code()).isEqualTo(secondCandidate);
+        verify(repository, times(2)).save(any(Defect.class));
+    }
+
+    @Test
+    void responseIncludesGeneratedCode() {
+        UUID equipmentId = UUID.randomUUID();
+        int year = Year.now().getValue();
+        String expectedCode = "DEF-" + year + "-0001";
+
+        when(repository.maxSequenceByCodePrefix("DEF-" + year + "-")).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(repository.save(any(Defect.class))).thenAnswer(invocation -> {
+            Defect defect = invocation.getArgument(0);
+            ReflectionTestUtils.setField(defect, "id", UUID.randomUUID());
+            return defect;
+        });
+        stubCreateResponseDependencies(equipmentId);
+
+        DefectResponse response = service.create(request(equipmentId, null));
+
+        assertThat(response.code()).isEqualTo(expectedCode);
     }
 
     @Test
@@ -594,5 +695,13 @@ class DefectServiceTest {
         workOrder.setRepairRequestId(repairRequestId);
         workOrder.setDefectId(defectId);
         return workOrder;
+    }
+
+    private void stubCreateResponseDependencies(UUID equipmentId) {
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(workOrderRepository.findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(any()))
+                .thenReturn(List.of());
+        when(knowledgeRepository.findDefectIdsWithLesson(any(), eq("LESSON_LEARNED")))
+                .thenReturn(List.of());
     }
 }

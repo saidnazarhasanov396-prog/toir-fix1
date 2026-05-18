@@ -74,7 +74,9 @@ class DepartmentControllerContractTest {
                 "Akmalovich",
                 "Engineer",
                 departmentId,
+                "Mechanical",
                 null,
+                "Repair Brigade A",
                 null,
                 LocalDate.of(2025, 1, 10),
                 null,
@@ -95,8 +97,9 @@ class DepartmentControllerContractTest {
                 .andExpect(jsonPath("$[0].lastName").value("Valiyev"))
                 .andExpect(jsonPath("$[0].position").value("Engineer"))
                 .andExpect(jsonPath("$[0].departmentId").value(departmentId.toString()))
-                .andExpect(jsonPath("$[0].active").value(true));
-
+                .andExpect(jsonPath("$[0].active").value(true))
+                .andExpect(jsonPath("$[0].departmentName").value("Mechanical"))
+                .andExpect(jsonPath("$[0].brigadeName").value("Repair Brigade A"));
         verify(service).findEmployeesByDepartment(departmentId);
     }
 

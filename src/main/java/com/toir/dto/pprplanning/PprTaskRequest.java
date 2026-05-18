@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 public record PprTaskRequest(
-        @NotBlank String code,
+        String code,
         @NotNull UUID regulationId,
         @NotNull UUID equipmentId,
         @NotBlank String title,
