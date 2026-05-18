@@ -6,6 +6,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.toir.repository.projection.DefectListStatsProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -73,4 +75,39 @@ public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
 
     @Query(value = "SELECT * FROM defect_lists WHERE status = :status AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<DefectList> findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(@Param("status") DefectListStatus status);
+
+    @Query(nativeQuery = true, value = """
+        select
+            count(d.id) as totalDefectLists,
+
+            count(*) filter (
+                where d.status = cast(:draftStatus as text)
+            ) as draft,
+
+            count(*) filter (
+                where d.status = cast(:approvedStatus as text)
+            ) as approved,
+
+            count(*) filter (
+                where d.status = cast(:closedStatus as text)
+            ) as closed
+
+        from defect_lists d
+        where d.is_deleted = false
+          and (cast(:equipmentId as uuid) is null or d.equipment_id = cast(:equipmentId as uuid))
+          and (
+              cast(:searchPattern as varchar) is null
+              or lower(coalesce(d.code, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(d.title, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(d.notes, '')) like cast(:searchPattern as varchar)
+          )
+        """)
+    DefectListStatsProjection getDefectListStats(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("searchPattern") String searchPattern,
+            @Param("draftStatus") String draftStatus,
+            @Param("approvedStatus") String approvedStatus,
+            @Param("closedStatus") String closedStatus
+    );
+
 }

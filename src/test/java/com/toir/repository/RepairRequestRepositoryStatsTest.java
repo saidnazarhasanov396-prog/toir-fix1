@@ -2,19 +2,13 @@ package com.toir.repository;
 
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
-import com.toir.enums.PriorityLevel;
-import com.toir.enums.RequestStatus;
-import com.toir.enums.WorkOrderStatus;
-import com.toir.enums.WorkOrderType;
-import com.toir.enums.WorkType;
+import com.toir.enums.*;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.TestPropertySource;
 
 import java.util.UUID;
 
@@ -22,18 +16,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @ActiveProfiles("test")
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@TestPropertySource(properties = {
-        "spring.flyway.enabled=false",
-        "spring.sql.init.mode=never",
-        "spring.jpa.hibernate.ddl-auto=create-drop",
-
-        // EquipmentRepositoryTest'da ishlagan test DB config bilan bir xil bo'lsin
-        "spring.datasource.url=jdbc:postgresql://localhost:5433/toir",
-        "spring.datasource.username=postgres",
-        "spring.datasource.password=root123",
-        "spring.datasource.hikari.connection-timeout=3000"
-})
 class RepairRequestRepositoryStatsTest {
 
     @Autowired
