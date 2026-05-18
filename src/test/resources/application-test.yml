@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/toir
+    username: postgres
+    password: root123
+    hikari:
+      connection-timeout: 3000
+
+  flyway:
+    enabled: false
+
+  sql:
+    init:
+      mode: never
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+  test:
+    database:
+      replace: none
