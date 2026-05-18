@@ -2,6 +2,7 @@ package com.toir.controller.defects;
 import com.toir.dto.defectlist.DefectListDto;
 import com.toir.dto.defectlist.DefectListLineDto;
 import com.toir.dto.defectlist.DefectListRequest;
+import com.toir.dto.defectlist.DefectListStatsResponse;
 import com.toir.service.defects.DefectListService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -31,6 +32,15 @@ public class DefectListController {
     ) {
         return ResponseEntity.ok(service.search(equipmentId, page, size, search));
     }
+
+    @GetMapping("/stats")
+    public ResponseEntity<DefectListStatsResponse> stats(
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String search
+    ) {
+        return ResponseEntity.ok(service.getStats(equipmentId, search));
+    }
+
 
     @GetMapping("/{id}")
     public ResponseEntity<DefectListDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }

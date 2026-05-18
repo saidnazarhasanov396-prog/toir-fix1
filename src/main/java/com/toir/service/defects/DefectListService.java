@@ -3,6 +3,7 @@ package com.toir.service.defects;
 import com.toir.dto.defectlist.DefectListDto;
 import com.toir.dto.defectlist.DefectListLineDto;
 import com.toir.dto.defectlist.DefectListRequest;
+import com.toir.dto.defectlist.DefectListStatsResponse;
 import com.toir.entity.defects.DefectList;
 import com.toir.entity.defects.DefectListLine;
 import com.toir.enums.AuditAction;
@@ -11,6 +12,7 @@ import com.toir.enums.DefectListStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.defects.DefectListLineRepository;
 import com.toir.repository.defects.DefectListRepository;
+import com.toir.repository.projection.DefectListStatsProjection;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -55,6 +57,26 @@ public class DefectListService {
     @Transactional(readOnly = true)
     public List<DefectListDto> findByEquipment(UUID equipmentId) {
         return repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(DefectListDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public DefectListStatsResponse getStats(UUID equipmentId, String search) {
+        String searchPattern = toSearchPattern(search);
+
+        DefectListStatsProjection stats = repository.getDefectListStats(
+                equipmentId,
+                searchPattern,
+                DefectListStatus.DRAFT.name(),
+                DefectListStatus.APPROVED.name(),
+                DefectListStatus.CLOSED.name()
+        );
+
+        return new DefectListStatsResponse(
+                safe(stats.getTotalDefectLists()),
+                safe(stats.getDraft()),
+                safe(stats.getApproved()),
+                safe(stats.getClosed())
+        );
     }
 
     @Transactional
@@ -272,6 +294,18 @@ public class DefectListService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private String toSearchPattern(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+
+        return "%" + search.trim().toLowerCase() + "%";
+    }
+
+    private long safe(Long value) {
+        return value == null ? 0L : value;
     }
 
 }
