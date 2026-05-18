@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeRequest;
+import com.toir.dto.hr.EmployeeStatsResponse;
 import com.toir.entity.Department;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.Employee;
@@ -9,6 +10,7 @@ import com.toir.enums.DepartmentType;
 import com.toir.repository.TimesheetEntryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
+import com.toir.repository.projects.EmployeeStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.service.users.HrService;
 import com.toir.util.AuditBuilderService;
@@ -67,6 +69,8 @@ class HrServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 PageRequest.of(0, 20)
         )).thenReturn(new PageImpl<>(
                 List.of(employee),
@@ -79,7 +83,7 @@ class HrServiceTest {
         when(brigadeRepository.findAllByIdInAndIsDeletedFalse(List.of(brigadeId)))
                 .thenReturn(List.of(brigade));
 
-        var result = service.listEmployees(0, 20, null, null);
+        var result = service.listEmployees(0, 20, null, null, null, null);
 
         assertThat(result.getContent()).hasSize(1);
 
@@ -96,12 +100,117 @@ class HrServiceTest {
     }
 
     @Test
+    void listEmployeesPassesDepartmentAndBrigadeFiltersToRepository() {
+        UUID departmentId = UUID.randomUUID();
+        UUID brigadeId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+
+        Employee employee = employee(employeeId, departmentId, brigadeId);
+
+        Department department = department(departmentId, "Mechanical");
+        Brigade brigade = brigade(brigadeId, "Repair Brigade A");
+
+        when(employeeRepository.searchEmployees(
+                "Ali",
+                null,
+                null,
+                true,
+                departmentId,
+                brigadeId,
+                PageRequest.of(0, 20)
+        )).thenReturn(new PageImpl<>(
+                List.of(employee),
+                PageRequest.of(0, 20),
+                1
+        ));
+
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(List.of(departmentId)))
+                .thenReturn(List.of(department));
+        when(brigadeRepository.findAllByIdInAndIsDeletedFalse(List.of(brigadeId)))
+                .thenReturn(List.of(brigade));
+
+        var result = service.listEmployees(0, 20, "Ali", true, departmentId, brigadeId);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().departmentId()).isEqualTo(departmentId);
+        assertThat(result.getContent().getFirst().brigadeId()).isEqualTo(brigadeId);
+
+        verify(employeeRepository).searchEmployees(
+                "Ali",
+                null,
+                null,
+                true,
+                departmentId,
+                brigadeId,
+                PageRequest.of(0, 20)
+        );
+    }
+
+    @Test
+    void getEmployeeStatsWithoutFiltersReturnsStats() {
+        EmployeeStatsProjection projection = statsProjection(27L, 10L, 0L, 1L);
+
+        when(employeeRepository.getEmployeeStats(null, null, null))
+                .thenReturn(projection);
+
+        EmployeeStatsResponse result = service.getEmployeeStats(null, null, null);
+
+        assertThat(result.total()).isEqualTo(27);
+        assertThat(result.active()).isEqualTo(10);
+        assertThat(result.terminated()).isZero();
+        assertThat(result.withoutEmail()).isEqualTo(1);
+
+        verify(employeeRepository).getEmployeeStats(null, null, null);
+    }
+
+    @Test
+    void getEmployeeStatsWithFiltersPassesNormalizedSearchPattern() {
+        UUID departmentId = UUID.randomUUID();
+        UUID brigadeId = UUID.randomUUID();
+
+        EmployeeStatsProjection projection = statsProjection(5L, 4L, 1L, 2L);
+
+        when(employeeRepository.getEmployeeStats(departmentId, brigadeId, "%ali%"))
+                .thenReturn(projection);
+
+        EmployeeStatsResponse result = service.getEmployeeStats(
+                departmentId,
+                brigadeId,
+                "  Ali  "
+        );
+
+        assertThat(result.total()).isEqualTo(5);
+        assertThat(result.active()).isEqualTo(4);
+        assertThat(result.terminated()).isEqualTo(1);
+        assertThat(result.withoutEmail()).isEqualTo(2);
+
+        verify(employeeRepository).getEmployeeStats(departmentId, brigadeId, "%ali%");
+    }
+
+    @Test
+    void getEmployeeStatsMapsNullProjectionValuesToZero() {
+        EmployeeStatsProjection projection = statsProjection(null, null, null, null);
+
+        when(employeeRepository.getEmployeeStats(null, null, null))
+                .thenReturn(projection);
+
+        EmployeeStatsResponse result = service.getEmployeeStats(null, null, null);
+
+        assertThat(result.total()).isZero();
+        assertThat(result.active()).isZero();
+        assertThat(result.terminated()).isZero();
+        assertThat(result.withoutEmail()).isZero();
+    }
+
+    @Test
     void listEmployeesWithBlankDepartmentAndBrigadeReturnsNullNames() {
         UUID employeeId = UUID.randomUUID();
 
         Employee employee = employee(employeeId, null, null);
 
         when(employeeRepository.searchEmployees(
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -113,7 +222,7 @@ class HrServiceTest {
                 1
         ));
 
-        var result = service.listEmployees(0, 20, null, null);
+        var result = service.listEmployees(0, 20, null, null, null, null);
 
         EmployeeDto dto = result.getContent().getFirst();
 
@@ -290,5 +399,34 @@ class HrServiceTest {
         brigade.setActive(true);
         brigade.setDeleted(false);
         return brigade;
+    }
+
+    private EmployeeStatsProjection statsProjection(
+            Long total,
+            Long active,
+            Long terminated,
+            Long withoutEmail
+    ) {
+        return new EmployeeStatsProjection() {
+            @Override
+            public Long getTotal() {
+                return total;
+            }
+
+            @Override
+            public Long getActive() {
+                return active;
+            }
+
+            @Override
+            public Long getTerminated() {
+                return terminated;
+            }
+
+            @Override
+            public Long getWithoutEmail() {
+                return withoutEmail;
+            }
+        };
     }
 }

@@ -15,6 +15,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.TimesheetEntryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
+import com.toir.repository.projects.EmployeeStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -23,6 +24,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.toir.dto.hr.EmployeeStatsResponse;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -42,7 +44,14 @@ public class HrService {
     private final BrigadeRepository brigadeRepository;
 
     @Transactional(readOnly = true)
-    public Page<EmployeeDto> listEmployees(int page, int pageSize, String search, Boolean activeOnly) {
+    public Page<EmployeeDto> listEmployees(
+            int page,
+            int pageSize,
+            String search,
+            Boolean activeOnly,
+            UUID departmentId,
+            UUID brigadeId
+    ) {
         String part1 = null;
         String part2 = null;
 
@@ -59,10 +68,35 @@ public class HrService {
                 part1,
                 part2,
                 activeOnly,
+                departmentId,
+                brigadeId,
                 PaginationUtils.pageRequest(page, pageSize)
         );
+        return toDtoPage(employeePage);
+    }
 
-        return toDtoPage(employeePage);}
+    @Transactional(readOnly = true)
+    public EmployeeStatsResponse getEmployeeStats(
+            UUID departmentId,
+            UUID brigadeId,
+            String search
+    ) {
+        String searchPattern = toSearchPattern(search);
+
+        EmployeeStatsProjection stats = employeeRepository.getEmployeeStats(
+                departmentId,
+                brigadeId,
+                searchPattern
+        );
+
+        return new EmployeeStatsResponse(
+                safe(stats.getTotal()),
+                safe(stats.getActive()),
+                safe(stats.getTerminated()),
+                safe(stats.getWithoutEmail())
+        );
+    }
+
 
     @Transactional(readOnly = true)
     public EmployeeDto getEmployee(UUID id) {
@@ -322,6 +356,18 @@ public class HrService {
             return null;
         }
         return namesById.get(id);
+    }
+
+    private String toSearchPattern(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+
+        return "%" + search.trim().toLowerCase() + "%";
+    }
+
+    private long safe(Long value) {
+        return value == null ? 0L : value;
     }
 
 }

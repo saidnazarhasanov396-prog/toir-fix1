@@ -1,8 +1,5 @@
 package com.toir.controller.users;
-import com.toir.dto.hr.EmployeeDto;
-import com.toir.dto.hr.EmployeeRequest;
-import com.toir.dto.hr.TimesheetEntryDto;
-import com.toir.dto.hr.TimesheetEntryRequest;
+import com.toir.dto.hr.*;
 import com.toir.service.users.HrService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,8 +27,31 @@ public class HrController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) Boolean activeOnly) {
-        return ResponseEntity.ok(service.listEmployees(page-1, size, search, activeOnly));
+            @RequestParam(required = false) Boolean activeOnly,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID brigadeId
+    ) {
+        return ResponseEntity.ok(service.listEmployees(
+                page - 1,
+                size,
+                search,
+                activeOnly,
+                departmentId,
+                brigadeId
+        ));
+    }
+
+    @GetMapping("/employees/stats")
+    public ResponseEntity<EmployeeStatsResponse> employeeStats(
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID brigadeId,
+            @RequestParam(required = false) String search
+    ) {
+        return ResponseEntity.ok(service.getEmployeeStats(
+                departmentId,
+                brigadeId,
+                search
+        ));
     }
 
     @GetMapping("/employees/{id}")
