@@ -3,6 +3,7 @@ package com.toir.service.defects;
 import com.toir.dto.defect.DefectDto;
 import com.toir.dto.defect.DefectRequest;
 import com.toir.dto.defect.DefectResponse;
+import com.toir.dto.defect.DefectStatsResponse;
 import com.toir.dto.triad.RepairRequestBriefDto;
 import com.toir.dto.triad.TriadLinkMapper;
 import com.toir.dto.triad.WorkOrderBriefDto;
@@ -18,6 +19,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -75,6 +77,31 @@ public class DefectService {
     public List<DefectResponse> findByEquipment(UUID equipmentId) {
         return toResponses(repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId));
     }
+
+    @Transactional(readOnly = true)
+    public DefectStatsResponse getStats(
+            UUID equipmentId,
+            UUID repairRequestId,
+            String search
+    ) {
+        String searchPattern = toSearchPattern(search);
+
+        DefectStatsProjection stats = repository.getDefectStats(
+                equipmentId,
+                repairRequestId,
+                searchPattern,
+                DefectStatus.OPEN.name(),
+                DefectStatus.RESOLVED.name()
+        );
+
+        return new DefectStatsResponse(
+                safe(stats.getTotalDefects()),
+                safe(stats.getOpen()),
+                safe(stats.getResolved()),
+                safe(stats.getWithRecurrence())
+        );
+    }
+
 
     @Transactional
     public DefectResponse create(DefectRequest request) {
@@ -264,5 +291,17 @@ public class DefectService {
                 repairRequest,
                 linkedWorkOrders
         );
+    }
+
+    private String toSearchPattern(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+
+        return "%" + search.trim().toLowerCase() + "%";
+    }
+
+    private long safe(Long value) {
+        return value == null ? 0L : value;
     }
 }

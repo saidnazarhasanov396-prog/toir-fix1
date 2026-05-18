@@ -10,6 +10,7 @@ import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
+import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -17,6 +18,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -33,6 +35,9 @@ class RepairMaterialUsageServiceTest {
     RepairMaterialUsageRepository repository;
 
     @Mock
+    private AuditBuilderService auditBuilderService;
+
+    @Mock
     WarehouseStockRepository stockRepository;
 
     @Mock
@@ -44,6 +49,11 @@ class RepairMaterialUsageServiceTest {
 
     @InjectMocks
     RepairMaterialUsageService service;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(service, "auditBuilderService", auditBuilderService);
+    }
 
     @Test
     void registerFailsWhenWorkOrderNotFound() {
