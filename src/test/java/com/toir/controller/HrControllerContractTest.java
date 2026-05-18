@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.controller.users.HrController;
 import com.toir.dto.hr.EmployeeDto;
+import com.toir.dto.hr.EmployeeStatsResponse;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.users.HrService;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,7 +50,7 @@ class HrControllerContractTest {
 
         Page<EmployeeDto> page = getEmployeeDtos(employeeId, departmentId, brigadeId);
 
-        when(service.listEmployees(-1, 20, null, null)).thenReturn(page);
+        when(service.listEmployees(-1, 20, null, null, null, null)).thenReturn(page);
 
         mockMvc.perform(get("/api/v1/hr/employees")
                         .param("page", "0")
@@ -61,7 +62,7 @@ class HrControllerContractTest {
                 .andExpect(jsonPath("$.content[0].brigadeId").value(brigadeId.toString()))
                 .andExpect(jsonPath("$.content[0].brigadeName").value("Repair Brigade A"));
 
-        verify(service).listEmployees(-1, 20, null, null);
+        verify(service).listEmployees(-1, 20, null, null, null, null);
     }
     @Test
     void getEmployeeReturnsDepartmentNameAndBrigadeName() throws Exception {
@@ -102,7 +103,82 @@ class HrControllerContractTest {
         verify(service).getEmployee(employeeId);
     }
 
+    @Test
+    void listEmployeesPassesDepartmentAndBrigadeFiltersToService() throws Exception {
+        UUID employeeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID brigadeId = UUID.randomUUID();
 
+        Page<EmployeeDto> page = getEmployeeDtos(employeeId, departmentId, brigadeId);
+
+        when(service.listEmployees(-1, 20, "Ali", true, departmentId, brigadeId))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/v1/hr/employees")
+                        .param("page", "0")
+                        .param("size", "20")
+                        .param("search", "Ali")
+                        .param("activeOnly", "true")
+                        .param("departmentId", departmentId.toString())
+                        .param("brigadeId", brigadeId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].departmentId").value(departmentId.toString()))
+                .andExpect(jsonPath("$.content[0].brigadeId").value(brigadeId.toString()));
+
+        verify(service).listEmployees(-1, 20, "Ali", true, departmentId, brigadeId);
+    }
+
+
+    @Test
+    void employeeStatsWithoutFiltersReturnsStats() throws Exception {
+        EmployeeStatsResponse response = new EmployeeStatsResponse(
+                27,
+                10,
+                0,
+                1
+        );
+
+        when(service.getEmployeeStats(null, null, null)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/hr/employees/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(27))
+                .andExpect(jsonPath("$.active").value(10))
+                .andExpect(jsonPath("$.terminated").value(0))
+                .andExpect(jsonPath("$.withoutEmail").value(1));
+
+        verify(service).getEmployeeStats(null, null, null);
+    }
+
+    @Test
+    void employeeStatsWithFiltersPassesParamsToService() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID brigadeId = UUID.randomUUID();
+
+        EmployeeStatsResponse response = new EmployeeStatsResponse(
+                5,
+                4,
+                1,
+                2
+        );
+
+        when(service.getEmployeeStats(departmentId, brigadeId, "Ali"))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/hr/employees/stats")
+                        .param("departmentId", departmentId.toString())
+                        .param("brigadeId", brigadeId.toString())
+                        .param("search", "Ali"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(5))
+                .andExpect(jsonPath("$.active").value(4))
+                .andExpect(jsonPath("$.terminated").value(1))
+                .andExpect(jsonPath("$.withoutEmail").value(2));
+
+        verify(service).getEmployeeStats(departmentId, brigadeId, "Ali");
+    }
+
+    
 
     private static Page<EmployeeDto> getEmployeeDtos(UUID employeeId, UUID departmentId, UUID brigadeId) {
         EmployeeDto employee = new EmployeeDto(
