@@ -15,7 +15,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
-@ActiveProfiles("test")
+@ActiveProfiles("tes" +
+                "t")
 class KnowledgeArticleRepositoryLessonQueryTest {
 
     @Autowired
