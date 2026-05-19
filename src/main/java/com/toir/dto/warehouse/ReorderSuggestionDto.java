@@ -5,6 +5,7 @@ import java.util.UUID;
 public record ReorderSuggestionDto(
         UUID stockId,
         UUID warehouseId,
+        String warehouseName,
         UUID sparePartId,
         double quantity,
         double available,
