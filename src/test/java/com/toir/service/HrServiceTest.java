@@ -147,6 +147,39 @@ class HrServiceTest {
     }
 
     @Test
+    void listEmployeesForNonExistingDepartmentReturnsEmptyPage() {
+        UUID departmentId = UUID.randomUUID();
+
+        when(employeeRepository.searchEmployees(
+                null,
+                null,
+                null,
+                null,
+                departmentId,
+                null,
+                PageRequest.of(0, 20)
+        )).thenReturn(new PageImpl<>(
+                List.of(),
+                PageRequest.of(0, 20),
+                0
+        ));
+
+        var result = service.listEmployees(0, 20, null, null, departmentId, null);
+
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isZero();
+        verify(employeeRepository).searchEmployees(
+                null,
+                null,
+                null,
+                null,
+                departmentId,
+                null,
+                PageRequest.of(0, 20)
+        );
+    }
+
+    @Test
     void getEmployeeStatsWithoutFiltersReturnsStats() {
         EmployeeStatsProjection projection = statsProjection(27L, 10L, 0L, 1L);
 

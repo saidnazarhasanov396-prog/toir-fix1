@@ -1,12 +1,17 @@
 package com.toir.controller;
 
 import com.toir.dto.pprplanning.PprTaskDto;
+import com.toir.dto.pprplanning.PprPlanDto;
+import com.toir.dto.pprplanning.PprPlanStatsResponse;
+import com.toir.enums.PlanStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,13 +20,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Year;
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -45,6 +54,85 @@ class PprPlanControllerContractTest {
     }
 
     @Test
+    void listPlansPassesFilterParamsToService() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        PprPlanDto plan = new PprPlanDto(
+                planId,
+                "PPR-2026-0001",
+                "May plan",
+                2026,
+                5,
+                PlanStatus.DRAFT,
+                departmentId,
+                "Mechanical",
+                UUID.randomUUID(),
+                null,
+                null,
+                List.of()
+        );
+        when(service.findAll(2026, 5, departmentId, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/ppr-plans")
+                        .param("year", "2026")
+                        .param("month", "5")
+                        .param("departmentId", departmentId.toString())
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(planId.toString()))
+                .andExpect(jsonPath("$.content[0].departmentId").value(departmentId.toString()));
+
+        verify(service).findAll(2026, 5, departmentId, 0, 20);
+    }
+
+    @Test
+    void listPlansWithoutFiltersKeepsOldListBehavior() throws Exception {
+        when(service.findAll(null, null, null, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/ppr-plans")
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(0));
+
+        verify(service).findAll(null, null, null, 0, 20);
+    }
+
+    @Test
+    void statsPassesFilterParamsToService() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        PprPlanStatsResponse stats = new PprPlanStatsResponse(
+                6,
+                1,
+                2,
+                3,
+                8,
+                4,
+                5
+        );
+        when(service.getStats(2026, 5, departmentId)).thenReturn(stats);
+
+        mockMvc.perform(get("/api/v1/ppr-plans/stats")
+                        .param("year", "2026")
+                        .param("month", "5")
+                        .param("departmentId", departmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalPlans").value(6))
+                .andExpect(jsonPath("$.draftPlans").value(1))
+                .andExpect(jsonPath("$.generatedPlans").value(2))
+                .andExpect(jsonPath("$.approvedPlans").value(3))
+                .andExpect(jsonPath("$.plannedTasks").value(8))
+                .andExpect(jsonPath("$.inProgressTasks").value(4))
+                .andExpect(jsonPath("$.completedTasks").value(5));
+
+        verify(service).getStats(2026, 5, departmentId);
+    }
+
+    @Test
     void createTaskWithoutCodeReturnsGeneratedCode() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID taskId = UUID.randomUUID();
@@ -61,6 +149,8 @@ class PprPlanControllerContractTest {
                 "Manual PPR task",
                 start,
                 start.plusHours(2),
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 1),
                 start.plusDays(1),
                 PprTaskStatus.PLANNED,
                 PriorityLevel.MEDIUM,
@@ -86,7 +176,9 @@ class PprPlanControllerContractTest {
                                 """.formatted(regulationId, equipmentId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(taskId.toString()))
-                .andExpect(jsonPath("$.code").value(generatedCode));
+                .andExpect(jsonPath("$.code").value(generatedCode))
+                .andExpect(jsonPath("$.startDate").value("2026-06-01"))
+                .andExpect(jsonPath("$.endDate").value("2026-06-01"));
     }
 
     @Test

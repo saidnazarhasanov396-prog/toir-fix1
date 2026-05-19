@@ -4,6 +4,7 @@ import com.toir.controller.users.HrController;
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeStatsResponse;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.security.SecurityScope;
 import com.toir.service.users.HrService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,12 +33,15 @@ class HrControllerContractTest {
     @Mock
     HrService service;
 
+    @Mock
+    SecurityScope securityScope;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new HrController(service))
+                .standaloneSetup(new HrController(service, securityScope))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -50,6 +54,7 @@ class HrControllerContractTest {
 
         Page<EmployeeDto> page = getEmployeeDtos(employeeId, departmentId, brigadeId);
 
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
         when(service.listEmployees(-1, 20, null, null, null, null)).thenReturn(page);
 
         mockMvc.perform(get("/api/v1/hr/employees")
@@ -111,6 +116,7 @@ class HrControllerContractTest {
 
         Page<EmployeeDto> page = getEmployeeDtos(employeeId, departmentId, brigadeId);
 
+        when(securityScope.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
         when(service.listEmployees(-1, 20, "Ali", true, departmentId, brigadeId))
                 .thenReturn(page);
 
@@ -128,6 +134,32 @@ class HrControllerContractTest {
         verify(service).listEmployees(-1, 20, "Ali", true, departmentId, brigadeId);
     }
 
+    @Test
+    void listEmployeesUsesScopedDepartmentFilter() throws Exception {
+        UUID requestedDepartmentId = UUID.randomUUID();
+        UUID scopedDepartmentId = UUID.randomUUID();
+        UUID brigadeId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+
+        Page<EmployeeDto> page = getEmployeeDtos(employeeId, scopedDepartmentId, brigadeId);
+
+        when(securityScope.enforceDepartmentScope(requestedDepartmentId))
+                .thenReturn(scopedDepartmentId);
+        when(service.listEmployees(-1, 20, null, null, scopedDepartmentId, brigadeId))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/v1/hr/employees")
+                        .param("page", "0")
+                        .param("size", "20")
+                        .param("departmentId", requestedDepartmentId.toString())
+                        .param("brigadeId", brigadeId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].departmentId").value(scopedDepartmentId.toString()));
+
+        verify(securityScope).enforceDepartmentScope(requestedDepartmentId);
+        verify(service).listEmployees(-1, 20, null, null, scopedDepartmentId, brigadeId);
+    }
+
 
     @Test
     void employeeStatsWithoutFiltersReturnsStats() throws Exception {
@@ -138,6 +170,7 @@ class HrControllerContractTest {
                 1
         );
 
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
         when(service.getEmployeeStats(null, null, null)).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/hr/employees/stats"))
@@ -162,6 +195,7 @@ class HrControllerContractTest {
                 2
         );
 
+        when(securityScope.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
         when(service.getEmployeeStats(departmentId, brigadeId, "Ali"))
                 .thenReturn(response);
 

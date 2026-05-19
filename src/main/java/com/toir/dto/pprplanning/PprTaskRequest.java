@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -13,9 +14,11 @@ public record PprTaskRequest(
         @NotNull UUID regulationId,
         @NotNull UUID equipmentId,
         @NotBlank String title,
-        @NotNull LocalDateTime scheduledStart,
-        @NotNull LocalDateTime scheduledEnd,
-        @NotNull LocalDateTime dueDate,
+        LocalDate startDate,
+        LocalDate endDate,
+        LocalDateTime scheduledStart,
+        LocalDateTime scheduledEnd,
+        LocalDateTime dueDate,
         PriorityLevel priority,
         @PositiveOrZero double plannedLaborHours
 ) {}

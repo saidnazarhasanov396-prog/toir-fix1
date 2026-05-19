@@ -4,6 +4,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.entity.PprTask;
 import com.toir.enums.PprTaskStatus;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -16,6 +17,8 @@ public record PprTaskDto(
         String title,
         LocalDateTime scheduledStart,
         LocalDateTime scheduledEnd,
+        LocalDate startDate,
+        LocalDate endDate,
         LocalDateTime dueDate,
         PprTaskStatus status,
         PriorityLevel priority,
@@ -26,7 +29,10 @@ public record PprTaskDto(
     public static PprTaskDto from(PprTask t) {
         return new PprTaskDto(
                 t.getId(), t.getCode(), t.getPlan().getId(), t.getRegulationId(), t.getEquipmentId(),
-                t.getTitle(), t.getScheduledStart(), t.getScheduledEnd(), t.getDueDate(),
+                t.getTitle(), t.getScheduledStart(), t.getScheduledEnd(),
+                t.getScheduledStart() != null ? t.getScheduledStart().toLocalDate() : null,
+                t.getScheduledEnd() != null ? t.getScheduledEnd().toLocalDate() : null,
+                t.getDueDate(),
                 t.getStatus(), t.getPriority(), t.getPlannedLaborHours(), t.getActualLaborHours(),
                 t.getPostponeReason()
         );
