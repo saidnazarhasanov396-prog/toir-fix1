@@ -143,6 +143,7 @@ class PprPlanControllerContractTest {
 
         when(service.findAll(null, null, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, departmentId)));
         when(service.findById(planId)).thenReturn(plan);
 
         mockMvc.perform(get("/api/v1/ppr-plans")
@@ -159,7 +160,6 @@ class PprPlanControllerContractTest {
     @Test
     void getByIdReturnsNotFoundWithCleanErrorMessage() throws Exception {
         UUID missingId = UUID.randomUUID();
-        when(service.findById(missingId)).thenThrow(RestException.notFound("PPR plan not found: " + missingId));
 
         mockMvc.perform(get("/api/v1/ppr-plans/{id}", missingId))
                 .andExpect(status().isNotFound())

@@ -101,7 +101,11 @@ class ApprovalPbacScopeTest {
     @Test
     void createValidatesRequesterAndDocumentScope() {
         CreateApprovalRequest request = createRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
-        when(requestRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(requestRepository.save(any())).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
 
         service.create(request);
 

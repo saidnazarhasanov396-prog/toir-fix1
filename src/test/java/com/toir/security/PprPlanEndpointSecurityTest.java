@@ -2,7 +2,10 @@ package com.toir.security;
 
 import com.toir.controller.PprPlanController;
 import com.toir.dto.pprplanning.PprPlanDto;
+import com.toir.entity.PprPlan;
 import com.toir.enums.PlanStatus;
+import com.toir.repository.PprPlanRepository;
+import com.toir.repository.PprTaskRepository;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
 import org.junit.jupiter.api.Test;
@@ -16,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -46,6 +50,15 @@ class PprPlanEndpointSecurityTest {
     @MockBean
     PprGeneratorService pprGeneratorService;
 
+    @MockBean
+    PprPlanRepository pprPlanRepository;
+
+    @MockBean
+    PprTaskRepository pprTaskRepository;
+
+    @MockBean
+    ScopeAccessService scopeAccessService;
+
     @TestConfiguration
     static class SecurityBeans {
         @Bean
@@ -66,6 +79,8 @@ class PprPlanEndpointSecurityTest {
     @WithMockUser(authorities = "PPR_PLAN_READ")
     void pprPlanReadAuthorityCanReadDetail() throws Exception {
         UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(pprPlanRepository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(planEntity(id, departmentId)));
         when(pprPlanService.findById(id)).thenReturn(planDto(id));
 
         mockMvc.perform(get("/api/v1/ppr-plans/{id}", id))
@@ -94,6 +109,8 @@ class PprPlanEndpointSecurityTest {
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void systemAdminCanReadAndMutate() throws Exception {
         UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(pprPlanRepository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(planEntity(id, departmentId)));
         when(pprPlanService.findById(id)).thenReturn(planDto(id));
         when(pprPlanService.create(any())).thenReturn(planDto(UUID.randomUUID()));
 
@@ -119,6 +136,8 @@ class PprPlanEndpointSecurityTest {
     @WithMockUser(authorities = "*")
     void wildcardAuthorityCanReadAndMutate() throws Exception {
         UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(pprPlanRepository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(planEntity(id, departmentId)));
         when(pprPlanService.findById(id)).thenReturn(planDto(id));
         when(pprPlanService.create(any())).thenReturn(planDto(UUID.randomUUID()));
 
@@ -156,5 +175,17 @@ class PprPlanEndpointSecurityTest {
                 List.of()
         );
     }
-}
 
+    private PprPlan planEntity(UUID id, UUID departmentId) {
+        PprPlan plan = new PprPlan();
+        plan.setId(id);
+        plan.setCode("PPR-2026-0001");
+        plan.setName("May plan");
+        plan.setYear(2026);
+        plan.setMonth(5);
+        plan.setStatus(PlanStatus.DRAFT);
+        plan.setDepartmentId(departmentId);
+        plan.setCreatedById(UUID.randomUUID());
+        return plan;
+    }
+}

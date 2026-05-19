@@ -35,9 +35,31 @@ import java.util.UUID;
 public class PprPlanController {
 
     private static final String PPR_PLAN_READ_AUTH =
-            "hasAnyAuthority('read','PPR_PLAN_READ','PPR_PLAN_WRITE','SYSTEM_ADMIN','*')";
-    private static final String PPR_PLAN_WRITE_AUTH =
-            "hasAnyAuthority('PPR_PLAN_WRITE','SYSTEM_ADMIN','*')";
+            "hasAnyAuthority('read','PPR_PLAN_READ','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_CREATE_AUTH =
+            "hasAnyAuthority('PPR_PLAN_CREATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_UPDATE_AUTH =
+            "hasAnyAuthority('PPR_PLAN_UPDATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_DELETE_AUTH =
+            "hasAnyAuthority('PPR_PLAN_DELETE','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_APPROVE_AUTH =
+            "hasAnyAuthority('PPR_PLAN_APPROVE','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_GENERATE_AUTH =
+            "hasAnyAuthority('PPR_PLAN_GENERATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_READ_AUTH =
+            "hasAnyAuthority('PPR_TASK_READ','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_CREATE_AUTH =
+            "hasAnyAuthority('PPR_TASK_CREATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_POSTPONE_AUTH =
+            "hasAnyAuthority('PPR_TASK_POSTPONE','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_APPROVE_AUTH =
+            "hasAnyAuthority('PPR_TASK_APPROVE','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_START_AUTH =
+            "hasAnyAuthority('PPR_TASK_START','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_COMPLETE_AUTH =
+            "hasAnyAuthority('PPR_TASK_COMPLETE','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_CANCEL_AUTH =
+            "hasAnyAuthority('PPR_TASK_CANCEL','SYSTEM_ADMIN','*')";
 
     private final PprPlanService service;
     private final PprGeneratorService generatorService;
@@ -75,14 +97,14 @@ public class PprPlanController {
     }
 
     @PostMapping
-    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
+    @PreAuthorize(PPR_PLAN_CREATE_AUTH)
     public ResponseEntity<PprPlanDto> create(@Valid @RequestBody PprPlanRequest request) {
         assertCanAccessRequestedDepartment(request.departmentId());
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
     @PatchMapping("/{id}")
-    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
+    @PreAuthorize(PPR_PLAN_UPDATE_AUTH)
     public ResponseEntity<PprPlanDto> update(@PathVariable UUID id, @Valid @RequestBody PprPlanRequest request) {
         assertCanAccessPlan(planOrThrow(id));
         assertCanAccessRequestedDepartment(request.departmentId());
@@ -90,7 +112,7 @@ public class PprPlanController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
+    @PreAuthorize(PPR_PLAN_DELETE_AUTH)
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         assertCanAccessPlan(planOrThrow(id));
         service.delete(id);
@@ -98,56 +120,56 @@ public class PprPlanController {
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
+    @PreAuthorize(PPR_PLAN_APPROVE_AUTH)
     public ResponseEntity<PprPlanDto> approve(@PathVariable UUID id, @RequestParam UUID approverId) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(service.approve(id, approverId));
     }
 
     @PostMapping("/{id}/generate")
-    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
+    @PreAuthorize(PPR_PLAN_GENERATE_AUTH)
     public ResponseEntity<PprGeneratorService.GenerationResult> generate(@PathVariable UUID id) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(generatorService.generateForPlan(id));
     }
 
     @GetMapping("/{id}/tasks")
-    @PreAuthorize(PPR_PLAN_READ_AUTH)
+    @PreAuthorize(PPR_TASK_READ_AUTH)
     public ResponseEntity<Page<PprTaskDto>> tasks(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(PaginationUtils.page(service.findTasksByPlan(id), page, size));
     }
 
     @PostMapping("/{id}/tasks")
-    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
+    @PreAuthorize(PPR_TASK_CREATE_AUTH)
     public ResponseEntity<PprTaskDto> addTask(@PathVariable UUID id, @Valid @RequestBody PprTaskRequest request) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addTask(id, request));
     }
 
     @PostMapping("/tasks/{taskId}/postpone")
-    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
+    @PreAuthorize(PPR_TASK_POSTPONE_AUTH)
     public ResponseEntity<PprTaskDto> postponeTask(@PathVariable UUID taskId, @Valid @RequestBody PostponeTaskRequest request) {
         assertCanAccessTask(taskOrThrow(taskId));
         return ResponseEntity.ok(service.postponeTask(taskId, request));
     }
 
     @PostMapping("/tasks/{taskId}/approve")
-    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
+    @PreAuthorize(PPR_TASK_APPROVE_AUTH)
     public ResponseEntity<PprTaskDto> approveTask(@PathVariable UUID taskId) {
         assertCanAccessTask(taskOrThrow(taskId));
         return ResponseEntity.ok(service.approveTask(taskId));
     }
 
     @PostMapping("/tasks/{taskId}/start")
-    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
+    @PreAuthorize(PPR_TASK_START_AUTH)
     public ResponseEntity<PprTaskDto> startTask(@PathVariable UUID taskId) {
         assertCanAccessTask(taskOrThrow(taskId));
         return ResponseEntity.ok(service.startTask(taskId));
     }
 
     @PostMapping("/tasks/{taskId}/complete")
-    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
+    @PreAuthorize(PPR_TASK_COMPLETE_AUTH)
     public ResponseEntity<PprTaskDto> completeTask(
             @PathVariable UUID taskId,
             @RequestParam(required = false) Double actualLaborHours
@@ -157,7 +179,7 @@ public class PprPlanController {
     }
 
     @PostMapping("/tasks/{taskId}/cancel")
-    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
+    @PreAuthorize(PPR_TASK_CANCEL_AUTH)
     public ResponseEntity<PprTaskDto> cancelTask(
             @PathVariable UUID taskId,
             @RequestParam(required = false) String reason
