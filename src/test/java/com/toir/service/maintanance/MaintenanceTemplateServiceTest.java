@@ -1,5 +1,7 @@
 package com.toir.service.maintanance;
 
+import com.toir.repository.equipment.EquipmentTypeRepository;
+
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
 import com.toir.entity.maintenance.MaintenanceTemplate;
@@ -45,6 +47,9 @@ class MaintenanceTemplateServiceTest {
 
     @Mock
     AuditBuilderService auditBuilderService;
+
+    @Mock
+    EquipmentTypeRepository equipmentTypeRepository;
 
     @InjectMocks
     MaintenanceTemplateService service;

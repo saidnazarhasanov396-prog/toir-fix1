@@ -4,6 +4,6 @@ public record MaintenanceTemplateStatsResponse(
         long totalTemplates,
         long withOperations,
         long totalOperations,
-        double avgPerTemplate
+        float avgPerTemplate
 ) {
 }

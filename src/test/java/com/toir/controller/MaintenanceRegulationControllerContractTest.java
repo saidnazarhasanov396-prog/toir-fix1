@@ -53,6 +53,7 @@ class MaintenanceRegulationControllerContractTest {
                 "Monthly pump regulation",
                 "Regulation description",
                 equipmentTypeId,
+                "Pump",
                 MaintenanceKind.PREVENTIVE,
                 3.0,
                 true,
