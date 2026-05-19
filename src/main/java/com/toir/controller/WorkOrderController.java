@@ -1,8 +1,5 @@
 package com.toir.controller;
-import com.toir.dto.workorder.CloseWorkOrderRequest;
-import com.toir.dto.workorder.CompleteWorkOrderRequest;
-import com.toir.dto.workorder.WorkOrderDto;
-import com.toir.dto.workorder.WorkOrderRequest;
+import com.toir.dto.workorder.*;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.security.SecurityScope;
@@ -40,7 +37,7 @@ public class WorkOrderController {
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<com.toir.dto.workorder.WorkOrderStatsResponse> stats(
+    public ResponseEntity<WorkOrderStatsResponse> stats(
             @RequestParam(required = false) WorkOrderStatus status,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,

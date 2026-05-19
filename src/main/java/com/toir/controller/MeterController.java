@@ -1,9 +1,5 @@
 package com.toir.controller;
-import com.toir.dto.meter.EquipmentMeterDto;
-import com.toir.dto.meter.EquipmentMeterRequest;
-import com.toir.dto.meter.MeterReadingDto;
-import com.toir.dto.meter.MeterReadingRequest;
-import com.toir.dto.meter.MeterTriggerMatch;
+import com.toir.dto.meter.*;
 import com.toir.enums.MeterType;
 import com.toir.service.MeterService;
 import com.toir.service.MeterTriggerService;
@@ -50,7 +46,7 @@ public class MeterController {
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<com.toir.dto.meter.MeterStatsResponse> stats(
+    public ResponseEntity<MeterStatsResponse> stats(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) MeterType meterType,
             @RequestParam(required = false) UUID equipmentId,

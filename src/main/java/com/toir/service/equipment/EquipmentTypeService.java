@@ -1,4 +1,5 @@
 package com.toir.service.equipment;
+import com.toir.dto.equipmenttype.EquipmentTypeStatsResponse;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -36,10 +37,10 @@ public class EquipmentTypeService {
     }
 
     @Transactional(readOnly = true)
-    public com.toir.dto.equipmenttype.EquipmentTypeStatsResponse getStats(String search, String category) {
+    public EquipmentTypeStatsResponse getStats(String search, String category) {
         search = search == null ? null : "%" + search.toLowerCase() + "%";
         var stats = repository.getEquipmentTypeStats(category, search);
-        return new com.toir.dto.equipmenttype.EquipmentTypeStatsResponse(
+        return new EquipmentTypeStatsResponse(
                 stats.getTotalTypes() == null ? 0 : stats.getTotalTypes(),
                 stats.getActiveCategories() == null ? 0 : stats.getActiveCategories(),
                 stats.getWithActiveEquipment() == null ? 0 : stats.getWithActiveEquipment(),
