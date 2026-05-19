@@ -14,15 +14,20 @@ public record PprPlanDto(
         int month,
         PlanStatus status,
         UUID departmentId,
+        String departmentName,
         UUID createdById,
         UUID approvedById,
         String notes,
         List<PprTaskDto> tasks
 ) {
     public static PprPlanDto from(PprPlan p) {
+        return from(p, null);
+    }
+
+    public static PprPlanDto from(PprPlan p, String departmentName) {
         return new PprPlanDto(
                 p.getId(), p.getCode(), p.getName(), p.getYear(), p.getMonth(), p.getStatus(),
-                p.getDepartmentId(), p.getCreatedById(), p.getApprovedById(), p.getNotes(),
+                p.getDepartmentId(), departmentName, p.getCreatedById(), p.getApprovedById(), p.getNotes(),
                 p.getTasks().stream().map(PprTaskDto::from).toList()
         );
     }

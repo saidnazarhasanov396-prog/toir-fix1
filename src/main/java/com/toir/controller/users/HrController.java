@@ -1,5 +1,6 @@
 package com.toir.controller.users;
 import com.toir.dto.hr.*;
+import com.toir.security.SecurityScope;
 import com.toir.service.users.HrService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 public class HrController {
 
     private final HrService service;
+    private final SecurityScope securityScope;
 
     @GetMapping("/employees")
     public ResponseEntity<Page<EmployeeDto>> listEmployees(
@@ -31,12 +33,14 @@ public class HrController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID brigadeId
     ) {
+        UUID scopedDepartmentId = securityScope.enforceDepartmentScope(departmentId);
+
         return ResponseEntity.ok(service.listEmployees(
                 page - 1,
                 size,
                 search,
                 activeOnly,
-                departmentId,
+                scopedDepartmentId,
                 brigadeId
         ));
     }
@@ -47,8 +51,10 @@ public class HrController {
             @RequestParam(required = false) UUID brigadeId,
             @RequestParam(required = false) String search
     ) {
+        UUID scopedDepartmentId = securityScope.enforceDepartmentScope(departmentId);
+
         return ResponseEntity.ok(service.getEmployeeStats(
-                departmentId,
+                scopedDepartmentId,
                 brigadeId,
                 search
         ));

@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.pprplanning.PostponeTaskRequest;
 import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.dto.pprplanning.PprPlanRequest;
+import com.toir.dto.pprplanning.PprPlanStatsResponse;
 import com.toir.dto.pprplanning.PprTaskDto;
 import com.toir.dto.pprplanning.PprTaskRequest;
 import com.toir.service.PprGeneratorService;
@@ -29,8 +30,23 @@ public class PprPlanController {
     private final PprGeneratorService generatorService;
 
     @GetMapping
-    public ResponseEntity<Page<PprPlanDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size));
+    public ResponseEntity<Page<PprPlanDto>> list(
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(service.findAll(year, month, departmentId, page, size));
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<PprPlanStatsResponse> stats(
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) UUID departmentId
+    ) {
+        return ResponseEntity.ok(service.getStats(year, month, departmentId));
     }
 
     @GetMapping("/{id}")
