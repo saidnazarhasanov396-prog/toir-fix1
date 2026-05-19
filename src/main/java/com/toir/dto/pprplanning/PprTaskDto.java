@@ -1,5 +1,6 @@
 package com.toir.dto.pprplanning;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.toir.enums.PriorityLevel;
 import com.toir.entity.PprTask;
 import com.toir.enums.PprTaskStatus;
@@ -17,7 +18,9 @@ public record PprTaskDto(
         String title,
         LocalDateTime scheduledStart,
         LocalDateTime scheduledEnd,
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
         LocalDate startDate,
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
         LocalDate endDate,
         LocalDateTime dueDate,
         PprTaskStatus status,
