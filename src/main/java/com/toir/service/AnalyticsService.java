@@ -27,7 +27,9 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
+import com.toir.security.ScopeAccessService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,37 +53,63 @@ public class AnalyticsService {
     private final EquipmentRepository equipmentRepository;
     private final DepartmentRepository departmentRepository;
     private final ActualCostRepository actualCostRepository;
+    private final ScopeAccessService scopeAccessService;
 
 
     @Transactional
     public AnalyticsOverview overview() {
-        long openRequests = repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.OPEN.name())
-                + repairRequestRepository.countByStatusAndIsDeletedFalse(RequestStatus.IN_PROGRESS.name());
-        long emergencyRequests = repairRequestRepository.search(null, null, null).stream()
+        UUID departmentId = analyticsDepartmentScope();
+        Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(Collectors.toMap(Equipment::getId, e -> e));
+
+        List<RepairRequest> allRequests = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(r -> departmentId == null || departmentId.equals(r.getDepartmentId()))
+                .toList();
+        List<WorkOrder> allWorkOrders = workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(w -> departmentId == null || departmentId.equals(w.getDepartmentId()))
+                .toList();
+        List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(d -> departmentId == null || departmentId.equals(d.getDepartmentId()))
+                .toList();
+        List<Defect> allDefects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(d -> departmentId == null || isEquipmentInDepartment(equipById, d.getEquipmentId(), departmentId))
+                .toList();
+        List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(m -> departmentId == null || isEquipmentInDepartment(equipById, m.getEquipmentId(), departmentId))
+                .toList();
+        List<com.toir.entity.PprTask> allPprTasks = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(t -> departmentId == null || isEquipmentInDepartment(equipById, t.getEquipmentId(), departmentId))
+                .toList();
+
+        long openRequests = allRequests.stream()
+                .filter(r -> r.getStatus() == RequestStatus.OPEN || r.getStatus() == RequestStatus.IN_PROGRESS)
+                .count();
+        long emergencyRequests = allRequests.stream()
                 .filter(r -> r.getStatus() != RequestStatus.CLOSED && r.getStatus() != RequestStatus.CANCELLED)
                 .filter(r -> "EMERGENCY".equals(r.getPriority().name()))
                 .count();
-        long closedWorkOrders = workOrderRepository.countByStatusAndIsDeletedFalse(WorkOrderStatus.CLOSED.name());
-        long activeDefects = defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.OPEN.name())
-                + defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.IN_ANALYSIS.name())
-                + defectRepository.countByStatusAndIsDeletedFalse(DefectStatus.IN_PROGRESS.name());
+        long closedWorkOrders = allWorkOrders.stream()
+                .filter(w -> w.getStatus() == WorkOrderStatus.CLOSED)
+                .count();
+        long activeDefects = allDefects.stream()
+                .filter(d -> d.getStatus() == DefectStatus.OPEN
+                        || d.getStatus() == DefectStatus.IN_ANALYSIS
+                        || d.getStatus() == DefectStatus.IN_PROGRESS)
+                .count();
 
         Totals totals = new Totals(openRequests, emergencyRequests, closedWorkOrders, activeDefects);
 
-        List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         double mtbfAvg = allMetrics.stream().map(ReliabilityMetric::getMtbfHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
         double mttrAvg = allMetrics.stream().map(ReliabilityMetric::getMttrHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
 
-        List<WorkOrder> allWorkOrders = workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         long totalWO = allWorkOrders.size();
         long unplannedWO = allWorkOrders.stream()
                 .filter(w -> w.getType() == WorkOrderType.EMERGENCY || w.getType() == WorkOrderType.DEFECT)
                 .count();
         double unplannedShare = totalWO > 0 ? (double) unplannedWO / totalWO * 100 : 0;
 
-        List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         double downtimeHoursTotal = allDowntimes.stream()
                 .map(DowntimeEvent::getDurationMinutes)
                 .filter(Objects::nonNull)
@@ -90,29 +118,32 @@ public class AnalyticsService {
 
         // Reaction = detectedAt → first status transition to IN_PROGRESS (approx: createdAt→now for IN_PROGRESS)
         // Resolution = detectedAt → actualCompletionAt
-        List<RepairRequest> closedRequests = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+        List<RepairRequest> closedRequests = allRequests.stream()
                 .filter(r -> r.getStatus() == RequestStatus.CLOSED && r.getActualCompletionAt() != null)
                 .toList();
         double avgResolutionHours = closedRequests.stream()
                 .mapToLong(r -> java.time.Duration.between(r.getDetectedAt(), r.getActualCompletionAt()).toMinutes())
                 .average().orElse(0) / 60.0;
         // reaction — use createdAt→updatedAt as proxy for non-CLOSED (analyst view approximates)
-        double avgReactionHours = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+        double avgReactionHours = allRequests.stream()
                 .filter(r -> r.getStatus() != RequestStatus.OPEN && r.getStatus() != RequestStatus.DRAFT)
                 .mapToLong(r -> java.time.Duration.between(r.getCreatedAt(), r.getUpdatedAt()).toMinutes())
                 .average().orElse(0) / 60.0;
 
-        long pprTotalForKpi = pprTaskRepository.countByIsDeletedFalse();
-        long pprDoneForKpi = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED.name());
+        long pprTotalForKpi = allPprTasks.size();
+        long pprDoneForKpi = allPprTasks.stream()
+                .filter(t -> t.getStatus() == PprTaskStatus.COMPLETED)
+                .count();
         double pprCompletionRate = pprTotalForKpi > 0 ? (double) pprDoneForKpi / pprTotalForKpi * 100 : 0;
 
-        long pprOverdueCount = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.OVERDUE.name());
+        long pprOverdueCount = allPprTasks.stream()
+                .filter(t -> t.getStatus() == PprTaskStatus.OVERDUE)
+                .count();
         double overdueWorkShare = pprTotalForKpi > 0 ? (double) pprOverdueCount / pprTotalForKpi * 100 : 0;
 
         Kpis kpis = new Kpis(mtbfAvg, mttrAvg, unplannedShare, downtimeHoursTotal,
                 avgReactionHours, avgResolutionHours, pprCompletionRate, overdueWorkShare);
 
-        List<Defect> allDefects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         List<FailureReasonRow> topFailureReasons = allDefects.stream()
                 .filter(d -> d.getFailureReason() != null && !d.getFailureReason().isBlank())
                 .collect(Collectors.groupingBy(Defect::getFailureReason, Collectors.counting()))
@@ -141,9 +172,6 @@ public class AnalyticsService {
                             e.getValue());
                 })
                 .toList();
-
-        Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .collect(Collectors.toMap(Equipment::getId, e -> e));
 
         List<ReliabilitySnapshotRow> reliabilitySnapshot = allMetrics.stream()
                 .collect(Collectors.toMap(
@@ -178,8 +206,10 @@ public class AnalyticsService {
                 })
                 .toList();
 
-        long pprTotal = pprTaskRepository.countByIsDeletedFalse();
-        long pprDone = pprTaskRepository.countByStatusAndIsDeletedFalse(PprTaskStatus.COMPLETED.name());
+        long pprTotal = allPprTasks.size();
+        long pprDone = allPprTasks.stream()
+                .filter(t -> t.getStatus() == PprTaskStatus.COMPLETED)
+                .count();
         double pprCompletion = pprTotal > 0 ? (double) pprDone / pprTotal * 100 : 0;
 
         List<MaintenanceKpiRow> maintenanceKpis = allWorkOrders.stream()
@@ -212,7 +242,11 @@ public class AnalyticsService {
 
     @Transactional
     public FailureParetoResponse failurePareto() {
+        UUID departmentId = analyticsDepartmentScope();
+        Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(Collectors.toMap(Equipment::getId, e -> e));
         List<FailureReasonRow> items = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(d -> departmentId == null || isEquipmentInDepartment(equipById, d.getEquipmentId(), departmentId))
                 .filter(d -> d.getFailureReason() != null && !d.getFailureReason().isBlank())
                 .collect(Collectors.groupingBy(Defect::getFailureReason, Collectors.counting()))
                 .entrySet().stream()
@@ -224,7 +258,12 @@ public class AnalyticsService {
 
     @Transactional
     public RcaOverviewResponse rcaOverview() {
-        List<Defect> all = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        UUID departmentId = analyticsDepartmentScope();
+        Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(Collectors.toMap(Equipment::getId, e -> e));
+        List<Defect> all = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(d -> departmentId == null || isEquipmentInDepartment(equipById, d.getEquipmentId(), departmentId))
+                .toList();
         List<RcaOverviewResponse.CountRow> topRoot = all.stream()
                 .filter(d -> d.getRootCause() != null && !d.getRootCause().isBlank())
                 .collect(Collectors.groupingBy(Defect::getRootCause, Collectors.counting()))
@@ -246,6 +285,9 @@ public class AnalyticsService {
 
     @Transactional
     public RcaEquipmentResponse rcaEquipment(UUID equipmentId) {
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> com.toir.exception.RestException.notFound("Equipment not found: " + equipmentId));
+        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
         List<Defect> defects = defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
         Map<String, Long> topCauses = defects.stream()
                 .filter(d -> d.getRootCause() != null)
@@ -270,8 +312,9 @@ public class AnalyticsService {
     }
 
     public EquipmentAnalyticsResponse equipmentAnalytics(UUID equipmentId) {
-        equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> com.toir.exception.RestException.notFound("Equipment not found: " + equipmentId));
+        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
 
         List<RepairRequest> requests = repairRequestRepository.search(null, null, equipmentId);
         if (requests == null) {
@@ -346,6 +389,30 @@ public class AnalyticsService {
 
     @Transactional
     public List<ReliabilityMetric> reliabilityList() {
-        return reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        UUID departmentId = analyticsDepartmentScope();
+        if (departmentId == null) {
+            return reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        }
+        Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(Collectors.toMap(Equipment::getId, e -> e));
+        return reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(m -> isEquipmentInDepartment(equipById, m.getEquipmentId(), departmentId))
+                .toList();
+    }
+
+    private UUID analyticsDepartmentScope() {
+        if (scopeAccessService.isScopeAdmin()) {
+            return null;
+        }
+        UUID currentDepartmentId = scopeAccessService.currentDepartmentIdOrNull();
+        if (currentDepartmentId == null) {
+            throw new AccessDeniedException("Access denied by data scope");
+        }
+        return currentDepartmentId;
+    }
+
+    private boolean isEquipmentInDepartment(Map<UUID, Equipment> equipById, UUID equipmentId, UUID departmentId) {
+        Equipment equipment = equipById.get(equipmentId);
+        return equipment != null && departmentId.equals(equipment.getDepartmentId());
     }
 }

@@ -3,6 +3,10 @@ package com.toir.service;
 import com.toir.dto.knowledge.KnowledgeStatsResponse;
 import com.toir.repository.KnowledgeArticleRepository;
 import com.toir.repository.KnowledgeStatsProjection;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -21,6 +25,18 @@ class KnowledgeServiceStatsTest {
 
     @Mock
     KnowledgeArticleRepository repository;
+
+    @Mock
+    EquipmentRepository equipmentRepository;
+
+    @Mock
+    DefectRepository defectRepository;
+
+    @Mock
+    WorkOrderRepository workOrderRepository;
+
+    @Mock
+    ScopeAccessService scopeAccessService;
 
     @InjectMocks
     KnowledgeService service;

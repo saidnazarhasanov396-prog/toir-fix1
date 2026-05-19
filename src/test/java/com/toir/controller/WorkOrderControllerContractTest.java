@@ -596,7 +596,8 @@ class WorkOrderControllerContractTest {
     @Test
     void statsShouldReturn200AndStatsPayload() throws Exception {
         com.toir.dto.workorder.WorkOrderStatsResponse statsResponse = new com.toir.dto.workorder.WorkOrderStatsResponse(10, 5, 4, 1);
-        when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
+
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.getStats(isNull(), isNull(), isNull(), isNull())).thenReturn(statsResponse);
 
         mockMvc.perform(get("/api/v1/work-orders/stats"))
