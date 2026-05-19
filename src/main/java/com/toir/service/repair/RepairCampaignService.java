@@ -3,12 +3,14 @@ package com.toir.service.repair;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
+import com.toir.entity.Department;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignStage;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
 import com.toir.util.AuditBuilderService;
@@ -17,7 +19,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -25,23 +31,29 @@ public class RepairCampaignService {
 
     private final RepairCampaignRepository repository;
     private final RepairCampaignStageRepository stageRepository;
+    private final DepartmentRepository departmentRepository;
     private final AuditBuilderService auditBuilderService;
-
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(RepairCampaignDto::from).toList();
+        return toDtoList(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc());
     }
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findByYear(int year) {
-        return repository.findAllByYearAndIsDeletedFalseOrderByStartDateAsc(year).stream()
-                .map(RepairCampaignDto::from).toList();
+        return toDtoList(repository.findAllByYearAndIsDeletedFalseOrderByStartDateAsc(year));
+    }
+
+    @Transactional(readOnly = true)
+    public List<RepairCampaignDto> findAllFiltered(String search, Integer year, RepairCampaignStatus status) {
+        String statusStr = status != null ? status.name() : null;
+        String searchPattern = (search != null && !search.isBlank()) ? "%" + search.trim().toLowerCase() + "%" : null;
+        return toDtoList(repository.findAllFiltered(year, statusStr, searchPattern));
     }
 
     @Transactional(readOnly = true)
     public RepairCampaignDto findById(UUID id) {
-        return RepairCampaignDto.from(getOrThrow(id));
+        return toDto(getOrThrow(id));
     }
 
     @Transactional
@@ -75,7 +87,7 @@ public class RepairCampaignService {
                 saved
         );
 
-        return RepairCampaignDto.from(saved);
+        return toDto(saved);
     }
 
     @Transactional
@@ -97,7 +109,7 @@ public class RepairCampaignService {
                 c,
                 saved
         );
-        return RepairCampaignDto.from(c);
+        return toDto(saved);
     }
 
     @Transactional
@@ -119,7 +131,7 @@ public class RepairCampaignService {
                 c,
                 save
         );
-        return RepairCampaignDto.from(c);
+        return toDto(save);
     }
 
     @Transactional
@@ -143,7 +155,7 @@ public class RepairCampaignService {
                 c,
                 save
         );
-        return RepairCampaignDto.from(c);
+        return toDto(save);
     }
 
     @Transactional
@@ -239,5 +251,33 @@ public class RepairCampaignService {
     private RepairCampaign getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Repair campaign not found: " + id));
+    }
+
+    private RepairCampaignDto toDto(RepairCampaign c) {
+        if (c == null) {
+            return null;
+        }
+        if (c.getDepartmentId() == null) {
+            return RepairCampaignDto.from(c, null);
+        }
+        String departmentName = departmentRepository.findByIdAndIsDeletedFalse(c.getDepartmentId())
+                .map(Department::getName)
+                .orElse(null);
+        return RepairCampaignDto.from(c, departmentName);
+    }
+
+    private List<RepairCampaignDto> toDtoList(List<RepairCampaign> campaigns) {
+        if (campaigns == null || campaigns.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> departmentIds = campaigns.stream()
+                .map(RepairCampaign::getDepartmentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> departmentNames = departmentRepository.findAllByIdInAndIsDeletedFalse(departmentIds).stream()
+                .collect(Collectors.toMap(Department::getId, Department::getName));
+        return campaigns.stream()
+                .map(c -> RepairCampaignDto.from(c, departmentNames.getOrDefault(c.getDepartmentId(), null)))
+                .toList();
     }
 }

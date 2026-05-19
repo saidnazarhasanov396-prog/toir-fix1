@@ -2,6 +2,7 @@ package com.toir.dto.repaircampaign;
 
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.enums.RepairCampaignStatus;
+import com.toir.service.department.DepartmentService;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -14,6 +15,7 @@ public record RepairCampaignDto(
         int year,
         Integer quarter,
         UUID departmentId,
+        String departmentName,
         RepairCampaignStatus status,
         LocalDate startDate,
         LocalDate endDate,
@@ -24,15 +26,19 @@ public record RepairCampaignDto(
         String notes,
         List<RepairCampaignStageDto> stages
 ) {
-    public static RepairCampaignDto from(RepairCampaign c) {
+    public static RepairCampaignDto from(RepairCampaign c, String departmentName) {
         return new RepairCampaignDto(
                 c.getId(), c.getCode(), c.getName(),
-                c.getYear(), c.getQuarter(), c.getDepartmentId(), c.getStatus(),
+                c.getYear(), c.getQuarter(), c.getDepartmentId(), departmentName, c.getStatus(),
                 c.getStartDate(), c.getEndDate(),
                 c.getTotalBudget(), c.getTotalActual(),
                 c.getTotalBudget() - c.getTotalActual(),
                 c.getScope(), c.getNotes(),
                 c.getStages().stream().map(RepairCampaignStageDto::from).toList()
         );
+    }
+
+    public static RepairCampaignDto from(RepairCampaign c) {
+        return from(c, null);
     }
 }
