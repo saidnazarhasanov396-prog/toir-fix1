@@ -12,8 +12,10 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,12 +33,15 @@ public class WarehouseService {
     private final LocationRepository locationRepository;
     private final EmployeeRepository employeeRepository;
     private final AuditBuilderService auditBuilderService;
+    private final ScopeAccessService scopeAccessService;
 
 
 
     @Transactional(readOnly = true)
     public List<WarehouseDto> findAll(String search, UUID departmentId, UUID locationId, UUID responsibleId, Boolean active) {
-        return repository.search(normalizeSearch(search), departmentId, locationId, responsibleId, active).stream()
+        UUID scopedDepartmentId = scopedDepartmentId(departmentId);
+        return repository.search(normalizeSearch(search), scopedDepartmentId, locationId, responsibleId, active).stream()
+                .filter(this::canAccessWarehouse)
                 .map(w -> WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(w.getId()),
                         departmentRepository, locationRepository, employeeRepository))
                 .toList();
@@ -45,18 +50,20 @@ public class WarehouseService {
     @Transactional(readOnly = true)
     public WarehouseDto findById(UUID id) {
         Warehouse w = getOrThrow(id);
+        assertCanAccessWarehouse(w);
         return WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(id),
                 departmentRepository, locationRepository, employeeRepository);
     }
 
     @Transactional(readOnly = true)
     public List<WarehouseStockDto> findStocks(UUID warehouseId) {
-        getOrThrow(warehouseId);
+        assertCanAccessWarehouse(getOrThrow(warehouseId));
         return stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId).stream().map(WarehouseStockDto::from).toList();
     }
 
     @Transactional
     public WarehouseDto create(WarehouseRequest request) {
+        assertCanCreateOrTargetWarehouse(request);
         Warehouse entity = new Warehouse();
         entity.setCode(nextCode());
         apply(entity, request);
@@ -78,6 +85,8 @@ public class WarehouseService {
     @Transactional
     public WarehouseDto update(UUID id, WarehouseRequest request) {
         Warehouse entity = getOrThrow(id);
+        assertCanAccessWarehouse(entity);
+        assertCanCreateOrTargetWarehouse(request);
         apply(entity, request);
         Warehouse updated = repository.save(entity);
 
@@ -98,6 +107,7 @@ public class WarehouseService {
     @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
+        assertCanAccessWarehouse(entity);
         entity.setDeleted(true);
         Warehouse saved = repository.save(entity);
 
@@ -147,6 +157,44 @@ public class WarehouseService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private UUID scopedDepartmentId(UUID requestedDepartmentId) {
+        UUID scopedDepartmentId = scopeAccessService.enforceDepartmentScope(requestedDepartmentId);
+        if (!scopeAccessService.isScopeAdmin() && scopedDepartmentId == null) {
+            throw new AccessDeniedException("Access denied by warehouse scope");
+        }
+        return scopedDepartmentId;
+    }
+
+    private void assertCanCreateOrTargetWarehouse(WarehouseRequest request) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        boolean departmentAllowed = request.departmentId() != null
+                && scopeAccessService.canAccessDepartment(request.departmentId());
+        boolean responsibleAllowed = request.responsibleId() != null
+                && scopeAccessService.canAccessEmployee(request.responsibleId());
+        if (!departmentAllowed && !responsibleAllowed) {
+            throw new AccessDeniedException("Access denied by warehouse scope");
+        }
+    }
+
+    private void assertCanAccessWarehouse(Warehouse warehouse) {
+        if (!canAccessWarehouse(warehouse)) {
+            throw new AccessDeniedException("Access denied by warehouse scope");
+        }
+    }
+
+    private boolean canAccessWarehouse(Warehouse warehouse) {
+        if (warehouse == null) {
+            return false;
+        }
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        return (warehouse.getDepartmentId() != null && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId()))
+                || (warehouse.getResponsibleId() != null && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId()));
     }
 
 }

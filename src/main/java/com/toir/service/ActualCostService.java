@@ -23,10 +23,15 @@ public class ActualCostService {
 
     private final ActualCostRepository repository;
     private final AuditBuilderService auditBuilderService;
+    private final FinanceScopeService financeScopeService;
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
-        return repository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING).stream().map(ActualCostDto::from).toList();
+        return financeScopeService
+                .filterActualCosts(repository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .stream()
+                .map(ActualCostDto::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -36,7 +41,7 @@ public class ActualCostService {
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findByFilters(UUID workOrderId, String search) {
-        return repository.findAllByFiltersOrderByUpdatedAtDesc(workOrderId, search).stream()
+        return financeScopeService.filterActualCosts(repository.findAllByFiltersOrderByUpdatedAtDesc(workOrderId, search)).stream()
                 .map(ActualCostDto::from)
                 .toList();
     }
@@ -52,6 +57,7 @@ public class ActualCostService {
         c.setAmount(r.amount());
         c.setNotes(r.notes());
         c.setStatus(ActualCostStatus.PENDING);
+        financeScopeService.assertCanMutateActualCost(c);
         ActualCost saved = repository.save(c);
 
         auditBuilderService.log(
@@ -74,6 +80,7 @@ public class ActualCostService {
         }
         ActualCost c = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Actual cost not found: " + id));
+        financeScopeService.assertCanMutateActualCost(c);
         c.setStatus(approve ? ActualCostStatus.APPROVED : ActualCostStatus.REJECTED);
         c.setReviewedById(reviewerId);
         c.setReviewedAt(Instant.now());

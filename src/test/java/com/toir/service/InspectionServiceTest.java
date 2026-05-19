@@ -14,7 +14,9 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.inspection.InspectionCheckpointRepository;
 import com.toir.repository.inspection.InspectionRoundRepository;
 import com.toir.repository.inspection.InspectionRouteRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -31,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,8 +59,16 @@ class InspectionServiceTest {
     @Mock
     UnitOfMeasurementService unitOfMeasurementService;
 
+    @Mock
+    ScopeAccessService scopeAccessService;
+
     @InjectMocks
     InspectionService service;
+
+    @BeforeEach
+    void setUpScopeAdminBypass() {
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+    }
 
     @Test
     void listRoundsWithNullFiltersReturnsEmptyList() {
@@ -73,7 +84,11 @@ class InspectionServiceTest {
         UUID routeId = UUID.randomUUID();
         UUID performedBy = UUID.randomUUID();
         InspectionRound round = round(UUID.randomUUID(), InspectionRoundStatus.IN_PROGRESS);
+        InspectionRoute route = new InspectionRoute();
+        ReflectionTestUtils.setField(route, "id", routeId);
+        round.setRoute(route);
         round.setPerformedBy(performedBy);
+        when(routeRepo.findByIdAndIsDeletedFalse(routeId)).thenReturn(Optional.of(route));
         when(roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(
                 eq(routeId),
                 eq(performedBy),

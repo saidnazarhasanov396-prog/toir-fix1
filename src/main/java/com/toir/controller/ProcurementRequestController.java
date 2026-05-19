@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -27,6 +28,7 @@ public class ProcurementRequestController {
     private final ProcurementRequestService service;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_READ')")
     public ResponseEntity<Page<ProcurementRequestDto>> list(
             @RequestParam(required = false) ProcurementRequestStatus status,
             @RequestParam(required = false) UUID departmentId
@@ -35,39 +37,49 @@ public class ProcurementRequestController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_READ')")
     public ResponseEntity<ProcurementRequestDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_CREATE')")
     public ResponseEntity<ProcurementRequestDto> create(@Valid @RequestBody ProcurementRequestRequest r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
     }
 
     @PostMapping("/{id}/lines")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_CREATE')")
     public ResponseEntity<ProcurementRequestDto> addLine(@PathVariable UUID id, @Valid @RequestBody ProcurementLineRequest r) {
         return ResponseEntity.ok(service.addLine(id, r));
     }
 
     @PostMapping("/{id}/submit")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_SUBMIT')")
     public ResponseEntity<ProcurementRequestDto> submit(@PathVariable UUID id) { return ResponseEntity.ok(service.submit(id)); }
 
     @PostMapping("/{id}/approve")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_APPROVE')")
     public ResponseEntity<ProcurementRequestDto> approve(@PathVariable UUID id) { return ResponseEntity.ok(service.approve(id)); }
 
     @PostMapping("/{id}/reject")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_REJECT')")
     public ResponseEntity<ProcurementRequestDto> reject(@PathVariable UUID id, @RequestParam String reason) {
         return ResponseEntity.ok(service.reject(id, reason));
     }
 
     @PostMapping("/{id}/ordered")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_ORDER')")
     public ResponseEntity<ProcurementRequestDto> markOrdered(@PathVariable UUID id) { return ResponseEntity.ok(service.markOrdered(id)); }
 
     @PostMapping("/{id}/received")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_RECEIVE')")
     public ResponseEntity<ProcurementRequestDto> markReceived(@PathVariable UUID id) { return ResponseEntity.ok(service.markReceived(id)); }
 
     @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_CANCEL')")
     public ResponseEntity<ProcurementRequestDto> cancel(@PathVariable UUID id) { return ResponseEntity.ok(service.cancel(id)); }
 
     @PostMapping("/generate-from-low-stock")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_CREATE')")
     public ResponseEntity<Page<ProcurementRequestDto>> generateFromLowStock(@RequestParam(required = false) UUID warehouseId,
                                                                             @RequestParam(defaultValue = "0") int page,
                                                                             @RequestParam(defaultValue = "20") int size) {

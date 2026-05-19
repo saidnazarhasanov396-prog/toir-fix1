@@ -12,6 +12,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -26,6 +27,7 @@ public class WarehouseReorderController {
     private final WarehouseReorderService reorderService;
 
     @GetMapping("/suggestions")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
     public ResponseEntity<Page<ReorderSuggestionDto>> suggestions(
             @RequestParam(required = false) UUID warehouseId,
             @RequestParam(defaultValue = "0") int page,

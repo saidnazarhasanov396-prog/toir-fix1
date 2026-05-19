@@ -6,6 +6,7 @@ import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.FinanceScopeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +41,9 @@ class BudgetSummaryControllerContractTest {
     @Mock
     UserRepository userRepository;
 
+    @Mock
+    FinanceScopeService financeScopeService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -49,7 +53,8 @@ class BudgetSummaryControllerContractTest {
                         lineRepository,
                         actualCostRepository,
                         costCategoryRepository,
-                        userRepository))
+                        userRepository,
+                        financeScopeService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -57,6 +62,7 @@ class BudgetSummaryControllerContractTest {
     @Test
     void reviewActivityWithoutUuidShouldReturnStableEmptyResponse() throws Exception {
         when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null)).thenReturn(List.of());
+        when(financeScopeService.filterActualCosts(List.of())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/review-activity"))
                 .andExpect(status().isOk())

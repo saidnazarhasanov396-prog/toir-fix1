@@ -3,6 +3,7 @@ import com.toir.dto.equipmentlabel.EquipmentLabelResponse;
 import com.toir.entity.equipment.Equipment;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -11,6 +12,8 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,14 +24,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/equipment")
 @Tag(name = "equipment-label")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
 public class EquipmentLabelController {
 
     private final EquipmentRepository repository;
+    private final ScopeAccessService scopeAccessService;
 
     @GetMapping("/{id}/label")
     public ResponseEntity<EquipmentLabelResponse> label(@PathVariable UUID id) {
         Equipment eq = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
+        assertCanAccessEquipment(eq);
         return ResponseEntity.ok(buildPayload(eq));
     }
 
@@ -37,6 +43,7 @@ public class EquipmentLabelController {
         Equipment eq = repository.findByCodeAndIsDeletedFalse(code)
                 .or(() -> repository.findByInventoryNumberAndIsDeletedFalse(code))
                 .orElseThrow(() -> RestException.notFound("Equipment not found by code/inventory: " + code));
+        assertCanAccessEquipment(eq);
         return ResponseEntity.ok(buildPayload(eq));
     }
 
@@ -55,6 +62,7 @@ public class EquipmentLabelController {
             UUID id = UUID.fromString(value);
             Equipment eq = repository.findByIdAndIsDeletedFalse(id)
                     .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
+            assertCanAccessEquipment(eq);
             return ResponseEntity.ok(buildPayload(eq));
         } catch (IllegalArgumentException ignored) {
             return resolveByCode(value);
@@ -65,6 +73,7 @@ public class EquipmentLabelController {
     public ResponseEntity<byte[]> labelSvg(@PathVariable UUID id) {
         Equipment eq = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
+        assertCanAccessEquipment(eq);
         String payload = String.format("toir://equipment/%s?code=%s&inv=%s",
                 eq.getId(), eq.getCode(), eq.getInventoryNumber());
         String svg = "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='180' viewBox='0 0 320 180'>" +
@@ -114,5 +123,15 @@ public class EquipmentLabelController {
     private static String escape(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    private void assertCanAccessEquipment(Equipment equipment) {
+        if (equipment.getDepartmentId() == null) {
+            if (!scopeAccessService.isScopeAdmin()) {
+                throw new AccessDeniedException("Access denied by equipment department scope");
+            }
+            return;
+        }
+        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
     }
 }

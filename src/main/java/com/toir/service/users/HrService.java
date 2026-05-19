@@ -17,11 +17,13 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.toir.dto.hr.EmployeeStatsResponse;
@@ -42,6 +44,7 @@ public class HrService {
     private final AuditBuilderService auditBuilderService;
     private final DepartmentRepository departmentRepository;
     private final BrigadeRepository brigadeRepository;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public Page<EmployeeDto> listEmployees(
@@ -54,6 +57,7 @@ public class HrService {
     ) {
         String part1 = null;
         String part2 = null;
+        UUID scopedDepartmentId = enforceEmployeeListDepartmentScope(departmentId);
 
         if (search != null && !search.isBlank()) {
             String[] parts = search.trim().split("\\s+");
@@ -68,7 +72,7 @@ public class HrService {
                 part1,
                 part2,
                 activeOnly,
-                departmentId,
+                scopedDepartmentId,
                 brigadeId,
                 PaginationUtils.pageRequest(page, pageSize)
         );
@@ -81,10 +85,11 @@ public class HrService {
             UUID brigadeId,
             String search
     ) {
+        UUID scopedDepartmentId = enforceEmployeeListDepartmentScope(departmentId);
         String searchPattern = toSearchPattern(search);
 
         EmployeeStatsProjection stats = employeeRepository.getEmployeeStats(
-                departmentId,
+                scopedDepartmentId,
                 brigadeId,
                 searchPattern
         );
@@ -100,10 +105,13 @@ public class HrService {
 
     @Transactional(readOnly = true)
     public EmployeeDto getEmployee(UUID id) {
-        return toDto(getEmployeeOrThrow(id));
+        Employee employee = getEmployeeOrThrow(id);
+        assertCanReadEmployee(employee);
+        return toDto(employee);
     }
     @Transactional
     public EmployeeDto createEmployee(EmployeeRequest r) {
+        assertCanAccessEmployeeRequestDepartment(r);
         if (employeeRepository.existsByPersonnelNumberAndIsDeletedFalse(r.personnelNumber())) {
             throw RestException.conflict("Personnel number already exists: " + r.personnelNumber());
         }
@@ -127,6 +135,8 @@ public class HrService {
     @Transactional
     public EmployeeDto updateEmployee(UUID id, EmployeeRequest r) {
         Employee e = getEmployeeOrThrow(id);
+        assertCanMutateEmployee(e);
+        assertCanAccessEmployeeRequestDepartment(r);
         applyEmployee(e, r);
 
         Employee save = employeeRepository.save(e);
@@ -146,6 +156,7 @@ public class HrService {
     @Transactional
     public void deleteEmployee(UUID id) {
         var entity = getEmployeeOrThrow(id);
+        assertCanMutateEmployee(entity);
         entity.setDeleted(true);
         Employee saved = employeeRepository.save(entity);
 
@@ -162,6 +173,8 @@ public class HrService {
 
     @Transactional(readOnly = true)
     public List<TimesheetEntryDto> timesheetFor(UUID employeeId, LocalDate from, LocalDate to) {
+        Employee employee = getEmployeeOrThrow(employeeId);
+        assertCanReadEmployee(employee);
         return timesheetRepository
                         .findAllByEmployeeIdAndWorkDateBetweenAndIsDeletedFalseOrderByWorkDateAsc(employeeId, from, to)
                 .stream().map(TimesheetEntryDto::from).toList();
@@ -170,12 +183,15 @@ public class HrService {
     @Transactional(readOnly = true)
     public List<TimesheetEntryDto> timesheetRange(LocalDate from, LocalDate to) {
         return timesheetRepository.findAllByWorkDateBetweenAndIsDeletedFalse(from, to)
-                .stream().map(TimesheetEntryDto::from).toList();
+                .stream()
+                .filter(this::canAccessTimesheet)
+                .map(TimesheetEntryDto::from).toList();
     }
 
     @Transactional
     public TimesheetEntryDto createTimesheet(TimesheetEntryRequest r) {
-        getEmployeeOrThrow(r.employeeId());
+        Employee employee = getEmployeeOrThrow(r.employeeId());
+        assertCanReadEmployee(employee);
         TimesheetEntry e = new TimesheetEntry();
         applyTimesheet(e, r);
         TimesheetEntry saved = timesheetRepository.save(e);
@@ -196,6 +212,9 @@ public class HrService {
     public TimesheetEntryDto updateTimesheet(UUID id, TimesheetEntryRequest r) {
         TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
+        assertCanAccessTimesheet(e);
+        Employee targetEmployee = getEmployeeOrThrow(r.employeeId());
+        assertCanReadEmployee(targetEmployee);
         applyTimesheet(e, r);
 
         TimesheetEntry save = timesheetRepository.save(e);
@@ -216,6 +235,7 @@ public class HrService {
     public void deleteTimesheet(UUID id) {
         TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
+        assertCanAccessTimesheet(e);
         e.setDeleted(true);
         TimesheetEntry saved = timesheetRepository.save(e);
 
@@ -234,6 +254,7 @@ public class HrService {
     public TimesheetEntryDto approveTimesheet(UUID id) {
         TimesheetEntry e = timesheetRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Timesheet entry not found: " + id));
+        assertCanApproveTimesheet(e);
 
         e.setStatus(TimesheetStatus.APPROVED);
 
@@ -254,6 +275,99 @@ public class HrService {
     private Employee getEmployeeOrThrow(UUID id) {
         return employeeRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Employee not found: " + id));
+    }
+
+    private UUID enforceEmployeeListDepartmentScope(UUID requestedDepartmentId) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return requestedDepartmentId;
+        }
+        if (scopeAccessService.currentDepartmentIdOrNull() == null) {
+            throwAccessDenied();
+        }
+        return scopeAccessService.enforceDepartmentScope(requestedDepartmentId);
+    }
+
+    private void assertCanReadEmployee(Employee employee) {
+        if (!canReadEmployee(employee)) {
+            throwAccessDenied();
+        }
+    }
+
+    private boolean canReadEmployee(Employee employee) {
+        if (employee == null) {
+            return false;
+        }
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        return scopeAccessService.canAccessDepartment(employee.getDepartmentId())
+                || scopeAccessService.canAccessEmployee(employee.getId())
+                || scopeAccessService.canAccessAssignedUser(employee.getUserId());
+    }
+
+    private void assertCanMutateEmployee(Employee employee) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        if (employee == null || !scopeAccessService.canAccessDepartment(employee.getDepartmentId())) {
+            throwAccessDenied();
+        }
+    }
+
+    private void assertCanAccessEmployeeRequestDepartment(EmployeeRequest request) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        UUID departmentId = resolveEmployeeRequestDepartmentId(request);
+        if (departmentId == null || !scopeAccessService.canAccessDepartment(departmentId)) {
+            throwAccessDenied();
+        }
+    }
+
+    private UUID resolveEmployeeRequestDepartmentId(EmployeeRequest request) {
+        if (request.departmentId() != null) {
+            return request.departmentId();
+        }
+        if (request.brigadeId() == null) {
+            return null;
+        }
+        return brigadeRepository.findByIdAndIsDeletedFalse(request.brigadeId())
+                .map(Brigade::getDepartmentId)
+                .orElse(null);
+    }
+
+    private void assertCanAccessTimesheet(TimesheetEntry entry) {
+        if (!canAccessTimesheet(entry)) {
+            throwAccessDenied();
+        }
+    }
+
+    private void assertCanApproveTimesheet(TimesheetEntry entry) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        if (scopeAccessService.currentEmployeeId()
+                .map(entry.getEmployeeId()::equals)
+                .orElse(false)) {
+            throwAccessDenied();
+        }
+        assertCanAccessTimesheet(entry);
+    }
+
+    private boolean canAccessTimesheet(TimesheetEntry entry) {
+        if (entry == null) {
+            return false;
+        }
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        return employeeRepository.findByIdAndIsDeletedFalse(entry.getEmployeeId())
+                .map(this::canReadEmployee)
+                .orElse(false);
+    }
+
+    private void throwAccessDenied() {
+        throw new AccessDeniedException("Access denied by data scope");
     }
 
     private void applyEmployee(Employee e, EmployeeRequest r) {

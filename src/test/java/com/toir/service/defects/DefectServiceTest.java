@@ -21,7 +21,9 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -46,6 +48,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -71,8 +74,16 @@ class DefectServiceTest {
     @Mock
     AuditBuilderService auditBuilderService;
 
+    @Mock
+    ScopeAccessService scopeAccessService;
+
     @InjectMocks
     DefectService service;
+
+    @BeforeEach
+    void setUpScopeAdminBypass() {
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+    }
 
     @Test
     void findAllFiltersByRepairRequestId() {

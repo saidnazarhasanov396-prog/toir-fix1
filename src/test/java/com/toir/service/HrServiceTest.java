@@ -12,8 +12,10 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.users.HrService;
 import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -29,6 +31,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -50,8 +53,16 @@ class HrServiceTest {
     @Mock
     BrigadeRepository brigadeRepository;
 
+    @Mock
+    ScopeAccessService scopeAccessService;
+
     @InjectMocks
     HrService service;
+
+    @BeforeEach
+    void setUpScopeAdminBypass() {
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+    }
 
     @Test
     void listEmployeesIncludesDepartmentNameAndBrigadeName() {

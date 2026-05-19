@@ -15,8 +15,10 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.inspection.InspectionCheckpointRepository;
 import com.toir.repository.inspection.InspectionRoundRepository;
 import com.toir.repository.inspection.InspectionRouteRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +36,7 @@ public class InspectionService {
     private final DefectRepository defectRepo;
     private final UnitOfMeasurementService unitOfMeasurementService;
     private final AuditBuilderService auditBuilderService;
+    private final ScopeAccessService scopeAccessService;
 
 
 
@@ -41,8 +44,9 @@ public class InspectionService {
 
     @Transactional(readOnly = true)
     public List<InspectionRouteDto> findRoutes(UUID departmentId, Boolean active,String search) {
+        UUID scopedDepartmentId = enforceRouteListDepartmentScope(departmentId);
         return routeRepo
-                .findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(departmentId,active,search).
+                .findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(scopedDepartmentId,active,search).
                 stream()
                 .map(InspectionRouteDto::from)
                 .toList();
@@ -50,11 +54,14 @@ public class InspectionService {
 
     @Transactional(readOnly = true)
     public InspectionRouteDto getRoute(UUID id) {
-        return InspectionRouteDto.from(loadRoute(id));
+        InspectionRoute route = loadRoute(id);
+        assertCanAccessRoute(route);
+        return InspectionRouteDto.from(route);
     }
 
     @Transactional
     public InspectionRouteDto createRoute(InspectionRouteRequest r) {
+        assertCanAccessRouteDepartment(r.departmentId());
         if (routeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Route code already exists: " + r.code());
         }
@@ -82,6 +89,8 @@ public class InspectionService {
     @Transactional
     public InspectionRouteDto updateRoute(UUID id, InspectionRouteRequest r) {
         InspectionRoute route = loadRoute(id);
+        assertCanAccessRoute(route);
+        assertCanAccessRouteDepartment(r.departmentId());
         if (!route.getCode().equals(r.code()) && routeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
             throw RestException.conflict("Route code already exists: " + r.code());
         }
@@ -104,6 +113,7 @@ public class InspectionService {
     @Transactional
     public void deleteRoute(UUID id) {
         var entity = loadRoute(id);
+        assertCanAccessRoute(entity);
         entity.setDeleted(true);
         InspectionRoute saved = routeRepo.save(entity);
 
@@ -122,6 +132,7 @@ public class InspectionService {
     @Transactional
     public InspectionRouteDto addCheckpoint(UUID routeId, InspectionRouteRequest.CheckpointRequest cp) {
         InspectionRoute route = loadRoute(routeId);
+        assertCanAccessRoute(route);
         InspectionCheckpoint checkpoint = buildCheckpoint(route, cp);
         route.getCheckpoints().add(checkpoint);
 
@@ -153,21 +164,28 @@ public class InspectionService {
 
     @Transactional(readOnly = true)
     public List<InspectionRoundDto> listRounds(UUID routeId, UUID performedBy,InspectionRoundStatus status) {
+        if (routeId != null) {
+            assertCanAccessRoute(loadRoute(routeId));
+        }
         return roundRepo
                 .findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(routeId, performedBy, status)
                 .stream()
+                .filter(this::canAccessRound)
                 .map(InspectionRoundDto::fromSummary)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public InspectionRoundDto getRound(UUID id) {
-        return InspectionRoundDto.from(loadRound(id));
+        InspectionRound round = loadRound(id);
+        assertCanAccessRound(round);
+        return InspectionRoundDto.from(round);
     }
 
     @Transactional
     public InspectionRoundDto startRound(UUID routeId, UUID performedBy) {
         InspectionRoute route = loadRoute(routeId);
+        assertCanAccessRoute(route);
         InspectionRound round = new InspectionRound();
         round.setRoute(route);
         round.setPerformedBy(performedBy);
@@ -192,6 +210,7 @@ public class InspectionService {
     @Transactional
     public InspectionRoundResultDto recordResult(UUID roundId, InspectionRoundResultRequest r) {
         InspectionRound round = loadRound(roundId);
+        assertCanAccessRound(round);
         if (round.getStatus() != InspectionRoundStatus.IN_PROGRESS) {
             throw RestException.badRequest("Cannot add results to a completed round");
         }
@@ -259,6 +278,7 @@ public class InspectionService {
     @Transactional
     public InspectionRoundDto completeRound(UUID roundId, String notes) {
         InspectionRound round = loadRound(roundId);
+        assertCanAccessRound(round);
         if (round.getStatus() != InspectionRoundStatus.IN_PROGRESS) {
             throw RestException.badRequest("Round is not IN_PROGRESS");
         }
@@ -285,6 +305,7 @@ public class InspectionService {
     @Transactional
     public InspectionRoundDto cancelRound(UUID roundId, String reason) {
         InspectionRound round = loadRound(roundId);
+        assertCanAccessRound(round);
         round.setStatus(InspectionRoundStatus.CANCELLED);
         round.setCompletedAt(Instant.now());
         round.setNotes(reason);
@@ -311,6 +332,65 @@ public class InspectionService {
     private InspectionRound loadRound(UUID id) {
         return roundRepo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Inspection round not found: " + id));
+    }
+
+    private UUID enforceRouteListDepartmentScope(UUID requestedDepartmentId) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return requestedDepartmentId;
+        }
+        if (scopeAccessService.currentDepartmentIdOrNull() == null) {
+            throwAccessDenied();
+        }
+        return scopeAccessService.enforceDepartmentScope(requestedDepartmentId);
+    }
+
+    private void assertCanAccessRouteDepartment(UUID departmentId) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        if (departmentId == null || !scopeAccessService.canAccessDepartment(departmentId)) {
+            throwAccessDenied();
+        }
+    }
+
+    private void assertCanAccessRoute(InspectionRoute route) {
+        if (!canAccessRoute(route)) {
+            throwAccessDenied();
+        }
+    }
+
+    private boolean canAccessRoute(InspectionRoute route) {
+        if (route == null) {
+            return false;
+        }
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        return scopeAccessService.canAccessDepartment(route.getDepartmentId());
+    }
+
+    private void assertCanAccessRound(InspectionRound round) {
+        if (!canAccessRound(round)) {
+            throwAccessDenied();
+        }
+    }
+
+    private boolean canAccessRound(InspectionRound round) {
+        if (round == null) {
+            return false;
+        }
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        InspectionRoute route = round.getRoute();
+        boolean routeInScope = route != null && scopeAccessService.canAccessDepartment(route.getDepartmentId());
+        boolean performerInScope = round.getPerformedBy() != null
+                && scopeAccessService.canAccessAssignedUser(round.getPerformedBy());
+        return routeInScope || performerInScope;
+    }
+
+    private void throwAccessDenied() {
+        throw new AccessDeniedException("Access denied by data scope");
     }
 
     private void applyRoute(InspectionRoute route, InspectionRouteRequest r) {

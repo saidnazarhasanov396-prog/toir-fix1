@@ -6,6 +6,7 @@ import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,11 +29,14 @@ class EquipmentLabelControllerContractTest {
     @Mock
     EquipmentRepository repository;
 
+    @Mock
+    ScopeAccessService scopeAccessService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new EquipmentLabelController(repository))
+        mockMvc = MockMvcBuilders.standaloneSetup(new EquipmentLabelController(repository, scopeAccessService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -90,4 +94,3 @@ class EquipmentLabelControllerContractTest {
         return equipment;
     }
 }
-

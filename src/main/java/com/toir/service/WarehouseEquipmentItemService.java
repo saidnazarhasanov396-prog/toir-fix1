@@ -11,11 +11,13 @@ import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,16 +33,22 @@ public class WarehouseEquipmentItemService {
     private final EquipmentRepository equipmentRepository;
     private final DepartmentRepository departmentRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional
     public WarehouseEquipmentItemDto assign(UUID warehouseId, WarehouseEquipmentAssignRequest request) {
         Warehouse warehouse = getWarehouseOrThrow(warehouseId);
+        assertCanAccessWarehouse(warehouse);
         if (!warehouse.isActive()) {
             throw RestException.badRequest("Warehouse is not active");
         }
 
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found"));
+        if (equipment.getDepartmentId() != null && !scopeAccessService.isScopeAdmin()
+                && !scopeAccessService.canAccessDepartment(equipment.getDepartmentId())) {
+            throw new AccessDeniedException("Access denied by equipment department scope");
+        }
 
         warehouseEquipmentItemRepository.findActiveByEquipmentId(request.equipmentId())
                 .ifPresent(existing -> {
@@ -75,7 +83,7 @@ public class WarehouseEquipmentItemService {
                                                 WarehouseEquipmentStatus status,
                                                 int page,
                                                 int size) {
-        getWarehouseOrThrow(warehouseId);
+        assertCanAccessWarehouse(getWarehouseOrThrow(warehouseId));
         Page<WarehouseEquipmentItem> items = status == null
                 ? warehouseEquipmentItemRepository.findByWarehouseIdAndActiveTrueAndIsDeletedFalse(
                         warehouseId,
@@ -95,9 +103,13 @@ public class WarehouseEquipmentItemService {
                                                   WarehouseEquipmentStatus status,
                                                   UUID departmentId) {
         WarehouseEquipmentItem item = getWarehouseEquipmentItemOrThrow(warehouseId, equipmentId);
+        assertCanAccessWarehouse(getWarehouseOrThrow(item.getWarehouseId()));
         if (status == WarehouseEquipmentStatus.INSTALLED) {
             if (departmentId == null) {
                 throw RestException.badRequest("departmentId is required when status is INSTALLED");
+            }
+            if (!scopeAccessService.isScopeAdmin() && !scopeAccessService.canAccessDepartment(departmentId)) {
+                throw new AccessDeniedException("Access denied by target department scope");
             }
             if (item.getStatus() == WarehouseEquipmentStatus.OUT_OF_SERVICE) {
                 throw RestException.badRequest("OUT_OF_SERVICE equipment cannot be installed directly");
@@ -119,6 +131,7 @@ public class WarehouseEquipmentItemService {
     @Transactional
     public void remove(UUID warehouseId, UUID equipmentId) {
         WarehouseEquipmentItem item = getWarehouseEquipmentItemOrThrow(warehouseId, equipmentId);
+        assertCanAccessWarehouse(getWarehouseOrThrow(item.getWarehouseId()));
         item.setActive(false);
         item.setDeleted(true);
         warehouseEquipmentItemRepository.save(item);
@@ -129,6 +142,7 @@ public class WarehouseEquipmentItemService {
                                                                   UUID targetWarehouseId,
                                                                   WarehouseEquipmentStatus targetStatus) {
         Warehouse targetWarehouse = getWarehouseOrThrow(targetWarehouseId);
+        assertCanAccessWarehouse(targetWarehouse);
         if (!targetWarehouse.isActive()) {
             throw RestException.badRequest("Warehouse is not active");
         }
@@ -142,6 +156,7 @@ public class WarehouseEquipmentItemService {
 
         WarehouseEquipmentItem existing = warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId).orElse(null);
         if (existing != null) {
+            assertCanAccessWarehouse(getWarehouseOrThrow(existing.getWarehouseId()));
             if (Objects.equals(existing.getWarehouseId(), targetWarehouseId)) {
                 existing.setStatus(targetStatus);
                 WarehouseEquipmentItem saved = warehouseEquipmentItemRepository.save(existing);
@@ -177,5 +192,18 @@ public class WarehouseEquipmentItemService {
                         equipmentId
                 )
                 .orElseThrow(() -> RestException.notFound("Warehouse equipment item not found"));
+    }
+
+    private void assertCanAccessWarehouse(Warehouse warehouse) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        boolean departmentAllowed = warehouse.getDepartmentId() != null
+                && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId());
+        boolean responsibleAllowed = warehouse.getResponsibleId() != null
+                && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId());
+        if (!departmentAllowed && !responsibleAllowed) {
+            throw new AccessDeniedException("Access denied by warehouse scope");
+        }
     }
 }

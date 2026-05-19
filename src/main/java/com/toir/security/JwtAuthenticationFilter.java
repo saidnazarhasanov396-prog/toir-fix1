@@ -16,9 +16,10 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -48,10 +49,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         claims.get("primaryRoleCode", String.class),
                         readList(claims, "permissions")
                 );
-                List<String> authorityCodes = new ArrayList<>(readList(claims, "authorities"));
-                if (StringUtils.hasText(principal.primaryRoleCode()) && !authorityCodes.contains(principal.primaryRoleCode())) {
+                Set<String> authorityCodes = new LinkedHashSet<>(readList(claims, "authorities"));
+                if (StringUtils.hasText(principal.primaryRoleCode())) {
                     authorityCodes.add(principal.primaryRoleCode());
                 }
+                authorityCodes.addAll(principal.permissions());
                 List<SimpleGrantedAuthority> authorities = authorityCodes.stream()
                         .map(SimpleGrantedAuthority::new)
                         .toList();
@@ -66,11 +68,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    @SuppressWarnings("unchecked")
     private List<String> readList(Claims claims, String key) {
         Object value = claims.get(key);
         if (value instanceof List<?> list) {
-            return (List<String>) list;
+            return list.stream()
+                    .filter(String.class::isInstance)
+                    .map(String.class::cast)
+                    .filter(StringUtils::hasText)
+                    .toList();
         }
         return Collections.emptyList();
     }

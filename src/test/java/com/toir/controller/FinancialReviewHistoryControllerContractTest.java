@@ -9,6 +9,7 @@ import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.FinanceScopeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +46,9 @@ class FinancialReviewHistoryControllerContractTest {
     @Mock
     UserRepository userRepository;
 
+    @Mock
+    FinanceScopeService financeScopeService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -54,7 +58,8 @@ class FinancialReviewHistoryControllerContractTest {
                 lineRepository,
                 actualCostRepository,
                 costCategoryRepository,
-                userRepository
+                userRepository,
+                financeScopeService
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())

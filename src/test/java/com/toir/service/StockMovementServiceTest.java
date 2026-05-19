@@ -2,13 +2,17 @@ package com.toir.service;
 
 import com.toir.dto.stockmovement.StockMovementRequest;
 import com.toir.entity.StockMovement;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -24,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -43,8 +48,23 @@ class StockMovementServiceTest {
     @Mock
     AuditBuilderService auditBuilderService;
 
+    @Mock
+    WarehouseRepository warehouseRepository;
+
+    @Mock
+    ScopeAccessService scopeAccessService;
+
     @InjectMocks
     StockMovementService service;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(warehouseRepository.findByIdAndIsDeletedFalse(any())).thenAnswer(invocation -> {
+            UUID warehouseId = invocation.getArgument(0);
+            return Optional.of(warehouse(warehouseId));
+        });
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+    }
 
     @Test
     void issueFailsWhenQuantityIsZeroOrNegative() {
@@ -162,6 +182,13 @@ class StockMovementServiceTest {
         stock.setReservedQty(reservedQty);
         stock.setMinQty(0);
         return stock;
+    }
+
+    private Warehouse warehouse(UUID warehouseId) {
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        warehouse.setActive(true);
+        return warehouse;
     }
 
     private StockMovement saveWithId(StockMovement movement) {

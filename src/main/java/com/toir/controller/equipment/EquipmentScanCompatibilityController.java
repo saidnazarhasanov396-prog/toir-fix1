@@ -4,12 +4,15 @@ import com.toir.dto.equipmentlabel.EquipmentLabelResponse;
 import com.toir.entity.equipment.Equipment;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,14 +22,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/scan/equipment")
 @Tag(name = "equipment-scan-compat")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
 public class EquipmentScanCompatibilityController {
 
     private final EquipmentRepository repository;
+    private final ScopeAccessService scopeAccessService;
 
     @GetMapping("/{id}")
     public ResponseEntity<EquipmentLabelResponse> resolveByEquipmentId(@PathVariable UUID id) {
         Equipment equipment = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
+        assertCanAccessEquipment(equipment);
         return ResponseEntity.ok(buildPayload(equipment));
     }
 
@@ -62,5 +68,14 @@ public class EquipmentScanCompatibilityController {
                 List.of(ref)
         );
     }
-}
 
+    private void assertCanAccessEquipment(Equipment equipment) {
+        if (equipment.getDepartmentId() == null) {
+            if (!scopeAccessService.isScopeAdmin()) {
+                throw new AccessDeniedException("Access denied by equipment department scope");
+            }
+            return;
+        }
+        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
+    }
+}

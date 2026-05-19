@@ -24,17 +24,22 @@ public class ActualCostReviewRouteOverrideService {
     private final ActualCostReviewRouteOverrideRepository repository;
     private final ActualCostRepository actualCostRepository;
     private final ActualCostReviewRouteOverrideResponseMapper responseMapper;
+    private final FinanceScopeService financeScopeService;
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewRouteOverrideResponseDto> findActive() {
-        return repository.findAllByActiveTrueAndIsDeletedFalse().stream()
+        return financeScopeService.filterRouteOverrides(repository.findAllByActiveTrueAndIsDeletedFalse()).stream()
                 .map(this::toListResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewRouteOverrideResponseDto> findByActualCost(UUID actualCostId) {
+        ActualCost actualCost = actualCostRepository.findByIdAndIsDeletedFalse(actualCostId)
+                .orElseThrow(() -> RestException.notFound("Actual cost not found"));
+        financeScopeService.assertCanReadActualCost(actualCost);
         return repository.findAllByActualCostIdAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId).stream()
+                .filter(override -> financeScopeService.filterRouteOverrides(List.of(override)).size() == 1)
                 .map(this::toListResponse)
                 .toList();
     }
@@ -49,6 +54,10 @@ public class ActualCostReviewRouteOverrideService {
 
         ActualCost actualCost = actualCostRepository.findByIdAndIsDeletedFalse(r.actualCostId())
                 .orElseThrow(() -> RestException.notFound("Actual cost not found"));
+        ActualCostReviewRouteOverride scopeCandidate = new ActualCostReviewRouteOverride();
+        scopeCandidate.setActualCostId(r.actualCostId());
+        scopeCandidate.setDepartmentId(r.departmentId());
+        financeScopeService.assertCanApplyRouteOverride(scopeCandidate, actualCost);
 
         repository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(r.actualCostId())
                 .ifPresent(existing -> {
@@ -78,6 +87,7 @@ public class ActualCostReviewRouteOverrideService {
     public ActualCostReviewRouteOverrideDto deactivate(UUID id, UUID userId, String comment) {
         ActualCostReviewRouteOverride o = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Route override not found: " + id));
+        financeScopeService.assertCanAccessRouteOverride(o);
         if (!o.isActive()) {
             throw RestException.badRequest("Override already inactive");
         }

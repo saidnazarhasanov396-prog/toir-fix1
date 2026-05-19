@@ -6,6 +6,7 @@ import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.entity.SparePart;
 import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.entity.projects.ProcurementRequest;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -13,9 +14,12 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,25 +36,44 @@ public class ProcurementRequestService {
     private final SparePartRepository sparePartRepository;
     private final WarehouseStockRepository stockRepository;
     private final AuditBuilderService auditBuilderService;
-
-
+    private final WarehouseRepository warehouseRepository;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId) {
         List<ProcurementRequest> list;
-        if (status != null) list = repo.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(status);
-        else if (departmentId != null) list = repo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(departmentId);
-        else list = repo.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
-        return list.stream().map(ProcurementRequestDto::from).toList();
+        if (scopeAccessService.isScopeAdmin()) {
+            if (status != null) list = repo.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(status);
+            else if (departmentId != null) list = repo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(departmentId);
+            else list = repo.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+            return list.stream().map(ProcurementRequestDto::from).toList();
+        }
+
+        UUID scopedDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
+        if (status == null) {
+            if (scopedDepartmentId == null) {
+                throw forbidden();
+            }
+            list = repo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(scopedDepartmentId);
+        } else {
+            list = repo.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(status);
+        }
+        return list.stream()
+                .filter(this::canRead)
+                .map(ProcurementRequestDto::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public ProcurementRequestDto findById(UUID id) {
-        return ProcurementRequestDto.from(load(id));
+        ProcurementRequest procurement = load(id);
+        assertCanRead(procurement);
+        return ProcurementRequestDto.from(procurement);
     }
 
     @Transactional
     public ProcurementRequestDto create(ProcurementRequestRequest r) {
+        assertCanCreate(r.departmentId(), r.warehouseId());
         ProcurementRequest p = new ProcurementRequest();
         p.setNumber(nextNumber());
         p.setTitle(r.title());
@@ -84,6 +107,7 @@ public class ProcurementRequestService {
     @Transactional
     public ProcurementRequestDto addLine(UUID id, ProcurementLineRequest line) {
         ProcurementRequest p = load(id);
+        assertCanMutate(p);
         if (p.getStatus() != ProcurementRequestStatus.DRAFT) {
             throw RestException.badRequest("Can only add lines to DRAFT requests");
         }
@@ -108,6 +132,7 @@ public class ProcurementRequestService {
     @Transactional
     public ProcurementRequestDto submit(UUID id) {
         ProcurementRequest p = load(id);
+        assertCanMutate(p);
         if (p.getStatus() != ProcurementRequestStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT can be submitted");
         }
@@ -134,6 +159,7 @@ public class ProcurementRequestService {
     @Transactional
     public ProcurementRequestDto approve(UUID id) {
         ProcurementRequest p = load(id);
+        assertCanMutate(p);
         if (p.getStatus() != ProcurementRequestStatus.SUBMITTED) {
             throw RestException.badRequest("Only SUBMITTED can be approved");
         }
@@ -155,6 +181,7 @@ public class ProcurementRequestService {
     @Transactional
     public ProcurementRequestDto reject(UUID id, String reason) {
         ProcurementRequest p = load(id);
+        assertCanMutate(p);
         if (p.getStatus() == ProcurementRequestStatus.RECEIVED
                 || p.getStatus() == ProcurementRequestStatus.CANCELLED) {
             throw RestException.badRequest("Cannot reject completed procurement request");
@@ -178,6 +205,7 @@ public class ProcurementRequestService {
     @Transactional
     public ProcurementRequestDto markOrdered(UUID id) {
         ProcurementRequest p = load(id);
+        assertCanMutate(p);
         if (p.getStatus() != ProcurementRequestStatus.APPROVED) {
             throw RestException.badRequest("Only APPROVED can be marked ORDERED");
         }
@@ -199,6 +227,10 @@ public class ProcurementRequestService {
     @Transactional
     public ProcurementRequestDto markReceived(UUID id) {
         ProcurementRequest p = load(id);
+        assertCanMutate(p);
+        if (!scopeAccessService.isScopeAdmin() && p.getWarehouseId() != null) {
+            assertCanAccessWarehouse(p.getWarehouseId());
+        }
         if (p.getStatus() != ProcurementRequestStatus.ORDERED) {
             throw RestException.badRequest("Only ORDERED can be marked RECEIVED");
         }
@@ -220,6 +252,7 @@ public class ProcurementRequestService {
     @Transactional
     public ProcurementRequestDto cancel(UUID id) {
         ProcurementRequest p = load(id);
+        assertCanMutate(p);
         if (p.getStatus() == ProcurementRequestStatus.RECEIVED) {
             throw RestException.badRequest("Cannot cancel received procurement request");
         }
@@ -240,6 +273,12 @@ public class ProcurementRequestService {
     /** Сгенерировать заявку(и) на закупку из low-stock позиций (по складу). */
     @Transactional
     public List<ProcurementRequestDto> generateFromLowStock(UUID warehouseId) {
+        if (!scopeAccessService.isScopeAdmin()) {
+            if (warehouseId == null) {
+                throw forbidden();
+            }
+            assertCanAccessWarehouse(warehouseId);
+        }
         List<WarehouseStock> stocks = stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(s -> warehouseId == null || s.getWarehouseId().equals(warehouseId))
                 .filter(s -> s.getAvailable() < s.getMinQty())
@@ -317,6 +356,128 @@ public class ProcurementRequestService {
     private ProcurementRequest load(UUID id) {
         return repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Procurement request not found: " + id));
+    }
+
+    private void assertCanRead(ProcurementRequest procurement) {
+        if (!canRead(procurement)) {
+            throw forbidden();
+        }
+    }
+
+    private boolean canRead(ProcurementRequest procurement) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        if (hasConflictingDepartmentWarehouseScope(procurement)) {
+            return false;
+        }
+        return canAccessProcurementDepartment(procurement)
+                || canAccessProcurementWarehouse(procurement)
+                || canReadRequester(procurement.getRequestedBy());
+    }
+
+    private void assertCanMutate(ProcurementRequest procurement) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        if (hasConflictingDepartmentWarehouseScope(procurement)) {
+            throw forbidden();
+        }
+        if (!canAccessProcurementDepartment(procurement) && !canAccessProcurementWarehouse(procurement)) {
+            throw forbidden();
+        }
+    }
+
+    private void assertCanCreate(UUID departmentId, UUID warehouseId) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        if (hasConflictingDepartmentWarehouseScope(departmentId, warehouseId)) {
+            throw forbidden();
+        }
+        if (departmentId != null && !scopeAccessService.canAccessDepartment(departmentId)) {
+            throw forbidden();
+        }
+        if (warehouseId != null) {
+            assertCanAccessWarehouse(warehouseId);
+        }
+        if (departmentId == null && warehouseId == null) {
+            throw forbidden();
+        }
+    }
+
+    private boolean canAccessProcurementDepartment(ProcurementRequest procurement) {
+        UUID departmentId = procurement.getDepartmentId();
+        return departmentId != null && scopeAccessService.canAccessDepartment(departmentId);
+    }
+
+    private boolean canAccessProcurementWarehouse(ProcurementRequest procurement) {
+        UUID warehouseId = procurement.getWarehouseId();
+        return warehouseId != null && canAccessWarehouse(warehouseId);
+    }
+
+    private boolean hasConflictingDepartmentWarehouseScope(ProcurementRequest procurement) {
+        return hasConflictingDepartmentWarehouseScope(procurement.getDepartmentId(), procurement.getWarehouseId());
+    }
+
+    private boolean hasConflictingDepartmentWarehouseScope(UUID departmentId, UUID warehouseId) {
+        if (departmentId == null || warehouseId == null) {
+            return false;
+        }
+        return loadWarehouseOrNull(warehouseId)
+                .map(Warehouse::getDepartmentId)
+                .filter(warehouseDepartmentId -> !departmentId.equals(warehouseDepartmentId))
+                .isPresent();
+    }
+
+    private boolean canReadRequester(UUID requestedBy) {
+        if (requestedBy == null) {
+            return false;
+        }
+        UUID currentUserId = scopeAccessService.currentUserIdOrNull();
+        if (requestedBy.equals(currentUserId)) {
+            return true;
+        }
+        return scopeAccessService.currentEmployeeId()
+                .map(requestedBy::equals)
+                .orElse(false);
+    }
+
+    private boolean canAccessWarehouse(UUID warehouseId) {
+        return loadWarehouseOrNull(warehouseId)
+                .map(this::canAccessWarehouse)
+                .orElse(false);
+    }
+
+    private void assertCanAccessWarehouse(UUID warehouseId) {
+        Warehouse warehouse = loadWarehouse(warehouseId);
+        if (!canAccessWarehouse(warehouse)) {
+            throw forbidden();
+        }
+    }
+
+    private boolean canAccessWarehouse(Warehouse warehouse) {
+        return scopeAccessService.isScopeAdmin()
+                || (warehouse.getDepartmentId() != null
+                    && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId()))
+                || (warehouse.getResponsibleId() != null
+                    && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId()));
+    }
+
+    private Optional<Warehouse> loadWarehouseOrNull(UUID warehouseId) {
+        if (warehouseId == null) {
+            return Optional.empty();
+        }
+        return warehouseRepository.findByIdAndIsDeletedFalse(warehouseId);
+    }
+
+    private Warehouse loadWarehouse(UUID warehouseId) {
+        return warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
+                .orElseThrow(() -> RestException.notFound("Warehouse not found: " + warehouseId));
+    }
+
+    private AccessDeniedException forbidden() {
+        return new AccessDeniedException("Access denied by procurement scope");
     }
 
     private String nextNumber() {

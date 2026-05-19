@@ -13,7 +13,9 @@ import com.toir.controller.department.DepartmentController;
 import com.toir.controller.maintenance.MaintenanceBudgetController;
 import com.toir.controller.users.RoleController;
 import com.toir.controller.users.UserController;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
@@ -23,6 +25,7 @@ import com.toir.service.ActualCostReviewRouteOverrideService;
 import com.toir.service.ActualCostService;
 import com.toir.service.ApprovalService;
 import com.toir.service.AuditLogService;
+import com.toir.service.FinanceScopeService;
 import com.toir.service.ProcurementRequestService;
 import com.toir.service.SparePartService;
 import com.toir.service.WarehouseEquipmentItemService;
@@ -32,6 +35,7 @@ import com.toir.service.department.DepartmentService;
 import com.toir.service.maintanance.MaintenanceBudgetService;
 import com.toir.service.users.RoleService;
 import com.toir.service.users.UserService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -46,11 +50,15 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -75,6 +83,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         JwtAuthenticationFilter.class,
         JwtAuthenticationEntryPoint.class,
         RestAccessDeniedHandler.class,
+        SecurityAccessService.class,
         RbacSensitiveModulesSecurityTest.SecurityBeans.class
 })
 class RbacSensitiveModulesSecurityTest {
@@ -106,6 +115,10 @@ class RbacSensitiveModulesSecurityTest {
     @MockBean
     WorkOrderService workOrderService;
     @MockBean
+    WorkOrderRepository workOrderRepository;
+    @MockBean
+    ScopeAccessService scopeAccessService;
+    @MockBean
     SecurityScope securityScope;
     @MockBean
     ActualCostService actualCostService;
@@ -125,6 +138,8 @@ class RbacSensitiveModulesSecurityTest {
     UserRepository budgetUserRepository;
     @MockBean
     DepartmentRepository departmentRepository;
+    @MockBean
+    FinanceScopeService financeScopeService;
 
     @TestConfiguration
     static class SecurityBeans {
@@ -134,6 +149,20 @@ class RbacSensitiveModulesSecurityTest {
             properties.setAllowedOriginPatterns(List.of("http://localhost:3000"));
             return properties;
         }
+    }
+
+    @BeforeEach
+    void setUpWorkOrderPbacBypass() {
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        lenient().when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
+        lenient().when(scopeAccessService.enforceDepartmentScope(any(UUID.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(workOrderRepository.findByIdAndIsDeletedFalse(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.of(workOrderEntity(invocation.getArgument(0))));
+        lenient().when(financeScopeService.filterBudgets(any())).thenReturn(List.of());
+        lenient().when(financeScopeService.filterBudgetLines(any())).thenReturn(List.of());
+        lenient().when(financeScopeService.filterActualCosts(any())).thenReturn(List.of());
+        lenient().when(financeScopeService.filterRouteOverrides(any())).thenReturn(List.of());
     }
 
     private static Stream<String> adminOnlyEndpoints() {
@@ -217,11 +246,18 @@ class RbacSensitiveModulesSecurityTest {
     }
 
     @Test
-    @WithMockUser(authorities = "TECHNICAL_DIRECTOR")
+    @WithMockUser(authorities = {"TECHNICAL_DIRECTOR", PermissionConstants.DEPARTMENT_READ})
     void knownBusinessRoleStillCanAccessSensitiveDepartmentEndpoint() throws Exception {
         when(departmentService.findAll(any(), anyString())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/departments?page=0&size=1"))
                 .andExpect(status().isOk());
+    }
+
+    private static WorkOrder workOrderEntity(UUID id) {
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(id);
+        workOrder.setDepartmentId(UUID.randomUUID());
+        return workOrder;
     }
 }

@@ -1,0 +1,226 @@
+package com.toir.security;
+
+import com.toir.dto.actualcost.ActualCostDto;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.BudgetLine;
+import com.toir.entity.projects.MaintenanceBudget;
+import com.toir.entity.repair.RepairRequest;
+import com.toir.enums.ActualCostStatus;
+import com.toir.exception.RestException;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.projects.BudgetLineRepository;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.service.ActualCostService;
+import com.toir.service.FinanceScopeService;
+import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.security.access.AccessDeniedException;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class ActualCostPbacScopeTest {
+
+    ActualCostRepository repository;
+    AuditBuilderService auditBuilderService;
+    WorkOrderRepository workOrderRepository;
+    RepairRequestRepository repairRequestRepository;
+    BudgetLineRepository budgetLineRepository;
+    ScopeAccessService scopeAccessService;
+    ActualCostService service;
+
+    @BeforeEach
+    void setUp() {
+        repository = mock(ActualCostRepository.class);
+        auditBuilderService = mock(AuditBuilderService.class);
+        workOrderRepository = mock(WorkOrderRepository.class);
+        repairRequestRepository = mock(RepairRequestRepository.class);
+        budgetLineRepository = mock(BudgetLineRepository.class);
+        scopeAccessService = mock(ScopeAccessService.class);
+        FinanceScopeService financeScopeService = new FinanceScopeService(
+                scopeAccessService,
+                repository,
+                workOrderRepository,
+                repairRequestRepository,
+                budgetLineRepository
+        );
+        service = new ActualCostService(repository, auditBuilderService, financeScopeService);
+    }
+
+    @Test
+    void pendingListOnlyReturnsScopedActualCosts() {
+        UUID allowedDepartmentId = UUID.randomUUID();
+        UUID forbiddenDepartmentId = UUID.randomUUID();
+        UUID allowedWorkOrderId = UUID.randomUUID();
+        UUID forbiddenWorkOrderId = UUID.randomUUID();
+        ActualCost allowed = actualCost(UUID.randomUUID(), allowedWorkOrderId, null, null, ActualCostStatus.PENDING);
+        ActualCost forbidden = actualCost(UUID.randomUUID(), forbiddenWorkOrderId, null, null, ActualCostStatus.PENDING);
+        when(repository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(List.of(allowed, forbidden));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(allowedWorkOrderId))
+                .thenReturn(Optional.of(workOrder(allowedWorkOrderId, allowedDepartmentId)));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(forbiddenWorkOrderId))
+                .thenReturn(Optional.of(workOrder(forbiddenWorkOrderId, forbiddenDepartmentId)));
+        when(scopeAccessService.canAccessDepartment(allowedDepartmentId)).thenReturn(true);
+        when(scopeAccessService.canAccessDepartment(forbiddenDepartmentId)).thenReturn(false);
+
+        var result = service.findPending();
+
+        assertThat(result).extracting(ActualCostDto::id).containsExactly(allowed.getId());
+    }
+
+    @Test
+    void createValidatesLinkedWorkOrderScope() {
+        UUID departmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, departmentId)));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.create(dto(null, workOrderId, null, null)))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verify(repository, never()).save(any(ActualCost.class));
+    }
+
+    @Test
+    void createWithoutScopeResolvableLinkDeniedForNonAdmin() {
+        assertThatThrownBy(() -> service.create(dto(null, null, null, null)))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verify(repository, never()).save(any(ActualCost.class));
+    }
+
+    @Test
+    void rejectForbiddenActualCostReturns403BeforeStatusChange() {
+        UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        ActualCost actualCost = actualCost(id, workOrderId, null, null, ActualCostStatus.PENDING);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, departmentId)));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.review(id, false, UUID.randomUUID(), "Rejected"))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verify(repository, never()).save(actualCost);
+    }
+
+    @Test
+    void missingActualCostRemains404() {
+        UUID id = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.review(id, true, UUID.randomUUID(), null))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Actual cost not found");
+    }
+
+    @Test
+    void conflictingLinkedDepartmentsDenyNonAdmin() {
+        UUID id = UUID.randomUUID();
+        UUID workOrderDepartmentId = UUID.randomUUID();
+        UUID repairDepartmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        ActualCost actualCost = actualCost(id, workOrderId, repairRequestId, null, ActualCostStatus.PENDING);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, workOrderDepartmentId)));
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, repairDepartmentId)));
+        when(scopeAccessService.canAccessDepartment(workOrderDepartmentId)).thenReturn(true);
+        when(scopeAccessService.canAccessDepartment(repairDepartmentId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.review(id, true, UUID.randomUUID(), null))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void budgetLineScopeAllowsActualCostCreate() {
+        UUID departmentId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId))
+                .thenReturn(Optional.of(budgetLine(budgetLineId, departmentId)));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+        when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> {
+            ActualCost saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        var result = service.create(dto(null, null, null, budgetLineId));
+
+        assertThat(result.budgetLineId()).isEqualTo(budgetLineId);
+    }
+
+    private ActualCost actualCost(UUID id, UUID workOrderId, UUID repairRequestId, UUID budgetLineId, ActualCostStatus status) {
+        ActualCost actualCost = new ActualCost();
+        actualCost.setId(id);
+        actualCost.setWorkOrderId(workOrderId);
+        actualCost.setRepairRequestId(repairRequestId);
+        actualCost.setBudgetLineId(budgetLineId);
+        actualCost.setCostCategoryId(UUID.randomUUID());
+        actualCost.setStatus(status);
+        actualCost.setAmount(100);
+        actualCost.setCostDate(Instant.parse("2026-05-01T00:00:00Z"));
+        return actualCost;
+    }
+
+    private ActualCostDto dto(UUID id, UUID workOrderId, UUID repairRequestId, UUID budgetLineId) {
+        return new ActualCostDto(
+                id,
+                workOrderId,
+                repairRequestId,
+                null,
+                budgetLineId,
+                UUID.randomUUID(),
+                ActualCostStatus.PENDING,
+                null,
+                null,
+                null,
+                100,
+                Instant.parse("2026-05-01T00:00:00Z"),
+                null
+        );
+    }
+
+    private WorkOrder workOrder(UUID id, UUID departmentId) {
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(id);
+        workOrder.setDepartmentId(departmentId);
+        return workOrder;
+    }
+
+    private RepairRequest repairRequest(UUID id, UUID departmentId) {
+        RepairRequest repairRequest = new RepairRequest();
+        repairRequest.setId(id);
+        repairRequest.setDepartmentId(departmentId);
+        return repairRequest;
+    }
+
+    private BudgetLine budgetLine(UUID id, UUID departmentId) {
+        MaintenanceBudget budget = new MaintenanceBudget();
+        budget.setId(UUID.randomUUID());
+        budget.setDepartmentId(departmentId);
+        BudgetLine line = new BudgetLine();
+        line.setId(id);
+        line.setBudget(budget);
+        return line;
+    }
+}
