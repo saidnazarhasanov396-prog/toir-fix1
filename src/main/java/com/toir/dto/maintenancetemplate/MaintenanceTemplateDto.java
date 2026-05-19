@@ -19,12 +19,15 @@ public record MaintenanceTemplateDto(
         boolean active,
         List<MaintenanceOperationDto> operations
 ) {
-    private static EquipmentTypeService equipmentTypeService;
-    public static MaintenanceTemplateDto from(MaintenanceTemplate t) {
+    public static MaintenanceTemplateDto from(MaintenanceTemplate t, String equipmentTypeName) {
         return new MaintenanceTemplateDto(
                 t.getId(), t.getCode(), t.getName(), t.getDescription(),
-                t.getEquipmentTypeId(), equipmentTypeService.findById(t.getEquipmentTypeId()).name(), t.getMaintenanceKind(), t.getNormativeLaborHours(), t.isActive(),
+                t.getEquipmentTypeId(), equipmentTypeName, t.getMaintenanceKind(), t.getNormativeLaborHours(), t.isActive(),
                 t.getOperations().stream().map(MaintenanceOperationDto::from).toList()
         );
+    }
+
+    public static MaintenanceTemplateDto from(MaintenanceTemplate t) {
+        return from(t, null);
     }
 }
