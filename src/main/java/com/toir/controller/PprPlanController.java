@@ -34,6 +34,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PprPlanController {
 
+    private static final String PPR_PLAN_READ_AUTH =
+            "hasAnyAuthority('read','PPR_PLAN_READ','PPR_PLAN_WRITE','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_WRITE_AUTH =
+            "hasAnyAuthority('PPR_PLAN_WRITE','SYSTEM_ADMIN','*')";
+
     private final PprPlanService service;
     private final PprGeneratorService generatorService;
     private final PprPlanRepository planRepository;
@@ -41,7 +46,7 @@ public class PprPlanController {
     private final ScopeAccessService scopeAccessService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_PLAN_READ')")
+    @PreAuthorize(PPR_PLAN_READ_AUTH)
     public ResponseEntity<Page<PprPlanDto>> list(
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
@@ -53,7 +58,7 @@ public class PprPlanController {
     }
 
     @GetMapping("/stats")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_PLAN_READ')")
+    @PreAuthorize(PPR_PLAN_READ_AUTH)
     public ResponseEntity<PprPlanStatsResponse> stats(
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
@@ -63,21 +68,21 @@ public class PprPlanController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_PLAN_READ')")
+    @PreAuthorize(PPR_PLAN_READ_AUTH)
     public ResponseEntity<PprPlanDto> get(@PathVariable UUID id) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(service.findById(id));
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_PLAN_CREATE')")
+    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
     public ResponseEntity<PprPlanDto> create(@Valid @RequestBody PprPlanRequest request) {
         assertCanAccessRequestedDepartment(request.departmentId());
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
     @PatchMapping("/{id}")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_PLAN_UPDATE')")
+    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
     public ResponseEntity<PprPlanDto> update(@PathVariable UUID id, @Valid @RequestBody PprPlanRequest request) {
         assertCanAccessPlan(planOrThrow(id));
         assertCanAccessRequestedDepartment(request.departmentId());
@@ -85,7 +90,7 @@ public class PprPlanController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_PLAN_DELETE')")
+    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         assertCanAccessPlan(planOrThrow(id));
         service.delete(id);
@@ -93,56 +98,56 @@ public class PprPlanController {
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_PLAN_APPROVE')")
+    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
     public ResponseEntity<PprPlanDto> approve(@PathVariable UUID id, @RequestParam UUID approverId) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(service.approve(id, approverId));
     }
 
     @PostMapping("/{id}/generate")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_PLAN_GENERATE')")
+    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
     public ResponseEntity<PprGeneratorService.GenerationResult> generate(@PathVariable UUID id) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(generatorService.generateForPlan(id));
     }
 
     @GetMapping("/{id}/tasks")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_TASK_READ')")
+    @PreAuthorize(PPR_PLAN_READ_AUTH)
     public ResponseEntity<Page<PprTaskDto>> tasks(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(PaginationUtils.page(service.findTasksByPlan(id), page, size));
     }
 
     @PostMapping("/{id}/tasks")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_TASK_CREATE')")
+    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
     public ResponseEntity<PprTaskDto> addTask(@PathVariable UUID id, @Valid @RequestBody PprTaskRequest request) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addTask(id, request));
     }
 
     @PostMapping("/tasks/{taskId}/postpone")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_TASK_POSTPONE')")
+    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
     public ResponseEntity<PprTaskDto> postponeTask(@PathVariable UUID taskId, @Valid @RequestBody PostponeTaskRequest request) {
         assertCanAccessTask(taskOrThrow(taskId));
         return ResponseEntity.ok(service.postponeTask(taskId, request));
     }
 
     @PostMapping("/tasks/{taskId}/approve")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_TASK_APPROVE')")
+    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
     public ResponseEntity<PprTaskDto> approveTask(@PathVariable UUID taskId) {
         assertCanAccessTask(taskOrThrow(taskId));
         return ResponseEntity.ok(service.approveTask(taskId));
     }
 
     @PostMapping("/tasks/{taskId}/start")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_TASK_START')")
+    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
     public ResponseEntity<PprTaskDto> startTask(@PathVariable UUID taskId) {
         assertCanAccessTask(taskOrThrow(taskId));
         return ResponseEntity.ok(service.startTask(taskId));
     }
 
     @PostMapping("/tasks/{taskId}/complete")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_TASK_COMPLETE')")
+    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
     public ResponseEntity<PprTaskDto> completeTask(
             @PathVariable UUID taskId,
             @RequestParam(required = false) Double actualLaborHours
@@ -152,7 +157,7 @@ public class PprPlanController {
     }
 
     @PostMapping("/tasks/{taskId}/cancel")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PPR_TASK_CANCEL')")
+    @PreAuthorize(PPR_PLAN_WRITE_AUTH)
     public ResponseEntity<PprTaskDto> cancelTask(
             @PathVariable UUID taskId,
             @RequestParam(required = false) String reason

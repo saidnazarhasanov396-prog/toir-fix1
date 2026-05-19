@@ -36,4 +36,24 @@ public interface RepairCampaignRepository extends JpaRepository<RepairCampaign, 
 
     @Query(value = "SELECT * FROM repair_campaigns WHERE department_id = :departmentId AND year = :year AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<RepairCampaign> findAllByDepartmentIdAndYearAndIsDeletedFalseOrderByStartDateAsc(@Param("departmentId") UUID departmentId, @Param("year") int year);
+
+    @Query(value = """
+            SELECT * FROM repair_campaigns 
+            WHERE is_deleted = false 
+              AND (:year IS NULL OR year = :year)
+              AND (:status IS NULL OR status = :status)
+              AND (
+                :searchPattern IS NULL 
+                OR lower(coalesce(code, '')) LIKE :searchPattern 
+                OR lower(coalesce(name, '')) LIKE :searchPattern
+                OR lower(coalesce(scope, '')) LIKE :searchPattern
+                OR lower(coalesce(notes, '')) LIKE :searchPattern
+              )
+            ORDER BY start_date ASC
+            """, nativeQuery = true)
+    List<RepairCampaign> findAllFiltered(
+            @Param("year") Integer year, 
+            @Param("status") String status,
+            @Param("searchPattern") String searchPattern
+    );
 }

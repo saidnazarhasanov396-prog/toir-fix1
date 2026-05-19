@@ -13,6 +13,7 @@ public record MaintenanceRegulationDto(
         String name,
         String description,
         UUID equipmentTypeId,
+        String equipmentTypeName,
         MaintenanceKind maintenanceKind,
         double normativeLaborHours,
         boolean active,
@@ -23,13 +24,17 @@ public record MaintenanceRegulationDto(
         MeterType triggerMeterType,
         Double triggerMeterInterval
 ) {
-    public static MaintenanceRegulationDto from(MaintenanceRegulation r) {
+    public static MaintenanceRegulationDto from(MaintenanceRegulation r, String equipmentTypeName) {
         return new MaintenanceRegulationDto(
                 r.getId(), r.getCode(), r.getName(), r.getDescription(),
-                r.getEquipmentTypeId(), r.getMaintenanceKind(), r.getNormativeLaborHours(),
+                r.getEquipmentTypeId(), equipmentTypeName, r.getMaintenanceKind(), r.getNormativeLaborHours(),
                 r.isActive(), r.getPeriodicityUnit(), r.getPeriodicityValue(),
                 r.getToleranceDays(), r.isRequiresShutdown(),
                 r.getTriggerMeterType(), r.getTriggerMeterInterval()
         );
+    }
+
+    public static MaintenanceRegulationDto from(MaintenanceRegulation r) {
+        return from(r, null);
     }
 }

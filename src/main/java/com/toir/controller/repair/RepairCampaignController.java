@@ -2,6 +2,7 @@ package com.toir.controller.repair;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
+import com.toir.enums.RepairCampaignStatus;
 import com.toir.service.repair.RepairCampaignService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,8 +25,8 @@ public class RepairCampaignController {
     private final RepairCampaignService service;
 
     @GetMapping
-    public ResponseEntity<Page<RepairCampaignDto>> list(@RequestParam(required = false) Integer year, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(year != null ? service.findByYear(year) : service.findAll(), page, size));
+    public ResponseEntity<Page<RepairCampaignDto>> list(@RequestParam(required = false) String search, @RequestParam(required = false) Integer year, @RequestParam(required = false) RepairCampaignStatus status , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAllFiltered(search, year, status), page, size));
     }
 
     @GetMapping("/{id}")

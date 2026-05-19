@@ -157,4 +157,35 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     boolean existsActiveReplacementAssignment(@Param("replacementEquipmentId") UUID replacementEquipmentId,
                                               @Param("workType") WorkType workType,
                                               @Param("finalStatuses") Collection<WorkOrderStatus> finalStatuses);
+
+    @Query(nativeQuery = true, value = """
+        select
+            count(w.id) as totalOrders,
+            count(w.id) filter (where w.status in ('DRAFT', 'PLANNED', 'APPROVED', 'IN_PROGRESS', 'SUSPENDED')) as openOrders,
+            count(w.id) filter (where w.status in ('COMPLETED', 'CLOSED')) as completedOrders,
+            count(w.id) filter (
+                where w.status not in ('COMPLETED', 'CLOSED', 'CANCELLED')
+                  and w.end_planned_at is not null
+                  and w.end_planned_at < current_timestamp
+            ) as overdueOrders
+        from work_orders w
+        where w.is_deleted = false
+          and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
+          and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+          and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
+          and (
+              nullif(trim(cast(:search as varchar)), '') is null
+              or lower(coalesce(to_jsonb(w)->>'number', '')) like lower(concat('%', cast(:search as varchar), '%'))
+              or lower(coalesce(to_jsonb(w)->>'title', '')) like lower(concat('%', cast(:search as varchar), '%'))
+              or lower(coalesce(to_jsonb(w)->>'summary', '')) like lower(concat('%', cast(:search as varchar), '%'))
+              or lower(coalesce(to_jsonb(w)->>'result', '')) like lower(concat('%', cast(:search as varchar), '%'))
+              or lower(coalesce(to_jsonb(w)->>'closure_notes', '')) like lower(concat('%', cast(:search as varchar), '%'))
+          )
+    """)
+    WorkOrderStatsProjection getWorkOrderStats(
+            @Param("status") String status,
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId,
+            @Param("search") String search
+    );
 }

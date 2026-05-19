@@ -35,6 +35,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -590,5 +591,21 @@ class WorkOrderControllerContractTest {
                 "HIGH",
                 Instant.now()
         );
+    }
+
+    @Test
+    void statsShouldReturn200AndStatsPayload() throws Exception {
+        com.toir.dto.workorder.WorkOrderStatsResponse statsResponse = new com.toir.dto.workorder.WorkOrderStatsResponse(10, 5, 4, 1);
+        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.getStats(isNull(), isNull(), isNull(), isNull())).thenReturn(statsResponse);
+
+        mockMvc.perform(get("/api/v1/work-orders/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalOrders").value(10))
+                .andExpect(jsonPath("$.openOrders").value(5))
+                .andExpect(jsonPath("$.completedOrders").value(4))
+                .andExpect(jsonPath("$.overdueOrders").value(1));
+
+        verify(service).getStats(null, null, null, null);
     }
 }

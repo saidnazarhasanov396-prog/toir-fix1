@@ -24,8 +24,10 @@ public class PlannedShutdownService {
 
 
     @Transactional(readOnly = true)
-    public List<PlannedShutdownDto> findByDepartment(UUID departmentId) {
-        return repository.findAllByDepartmentIdAndIsDeletedFalseOrderByStartAtDesc(departmentId).stream()
+    public List<PlannedShutdownDto> findAllFiltered(UUID departmentId, PlanStatus status, String search) {
+        String statusStr = status != null ? status.name() : null;
+        String searchPattern = (search != null && !search.isBlank()) ? "%" + search.trim().toLowerCase() + "%" : null;
+        return repository.findAllFiltered(departmentId, statusStr, searchPattern).stream()
                 .map(PlannedShutdownDto::from).toList();
     }
 

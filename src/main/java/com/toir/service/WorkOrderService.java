@@ -103,6 +103,19 @@ public class WorkOrderService {
     }
 
     @Transactional(readOnly = true)
+    public WorkOrderStatsResponse getStats(WorkOrderStatus status, UUID departmentId, UUID equipmentId, String search) {
+        String statusStr = status == null ? null : status.name();
+        String normalizedSearch = normalizeSearch(search);
+        var stats = repository.getWorkOrderStats(statusStr, departmentId, equipmentId, normalizedSearch);
+        return new WorkOrderStatsResponse(
+                stats.getTotalOrders() == null ? 0 : stats.getTotalOrders(),
+                stats.getOpenOrders() == null ? 0 : stats.getOpenOrders(),
+                stats.getCompletedOrders() == null ? 0 : stats.getCompletedOrders(),
+                stats.getOverdueOrders() == null ? 0 : stats.getOverdueOrders()
+        );
+    }
+
+    @Transactional(readOnly = true)
     public Page<WorkOrderDto> mobileFeed(UUID departmentId, UUID equipmentId, String search, int page, int pageSize) {
         Page<WorkOrder> resultPage = repository.searchMobileFeed(
                 departmentId,

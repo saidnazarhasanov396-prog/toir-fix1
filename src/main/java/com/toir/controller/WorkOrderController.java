@@ -3,6 +3,7 @@ import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
+import com.toir.dto.workorder.WorkOrderStatsResponse;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
@@ -44,6 +45,17 @@ public class WorkOrderController {
             @RequestParam(required = false) String search
     ) {
         return ResponseEntity.ok(service.search(status, scopedDepartment(departmentId), equipmentId, page, size, search));
+    }
+
+    @GetMapping("/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_READ')")
+    public ResponseEntity<WorkOrderStatsResponse> stats(
+            @RequestParam(required = false) WorkOrderStatus status,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String search
+    ) {
+        return ResponseEntity.ok(service.getStats(status, scopedDepartment(departmentId), equipmentId, search));
     }
 
     @GetMapping("/mobile-feed")

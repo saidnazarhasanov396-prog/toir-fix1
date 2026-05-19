@@ -57,4 +57,30 @@ public interface MaintenanceTemplateRepository extends JpaRepository<Maintenance
 """)
     List<MaintenanceTemplate> findAllByIsDeletedFalseAndMaintenanceKindAndSearch(String search, MaintenanceKind type);
 
+    @Query(value = """
+            WITH template_stats AS (
+                SELECT 
+                    mt.id,
+                    (SELECT COUNT(*) FROM maintenance_operations mo WHERE mo.template_id = mt.id AND mo.is_deleted = false) AS op_count
+                FROM maintenance_templates mt
+                WHERE mt.is_deleted = false
+                  AND (
+                      :search IS NULL OR :search = '' OR 
+                      LOWER(mt.code) LIKE LOWER(:search) OR 
+                      LOWER(mt.description) LIKE LOWER(:search) OR 
+                      LOWER(mt.name) LIKE LOWER(:search)
+                  )
+                  AND (:type IS NULL OR :type = '' OR mt.maintenance_kind = :type)
+            )
+            SELECT 
+                COUNT(*) AS totalTemplates,
+                COUNT(CASE WHEN op_count > 0 THEN 1 END) AS withOperations,
+                COALESCE(SUM(op_count), 0) AS totalOperations,
+                COALESCE(AVG(op_count), 0.0) AS avgOperationsPerTemplate
+            FROM template_stats
+            """, nativeQuery = true)
+    MaintenanceTemplateStatsProjection getTemplateStats(
+            @Param("search") String search,
+            @Param("type") String type
+    );
 }

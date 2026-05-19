@@ -3,14 +3,18 @@ package com.toir.service.maintanance;
 import com.toir.dto.maintenancetemplate.MaintenanceOperationDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
+import com.toir.dto.maintenancetemplate.MaintenanceTemplateStatsResponse;
 import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.MaintenanceKind;
 import com.toir.exception.RestException;
+import com.toir.entity.equipment.EquipmentType;
+import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
+import com.toir.repository.maintenance.MaintenanceTemplateStatsProjection;
 import com.toir.service.SparePartService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +25,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Year;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +37,7 @@ public class MaintenanceTemplateService {
 
     private final MaintenanceTemplateRepository repository;
     private final MaintenanceOperationRepository operationRepository;
+    private final EquipmentTypeRepository equipmentTypeRepository;
     private final SparePartService sparePartService;
     private final AuditBuilderService auditBuilderService;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
@@ -37,15 +46,29 @@ public class MaintenanceTemplateService {
 
 
     @Transactional(readOnly = true)
+    public MaintenanceTemplateStatsResponse getStats(String search, MaintenanceKind type) {
+        String searchPattern = search != null && !search.isBlank() ? sparePartService.toSearchPattern(search) : null;
+        String typeStr = type != null ? type.name() : null;
+        MaintenanceTemplateStatsProjection stats = repository.getTemplateStats(searchPattern, typeStr);
+        if (stats == null) {
+            return new MaintenanceTemplateStatsResponse(0, 0, 0, 0.0f);
+        }
+        return new MaintenanceTemplateStatsResponse(
+                stats.getTotalTemplates() != null ? stats.getTotalTemplates() : 0L,
+                stats.getWithOperations() != null ? stats.getWithOperations() : 0L,
+                stats.getTotalOperations() != null ? stats.getTotalOperations() : 0L,
+                stats.getAvgOperationsPerTemplate() != null ? stats.getAvgOperationsPerTemplate() : 0.0f
+        );
+    }
+
+    @Transactional(readOnly = true)
     public List<MaintenanceTemplateDto> findAll(String search, MaintenanceKind type) {
-        return repository.findAllByIsDeletedFalseAndMaintenanceKindAndSearch(sparePartService.toSearchPattern(search), type).stream()
-                .map(MaintenanceTemplateDto::from)
-                .toList();
+        return toDtoList(repository.findAllByIsDeletedFalseAndMaintenanceKindAndSearch(sparePartService.toSearchPattern(search), type));
     }
 
     @Transactional(readOnly = true)
     public MaintenanceTemplateDto findById(UUID id) {
-        return MaintenanceTemplateDto.from(getOrThrow(id));
+        return toDto(getOrThrow(id));
     }
 
     @Transactional
@@ -62,7 +85,7 @@ public class MaintenanceTemplateService {
                 null,
                 saved);
 
-        return MaintenanceTemplateDto.from(saved);
+        return toDto(saved);
     }
 
     @Transactional
@@ -82,7 +105,7 @@ public class MaintenanceTemplateService {
                 t,
                 saved);
 
-        return MaintenanceTemplateDto.from(t);
+        return toDto(t);
     }
 
     @Transactional
@@ -195,5 +218,29 @@ public class MaintenanceTemplateService {
                 || (normalized.contains("maintenance_templates")
                 && normalized.contains("duplicate")
                 && normalized.contains("code"));
+    }
+
+    private MaintenanceTemplateDto toDto(MaintenanceTemplate t) {
+        if (t == null) return null;
+        if (t.getEquipmentTypeId() == null) {
+            return MaintenanceTemplateDto.from(t, null);
+        }
+        String equipmentTypeName = equipmentTypeRepository.findByIdAndIsDeletedFalse(t.getEquipmentTypeId())
+                .map(EquipmentType::getName)
+                .orElse(null);
+        return MaintenanceTemplateDto.from(t, equipmentTypeName);
+    }
+
+    private List<MaintenanceTemplateDto> toDtoList(List<MaintenanceTemplate> templates) {
+        if (templates == null || templates.isEmpty()) return List.of();
+        Set<UUID> eqTypeIds = templates.stream()
+                .map(MaintenanceTemplate::getEquipmentTypeId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> eqTypeNames = equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(eqTypeIds).stream()
+                .collect(Collectors.toMap(EquipmentType::getId, EquipmentType::getName));
+        return templates.stream()
+                .map(t -> MaintenanceTemplateDto.from(t, eqTypeNames.getOrDefault(t.getEquipmentTypeId(), null)))
+                .toList();
     }
 }

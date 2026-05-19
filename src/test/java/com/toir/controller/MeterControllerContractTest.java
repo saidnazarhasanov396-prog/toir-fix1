@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -68,5 +69,20 @@ class MeterControllerContractTest {
         mockMvc.perform(get("/api/v1/meters/triggers"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("equipmentId or equipmentSearch is required"));
+    }
+
+    @Test
+    void statsShouldReturn200AndStatsPayload() throws Exception {
+        com.toir.dto.meter.MeterStatsResponse statsResponse = new com.toir.dto.meter.MeterStatsResponse(20, 15, 200, 3);
+        when(service.getStats(isNull(), isNull(), isNull(), isNull())).thenReturn(statsResponse);
+
+        mockMvc.perform(get("/api/v1/meters/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalMeters").value(20))
+                .andExpect(jsonPath("$.activeMeters").value(15))
+                .andExpect(jsonPath("$.totalReadings").value(200))
+                .andExpect(jsonPath("$.dueTriggers").value(3));
+
+        verify(service).getStats(null, null, null, null);
     }
 }

@@ -6,6 +6,8 @@ import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
+import com.toir.entity.equipment.EquipmentType;
+import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -18,13 +20,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Year;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class MaintenanceRegulationService {
 
     private final MaintenanceRegulationRepository repository;
+    private final EquipmentTypeRepository equipmentTypeRepository;
     private final AuditBuilderService auditBuilderService;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
     private static final String CLIENT_CODE_REJECT_MESSAGE =
@@ -33,7 +40,7 @@ public class MaintenanceRegulationService {
 
     @Transactional(readOnly = true)
     public List<MaintenanceRegulationDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(MaintenanceRegulationDto::from).toList();
+        return toDtoList(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc());
     }
 
     @Transactional(readOnly = true)
@@ -42,12 +49,12 @@ public class MaintenanceRegulationService {
         return repository.searchPaginated(
                 search,
                 pageable
-        ).map(MaintenanceRegulationDto::from);
+        ).map(this::toDto);
     }
 
     @Transactional(readOnly = true)
     public MaintenanceRegulationDto findById(UUID id) {
-        return MaintenanceRegulationDto.from(getOrThrow(id));
+        return toDto(getOrThrow(id));
     }
 
 
@@ -70,7 +77,7 @@ public class MaintenanceRegulationService {
                 null,
                 saved);
 
-        return MaintenanceRegulationDto.from(saved);
+        return toDto(saved);
     }
 
     @Transactional
@@ -90,7 +97,7 @@ public class MaintenanceRegulationService {
                 entity,
                 save);
 
-        return MaintenanceRegulationDto.from(entity);
+        return toDto(entity);
     }
 
     @Transactional
@@ -179,5 +186,29 @@ public class MaintenanceRegulationService {
                 || (normalized.contains("maintenance_regulations")
                 && normalized.contains("duplicate")
                 && normalized.contains("code"));
+    }
+
+    private MaintenanceRegulationDto toDto(MaintenanceRegulation r) {
+        if (r == null) return null;
+        if (r.getEquipmentTypeId() == null) {
+            return MaintenanceRegulationDto.from(r, null);
+        }
+        String equipmentTypeName = equipmentTypeRepository.findByIdAndIsDeletedFalse(r.getEquipmentTypeId())
+                .map(EquipmentType::getName)
+                .orElse(null);
+        return MaintenanceRegulationDto.from(r, equipmentTypeName);
+    }
+
+    private List<MaintenanceRegulationDto> toDtoList(List<MaintenanceRegulation> regulations) {
+        if (regulations == null || regulations.isEmpty()) return List.of();
+        Set<UUID> eqTypeIds = regulations.stream()
+                .map(MaintenanceRegulation::getEquipmentTypeId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> eqTypeNames = equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(eqTypeIds).stream()
+                .collect(Collectors.toMap(EquipmentType::getId, EquipmentType::getName));
+        return regulations.stream()
+                .map(r -> MaintenanceRegulationDto.from(r, eqTypeNames.getOrDefault(r.getEquipmentTypeId(), null)))
+                .toList();
     }
 }
