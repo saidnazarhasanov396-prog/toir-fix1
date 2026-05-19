@@ -3,8 +3,13 @@ package com.toir.service;
 import com.toir.dto.knowledge.KnowledgeArticleDto;
 import com.toir.dto.knowledge.KnowledgeStatsResponse;
 import com.toir.entity.KnowledgeArticle;
+import com.toir.entity.defects.Defect;
 import com.toir.exception.RestException;
 import com.toir.repository.KnowledgeArticleRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,6 +28,10 @@ import java.util.UUID;
 public class KnowledgeService {
 
     private final KnowledgeArticleRepository repository;
+    private final EquipmentRepository equipmentRepository;
+    private final DefectRepository defectRepository;
+    private final WorkOrderRepository workOrderRepository;
+    private final ScopeAccessService scopeAccessService;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
 
     @Transactional(readOnly = true)
@@ -70,6 +79,7 @@ public class KnowledgeService {
 
     @Transactional
     public KnowledgeArticle create(KnowledgeArticle article) {
+        validateLinkedScope(article);
         if (article.getKind() == null) {
             article.setKind("LESSON_LEARNED");
         }
@@ -81,6 +91,8 @@ public class KnowledgeService {
     public KnowledgeArticle update(UUID id, KnowledgeArticle patch) {
         KnowledgeArticle existing = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Article not found: " + id));
+        validateLinkedScope(existing);
+        validateLinkedScope(patch);
         existing.setTitle(patch.getTitle());
         existing.setKind(patch.getKind() != null ? patch.getKind() : existing.getKind());
         existing.setEquipmentTypeId(patch.getEquipmentTypeId());
@@ -99,8 +111,35 @@ public class KnowledgeService {
     public void delete(UUID id) {
         KnowledgeArticle entity = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Article not found: " + id));
+        validateLinkedScope(entity);
         entity.setDeleted(true);
         repository.save(entity);
+    }
+
+    private void validateLinkedScope(KnowledgeArticle article) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        if (article.getEquipmentId() != null) {
+            UUID departmentId = equipmentRepository.findByIdAndIsDeletedFalse(article.getEquipmentId())
+                    .orElseThrow(() -> RestException.notFound("Equipment not found: " + article.getEquipmentId()))
+                    .getDepartmentId();
+            scopeAccessService.assertCanAccessDepartment(departmentId);
+        }
+        if (article.getDefectId() != null) {
+            Defect defect = defectRepository.findByIdAndIsDeletedFalse(article.getDefectId())
+                    .orElseThrow(() -> RestException.notFound("Defect not found: " + article.getDefectId()));
+            UUID departmentId = equipmentRepository.findByIdAndIsDeletedFalse(defect.getEquipmentId())
+                    .orElseThrow(() -> RestException.notFound("Equipment not found: " + defect.getEquipmentId()))
+                    .getDepartmentId();
+            scopeAccessService.assertCanAccessDepartment(departmentId);
+        }
+        if (article.getWorkOrderId() != null) {
+            UUID departmentId = workOrderRepository.findByIdAndIsDeletedFalse(article.getWorkOrderId())
+                    .orElseThrow(() -> RestException.notFound("Work order not found: " + article.getWorkOrderId()))
+                    .getDepartmentId();
+            scopeAccessService.assertCanAccessDepartment(departmentId);
+        }
     }
 
     private List<String> normalizeTags(List<String> tags) {

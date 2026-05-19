@@ -4,15 +4,18 @@ import com.toir.controller.ParetoController.ParetoItem;
 import com.toir.controller.ParetoController.TopEquipmentItem;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,13 +38,16 @@ public class ParetoService {
     private final DowntimeEventRepository downtimeRepository;
     private final WorkOrderRepository workOrderRepository;
     private final EquipmentRepository equipmentRepository;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public Page<ParetoItem> downtimeCauses(Instant from, Instant to, int page, int size) {
+        UUID departmentId = analyticsDepartmentScope();
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
         List<DowntimeEvent> events = downtimeRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(e -> !e.getStartAt().isBefore(start) && !e.getStartAt().isAfter(end))
+                .filter(e -> departmentId == null || departmentId.equals(e.getDepartmentId()))
                 .toList();
 
         Map<String, Double> byType = new HashMap<>();
@@ -56,10 +62,14 @@ public class ParetoService {
 
     @Transactional(readOnly = true)
     public Page<ParetoItem> defectRootCauses(Instant from, Instant to, int page, int size) {
+        UUID departmentId = analyticsDepartmentScope();
+        Map<UUID, Equipment> equipmentById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(java.util.stream.Collectors.toMap(Equipment::getId, e -> e));
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
         List<Defect> defects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> !d.getDetectedAt().isBefore(start) && !d.getDetectedAt().isAfter(end))
+                .filter(d -> departmentId == null || isEquipmentInDepartment(equipmentById, d.getEquipmentId(), departmentId))
                 .toList();
         Map<String, Double> byCause = new HashMap<>();
         for (Defect d : defects) {
@@ -73,18 +83,23 @@ public class ParetoService {
 
     @Transactional(readOnly = true)
     public Page<TopEquipmentItem> topProblemEquipment(int limit, Instant from, Instant to, int page, int size) {
+        UUID departmentId = analyticsDepartmentScope();
+        Map<UUID, Equipment> equipmentById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(java.util.stream.Collectors.toMap(Equipment::getId, e -> e));
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
 
         Map<UUID, Integer> failuresByEq = new HashMap<>();
         for (Defect d : defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (d.getDetectedAt().isBefore(start) || d.getDetectedAt().isAfter(end)) continue;
+            if (departmentId != null && !isEquipmentInDepartment(equipmentById, d.getEquipmentId(), departmentId)) continue;
             failuresByEq.merge(d.getEquipmentId(), 1, Integer::sum);
         }
 
         Map<UUID, Long> downtimeByEq = new HashMap<>();
         for (DowntimeEvent ev : downtimeRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (ev.getStartAt().isBefore(start) || ev.getStartAt().isAfter(end)) continue;
+            if (departmentId != null && !departmentId.equals(ev.getDepartmentId())) continue;
             long minutes = eventDurationMinutes(ev);
             if (minutes <= 0) continue;
             downtimeByEq.merge(ev.getEquipmentId(), minutes, Long::sum);
@@ -94,6 +109,7 @@ public class ParetoService {
         for (WorkOrder wo : workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (wo.getStatus() == WorkOrderStatus.COMPLETED || wo.getStatus() == WorkOrderStatus.CANCELLED) continue;
             if (wo.getEquipmentId() == null) continue;
+            if (departmentId != null && !departmentId.equals(wo.getDepartmentId())) continue;
             openWorkOrdersByEq.merge(wo.getEquipmentId(), 1, Integer::sum);
         }
 
@@ -143,5 +159,21 @@ public class ParetoService {
             result.add(new ParetoItem(e.getKey(), e.getValue(), pct));
         }
         return result;
+    }
+
+    private UUID analyticsDepartmentScope() {
+        if (scopeAccessService.isScopeAdmin()) {
+            return null;
+        }
+        UUID currentDepartmentId = scopeAccessService.currentDepartmentIdOrNull();
+        if (currentDepartmentId == null) {
+            throw new AccessDeniedException("Access denied by data scope");
+        }
+        return currentDepartmentId;
+    }
+
+    private boolean isEquipmentInDepartment(Map<UUID, Equipment> equipmentById, UUID equipmentId, UUID departmentId) {
+        Equipment equipment = equipmentById.get(equipmentId);
+        return equipment != null && departmentId.equals(equipment.getDepartmentId());
     }
 }

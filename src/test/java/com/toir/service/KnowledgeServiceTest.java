@@ -4,6 +4,11 @@ import com.toir.dto.knowledge.KnowledgeArticleDto;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.exception.RestException;
 import com.toir.repository.KnowledgeArticleRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -23,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,8 +39,25 @@ class KnowledgeServiceTest {
     @Mock
     KnowledgeArticleRepository repository;
 
+    @Mock
+    EquipmentRepository equipmentRepository;
+
+    @Mock
+    DefectRepository defectRepository;
+
+    @Mock
+    WorkOrderRepository workOrderRepository;
+
+    @Mock
+    ScopeAccessService scopeAccessService;
+
     @InjectMocks
     KnowledgeService service;
+
+    @BeforeEach
+    void setUpScope() {
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+    }
 
     @Test
     void listWithNoFiltersReturnsEmptyPage() {
