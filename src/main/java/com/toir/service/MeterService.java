@@ -1,9 +1,6 @@
 package com.toir.service;
 
-import com.toir.dto.meter.EquipmentMeterDto;
-import com.toir.dto.meter.EquipmentMeterRequest;
-import com.toir.dto.meter.MeterReadingDto;
-import com.toir.dto.meter.MeterReadingRequest;
+import com.toir.dto.meter.*;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.equipment.MeterReading;
@@ -51,6 +48,18 @@ public class MeterService {
         return meterRepository.findAllByFiltersOrderByUpdatedAtDesc(search, meterTypeStr, equipmentId, equipmentSearch).stream()
                 .map(this::enrichWithEquipmentName)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public MeterStatsResponse getStats(String search, MeterType meterType, UUID equipmentId, String equipmentSearch) {
+        String meterTypeStr = meterType == null ? null : meterType.toString();
+        var stats = meterRepository.getMeterStats(search, meterTypeStr, equipmentId, equipmentSearch);
+        return new MeterStatsResponse(
+                stats.getTotalMeters() == null ? 0 : stats.getTotalMeters(),
+                stats.getActiveMeters() == null ? 0 : stats.getActiveMeters(),
+                stats.getTotalReadings() == null ? 0 : stats.getTotalReadings(),
+                stats.getDueTriggers() == null ? 0 : stats.getDueTriggers()
+        );
     }
 
     @Transactional(readOnly = true)

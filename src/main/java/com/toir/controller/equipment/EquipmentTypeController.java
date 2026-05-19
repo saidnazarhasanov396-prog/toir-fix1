@@ -1,6 +1,7 @@
 package com.toir.controller.equipment;
 import com.toir.dto.equipmenttype.EquipmentTypeDto;
 import com.toir.dto.equipmenttype.EquipmentTypeRequest;
+import com.toir.dto.equipmenttype.EquipmentTypeStatsResponse;
 import com.toir.service.equipment.EquipmentTypeService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,6 +28,13 @@ public class EquipmentTypeController {
                                        @RequestParam(required = false) String category
     , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(service.findAll(search,category), page, size));
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<EquipmentTypeStatsResponse> stats(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String category) {
+        return ResponseEntity.ok(service.getStats(search, category));
     }
 
     @GetMapping("/{id}")

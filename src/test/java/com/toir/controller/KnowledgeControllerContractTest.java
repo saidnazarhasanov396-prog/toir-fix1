@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -354,7 +355,7 @@ class KnowledgeControllerContractTest {
             return;
         }
         Throwable root = NestedExceptionUtils.getMostSpecificCause(ex);
-        String rootMessage = root != null ? root.getClass().getName() + ": " + root.getMessage() : "n/a";
+        String rootMessage = root.getClass().getName() + ": " + root.getMessage();
         fail("Resolved exception: " + ex.getClass().getName() + ": " + ex.getMessage() + "; root cause: " + rootMessage);
     }
 
@@ -383,6 +384,21 @@ class KnowledgeControllerContractTest {
                 Instant.now(),
                 false
         );
+    }
+
+    @Test
+    void statsShouldReturn200AndStatsPayload() throws Exception {
+        com.toir.dto.knowledge.KnowledgeStatsResponse statsResponse = new com.toir.dto.knowledge.KnowledgeStatsResponse(10, 5, 3, 2);
+        when(service.getStats(isNull(), isNull(), isNull())).thenReturn(statsResponse);
+
+        mockMvc.perform(get("/api/v1/knowledge/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalArticles").value(10))
+                .andExpect(jsonPath("$.lessonLearned").value(5))
+                .andExpect(jsonPath("$.procedures").value(3))
+                .andExpect(jsonPath("$.troubleshooting").value(2));
+
+        verify(service).getStats(null, null, null);
     }
 
     private KnowledgeArticle articleEntity(String code, List<String> tags) {

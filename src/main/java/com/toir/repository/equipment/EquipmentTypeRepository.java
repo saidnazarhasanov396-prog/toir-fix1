@@ -57,4 +57,36 @@ public interface EquipmentTypeRepository extends JpaRepository<EquipmentType, UU
     order by e.updatedAt desc
 """)
     List<EquipmentType> findAllByIsDeletedFalseAndBySearchParam(String search, String category);
+
+    @Query(nativeQuery = true, value = """
+        select
+            count(t.id) as totalTypes,
+            count(distinct t.category) filter (where t.category is not null and trim(t.category) != '') as activeCategories,
+            count(distinct t.id) filter (
+                where exists (
+                    select 1 from equipment e
+                    where e.equipment_type_id = t.id
+                      and e.is_deleted = false
+                      and e.status = 'ACTIVE'
+                )
+            ) as withActiveEquipment,
+            count(t.id) filter (
+                where t.created_at >= current_date - interval '30 days'
+            ) as recentlyAdded
+        from equipment_types t
+        where t.is_deleted = false
+          and (:category is null or t.category = cast(:category as varchar))
+          and (
+              cast(:searchPattern as varchar) is null
+              or lower(t.code) like cast(:searchPattern as varchar)
+              or lower(t.name) like cast(:searchPattern as varchar)
+              or lower(t.description) like cast(:searchPattern as varchar)
+              or lower(t.name_en) like cast(:searchPattern as varchar)
+              or lower(t.name_uz) like cast(:searchPattern as varchar)
+          )
+        """)
+    EquipmentTypeStatsProjection getEquipmentTypeStats(
+            @Param("category") String category,
+            @Param("searchPattern") String searchPattern
+    );
 }
