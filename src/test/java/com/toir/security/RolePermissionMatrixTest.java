@@ -38,6 +38,10 @@ class RolePermissionMatrixTest {
                 PermissionConstants.REPAIR_REQUEST_READ,
                 PermissionConstants.KNOWLEDGE_READ
         );
+        assertThat(matrix.get("PPR_ENGINEER")).doesNotContain(
+                PermissionConstants.PPR_PLAN_APPROVE,
+                PermissionConstants.PPR_TASK_APPROVE
+        );
 
         assertThat(matrix.get("RELIABILITY_ENGINEER")).contains(
                 PermissionConstants.EQUIPMENT_READ,
@@ -57,12 +61,32 @@ class RolePermissionMatrixTest {
         );
 
         assertThat(matrix.get("FOREMAN")).contains(
+                PermissionConstants.REPAIR_REQUEST_READ,
+                PermissionConstants.REPAIR_REQUEST_UPDATE,
                 PermissionConstants.REPAIR_REQUEST_APPROVE,
                 PermissionConstants.REPAIR_REQUEST_ASSIGN,
+                PermissionConstants.REPAIR_REQUEST_REJECT,
+                PermissionConstants.REPAIR_REQUEST_CLOSE,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.WORK_ORDER_CREATE,
                 PermissionConstants.WORK_ORDER_APPROVE,
+                PermissionConstants.WORK_ORDER_START,
+                PermissionConstants.WORK_ORDER_COMPLETE,
                 PermissionConstants.WORK_ORDER_CLOSE,
+                PermissionConstants.DEFECT_READ,
+                PermissionConstants.DEFECT_CREATE,
+                PermissionConstants.DEFECT_UPDATE,
+                PermissionConstants.DEFECT_RESOLVE,
+                PermissionConstants.DEFECT_LIST_READ,
+                PermissionConstants.DEFECT_LIST_CREATE,
+                PermissionConstants.DEFECT_LIST_UPDATE,
                 PermissionConstants.DEFECT_LIST_APPROVE,
+                PermissionConstants.DEFECT_LIST_CLOSE,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.EMPLOYEE_READ,
+                PermissionConstants.TIMESHEET_READ,
                 PermissionConstants.TIMESHEET_APPROVE,
+                PermissionConstants.KNOWLEDGE_READ,
                 PermissionConstants.ANALYTICS_READ
         );
 
@@ -117,6 +141,11 @@ class RolePermissionMatrixTest {
                 PermissionConstants.ANALYTICS_EXPORT,
                 PermissionConstants.APPROVAL_READ,
                 PermissionConstants.APPROVAL_CREATE
+        );
+        assertThat(matrix.get("ECONOMIST")).doesNotContain(
+                PermissionConstants.ACTUAL_COST_APPROVE,
+                PermissionConstants.ACTUAL_COST_REJECT,
+                PermissionConstants.BUDGET_APPROVE
         );
 
         assertThat(matrix.get("VIEWER")).contains(
