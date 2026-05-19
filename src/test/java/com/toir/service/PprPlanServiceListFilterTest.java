@@ -7,6 +7,7 @@ import com.toir.entity.PprTask;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.PprTaskStatus;
+import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprPlanStatsProjection;
 import com.toir.repository.PprTaskRepository;
@@ -20,13 +21,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 
 import java.util.ArrayList;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -114,6 +118,46 @@ class PprPlanServiceListFilterTest {
         service.findAll(2026, 5, departmentId, 1, 10);
 
         verify(planRepository).searchPlans(2026, 5, departmentId, PageRequest.of(1, 10));
+    }
+
+    @Test
+    void getByIdReturnsSameVisiblePlanAsList() {
+        UUID departmentId = UUID.randomUUID();
+        PprPlan plan = plan(2026, 5, departmentId);
+
+        when(planRepository.searchPlans(null, null, null, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
+        when(planRepository.findByIdAndIsDeletedFalse(plan.getId())).thenReturn(Optional.of(plan));
+
+        var listed = service.findAll(null, null, null, 0, 20);
+        var detailed = service.findById(plan.getId());
+
+        assertThat(listed.getContent()).extracting(PprPlanDto::id).containsExactly(plan.getId());
+        assertThat(detailed.id()).isEqualTo(plan.getId());
+    }
+
+    @Test
+    void getByIdReturnsNotFoundWhenMissing() {
+        UUID id = UUID.randomUUID();
+        when(planRepository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findById(id))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(ex.getMessage()).isEqualTo("PPR plan not found: " + id);
+                });
+    }
+
+    @Test
+    void getByIdReturnsNotFoundForSoftDeletedPlan() {
+        UUID softDeletedPlanId = UUID.randomUUID();
+        when(planRepository.findByIdAndIsDeletedFalse(softDeletedPlanId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findById(softDeletedPlanId))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(ex.getMessage()).isEqualTo("PPR plan not found: " + softDeletedPlanId);
+                });
     }
 
     @Test

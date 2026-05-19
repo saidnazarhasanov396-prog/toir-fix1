@@ -34,7 +34,7 @@ class MaintenanceTemplateServiceStatsTest {
         when(projection.getTotalTemplates()).thenReturn(10L);
         when(projection.getWithOperations()).thenReturn(7L);
         when(projection.getTotalOperations()).thenReturn(25L);
-        when(projection.getAvgOperationsPerTemplate()).thenReturn(2.5);
+        when(projection.getAvgOperationsPerTemplate()).thenReturn(2.5f);
 
         when(sparePartService.toSearchPattern("pump")).thenReturn("%pump%");
         when(repository.getTemplateStats("%pump%", MaintenanceKind.PREVENTIVE.name()))
@@ -45,7 +45,7 @@ class MaintenanceTemplateServiceStatsTest {
         assertThat(stats.totalTemplates()).isEqualTo(10L);
         assertThat(stats.withOperations()).isEqualTo(7L);
         assertThat(stats.totalOperations()).isEqualTo(25L);
-        assertThat(stats.avgPerTemplate()).isEqualTo(2.5);
+        assertThat(stats.avgPerTemplate()).isEqualTo(2.5f);
     }
 
     @Test
@@ -57,6 +57,6 @@ class MaintenanceTemplateServiceStatsTest {
         assertThat(stats.totalTemplates()).isEqualTo(0L);
         assertThat(stats.withOperations()).isEqualTo(0L);
         assertThat(stats.totalOperations()).isEqualTo(0L);
-        assertThat(stats.avgPerTemplate()).isEqualTo(0.0);
+        assertThat(stats.avgPerTemplate()).isEqualTo(0.0f);
     }
 }

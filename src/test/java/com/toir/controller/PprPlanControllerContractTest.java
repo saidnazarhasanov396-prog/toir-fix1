@@ -28,6 +28,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -103,6 +104,50 @@ class PprPlanControllerContractTest {
     }
 
     @Test
+    void listAndGetByIdReturnSamePlanId() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        PprPlanDto plan = new PprPlanDto(
+                planId,
+                "PPR-2026-0099",
+                "June plan",
+                2026,
+                6,
+                PlanStatus.DRAFT,
+                departmentId,
+                "Instrumentation",
+                UUID.randomUUID(),
+                null,
+                null,
+                List.of()
+        );
+
+        when(service.findAll(null, null, null, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
+        when(service.findById(planId)).thenReturn(plan);
+
+        mockMvc.perform(get("/api/v1/ppr-plans")
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(planId.toString()));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/{id}", planId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(planId.toString()));
+    }
+
+    @Test
+    void getByIdReturnsNotFoundWithCleanErrorMessage() throws Exception {
+        UUID missingId = UUID.randomUUID();
+        when(service.findById(missingId)).thenThrow(RestException.notFound("PPR plan not found: " + missingId));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/{id}", missingId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("PPR plan not found: " + missingId));
+    }
+
+    @Test
     void statsPassesFilterParamsToService() throws Exception {
         UUID departmentId = UUID.randomUUID();
         PprPlanStatsResponse stats = new PprPlanStatsResponse(
@@ -130,6 +175,18 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.completedTasks").value(5));
 
         verify(service).getStats(2026, 5, departmentId);
+    }
+
+    @Test
+    void statsRouteIsNotSwallowedByIdRoute() throws Exception {
+        when(service.getStats(null, null, null)).thenReturn(new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalPlans").value(0));
+
+        verify(service).getStats(null, null, null);
+        verify(service, never()).findById(any(UUID.class));
     }
 
     @Test

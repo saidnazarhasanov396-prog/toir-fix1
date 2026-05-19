@@ -131,7 +131,7 @@ class MaintenanceTemplateControllerContractTest {
 
     @Test
     void getStatsReturnsStatsResponse() throws Exception {
-        MaintenanceTemplateStatsResponse response = new MaintenanceTemplateStatsResponse(10, 7, 25, 2.5);
+        MaintenanceTemplateStatsResponse response = new MaintenanceTemplateStatsResponse(10, 7, 25, 2.5f);
         when(service.getStats(eq("pump"), eq(MaintenanceKind.PREVENTIVE))).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/maintenance-templates/stats")
