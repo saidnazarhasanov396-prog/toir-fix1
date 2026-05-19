@@ -1,5 +1,6 @@
 package com.toir.controller;
 import com.toir.dto.plannedshutdown.PlannedShutdownDto;
+import com.toir.enums.PlanStatus;
 import com.toir.service.PlannedShutdownService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,8 +23,12 @@ public class PlannedShutdownController {
     private final PlannedShutdownService service;
 
     @GetMapping
-    public ResponseEntity<Page<PlannedShutdownDto>> list(@RequestParam UUID departmentId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findByDepartment(departmentId), page, size));
+    public ResponseEntity<Page<PlannedShutdownDto>> list(
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) PlanStatus status,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAllFiltered(departmentId, status, search), page, size));
     }
 
     @PostMapping

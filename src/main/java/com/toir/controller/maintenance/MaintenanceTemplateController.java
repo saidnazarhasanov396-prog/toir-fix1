@@ -1,7 +1,9 @@
 package com.toir.controller.maintenance;
+
 import com.toir.dto.maintenancetemplate.MaintenanceOperationDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
+import com.toir.dto.maintenancetemplate.MaintenanceTemplateStatsResponse;
 import com.toir.enums.MaintenanceKind;
 import com.toir.service.maintanance.MaintenanceTemplateService;
 import com.toir.util.PaginationUtils;
@@ -23,6 +25,14 @@ import org.springframework.web.bind.annotation.*;
 public class MaintenanceTemplateController {
 
     private final MaintenanceTemplateService service;
+
+    @GetMapping("/stats")
+    public ResponseEntity<MaintenanceTemplateStatsResponse> getStats(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) MaintenanceKind type
+    ) {
+        return ResponseEntity.ok(service.getStats(search, type));
+    }
 
     @GetMapping public ResponseEntity<Page<MaintenanceTemplateDto>> list(
             @RequestParam(required = false) String search,
