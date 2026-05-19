@@ -68,23 +68,23 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
                     :part1 is not null
                     and :part2 is not null
                     and (
-                        (lower(coalesce(e.lastName, '')) like lower(concat('%', :part1, '%'))
-                            and lower(coalesce(e.firstName, '')) like lower(concat('%', :part2, '%')))
+                        (lower(coalesce(e.lastName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                            and lower(coalesce(e.firstName, '')) like lower(concat('%', cast(:part2 as string), '%')))
                         or
-                        (lower(coalesce(e.firstName, '')) like lower(concat('%', :part1, '%'))
-                            and lower(coalesce(e.lastName, '')) like lower(concat('%', :part2, '%')))
+                        (lower(coalesce(e.firstName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                            and lower(coalesce(e.lastName, '')) like lower(concat('%', cast(:part2 as string), '%')))
                         or
-                        (lower(coalesce(e.firstName, '')) like lower(concat('%', :part1, '%'))
-                            and lower(coalesce(e.middleName, '')) like lower(concat('%', :part2, '%')))
+                        (lower(coalesce(e.firstName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                            and lower(coalesce(e.middleName, '')) like lower(concat('%', cast(:part2 as string), '%')))
                         or
-                        (lower(coalesce(e.middleName, '')) like lower(concat('%', :part1, '%'))
-                            and lower(coalesce(e.firstName, '')) like lower(concat('%', :part2, '%')))
+                        (lower(coalesce(e.middleName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                            and lower(coalesce(e.firstName, '')) like lower(concat('%', cast(:part2 as string), '%')))
                         or
-                        (lower(coalesce(e.lastName, '')) like lower(concat('%', :part1, '%'))
-                            and lower(coalesce(e.middleName, '')) like lower(concat('%', :part2, '%')))
+                        (lower(coalesce(e.lastName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                            and lower(coalesce(e.middleName, '')) like lower(concat('%', cast(:part2 as string), '%')))
                         or
-                        (lower(coalesce(e.middleName, '')) like lower(concat('%', :part1, '%'))
-                            and lower(coalesce(e.lastName, '')) like lower(concat('%', :part2, '%')))
+                        (lower(coalesce(e.middleName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                            and lower(coalesce(e.lastName, '')) like lower(concat('%', cast(:part2 as string), '%')))
                     )
                 )
           )
