@@ -36,6 +36,18 @@ public class EquipmentTypeService {
     }
 
     @Transactional(readOnly = true)
+    public com.toir.dto.equipmenttype.EquipmentTypeStatsResponse getStats(String search, String category) {
+        search = search == null ? null : "%" + search.toLowerCase() + "%";
+        var stats = repository.getEquipmentTypeStats(category, search);
+        return new com.toir.dto.equipmenttype.EquipmentTypeStatsResponse(
+                stats.getTotalTypes() == null ? 0 : stats.getTotalTypes(),
+                stats.getActiveCategories() == null ? 0 : stats.getActiveCategories(),
+                stats.getWithActiveEquipment() == null ? 0 : stats.getWithActiveEquipment(),
+                stats.getRecentlyAdded() == null ? 0 : stats.getRecentlyAdded()
+        );
+    }
+
+    @Transactional(readOnly = true)
     public EquipmentTypeDto findById(UUID id) {
         return EquipmentTypeDto.from(getOrThrow(id));
     }

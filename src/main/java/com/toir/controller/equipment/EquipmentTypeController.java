@@ -29,6 +29,13 @@ public class EquipmentTypeController {
         return ResponseEntity.ok(PaginationUtils.page(service.findAll(search,category), page, size));
     }
 
+    @GetMapping("/stats")
+    public ResponseEntity<com.toir.dto.equipmenttype.EquipmentTypeStatsResponse> stats(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String category) {
+        return ResponseEntity.ok(service.getStats(search, category));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<EquipmentTypeDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 

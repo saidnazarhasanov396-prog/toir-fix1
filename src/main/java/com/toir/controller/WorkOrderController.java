@@ -39,6 +39,16 @@ public class WorkOrderController {
         return ResponseEntity.ok(service.search(status, securityScope.enforceDepartmentScope(departmentId), equipmentId, page, size, search));
     }
 
+    @GetMapping("/stats")
+    public ResponseEntity<com.toir.dto.workorder.WorkOrderStatsResponse> stats(
+            @RequestParam(required = false) WorkOrderStatus status,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String search
+    ) {
+        return ResponseEntity.ok(service.getStats(status, securityScope.enforceDepartmentScope(departmentId), equipmentId, search));
+    }
+
     @GetMapping("/mobile-feed")
     public ResponseEntity<Page<WorkOrderDto>> mobileFeed(
             @RequestParam(required = false) UUID departmentId,

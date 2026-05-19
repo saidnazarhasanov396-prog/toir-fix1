@@ -54,6 +54,18 @@ public class MeterService {
     }
 
     @Transactional(readOnly = true)
+    public com.toir.dto.meter.MeterStatsResponse getStats(String search, MeterType meterType, UUID equipmentId, String equipmentSearch) {
+        String meterTypeStr = meterType == null ? null : meterType.toString();
+        var stats = meterRepository.getMeterStats(search, meterTypeStr, equipmentId, equipmentSearch);
+        return new com.toir.dto.meter.MeterStatsResponse(
+                stats.getTotalMeters() == null ? 0 : stats.getTotalMeters(),
+                stats.getActiveMeters() == null ? 0 : stats.getActiveMeters(),
+                stats.getTotalReadings() == null ? 0 : stats.getTotalReadings(),
+                stats.getDueTriggers() == null ? 0 : stats.getDueTriggers()
+        );
+    }
+
+    @Transactional(readOnly = true)
     public EquipmentMeterDto findMeter(UUID id) {
         return enrichWithEquipmentName(getMeterOrThrow(id));
     }

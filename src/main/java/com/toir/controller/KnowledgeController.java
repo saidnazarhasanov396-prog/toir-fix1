@@ -38,6 +38,15 @@ public class KnowledgeController {
         ));
     }
 
+    @GetMapping("/stats")
+    public ResponseEntity<com.toir.dto.knowledge.KnowledgeStatsResponse> stats(
+            @RequestParam(name = "equipmentId", required = false) UUID equipmentId,
+            @RequestParam(name = "equipmentTypeId", required = false) UUID equipmentTypeId,
+            @RequestParam(name = "kind", required = false) String kind
+    ) {
+        return ResponseEntity.ok(service.getStats(equipmentId, equipmentTypeId, kind));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<KnowledgeArticle> get(@PathVariable UUID id) {
         return ResponseEntity.ok(service.get(id));

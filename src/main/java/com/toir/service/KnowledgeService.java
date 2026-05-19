@@ -47,6 +47,18 @@ public class KnowledgeService {
                 .map(KnowledgeArticleDto::from);
     }
 
+    @Transactional(readOnly = true)
+    public com.toir.dto.knowledge.KnowledgeStatsResponse getStats(UUID equipmentId, UUID equipmentTypeId, String kind) {
+        String normalizedKind = kind == null || kind.isBlank() ? null : kind.trim();
+        var stats = repository.getKnowledgeStats(equipmentId, equipmentTypeId, normalizedKind);
+        return new com.toir.dto.knowledge.KnowledgeStatsResponse(
+                stats.getTotalArticles() == null ? 0 : stats.getTotalArticles(),
+                stats.getLessonLearned() == null ? 0 : stats.getLessonLearned(),
+                stats.getProcedures() == null ? 0 : stats.getProcedures(),
+                stats.getTroubleshooting() == null ? 0 : stats.getTroubleshooting()
+        );
+    }
+
     @Transactional
     public KnowledgeArticle get(UUID id) {
         KnowledgeArticle article = repository.findByIdAndIsDeletedFalse(id)
