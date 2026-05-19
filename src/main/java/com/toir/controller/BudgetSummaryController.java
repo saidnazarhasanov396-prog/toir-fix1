@@ -22,6 +22,7 @@ import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.FinanceScopeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -33,6 +34,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -56,12 +58,14 @@ public class BudgetSummaryController {
     private final ActualCostRepository actualCostRepository;
     private final CostCategoryRepository costCategoryRepository;
     private final UserRepository userRepository;
-
-
+    private final FinanceScopeService financeScopeService;
 
     @GetMapping("/summary")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_READ')")
     public ResponseEntity<BudgetSummaryResponse> summary() {
-        List<MaintenanceBudget> budgets = budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        List<MaintenanceBudget> budgets = financeScopeService.filterBudgets(
+                budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()
+        );
         double totalPlanned = budgets.stream().mapToDouble(MaintenanceBudget::getTotalPlanned).sum();
         double totalActual = budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum();
         double variance = totalPlanned - totalActual;
@@ -70,7 +74,8 @@ public class BudgetSummaryController {
         Map<UUID, CostCategory> catById = costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(CostCategory::getId, c -> c));
 
-        List<BudgetSummaryResponse.CategoryRow> byCategory = lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+        List<BudgetSummaryResponse.CategoryRow> byCategory = financeScopeService
+                .filterBudgetLines(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).stream()
                 .collect(Collectors.groupingBy(BudgetLine::getCostCategoryId))
                 .entrySet().stream()
                 .map(entry -> {
@@ -108,6 +113,7 @@ public class BudgetSummaryController {
     }
 
     @GetMapping("/cost-categories")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_READ')")
     public ResponseEntity<Page<CostCategoryDto>> costCategories(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
@@ -118,10 +124,13 @@ public class BudgetSummaryController {
     }
 
     @GetMapping("/actual-costs/register")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ')")
     public ResponseEntity<PageResponseWithSummary<ActualCostBudgetRow, ActualCostRegisterSummary>> actualCostRegister(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
-        List<ActualCost> items = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        List<ActualCost> items = financeScopeService.filterActualCosts(
+                actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()
+        );
         double totalAmount = items.stream().mapToDouble(ActualCost::getAmount).sum();
         double approvedAmount = items.stream().filter(c -> c.getStatus() == ActualCostStatus.APPROVED)
                 .mapToDouble(ActualCost::getAmount).sum();
@@ -154,17 +163,22 @@ public class BudgetSummaryController {
     }
 
     @GetMapping("/actual-costs/review-queue")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ')")
     public ResponseEntity<PageResponse<ActualCostBudgetRow>> reviewQueue(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
-        List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
+        List<ActualCost> pending = financeScopeService.filterActualCosts(
+                actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING)
+        );
         return ResponseEntity.ok(PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, size));
     }
 
     @GetMapping("/actual-costs/{id}/review-history")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ')")
     public ResponseEntity<ActualCostReviewHistoryResponse> reviewHistory(@PathVariable UUID id) {
         ActualCost actualCost = actualCostRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Actual cost not found: " + id));
+        financeScopeService.assertCanReadActualCost(actualCost);
 
         List<ActualCostReviewHistoryResponse.Event> events = actualCost.getReviewedAt() != null
                 ? List.of(new ActualCostReviewHistoryResponse.Event(
@@ -194,12 +208,14 @@ public class BudgetSummaryController {
     }
 
     @GetMapping("/actual-costs/review-activity")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ')")
     public ResponseEntity<PageResponseWithSummary<ActualCostBudgetRow, ActualCostReviewActivitySummary>> reviewActivity(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search) {
         Instant weekAgo = Instant.now().minus(7, ChronoUnit.DAYS);
-        List<ActualCost> recent = actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, search).stream()
+        List<ActualCost> recent = financeScopeService
+                .filterActualCosts(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, search)).stream()
                 .filter(c -> c.getReviewedAt() != null && c.getReviewedAt().isAfter(weekAgo))
                 .toList();
 
@@ -223,6 +239,7 @@ public class BudgetSummaryController {
     }
 
     @GetMapping("/actual-costs/handovers")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ')")
     public ResponseEntity<PageResponseWithSummary<ActualCostBudgetRow, ActualCostHandoverSummary>> handovers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
@@ -241,24 +258,30 @@ public class BudgetSummaryController {
     }
 
     @GetMapping("/actual-costs/approval-pack")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ')")
     public ResponseEntity<PageResponse<ActualCostBudgetRow>> approvalPack(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
-        List<ActualCost> pending = actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
+        List<ActualCost> pending = financeScopeService.filterActualCosts(
+                actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING)
+        );
         return ResponseEntity.ok(PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, size));
     }
 
     @GetMapping("/actual-costs/review-history-pack")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ')")
     public ResponseEntity<PageResponse<ActualCostBudgetRow>> reviewHistoryPack(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
-        List<ActualCost> reviewed = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+        List<ActualCost> reviewed = financeScopeService
+                .filterActualCosts(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).stream()
                 .filter(c -> c.getReviewedAt() != null)
                 .toList();
         return ResponseEntity.ok(PageResponse.of(reviewed.stream().map(this::actualCostRow).toList(), page, size));
     }
 
     @GetMapping("/contractor-works/{id}/recommendation")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_READ')")
     public ResponseEntity<ContractorWorkRecommendationResponse> contractorWorkRecommendation(@PathVariable UUID id) {
         return ResponseEntity.ok(new ContractorWorkRecommendationResponse(id.toString(), 0, List.of()));
     }

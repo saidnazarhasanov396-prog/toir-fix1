@@ -3,11 +3,14 @@ package com.toir.service;
 import com.toir.dto.warehouse.ReorderSuggestionDto;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.exception.RestException;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,12 +28,15 @@ public class WarehouseReorderService {
 
     private final WarehouseStockRepository stockRepository;
     private final WarehouseRepository warehouseRepository;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public Page<ReorderSuggestionDto> suggestions(UUID warehouseId, int page, int size) {
         List<WarehouseStock> stocks = warehouseId != null
-                ? stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId)
-                : stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+                ? stocksForWarehouse(warehouseId)
+                : stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(stock -> canAccessWarehouseId(stock.getWarehouseId()))
+                .toList();
 
         Set<UUID> warehouseIds = stocks.stream()
                 .map(WarehouseStock::getWarehouseId)
@@ -44,6 +50,11 @@ public class WarehouseReorderService {
             buildSuggestion(stock, warehouseNames).ifPresent(suggestions::add);
         }
         return PaginationUtils.page(suggestions, page, size);
+    }
+
+    private List<WarehouseStock> stocksForWarehouse(UUID warehouseId) {
+        assertCanAccessWarehouseId(warehouseId);
+        return stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId);
     }
 
     private Optional<ReorderSuggestionDto> buildSuggestion(WarehouseStock stock, Map<UUID, String> warehouseNames) {
@@ -80,5 +91,27 @@ public class WarehouseReorderService {
                 shortfall,
                 urgency
         ));
+    }
+
+    private void assertCanAccessWarehouseId(UUID warehouseId) {
+        Warehouse warehouse = warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
+                .orElseThrow(() -> RestException.notFound("Warehouse not found: " + warehouseId));
+        if (!canAccessWarehouse(warehouse)) {
+            throw new AccessDeniedException("Access denied by warehouse scope");
+        }
+    }
+
+    private boolean canAccessWarehouseId(UUID warehouseId) {
+        return warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
+                .map(this::canAccessWarehouse)
+                .orElse(false);
+    }
+
+    private boolean canAccessWarehouse(Warehouse warehouse) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        return (warehouse.getDepartmentId() != null && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId()))
+                || (warehouse.getResponsibleId() != null && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId()));
     }
 }

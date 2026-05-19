@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,6 +31,7 @@ public class DefectController {
 
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_READ')")
     public ResponseEntity<Page<DefectResponse>> list(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) UUID repairRequestId,
@@ -43,6 +45,7 @@ public class DefectController {
     }
 
     @GetMapping("/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_READ')")
     public ResponseEntity<DefectStatsResponse> stats(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) UUID repairRequestId,
@@ -60,23 +63,28 @@ public class DefectController {
 
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_READ')")
     public ResponseEntity<DefectResponse> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_CREATE')")
     public ResponseEntity<DefectResponse> create(@Valid @RequestBody DefectRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_UPDATE')")
     public ResponseEntity<DefectResponse> update(@PathVariable UUID id, @Valid @RequestBody DefectRequest request) {
         return ResponseEntity.ok(service.update(id, request));
     }
 
     @PostMapping("/{id}/resolve")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_RESOLVE')")
     public ResponseEntity<DefectResponse> resolve(@PathVariable UUID id) { return ResponseEntity.ok(service.resolve(id)); }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_DELETE')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
@@ -99,6 +107,7 @@ public class DefectController {
      */
     @PostMapping("/{id}/create-lesson")
     @Transactional
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_UPDATE')")
     public ResponseEntity<KnowledgeArticle> createLesson(@PathVariable UUID id) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.createLesson(id));
     }

@@ -10,8 +10,10 @@ import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,21 +27,32 @@ public class MaintenanceBudgetService {
     private final MaintenanceBudgetRepository repository;
     private final BudgetLineRepository lineRepository;
     private final AuditBuilderService auditBuilderService;
-
-
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public List<MaintenanceBudgetDto> findByYear(int year) {
-        return repository.findAllByYearAndIsDeletedFalse(year).stream().map(MaintenanceBudgetDto::from).toList();
+        if (scopeAccessService.isScopeAdmin()) {
+            return repository.findAllByYearAndIsDeletedFalse(year).stream().map(MaintenanceBudgetDto::from).toList();
+        }
+        UUID departmentId = scopeAccessService.enforceDepartmentScope(null);
+        if (departmentId == null) {
+            throw forbidden();
+        }
+        return repository.findAllByDepartmentIdAndYearAndIsDeletedFalse(departmentId, year).stream()
+                .map(MaintenanceBudgetDto::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public MaintenanceBudgetDto findById(UUID id) {
-        return MaintenanceBudgetDto.from(getOrThrow(id));
+        MaintenanceBudget budget = getOrThrow(id);
+        assertCanAccessBudget(budget);
+        return MaintenanceBudgetDto.from(budget);
     }
 
     @Transactional
     public MaintenanceBudgetDto create(MaintenanceBudgetDto r) {
+        assertCanCreateBudget(r.departmentId());
         MaintenanceBudget b = new MaintenanceBudget();
         b.setYear(r.year());
         b.setMonth(r.month());
@@ -62,6 +75,7 @@ public class MaintenanceBudgetService {
     @Transactional
     public MaintenanceBudgetDto approve(UUID id) {
         MaintenanceBudget b = getOrThrow(id);
+        assertCanAccessBudget(b);
         if (b.getStatus() != BudgetStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT budgets can be approved");
         }
@@ -83,6 +97,7 @@ public class MaintenanceBudgetService {
     @Transactional
     public BudgetLineDto addLine(UUID budgetId, BudgetLineDto r) {
         MaintenanceBudget b = getOrThrow(budgetId);
+        assertCanAccessBudget(b);
         if (b.getStatus() == BudgetStatus.LOCKED || b.getStatus() == BudgetStatus.CLOSED) {
             throw RestException.badRequest("Cannot add lines to locked/closed budget");
         }
@@ -114,5 +129,27 @@ public class MaintenanceBudgetService {
     private MaintenanceBudget getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Budget not found: " + id));
+    }
+
+    private void assertCanCreateBudget(UUID departmentId) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        if (departmentId == null || !scopeAccessService.canAccessDepartment(departmentId)) {
+            throw forbidden();
+        }
+    }
+
+    private void assertCanAccessBudget(MaintenanceBudget budget) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        if (budget.getDepartmentId() == null || !scopeAccessService.canAccessDepartment(budget.getDepartmentId())) {
+            throw forbidden();
+        }
+    }
+
+    private AccessDeniedException forbidden() {
+        return new AccessDeniedException("Access denied by budget scope");
     }
 }

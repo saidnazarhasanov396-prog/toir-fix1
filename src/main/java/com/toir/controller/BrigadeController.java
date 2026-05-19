@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,6 +26,7 @@ public class BrigadeController {
     private final BrigadeService service;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BRIGADE_READ')")
     public ResponseEntity<Page<BrigadeDto>> list(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) Boolean activeOnly,
@@ -34,35 +36,42 @@ public class BrigadeController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BRIGADE_READ')")
     public ResponseEntity<BrigadeDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BRIGADE_CREATE')")
     public ResponseEntity<BrigadeDto> create(@Valid @RequestBody BrigadeRequest r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BRIGADE_UPDATE')")
     public ResponseEntity<BrigadeDto> update(@PathVariable UUID id, @Valid @RequestBody BrigadeRequest r) {
         return ResponseEntity.ok(service.update(id, r));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BRIGADE_DELETE')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/members")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BRIGADE_READ')")
     public ResponseEntity<Page<BrigadeMemberDto>> listMembers(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(service.listMembers(id), page, size));
     }
 
     @PostMapping("/{id}/members")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BRIGADE_CREATE')")
     public ResponseEntity<BrigadeMemberDto> addMember(@PathVariable UUID id, @Valid @RequestBody BrigadeMemberRequest r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addMember(id, r));
     }
 
     @DeleteMapping("/{id}/members/{memberId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BRIGADE_UPDATE')")
     public ResponseEntity<Void> removeMember(@PathVariable UUID id, @PathVariable UUID memberId) {
         service.removeMember(id, memberId);
         return ResponseEntity.noContent().build();

@@ -17,13 +17,19 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserCertificationRepository;
+import com.toir.repository.users.UserRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.CsvWriter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -37,11 +43,17 @@ public class ReportsService {
     private final ActualCostRepository actualCostRepository;
     private final CalibrationRecordRepository calibrationRecordRepository;
     private final UserCertificationRepository userCertificationRepository;
+    private final UserRepository userRepository;
     private final RcmService rcmService;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public CsvFile rcmRiskCsv() {
-        List<EquipmentRiskScore> items = rcmService.computeAll();
+        UUID departmentId = reportsDepartmentScope();
+        Map<UUID, Equipment> equipmentById = equipmentById();
+        List<EquipmentRiskScore> items = rcmService.computeAll().stream()
+                .filter(score -> departmentId == null || isEquipmentInDepartment(equipmentById, score.equipmentId(), departmentId))
+                .toList();
         String csv = CsvWriter.build(
                 List.of("equipmentId", "equipmentCode", "equipmentName", "criticalityClass",
                         "consequence", "probability", "riskScore", "repairPriority",
@@ -65,7 +77,11 @@ public class ReportsService {
 
     @Transactional(readOnly = true)
     public CsvFile calibrationRecordsCsv() {
-        List<CalibrationRecord> items = calibrationRecordRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        UUID departmentId = reportsDepartmentScope();
+        Map<UUID, Equipment> equipmentById = equipmentById();
+        List<CalibrationRecord> items = calibrationRecordRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(record -> departmentId == null || isEquipmentInDepartment(equipmentById, record.getEquipmentId(), departmentId))
+                .toList();
         String csv = CsvWriter.build(
                 List.of("id", "equipmentId", "certificateNumber", "performedBy",
                         "performedAt", "nextDueAt", "result", "tolerance",
@@ -89,7 +105,13 @@ public class ReportsService {
 
     @Transactional(readOnly = true)
     public CsvFile userCertificationsCsv() {
-        List<UserCertification> items = userCertificationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        UUID departmentId = reportsDepartmentScope();
+        Map<UUID, UUID> userDepartmentById = userRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(user -> user.getDepartmentId() != null)
+                .collect(Collectors.toMap(com.toir.entity.users.User::getId, com.toir.entity.users.User::getDepartmentId));
+        List<UserCertification> items = userCertificationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(cert -> departmentId == null || departmentId.equals(userDepartmentById.get(cert.getUserId())))
+                .toList();
         String csv = CsvWriter.build(
                 List.of("id", "userId", "typeCode", "certificateNumber", "issuedBy",
                         "issuedAt", "expiresAt", "gradeOrLevel", "status", "notes"),
@@ -111,7 +133,10 @@ public class ReportsService {
 
     @Transactional(readOnly = true)
     public CsvFile equipmentCsv() {
-        List<Equipment> items = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        UUID departmentId = reportsDepartmentScope();
+        List<Equipment> items = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(equipment -> departmentId == null || departmentId.equals(equipment.getDepartmentId()))
+                .toList();
         String csv = CsvWriter.build(
                 List.of("id", "code", "name", "inventoryNumber", "serialNumber", "model",
                         "equipmentTypeId", "departmentId", "locationId", "criticalityClassId",
@@ -138,7 +163,10 @@ public class ReportsService {
 
     @Transactional(readOnly = true)
     public CsvFile repairRequestsCsv() {
-        List<RepairRequest> items = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        UUID departmentId = reportsDepartmentScope();
+        List<RepairRequest> items = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(request -> departmentId == null || departmentId.equals(request.getDepartmentId()))
+                .toList();
         List<Function<RepairRequest, Object>> extractors = List.of(
                 RepairRequest::getId,
                 RepairRequest::getNumber,
@@ -169,7 +197,11 @@ public class ReportsService {
 
     @Transactional(readOnly = true)
     public CsvFile defectsCsv() {
-        List<Defect> items = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        UUID departmentId = reportsDepartmentScope();
+        Map<UUID, Equipment> equipmentById = equipmentById();
+        List<Defect> items = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(defect -> departmentId == null || isEquipmentInDepartment(equipmentById, defect.getEquipmentId(), departmentId))
+                .toList();
         String csv = CsvWriter.build(
                 List.of("id", "code", "title", "equipmentId", "category", "severity",
                         "failureReason", "rootCause", "status", "recurrenceCount",
@@ -194,7 +226,10 @@ public class ReportsService {
 
     @Transactional(readOnly = true)
     public CsvFile workOrdersCsv() {
-        List<WorkOrder> items = workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        UUID departmentId = reportsDepartmentScope();
+        List<WorkOrder> items = workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(workOrder -> departmentId == null || departmentId.equals(workOrder.getDepartmentId()))
+                .toList();
         String csv = CsvWriter.build(
                 List.of("id", "number", "title", "equipmentId", "departmentId",
                         "type", "priority", "status", "createdById", "approvedById",
@@ -226,7 +261,10 @@ public class ReportsService {
 
     @Transactional(readOnly = true)
     public CsvFile downtimesCsv() {
-        List<DowntimeEvent> items = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        UUID departmentId = reportsDepartmentScope();
+        List<DowntimeEvent> items = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(downtime -> departmentId == null || departmentId.equals(downtime.getDepartmentId()))
+                .toList();
         String csv = CsvWriter.build(
                 List.of("id", "equipmentId", "departmentId", "workOrderId",
                         "startAt", "endAt", "durationMinutes", "type", "description"),
@@ -247,7 +285,14 @@ public class ReportsService {
 
     @Transactional(readOnly = true)
     public CsvFile actualCostsCsv() {
-        List<ActualCost> items = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        UUID departmentId = reportsDepartmentScope();
+        Map<UUID, WorkOrder> workOrderById = workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(Collectors.toMap(WorkOrder::getId, Function.identity()));
+        Map<UUID, RepairRequest> repairRequestById = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(Collectors.toMap(RepairRequest::getId, Function.identity()));
+        List<ActualCost> items = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(cost -> departmentId == null || actualCostInDepartment(cost, workOrderById, repairRequestById, departmentId))
+                .toList();
         String csv = CsvWriter.build(
                 List.of("id", "workOrderId", "repairRequestId", "contractorWorkId",
                         "costCategoryId", "budgetLineId", "status", "amount",
@@ -272,4 +317,40 @@ public class ReportsService {
     }
 
     public record CsvFile(String filename, String content) {}
+
+    private UUID reportsDepartmentScope() {
+        if (scopeAccessService.isScopeAdmin()) {
+            return null;
+        }
+        UUID currentDepartmentId = scopeAccessService.currentDepartmentIdOrNull();
+        if (currentDepartmentId == null) {
+            throw new AccessDeniedException("Access denied by data scope");
+        }
+        return currentDepartmentId;
+    }
+
+    private Map<UUID, Equipment> equipmentById() {
+        return equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(Collectors.toMap(Equipment::getId, Function.identity()));
+    }
+
+    private boolean isEquipmentInDepartment(Map<UUID, Equipment> equipmentById, UUID equipmentId, UUID departmentId) {
+        Equipment equipment = equipmentById.get(equipmentId);
+        return equipment != null && departmentId.equals(equipment.getDepartmentId());
+    }
+
+    private boolean actualCostInDepartment(ActualCost cost,
+                                           Map<UUID, WorkOrder> workOrderById,
+                                           Map<UUID, RepairRequest> repairRequestById,
+                                           UUID departmentId) {
+        if (cost.getWorkOrderId() != null) {
+            WorkOrder workOrder = workOrderById.get(cost.getWorkOrderId());
+            return workOrder != null && departmentId.equals(workOrder.getDepartmentId());
+        }
+        if (cost.getRepairRequestId() != null) {
+            RepairRequest repairRequest = repairRequestById.get(cost.getRepairRequestId());
+            return repairRequest != null && departmentId.equals(repairRequest.getDepartmentId());
+        }
+        return false;
+    }
 }

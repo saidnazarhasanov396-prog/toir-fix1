@@ -2,18 +2,23 @@ package com.toir.service.repair;
 
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.StockMovement;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairMaterialUsage;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,18 +34,25 @@ public class RepairMaterialUsageService {
     private final WorkOrderRepository workOrderRepository;
     private final StockMovementRepository stockMovementRepository;
     private final AuditBuilderService auditBuilderService;
+    private final WarehouseRepository warehouseRepository;
+    private final ScopeAccessService scopeAccessService;
 
 
     @Transactional(readOnly = true)
     public List<RepairMaterialUsageDto> findByWorkOrder(UUID workOrderId) {
-        return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId).stream().map(RepairMaterialUsageDto::from).toList();
+        WorkOrder workOrder = workOrderOrThrow(workOrderId);
+        assertCanAccessWorkOrder(workOrder);
+        return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId).stream()
+                .filter(usage -> canAccessWarehouseId(usage.getWarehouseId()))
+                .map(RepairMaterialUsageDto::from)
+                .toList();
     }
 
     @Transactional
     public RepairMaterialUsageDto register(UUID workOrderId, RepairMaterialUsageDto r) {
-        if (!workOrderRepository.existsByIdAndIsDeletedFalse(workOrderId)) {
-            throw RestException.notFound("Work order not found: " + workOrderId);
-        }
+        WorkOrder workOrder = workOrderOrThrow(workOrderId);
+        assertCanAccessWorkOrder(workOrder);
+        assertCanAccessWarehouseId(r.warehouseId());
         if (r.quantity() <= 0) {
             throw RestException.badRequest("Quantity must be greater than 0");
         }
@@ -83,5 +95,41 @@ public class RepairMaterialUsageService {
         );
 
         return RepairMaterialUsageDto.from(saved);
+    }
+
+    private WorkOrder workOrderOrThrow(UUID workOrderId) {
+        return workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)
+                .orElseThrow(() -> RestException.notFound("Work order not found: " + workOrderId));
+    }
+
+    private void assertCanAccessWorkOrder(WorkOrder workOrder) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        if (workOrder.getDepartmentId() == null || !scopeAccessService.canAccessDepartment(workOrder.getDepartmentId())) {
+            throw new AccessDeniedException("Access denied by work order department scope");
+        }
+    }
+
+    private void assertCanAccessWarehouseId(UUID warehouseId) {
+        Warehouse warehouse = warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
+                .orElseThrow(() -> RestException.notFound("Warehouse not found: " + warehouseId));
+        if (!canAccessWarehouse(warehouse)) {
+            throw new AccessDeniedException("Access denied by warehouse scope");
+        }
+    }
+
+    private boolean canAccessWarehouseId(UUID warehouseId) {
+        return warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
+                .map(this::canAccessWarehouse)
+                .orElse(false);
+    }
+
+    private boolean canAccessWarehouse(Warehouse warehouse) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        return (warehouse.getDepartmentId() != null && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId()))
+                || (warehouse.getResponsibleId() != null && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId()));
     }
 }

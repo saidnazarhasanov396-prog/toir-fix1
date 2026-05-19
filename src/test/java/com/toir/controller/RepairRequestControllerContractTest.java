@@ -5,6 +5,7 @@ import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.WorkOrderBriefDto;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.PriorityLevel;
@@ -13,7 +14,8 @@ import com.toir.enums.RequestStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
 import com.toir.exception.GlobalExceptionHandler;
-import com.toir.security.SecurityScope;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.repair.RepairRequestService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,11 +29,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -45,13 +48,18 @@ class RepairRequestControllerContractTest {
     RepairRequestService service;
 
     @Mock
-    SecurityScope securityScope;
+    RepairRequestRepository repository;
+
+    @Mock
+    ScopeAccessService scopeAccessService;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairRequestController(service, securityScope))
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        lenient().when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
+        mockMvc = MockMvcBuilders.standaloneSetup(new RepairRequestController(service, repository, scopeAccessService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -70,7 +78,7 @@ class RepairRequestControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
 
-        verifyNoInteractions(securityScope);
+        verify(scopeAccessService).enforceDepartmentScope(null);
         verify(service).search(RequestStatus.APPROVED, null, equipmentId, null, 0, 100, null);
     }
 
@@ -87,14 +95,14 @@ class RepairRequestControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
 
-        verifyNoInteractions(securityScope);
+        verify(scopeAccessService).enforceDepartmentScope(null);
         verify(service).search(null, null, equipmentId, null, 0, 100, null);
     }
 
     @Test
     void listWithStatusReturnsOnlyMatchingRepairRequests() throws Exception {
         RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
-        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(RequestStatus.APPROVED, null, null, null, 0, 100, null))
                 .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
 
@@ -104,7 +112,7 @@ class RepairRequestControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
 
-        verify(securityScope).enforceDepartmentScope(null);
+        verify(scopeAccessService).enforceDepartmentScope(null);
         verify(service).search(RequestStatus.APPROVED, null, null, null, 0, 100, null);
     }
 
@@ -123,7 +131,7 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.content").isEmpty())
                 .andExpect(jsonPath("$.totalElements").value(0));
 
-        verifyNoInteractions(securityScope);
+        verify(scopeAccessService).enforceDepartmentScope(null);
         verify(service).search(RequestStatus.APPROVED, null, equipmentId, null, 0, 100, null);
     }
 
@@ -131,7 +139,7 @@ class RepairRequestControllerContractTest {
     void listWithoutEquipmentIdKeepsExistingBehavior() throws Exception {
         UUID scopedDepartmentId = UUID.randomUUID();
         RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
-        when(securityScope.enforceDepartmentScope(null)).thenReturn(scopedDepartmentId);
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(scopedDepartmentId);
         when(service.search(null, scopedDepartmentId, null, null, 0, 100, null))
                 .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
 
@@ -140,7 +148,7 @@ class RepairRequestControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
 
-        verify(securityScope).enforceDepartmentScope(null);
+        verify(scopeAccessService).enforceDepartmentScope(null);
         verify(service).search(null, scopedDepartmentId, null, null, 0, 100, null);
     }
 
@@ -148,6 +156,7 @@ class RepairRequestControllerContractTest {
     void detailIncludesLinkedDefects() throws Exception {
         UUID requestId = UUID.randomUUID();
         RepairRequestDto response = dtoWithLinks(requestId);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
         when(service.findById(requestId)).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/repair-requests/{id}", requestId))
@@ -160,6 +169,7 @@ class RepairRequestControllerContractTest {
     void detailIncludesLinkedWorkOrders() throws Exception {
         UUID requestId = UUID.randomUUID();
         RepairRequestDto response = dtoWithLinks(requestId);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
         when(service.findById(requestId)).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/repair-requests/{id}", requestId))
@@ -171,7 +181,9 @@ class RepairRequestControllerContractTest {
     @Test
     void detailWithNoLinksReturnsEmptyArrays() throws Exception {
         UUID requestId = UUID.randomUUID();
-        when(service.findById(requestId)).thenReturn(dtoWithoutLinks(requestId));
+        RepairRequestDto response = dtoWithoutLinks(requestId);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
+        when(service.findById(requestId)).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/repair-requests/{id}", requestId))
                 .andExpect(status().isOk())
@@ -185,6 +197,7 @@ class RepairRequestControllerContractTest {
     void detailIncludesEquipmentDepartmentReporterIds() throws Exception {
         UUID requestId = UUID.randomUUID();
         RepairRequestDto response = dtoWithLinks(requestId);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
         when(service.findById(requestId)).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/repair-requests/{id}", requestId))
@@ -197,7 +210,7 @@ class RepairRequestControllerContractTest {
     @Test
     void listIncludesEquipmentDepartmentReporterIds() throws Exception {
         RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
-        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, null, 0, 20, null))
                 .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 20), 1));
 
@@ -211,7 +224,9 @@ class RepairRequestControllerContractTest {
     @Test
     void detailWithNullableIdsReturnsNullsNot500() throws Exception {
         UUID requestId = UUID.randomUUID();
-        when(service.findById(requestId)).thenReturn(dtoWithNullableIds(requestId));
+        RepairRequestDto response = dtoWithNullableIds(requestId);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
+        when(service.findById(requestId)).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/repair-requests/{id}", requestId))
                 .andExpect(status().isOk())
@@ -229,7 +244,7 @@ class RepairRequestControllerContractTest {
                 12
         );
 
-        when(securityScope.enforceDepartmentScope(isNull())).thenReturn(null);
+        when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
         when(service.getStats(null, null, null)).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/repair-requests/stats"))
@@ -239,7 +254,7 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.open").value(8))
                 .andExpect(jsonPath("$.withWorkOrder").value(12));
 
-        verify(securityScope).enforceDepartmentScope(null);
+        verify(scopeAccessService).enforceDepartmentScope(null);
         verify(service).getStats(null, null, null);
     }
 
@@ -256,7 +271,7 @@ class RepairRequestControllerContractTest {
                 5
         );
 
-        when(securityScope.enforceDepartmentScope(departmentId)).thenReturn(scopedDepartmentId);
+        when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(scopedDepartmentId);
         when(service.getStats(scopedDepartmentId, equipmentId, "pump")).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/repair-requests/stats")
@@ -269,8 +284,25 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.open").value(4))
                 .andExpect(jsonPath("$.withWorkOrder").value(5));
 
-        verify(securityScope).enforceDepartmentScope(departmentId);
+        verify(scopeAccessService).enforceDepartmentScope(departmentId);
         verify(service).getStats(scopedDepartmentId, equipmentId, "pump");
+    }
+
+    private RepairRequest entityFromDto(RepairRequestDto dto) {
+        RepairRequest entity = new RepairRequest();
+        entity.setId(dto.id());
+        entity.setNumber(dto.number());
+        entity.setTitle(dto.title());
+        entity.setDescription(dto.description());
+        entity.setEquipmentId(dto.equipmentId());
+        entity.setDepartmentId(dto.departmentId());
+        entity.setReporterId(dto.reporterId());
+        entity.setAssignedToId(dto.assignedToId());
+        entity.setPriority(dto.priority());
+        entity.setCriticality(dto.criticality());
+        entity.setStatus(dto.status());
+        entity.setSource(dto.source());
+        return entity;
     }
 
     private RepairRequestDto dtoWithLinks(UUID requestId) {

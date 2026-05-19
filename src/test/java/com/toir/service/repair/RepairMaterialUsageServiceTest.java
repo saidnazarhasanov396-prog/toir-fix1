@@ -2,14 +2,18 @@ package com.toir.service.repair;
 
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.StockMovement;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairMaterialUsage;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +50,11 @@ class RepairMaterialUsageServiceTest {
     @Mock
     StockMovementRepository stockMovementRepository;
 
+    @Mock
+    WarehouseRepository warehouseRepository;
+
+    @Mock
+    ScopeAccessService scopeAccessService;
 
     @InjectMocks
     RepairMaterialUsageService service;
@@ -53,12 +62,15 @@ class RepairMaterialUsageServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(service, "auditBuilderService", auditBuilderService);
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        lenient().when(warehouseRepository.findByIdAndIsDeletedFalse(any()))
+                .thenAnswer(invocation -> Optional.of(warehouse(invocation.getArgument(0))));
     }
 
     @Test
     void registerFailsWhenWorkOrderNotFound() {
         UUID workOrderId = UUID.randomUUID();
-        when(workOrderRepository.existsByIdAndIsDeletedFalse(workOrderId)).thenReturn(false);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.register(workOrderId, usageDto(5)))
                 .isInstanceOf(RestException.class)
@@ -79,7 +91,8 @@ class RepairMaterialUsageServiceTest {
         stock.setQuantity(10);
         stock.setReservedQty(4);
 
-        when(workOrderRepository.existsByIdAndIsDeletedFalse(workOrderId)).thenReturn(true);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
 
@@ -98,7 +111,8 @@ class RepairMaterialUsageServiceTest {
     @Test
     void registerFailsForZeroOrNegativeQuantity() {
         UUID workOrderId = UUID.randomUUID();
-        when(workOrderRepository.existsByIdAndIsDeletedFalse(workOrderId)).thenReturn(true);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId)));
 
         assertThatThrownBy(() -> service.register(workOrderId, usageDto(0)))
                 .isInstanceOf(RestException.class)
@@ -123,7 +137,8 @@ class RepairMaterialUsageServiceTest {
         stock.setQuantity(10);
         stock.setReservedQty(3);
 
-        when(workOrderRepository.existsByIdAndIsDeletedFalse(workOrderId)).thenReturn(true);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
         when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -169,5 +184,19 @@ class RepairMaterialUsageServiceTest {
                 quantity,
                 10.0
         );
+    }
+
+    private WorkOrder workOrder(UUID workOrderId) {
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setDepartmentId(UUID.randomUUID());
+        return workOrder;
+    }
+
+    private Warehouse warehouse(UUID warehouseId) {
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        warehouse.setActive(true);
+        return warehouse;
     }
 }

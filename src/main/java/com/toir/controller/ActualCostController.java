@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -24,9 +25,11 @@ public class ActualCostController {
     private final ActualCostService service;
 
     @GetMapping("/pending")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ')")
     public ResponseEntity<Page<ActualCostDto>> pending(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findPending(), page, size)); }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ')")
     public ResponseEntity<Page<ActualCostDto>> list(@RequestParam(required = false) UUID workOrderId,
                                                     @RequestParam(required = false) String search,
                                                     @RequestParam(defaultValue = "0") int page,
@@ -35,16 +38,19 @@ public class ActualCostController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_CREATE')")
     public ResponseEntity<ActualCostDto> create(@Valid @RequestBody ActualCostDto r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
     }
 
     @PostMapping("/{id}/approve")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_APPROVE')")
     public ResponseEntity<ActualCostDto> approve(@PathVariable UUID id, @RequestParam UUID reviewerId, @RequestParam(required = false) String comment) {
         return ResponseEntity.ok(service.review(id, true, reviewerId, comment));
     }
 
     @PostMapping("/{id}/reject")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_REJECT')")
     public ResponseEntity<ActualCostDto> reject(@PathVariable UUID id, @RequestParam UUID reviewerId, @RequestParam String comment) {
         return ResponseEntity.ok(service.review(id, false, reviewerId, comment));
     }

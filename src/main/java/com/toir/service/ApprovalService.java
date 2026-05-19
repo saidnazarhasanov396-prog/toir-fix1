@@ -27,33 +27,40 @@ public class ApprovalService {
 
     private final ApprovalRequestRepository requestRepository;
     private final AuditBuilderService auditBuilderService;
+    private final ApprovalScopeService approvalScopeService;
 
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> listByDocument(String documentType, UUID documentId) {
         return requestRepository.findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse(documentType, documentId).stream()
+                .filter(approvalScopeService::canReadApproval)
                 .map(ApprovalRequestDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> pending() {
         return requestRepository.findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalStatus.PENDING).stream()
+                .filter(approvalScopeService::canReadApproval)
                 .map(ApprovalRequestDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> byRequester(UUID requesterId) {
         return requestRepository.findAllByRequesterIdAndIsDeletedFalseOrderByCreatedAtDesc(requesterId).stream()
+                .filter(approvalScopeService::canReadApproval)
                 .map(ApprovalRequestDto::from).toList();
     }
 
     @Transactional(readOnly = true)
     public ApprovalRequestDto findById(UUID id) {
-        return ApprovalRequestDto.from(getOrThrow(id));
+        ApprovalRequest request = getOrThrow(id);
+        approvalScopeService.assertCanReadApproval(request);
+        return ApprovalRequestDto.from(request);
     }
 
     @Transactional
     public ApprovalRequestDto create(CreateApprovalRequest r) {
+        approvalScopeService.assertCanCreateApproval(r);
         ApprovalRequest request = new ApprovalRequest();
         request.setDocumentType(r.documentType());
         request.setDocumentId(r.documentId());
@@ -101,6 +108,7 @@ public class ApprovalService {
     @Transactional
     public ApprovalRequestDto cancel(UUID requestId) {
         ApprovalRequest request = getOrThrow(requestId);
+        approvalScopeService.assertCanCancelApproval(request);
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
         }
@@ -132,6 +140,7 @@ public class ApprovalService {
                 .filter(s -> s.getStepNumber() == request.getCurrentStep())
                 .findFirst()
                 .orElseThrow(() -> RestException.conflict("No current step"));
+        approvalScopeService.assertCanDecideApproval(request, current);
         if (!current.getApproverId().equals(decision.approverId())) {
             throw RestException.forbidden("Only designated approver can act on this step");
         }

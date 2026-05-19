@@ -12,6 +12,8 @@ import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -33,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -53,8 +56,18 @@ class WarehouseEquipmentItemServiceTest {
     @Mock
     WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
 
+    @Mock
+    ScopeAccessService scopeAccessService;
+
     @InjectMocks
     WarehouseEquipmentItemService service;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        lenient().when(warehouseRepository.findByIdAndIsDeletedFalse(any()))
+                .thenAnswer(invocation -> Optional.of(activeWarehouse(invocation.getArgument(0))));
+    }
 
     @Test
     void assignEquipmentToWarehouseSucceeds() {

@@ -7,6 +7,7 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,6 +43,9 @@ class WarehouseServiceTest {
     @Mock
     AuditBuilderService auditBuilderService;
 
+    @Mock
+    ScopeAccessService scopeAccessService;
+
     @InjectMocks
     WarehouseService service;
 
@@ -59,6 +63,8 @@ class WarehouseServiceTest {
         warehouse.setResponsibleId(responsibleId);
         warehouse.setActive(true);
 
+        when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
         when(repository.search(
                 eq("main"),
                 eq(departmentId),

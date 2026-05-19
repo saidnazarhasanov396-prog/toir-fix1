@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.RepairRequestBriefDto;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
@@ -11,7 +12,8 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
-import com.toir.security.SecurityScope;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.WorkOrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,12 +26,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
+import java.util.Optional;
 import java.time.Instant;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -44,13 +48,20 @@ class WorkOrderControllerContractTest {
     WorkOrderService service;
 
     @Mock
-    SecurityScope securityScope;
+    WorkOrderRepository repository;
+
+    @Mock
+    ScopeAccessService scopeAccessService;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new WorkOrderController(service, securityScope))
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        lenient().when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
+        lenient().when(repository.findByIdAndIsDeletedFalse(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.of(workOrderEntity(invocation.getArgument(0), UUID.randomUUID())));
+        mockMvc = MockMvcBuilders.standaloneSetup(new WorkOrderController(service, repository, scopeAccessService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -148,7 +159,7 @@ class WorkOrderControllerContractTest {
     @Test
     void listWithBlankSearchReturns200() throws Exception {
         WorkOrderDto dto = workOrderDto(UUID.randomUUID(), null, null);
-        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, 0, 10, ""))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
 
@@ -170,7 +181,7 @@ class WorkOrderControllerContractTest {
                 3,
                 1
         );
-        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, 0, 10, ""))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
 
@@ -187,7 +198,7 @@ class WorkOrderControllerContractTest {
     void listWithMissingLinkedRepairRequestReturnsNullObject() throws Exception {
         UUID missingRepairRequestId = UUID.randomUUID();
         WorkOrderDto dto = workOrderDtoWithIds(UUID.randomUUID(), missingRepairRequestId, null, null, null);
-        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, 0, 10, ""))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
 
@@ -204,7 +215,7 @@ class WorkOrderControllerContractTest {
     void listWithMissingLinkedDefectReturnsNullObject() throws Exception {
         UUID missingDefectId = UUID.randomUUID();
         WorkOrderDto dto = workOrderDtoWithIds(UUID.randomUUID(), null, missingDefectId, null, null);
-        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, 0, 10, ""))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
 
@@ -219,7 +230,7 @@ class WorkOrderControllerContractTest {
 
     @Test
     void listWithNoDataReturnsStablePage() throws Exception {
-        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, 0, 10, ""))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
 
@@ -409,6 +420,21 @@ class WorkOrderControllerContractTest {
                 .andExpect(jsonPath("$.workType").value("REPLACEMENT"));
     }
 
+    private WorkOrder workOrderEntity(UUID id, UUID departmentId) {
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(id);
+        workOrder.setNumber("WO-2026-1001");
+        workOrder.setTitle("Planned repair");
+        workOrder.setEquipmentId(UUID.randomUUID());
+        workOrder.setDepartmentId(departmentId);
+        workOrder.setStatus(WorkOrderStatus.PLANNED);
+        workOrder.setType(WorkOrderType.PLANNED);
+        workOrder.setWorkType(WorkType.REPAIR);
+        workOrder.setPriority(PriorityLevel.MEDIUM);
+        workOrder.setCreatedById(UUID.randomUUID());
+        return workOrder;
+    }
+
     private String baseCreateRequestJson(UUID repairRequestId, UUID defectId) {
         String repairRequestPart = repairRequestId == null
                 ? ""
@@ -570,7 +596,8 @@ class WorkOrderControllerContractTest {
     @Test
     void statsShouldReturn200AndStatsPayload() throws Exception {
         com.toir.dto.workorder.WorkOrderStatsResponse statsResponse = new com.toir.dto.workorder.WorkOrderStatsResponse(10, 5, 4, 1);
-        when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
+
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.getStats(isNull(), isNull(), isNull(), isNull())).thenReturn(statsResponse);
 
         mockMvc.perform(get("/api/v1/work-orders/stats"))

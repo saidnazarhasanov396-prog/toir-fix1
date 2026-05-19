@@ -31,7 +31,9 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.security.ScopeAccessService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -68,10 +70,12 @@ public class DashboardService {
     private final UserCertificationRepository userCertificationRepository;
     private final CalibrationRecordRepository calibrationRecordRepository;
     private final UserRepository userRepository;
+    private final ScopeAccessService scopeAccessService;
 
 
 
-    public DashboardOverview overview(UUID departmentId) {
+    public DashboardOverview overview(UUID requestedDepartmentId) {
+        UUID departmentId = scopedDepartment(requestedDepartmentId);
         Instant monthAgo = Instant.now().minus(30, ChronoUnit.DAYS);
 
         // Pre-load mappings for filtering
@@ -401,5 +405,16 @@ public class DashboardService {
                 counters, planFact, kpis, topProblem, downtimeByEq, latestDowntimes, latestMovements,
                 contractorLoad, List.of(), List.of(),
                 List.of(), lowStockItems, repeatedDefects, maintenanceKpis);
+    }
+
+    private UUID scopedDepartment(UUID requestedDepartmentId) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return requestedDepartmentId;
+        }
+        UUID currentDepartmentId = scopeAccessService.currentDepartmentIdOrNull();
+        if (currentDepartmentId == null) {
+            throw new AccessDeniedException("Access denied by data scope");
+        }
+        return currentDepartmentId;
     }
 }

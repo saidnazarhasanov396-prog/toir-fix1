@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -29,6 +30,7 @@ public class WarehouseController {
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_READ')")
     public ResponseEntity<Page<WarehouseDto>> list(@RequestParam(required = false) String search,
                                    @RequestParam(required = false) UUID departmentId,
                                    @RequestParam(name = "department_id", required = false) UUID departmentIdAlias,
@@ -48,12 +50,15 @@ public class WarehouseController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_READ')")
     public ResponseEntity<WarehouseDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @GetMapping("/{id}/stocks")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
     public ResponseEntity<Page<WarehouseStockDto>> stocks(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findStocks(id), page, size)); }
 
     @GetMapping("/{warehouseId}/equipment")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_EQUIPMENT_READ')")
     public ResponseEntity<Page<WarehouseEquipmentItemDto>> listEquipment(@PathVariable UUID warehouseId,
                                                                           @RequestParam(required = false) WarehouseEquipmentStatus status,
                                                                           @RequestParam(defaultValue = "0") int page,
@@ -63,6 +68,7 @@ public class WarehouseController {
 
     @DeleteMapping("/{warehouseId}/equipment/{equipmentId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_EQUIPMENT_STATUS_UPDATE')")
     public ResponseEntity<Void> unassignEquipment(@PathVariable UUID warehouseId,
                                                   @PathVariable UUID equipmentId) {
         warehouseEquipmentItemService.remove(warehouseId, equipmentId);
@@ -70,17 +76,20 @@ public class WarehouseController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_CREATE')")
     public ResponseEntity<WarehouseDto> create(@Valid @RequestBody WarehouseRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_UPDATE')")
     public ResponseEntity<WarehouseDto> update(@PathVariable UUID id, @Valid @RequestBody WarehouseRequest request) {
         return ResponseEntity.ok(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_DELETE')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
         return ResponseEntity.noContent().build();

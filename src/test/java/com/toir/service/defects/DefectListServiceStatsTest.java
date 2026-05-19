@@ -2,10 +2,15 @@ package com.toir.service.defects;
 
 import com.toir.dto.defectlist.DefectListStatsResponse;
 import com.toir.enums.DefectListStatus;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectListLineRepository;
 import com.toir.repository.defects.DefectListRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.DefectListStatsProjection;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -15,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -30,8 +36,25 @@ class DefectListServiceStatsTest {
     @Mock
     AuditBuilderService auditBuilderService;
 
+    @Mock
+    EquipmentRepository equipmentRepository;
+
+    @Mock
+    RepairRequestRepository repairRequestRepository;
+
+    @Mock
+    WorkOrderRepository workOrderRepository;
+
+    @Mock
+    ScopeAccessService scopeAccessService;
+
     @InjectMocks
     DefectListService service;
+
+    @BeforeEach
+    void setUpScopeAdminBypass() {
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+    }
 
     @Test
     void getStatsWithoutFiltersReturnsDefectListStats() {

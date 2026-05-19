@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -22,6 +23,7 @@ public class KnowledgeController {
     private final KnowledgeService service;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_READ')")
     public ResponseEntity<Page<KnowledgeArticleDto>> list(
             @RequestParam(name = "equipmentId", required = false) UUID equipmentId,
             @RequestParam(name = "equipmentTypeId", required = false) UUID equipmentTypeId,
@@ -49,21 +51,25 @@ public class KnowledgeController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_READ')")
     public ResponseEntity<KnowledgeArticle> get(@PathVariable UUID id) {
         return ResponseEntity.ok(service.get(id));
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_CREATE')")
     public ResponseEntity<KnowledgeArticle> create(@RequestBody KnowledgeArticle article) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(article));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_UPDATE')")
     public ResponseEntity<KnowledgeArticle> update(@PathVariable UUID id, @RequestBody KnowledgeArticle patch) {
         return ResponseEntity.ok(service.update(id, patch));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_DELETE')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
         return ResponseEntity.noContent().build();

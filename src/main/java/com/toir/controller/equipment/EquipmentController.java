@@ -1,8 +1,11 @@
 package com.toir.controller.equipment;
 import com.toir.dto.equipment.*;
+import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
-import com.toir.security.SecurityScope;
+import com.toir.exception.RestException;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.equipment.EquipmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -22,9 +27,11 @@ import org.springframework.web.bind.annotation.*;
 public class EquipmentController {
 
     private final EquipmentService service;
-    private final SecurityScope securityScope;
+    private final EquipmentRepository repository;
+    private final ScopeAccessService scopeAccessService;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<Page<EquipmentDto>> list(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentTypeId,
@@ -39,7 +46,7 @@ public class EquipmentController {
         int safePage = Math.max(0, page);
         int safePageSize = Math.max(1, size);
         return ResponseEntity.ok(service.search(
-                securityScope.enforceDepartmentScope(departmentId),
+                scopedDepartment(departmentId),
                 equipmentTypeId,
                 status,
                 category,
@@ -51,18 +58,21 @@ public class EquipmentController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<EquipmentDetailDto> get(@PathVariable UUID id) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
         return ResponseEntity.ok(service.findDetailById(id));
     }
 
     @GetMapping("/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public EquipmentStatsResponse getEquipmentStats(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) EquipmentCategory category,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentTypeId
     ) {
-        UUID scopedDepartmentId = securityScope.enforceDepartmentScope(departmentId);
+        UUID scopedDepartmentId = scopedDepartment(departmentId);
 
         return service.getEquipmentStats(
                 search,
@@ -73,11 +83,13 @@ public class EquipmentController {
     }
 
     @GetMapping("/{id}/children")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<Page<EquipmentDto>> children(
             @PathVariable UUID id,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size
     ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
         return ResponseEntity.ok(service.findChildren(id, Math.max(0, page), Math.max(1, size)));
     }
 
@@ -88,12 +100,21 @@ public class EquipmentController {
                     "If warehouseId is provided, the created equipment is assigned in warehouse equipment as AVAILABLE. " +
                     "Equipment code is system-generated and must not be provided by client."
     )
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_CREATE')")
     public ResponseEntity<EquipmentDto> create(@Valid @RequestBody EquipmentCreateRequest request) {
+        if (request.departmentId() != null) {
+            scopeAccessService.assertCanAccessDepartment(request.departmentId());
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<EquipmentDto> update(@PathVariable UUID id, @Valid @RequestBody EquipmentUpdateRequest request) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        if (request.departmentId() != null) {
+            scopeAccessService.assertCanAccessDepartment(request.departmentId());
+        }
         return ResponseEntity.ok(service.update(id, request));
     }
 
@@ -104,15 +125,45 @@ public class EquipmentController {
                     "Use targetType=WAREHOUSE to move equipment into warehouse inventory, " +
                     "or targetType=DEPARTMENT to install into a department."
     )
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TRANSFER')")
     public ResponseEntity<EquipmentDto> updatePlacement(@PathVariable UUID id,
                                                          @Valid @RequestBody EquipmentPlacementRequest request) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        if (request.departmentId() != null) {
+            scopeAccessService.assertCanAccessDepartment(request.departmentId());
+        }
         return ResponseEntity.ok(service.updatePlacement(id, request));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_DELETE')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
         service.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private UUID scopedDepartment(UUID requestedDepartmentId) {
+        UUID scopedDepartmentId = scopeAccessService.enforceDepartmentScope(requestedDepartmentId);
+        if (!scopeAccessService.isScopeAdmin() && scopeAccessService.currentDepartmentIdOrNull() == null) {
+            throw new AccessDeniedException("Access denied by equipment department scope");
+        }
+        return scopedDepartmentId;
+    }
+
+    private Equipment equipmentOrThrow(UUID id) {
+        return repository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
+    }
+
+    private void assertCanAccessEquipment(Equipment equipment) {
+        if (equipment.getDepartmentId() == null) {
+            if (!scopeAccessService.isScopeAdmin()) {
+                throw new AccessDeniedException("Access denied by equipment department scope");
+            }
+            return;
+        }
+        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
     }
 }

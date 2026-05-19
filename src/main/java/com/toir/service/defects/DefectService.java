@@ -23,12 +23,14 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +50,7 @@ public class DefectService {
     private final RepairRequestRepository repairRequestRepository;
     private final WorkOrderRepository workOrderRepository;
     private final AuditBuilderService auditBuilderService;
+    private final ScopeAccessService scopeAccessService;
     private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_DEFECT_LINK =
             EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
     private final KnowledgeArticleRepository knowledgeRepository;
@@ -68,12 +71,21 @@ public class DefectService {
                 search,
                 pageable
         );
+        if (!scopeAccessService.isScopeAdmin()) {
+            List<Defect> scopedContent = resultPage.getContent()
+                    .stream()
+                    .filter(this::canAccessDefect)
+                    .toList();
+            return toResponsePage(new PageImpl<>(scopedContent, pageable, scopedContent.size()));
+        }
         return toResponsePage(resultPage);
     }
 
     @Transactional(readOnly = true)
     public DefectResponse findById(UUID id) {
-        return toResponses(List.of(getOrThrow(id))).getFirst();
+        Defect defect = getOrThrow(id);
+        assertCanAccessDefect(defect);
+        return toResponses(List.of(defect)).getFirst();
     }
 
     @Transactional(readOnly = true)
@@ -88,6 +100,15 @@ public class DefectService {
             String search
     ) {
         String searchPattern = toSearchPattern(search);
+
+        if (!scopeAccessService.isScopeAdmin()) {
+            List<Defect> scopedDefects = repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()
+                    .stream()
+                    .filter(defect -> matchesStatsFilter(defect, equipmentId, repairRequestId, search))
+                    .filter(this::canAccessDefect)
+                    .toList();
+            return scopedStats(scopedDefects);
+        }
 
         DefectStatsProjection stats = repository.getDefectStats(
                 equipmentId,
@@ -108,6 +129,7 @@ public class DefectService {
 
     @Transactional
     public DefectResponse create(DefectRequest request) {
+        assertCanAccessDefectRequest(request);
         Defect saved = saveWithGeneratedCode(request);
 
         auditBuilderService.log(
@@ -126,6 +148,8 @@ public class DefectService {
     @Transactional
     public DefectResponse update(UUID id, DefectRequest request) {
         Defect entity = getOrThrow(id);
+        assertCanAccessDefect(entity);
+        assertCanAccessDefectRequest(request);
         apply(entity, request);
 
         Defect save = repository.save(entity);
@@ -146,6 +170,7 @@ public class DefectService {
     @Transactional
     public DefectResponse resolve(UUID id) {
         Defect entity = getOrThrow(id);
+        assertCanAccessDefect(entity);
         entity.setStatus(DefectStatus.RESOLVED);
         entity.setResolvedAt(Instant.now());
 
@@ -166,6 +191,7 @@ public class DefectService {
     @Transactional
     public void delete(UUID id) {
         var entity = getOrThrow(id);
+        assertCanAccessDefect(entity);
         entity.setDeleted(true);
         Defect saved = repository.save(entity);
 
@@ -331,6 +357,7 @@ public class DefectService {
     public KnowledgeArticle createLesson(UUID id) {
         Defect d = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Defect not found: " + id));
+        assertCanAccessDefect(d);
         String code = "LL-DEF-" + d.getCode();
         if (knowledgeRepository.existsByCodeAndIsDeletedFalse(code)) {
             throw RestException.conflict("Lesson already exists for defect: " + code);
@@ -352,6 +379,83 @@ public class DefectService {
         a.setPreventiveActions("Требуется заполнить по результатам расследования.");
 
         return knowledgeRepository.save(a);
+    }
+
+    private void assertCanAccessDefect(Defect defect) {
+        if (!canAccessDefect(defect)) {
+            throw new AccessDeniedException("Access denied by defect department scope");
+        }
+    }
+
+    private boolean canAccessDefect(Defect defect) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        return resolveDefectDepartmentId(defect)
+                .map(scopeAccessService::canAccessDepartment)
+                .orElse(false);
+    }
+
+    private void assertCanAccessDefectRequest(DefectRequest request) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        Optional<UUID> departmentId = resolveDefectDepartmentId(request.equipmentId(), request.repairRequestId());
+        if (departmentId.isEmpty() || !scopeAccessService.canAccessDepartment(departmentId.get())) {
+            throw new AccessDeniedException("Access denied by defect department scope");
+        }
+    }
+
+    private Optional<UUID> resolveDefectDepartmentId(Defect defect) {
+        return resolveDefectDepartmentId(defect.getEquipmentId(), defect.getRepairRequestId());
+    }
+
+    private Optional<UUID> resolveDefectDepartmentId(UUID equipmentId, UUID repairRequestId) {
+        Set<UUID> departments = new LinkedHashSet<>();
+        if (equipmentId != null) {
+            equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                    .map(Equipment::getDepartmentId)
+                    .filter(Objects::nonNull)
+                    .ifPresent(departments::add);
+        }
+        if (repairRequestId != null) {
+            repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId)
+                    .map(RepairRequest::getDepartmentId)
+                    .filter(Objects::nonNull)
+                    .ifPresent(departments::add);
+        }
+        return departments.size() == 1 ? Optional.of(departments.iterator().next()) : Optional.empty();
+    }
+
+    private boolean matchesStatsFilter(Defect defect, UUID equipmentId, UUID repairRequestId, String search) {
+        if (equipmentId != null && !equipmentId.equals(defect.getEquipmentId())) {
+            return false;
+        }
+        if (repairRequestId != null && !repairRequestId.equals(defect.getRepairRequestId())) {
+            return false;
+        }
+        if (search == null || search.isBlank()) {
+            return true;
+        }
+        String normalized = search.trim().toLowerCase(Locale.ROOT);
+        return containsIgnoreCase(defect.getCode(), normalized)
+                || containsIgnoreCase(defect.getTitle(), normalized)
+                || containsIgnoreCase(defect.getDescription(), normalized)
+                || containsIgnoreCase(defect.getCategory(), normalized)
+                || containsIgnoreCase(defect.getSeverity(), normalized)
+                || containsIgnoreCase(defect.getFailureReason(), normalized)
+                || containsIgnoreCase(defect.getRootCause(), normalized);
+    }
+
+    private boolean containsIgnoreCase(String value, String normalizedSearch) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(normalizedSearch);
+    }
+
+    private DefectStatsResponse scopedStats(List<Defect> defects) {
+        long open = defects.stream().filter(defect -> defect.getStatus() == DefectStatus.OPEN).count();
+        long resolved = defects.stream().filter(defect -> defect.getStatus() == DefectStatus.RESOLVED).count();
+        long withRecurrence = defects.stream().filter(defect -> defect.getRecurrenceCount() > 0).count();
+        return new DefectStatsResponse(defects.size(), open, resolved, withRecurrence);
     }
 
     private DefectResponse toResponse(Defect defect,

@@ -34,6 +34,9 @@ class ActualCostServiceTest {
     @Mock
     AuditBuilderService auditBuilderService;
 
+    @Mock
+    FinanceScopeService financeScopeService;
+
     @InjectMocks
     ActualCostService service;
 
@@ -89,6 +92,7 @@ class ActualCostServiceTest {
 
         when(repository.findAllByFiltersOrderByUpdatedAtDesc(workOrderId, "WO-2026-1"))
                 .thenReturn(List.of(actualCost));
+        when(financeScopeService.filterActualCosts(List.of(actualCost))).thenReturn(List.of(actualCost));
 
         List<ActualCostDto> result = service.findByFilters(workOrderId, "WO-2026-1");
 
