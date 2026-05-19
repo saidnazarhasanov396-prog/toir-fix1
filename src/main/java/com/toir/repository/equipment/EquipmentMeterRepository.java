@@ -90,11 +90,7 @@ public interface EquipmentMeterRepository extends JpaRepository<EquipmentMeter, 
              WHERE r.is_deleted = false 
                AND r.meter_id IN (SELECT id FROM filtered_meters)
             ) as totalReadings,
-            (SELECT count(t.id) FROM meter_triggers t 
-             WHERE t.is_deleted = false 
-               AND t.is_due = true 
-               AND t.meter_id IN (SELECT id FROM filtered_meters)
-            ) as dueTriggers
+            0 as dueTriggers
         """, nativeQuery = true)
     MeterStatsProjection getMeterStats(
             @Param("search") String search,

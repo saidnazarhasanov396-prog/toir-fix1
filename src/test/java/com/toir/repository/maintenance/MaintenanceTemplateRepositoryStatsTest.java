@@ -37,7 +37,7 @@ class MaintenanceTemplateRepositoryStatsTest {
         assertThat(stats.getTotalTemplates()).isEqualTo(2);
         assertThat(stats.getWithOperations()).isEqualTo(2);
         assertThat(stats.getTotalOperations()).isEqualTo(3);
-        assertThat(stats.getAvgOperationsPerTemplate()).isEqualTo(1.5);
+        assertThat(stats.getAvgOperationsPerTemplate()).isEqualTo(1.5f);
     }
 
     @Test
@@ -53,7 +53,7 @@ class MaintenanceTemplateRepositoryStatsTest {
         assertThat(stats.getTotalTemplates()).isEqualTo(1);
         assertThat(stats.getWithOperations()).isEqualTo(1);
         assertThat(stats.getTotalOperations()).isEqualTo(1);
-        assertThat(stats.getAvgOperationsPerTemplate()).isEqualTo(1.0);
+        assertThat(stats.getAvgOperationsPerTemplate()).isEqualTo(1.0f);
     }
 
     @Test
