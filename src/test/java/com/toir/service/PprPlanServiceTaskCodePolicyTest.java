@@ -11,6 +11,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Year;
 import java.util.ArrayList;
@@ -45,6 +47,9 @@ class PprPlanServiceTaskCodePolicyTest {
 
     @Mock
     PprTaskRepository taskRepository;
+
+    @Mock
+    DepartmentRepository departmentRepository;
 
     @Mock
     AuditBuilderService auditBuilderService;
@@ -254,6 +259,87 @@ class PprPlanServiceTaskCodePolicyTest {
         verify(taskRepository, times(2)).save(any(PprTask.class));
     }
 
+    @Test
+    void createTaskWithStartDateAndEndDatePersistsAndReturnsDateAliases() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId);
+        LocalDate startDate = LocalDate.of(2026, 5, 1);
+        LocalDate endDate = LocalDate.of(2026, 5, 10);
+
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(taskRepository.maxSequenceByCodePrefix("PPR-TASK-" + Year.now().getValue() + "-")).thenReturn(0L);
+        when(taskRepository.existsByCode("PPR-TASK-" + Year.now().getValue() + "-0001")).thenReturn(false);
+        when(taskRepository.save(any(PprTask.class))).thenAnswer(invocation -> {
+            PprTask task = invocation.getArgument(0);
+            task.setId(UUID.randomUUID());
+            return task;
+        });
+
+        PprTaskDto created = service.addTask(planId, requestWithDates(startDate, endDate));
+
+        assertThat(created.startDate()).isEqualTo(startDate);
+        assertThat(created.endDate()).isEqualTo(endDate);
+
+        ArgumentCaptor<PprTask> captor = ArgumentCaptor.forClass(PprTask.class);
+        verify(taskRepository).save(captor.capture());
+        assertThat(captor.getValue().getScheduledStart()).isEqualTo(startDate.atStartOfDay());
+        assertThat(captor.getValue().getScheduledEnd()).isEqualTo(endDate.atTime(23, 59, 59));
+        assertThat(captor.getValue().getDueDate()).isEqualTo(endDate.atTime(23, 59, 59));
+    }
+
+    @Test
+    void createTaskRejectsEndDateBeforeStartDate() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId);
+
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+
+        assertThatThrownBy(() -> service.addTask(
+                planId,
+                requestWithDates(LocalDate.of(2026, 5, 10), LocalDate.of(2026, 5, 1))
+        ))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("PPR task end date must not be before start date");
+                });
+
+        verify(taskRepository, never()).save(any(PprTask.class));
+    }
+
+    @Test
+    void startTaskUpdatesSameTaskAndReturnsStatusAndDates() {
+        UUID taskId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        PprTask task = new PprTask();
+        task.setId(taskId);
+        task.setCode("PPR-TASK-2026-0001");
+        task.setPlan(plan(planId));
+        task.setRegulationId(UUID.randomUUID());
+        task.setEquipmentId(UUID.randomUUID());
+        task.setTitle("Manual PPR task");
+        task.setScheduledStart(LocalDateTime.of(2026, 5, 1, 9, 0));
+        task.setScheduledEnd(LocalDateTime.of(2026, 5, 10, 18, 0));
+        task.setDueDate(LocalDateTime.of(2026, 5, 10, 18, 0));
+        task.setStatus(PprTaskStatus.PLANNED);
+        task.setPriority(PriorityLevel.MEDIUM);
+        task.setPlannedLaborHours(2.0);
+
+        when(taskRepository.findByIdAndIsDeletedFalse(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any(PprTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PprTaskDto result = service.startTask(taskId);
+
+        assertThat(result.id()).isEqualTo(taskId);
+        assertThat(result.status()).isEqualTo(PprTaskStatus.IN_PROGRESS);
+        assertThat(result.startDate()).isEqualTo(LocalDate.of(2026, 5, 1));
+        assertThat(result.endDate()).isEqualTo(LocalDate.of(2026, 5, 10));
+
+        ArgumentCaptor<PprTask> captor = ArgumentCaptor.forClass(PprTask.class);
+        verify(taskRepository).save(captor.capture());
+        assertThat(captor.getValue().getId()).isEqualTo(taskId);
+        assertThat(captor.getValue().getStatus()).isEqualTo(PprTaskStatus.IN_PROGRESS);
+    }
+
     private PprPlan plan(UUID id) {
         PprPlan plan = new PprPlan();
         plan.setId(id);
@@ -268,9 +354,27 @@ class PprPlanServiceTaskCodePolicyTest {
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 "Manual PPR task",
+                null,
+                null,
                 start,
                 start.plusHours(2),
                 start.plusDays(1),
+                PriorityLevel.MEDIUM,
+                2.0
+        );
+    }
+
+    private PprTaskRequest requestWithDates(LocalDate startDate, LocalDate endDate) {
+        return new PprTaskRequest(
+                null,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "Manual PPR task",
+                startDate,
+                endDate,
+                null,
+                null,
+                null,
                 PriorityLevel.MEDIUM,
                 2.0
         );

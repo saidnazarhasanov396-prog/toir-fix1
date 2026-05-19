@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.pprplanning.*;
+import com.toir.entity.Department;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
 import com.toir.enums.AuditAction;
@@ -9,18 +10,27 @@ import com.toir.enums.PlanStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
+import com.toir.repository.PprPlanStatsProjection;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.Year;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -29,6 +39,7 @@ public class PprPlanService {
 
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
+    private final DepartmentRepository departmentRepository;
     private final AuditBuilderService auditBuilderService;
     private final AuditSerializationService auditSerializationService;
     private static final int MAX_PLAN_CODE_GENERATION_ATTEMPTS = 50;
@@ -39,12 +50,41 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public List<PprPlanDto> findAll() {
-        return planRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(PprPlanDto::from).toList();
+        return toDtos(planRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprPlanDto> findAll(Integer year, Integer month, UUID departmentId, int page, int size) {
+        Page<PprPlan> plans = planRepository.searchPlans(
+                        year,
+                        month,
+                        departmentId,
+                        PaginationUtils.pageRequest(page, size)
+                );
+        Map<UUID, String> departmentNames = resolveDepartmentNames(plans.getContent());
+        return plans.map(plan -> PprPlanDto.from(plan, departmentNames.get(plan.getDepartmentId())));
+    }
+
+    @Transactional(readOnly = true)
+    public PprPlanStatsResponse getStats(Integer year, Integer month, UUID departmentId) {
+        PprPlanStatsProjection stats = planRepository.getStats(year, month, departmentId);
+        if (stats == null) {
+            return new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0);
+        }
+        return new PprPlanStatsResponse(
+                safe(stats.getTotalPlans()),
+                safe(stats.getDraftPlans()),
+                safe(stats.getGeneratedPlans()),
+                safe(stats.getApprovedPlans()),
+                safe(stats.getPlannedTasks()),
+                safe(stats.getInProgressTasks()),
+                safe(stats.getCompletedTasks())
+        );
     }
 
     @Transactional(readOnly = true)
     public PprPlanDto findById(UUID id) {
-        return PprPlanDto.from(getPlan(id));
+        return toDto(getPlan(id));
     }
 
     @Transactional
@@ -61,7 +101,7 @@ public class PprPlanService {
                 saved
         );
 
-        return PprPlanDto.from(saved);
+        return toDto(saved);
     }
 
     public PprPlanDto update(UUID id, PprPlanRequest request) {
@@ -85,7 +125,7 @@ public class PprPlanService {
                 plan,
                 saved
         );
-        return PprPlanDto.from(plan);
+        return toDto(plan);
     }
 
     @Transactional
@@ -115,7 +155,7 @@ public class PprPlanService {
         }
         plan.setStatus(PlanStatus.APPROVED);
         plan.setApprovedById(approverId);
-        return PprPlanDto.from(plan);
+        return toDto(plan);
     }
 
     public PprTaskDto addTask(UUID planId, PprTaskRequest request) {
@@ -244,12 +284,48 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public List<PprTaskDto> findTasksByPlan(UUID planId) {
-        return taskRepository.findAllByPlanIdAndIsDeletedFalseOrderByUpdatedAtDesc(planId).stream().map(PprTaskDto::from).toList();
+        return taskRepository.findAllByPlanIdAndIsDeletedFalseOrderByScheduledStartAscIdAsc(planId)
+                .stream()
+                .map(PprTaskDto::from)
+                .toList();
     }
 
     private PprPlan getPlan(UUID id) {
         return planRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("PPR plan not found: " + id));
+    }
+
+    private PprPlanDto toDto(PprPlan plan) {
+        Map<UUID, String> departmentNames = resolveDepartmentNames(List.of(plan));
+        return PprPlanDto.from(plan, departmentNames.get(plan.getDepartmentId()));
+    }
+
+    private List<PprPlanDto> toDtos(List<PprPlan> plans) {
+        Map<UUID, String> departmentNames = resolveDepartmentNames(plans);
+        return plans.stream()
+                .map(plan -> PprPlanDto.from(plan, departmentNames.get(plan.getDepartmentId())))
+                .toList();
+    }
+
+    private Map<UUID, String> resolveDepartmentNames(List<PprPlan> plans) {
+        List<UUID> departmentIds = plans.stream()
+                .map(PprPlan::getDepartmentId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (departmentIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Department> departments = departmentRepository.findAllByIdInAndIsDeletedFalse(departmentIds);
+        if (departments == null || departments.isEmpty()) {
+            return Map.of();
+        }
+        return departments.stream()
+                .collect(Collectors.toMap(
+                        Department::getId,
+                        Department::getName,
+                        (left, right) -> left
+                ));
     }
 
     private PprTask getTask(UUID id) {
@@ -258,16 +334,46 @@ public class PprPlanService {
     }
 
     private void applyTaskMutableFields(PprTask task, PprPlan plan, PprTaskRequest request) {
+        LocalDateTime scheduledStart = resolveScheduledStart(request);
+        LocalDateTime scheduledEnd = resolveScheduledEnd(request);
+        validateTaskDateRange(scheduledStart, scheduledEnd);
+
         task.setPlan(plan);
         task.setRegulationId(request.regulationId());
         task.setEquipmentId(request.equipmentId());
         task.setTitle(request.title());
-        task.setScheduledStart(request.scheduledStart());
-        task.setScheduledEnd(request.scheduledEnd());
-        task.setDueDate(request.dueDate());
+        task.setScheduledStart(scheduledStart);
+        task.setScheduledEnd(scheduledEnd);
+        task.setDueDate(request.dueDate() != null ? request.dueDate() : scheduledEnd);
         task.setPlannedLaborHours(request.plannedLaborHours());
         if (request.priority() != null) {
             task.setPriority(request.priority());
+        }
+    }
+
+    private LocalDateTime resolveScheduledStart(PprTaskRequest request) {
+        if (request.scheduledStart() != null) {
+            return request.scheduledStart();
+        }
+        if (request.startDate() != null) {
+            return request.startDate().atStartOfDay();
+        }
+        throw RestException.badRequest("PPR task startDate or scheduledStart is required");
+    }
+
+    private LocalDateTime resolveScheduledEnd(PprTaskRequest request) {
+        if (request.scheduledEnd() != null) {
+            return request.scheduledEnd();
+        }
+        if (request.endDate() != null) {
+            return request.endDate().atTime(LocalTime.of(23, 59, 59));
+        }
+        throw RestException.badRequest("PPR task endDate or scheduledEnd is required");
+    }
+
+    private void validateTaskDateRange(LocalDateTime scheduledStart, LocalDateTime scheduledEnd) {
+        if (scheduledEnd.isBefore(scheduledStart)) {
+            throw RestException.badRequest("PPR task end date must not be before start date");
         }
     }
 
@@ -372,6 +478,10 @@ public class PprPlanService {
 
     private String formatCode(String prefix, int year, long sequence) {
         return "%s-%d-%04d".formatted(prefix, year, sequence);
+    }
+
+    private long safe(Long value) {
+        return value == null ? 0L : value;
     }
 
 }

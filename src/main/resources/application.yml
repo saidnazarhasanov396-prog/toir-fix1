@@ -5,13 +5,13 @@ spring:
     default: prod
   sql:
     init:
-      mode: always
-      schema-locations: classpath:db/manual/*.sql
+      mode: never
   flyway:
     enabled: true
     baseline-on-migrate: true
     baseline-version: 0
     locations: classpath:db/migration
+    validate-on-migrate: true
 
 springdoc:
   cache:

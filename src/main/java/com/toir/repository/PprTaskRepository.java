@@ -32,6 +32,15 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
     @Query(value = "SELECT * FROM ppr_tasks WHERE plan_id = cast(:planId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<PprTask> findAllByPlanIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("planId") UUID planId);
 
+    @Query(value = """
+            SELECT *
+            FROM ppr_tasks
+            WHERE plan_id = cast(:planId as uuid)
+              AND is_deleted = false
+            ORDER BY scheduled_start ASC NULLS LAST, id ASC
+            """, nativeQuery = true)
+    List<PprTask> findAllByPlanIdAndIsDeletedFalseOrderByScheduledStartAscIdAsc(@Param("planId") UUID planId);
+
     boolean existsByCode(String code);
 
     @Query(value = """
