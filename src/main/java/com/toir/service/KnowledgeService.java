@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.knowledge.KnowledgeArticleDto;
+import com.toir.dto.knowledge.KnowledgeStatsResponse;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.exception.RestException;
 import com.toir.repository.KnowledgeArticleRepository;
@@ -45,6 +46,18 @@ public class KnowledgeService {
         return PaginationUtils
                 .page(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc(), page, size)
                 .map(KnowledgeArticleDto::from);
+    }
+
+    @Transactional(readOnly = true)
+    public KnowledgeStatsResponse getStats(UUID equipmentId, UUID equipmentTypeId, String kind) {
+        String normalizedKind = kind == null || kind.isBlank() ? null : kind.trim();
+        var stats = repository.getKnowledgeStats(equipmentId, equipmentTypeId, normalizedKind);
+        return new KnowledgeStatsResponse(
+                stats.getTotalArticles() == null ? 0 : stats.getTotalArticles(),
+                stats.getLessonLearned() == null ? 0 : stats.getLessonLearned(),
+                stats.getProcedures() == null ? 0 : stats.getProcedures(),
+                stats.getTroubleshooting() == null ? 0 : stats.getTroubleshooting()
+        );
     }
 
     @Transactional

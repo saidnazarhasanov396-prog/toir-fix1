@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.dto.knowledge.KnowledgeArticleDto;
+import com.toir.dto.knowledge.KnowledgeStatsResponse;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.service.KnowledgeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,6 +37,15 @@ public class KnowledgeController {
                 page,
                 size
         ));
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<KnowledgeStatsResponse> stats(
+            @RequestParam(name = "equipmentId", required = false) UUID equipmentId,
+            @RequestParam(name = "equipmentTypeId", required = false) UUID equipmentTypeId,
+            @RequestParam(name = "kind", required = false) String kind
+    ) {
+        return ResponseEntity.ok(service.getStats(equipmentId, equipmentTypeId, kind));
     }
 
     @GetMapping("/{id}")

@@ -30,4 +30,22 @@ public interface PlannedShutdownRepository extends JpaRepository<PlannedShutdown
 
     @Query(value = "SELECT * FROM planned_shutdowns WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<PlannedShutdown> findAllByDepartmentIdAndIsDeletedFalseOrderByStartAtDesc(@Param("departmentId") UUID departmentId);
+
+    @Query(value = """
+            SELECT * FROM planned_shutdowns 
+            WHERE is_deleted = false 
+              AND (cast(:departmentId as uuid) IS NULL OR department_id = cast(:departmentId as uuid))
+              AND (:status IS NULL OR status = :status)
+              AND (
+                :searchPattern IS NULL 
+                OR lower(coalesce(name, '')) LIKE :searchPattern 
+                OR lower(coalesce(reason, '')) LIKE :searchPattern
+              )
+            ORDER BY start_at DESC
+            """, nativeQuery = true)
+    List<PlannedShutdown> findAllFiltered(
+            @Param("departmentId") UUID departmentId,
+            @Param("status") String status,
+            @Param("searchPattern") String searchPattern
+    );
 }

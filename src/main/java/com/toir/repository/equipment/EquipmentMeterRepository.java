@@ -59,4 +59,47 @@ public interface EquipmentMeterRepository extends JpaRepository<EquipmentMeter, 
 
     @Query(value = "SELECT * FROM equipment_meters WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<EquipmentMeter> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
+
+    @Query(value = """
+        WITH filtered_meters AS (
+            SELECT em.id, em.is_active
+            FROM equipment_meters em
+            LEFT JOIN equipment e ON e.id = em.equipment_id AND e.is_deleted = false
+            WHERE em.is_deleted = false
+              AND (:metricType IS NULL OR :metricType = '' OR em.meter_type = :metricType)
+              AND (CAST(:equipmentId AS text) IS NULL OR em.equipment_id = CAST(:equipmentId AS uuid))
+              AND (CAST(:equipmentSearch AS text) IS NULL OR :equipmentSearch = '' OR
+                   LOWER(COALESCE(e.code, '')) LIKE LOWER(CONCAT('%', CAST(:equipmentSearch AS text), '%')) OR
+                   LOWER(COALESCE(e.name, '')) LIKE LOWER(CONCAT('%', CAST(:equipmentSearch AS text), '%')) OR
+                   LOWER(COALESCE(e.inventory_number, '')) LIKE LOWER(CONCAT('%', CAST(:equipmentSearch AS text), '%')) OR
+                   LOWER(COALESCE(e.technical_number, '')) LIKE LOWER(CONCAT('%', CAST(:equipmentSearch AS text), '%')) OR
+                   LOWER(COALESCE(e.serial_number, '')) LIKE LOWER(CONCAT('%', CAST(:equipmentSearch AS text), '%'))
+              )
+              AND (CAST(:search AS text) IS NULL OR :search = '' OR
+                   LOWER(em.name) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(em.unit) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(e.code, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(e.name, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(e.inventory_number, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%'))
+              )
+        )
+        SELECT 
+            (SELECT count(*) FROM filtered_meters) as totalMeters,
+            (SELECT count(*) FROM filtered_meters WHERE is_active = true) as activeMeters,
+            (SELECT count(r.id) FROM meter_readings r 
+             WHERE r.is_deleted = false 
+               AND r.meter_id IN (SELECT id FROM filtered_meters)
+            ) as totalReadings,
+            (SELECT count(t.id) FROM meter_triggers t 
+             WHERE t.is_deleted = false 
+               AND t.is_due = true 
+               AND t.meter_id IN (SELECT id FROM filtered_meters)
+            ) as dueTriggers
+        """, nativeQuery = true)
+    MeterStatsProjection getMeterStats(
+            @Param("search") String search,
+            @Param("metricType") String meterTypeStr,
+            @Param("equipmentId") UUID equipmentId,
+            @Param("equipmentSearch") String equipmentSearch
+    );
 }

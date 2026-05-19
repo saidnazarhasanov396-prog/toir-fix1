@@ -61,4 +61,22 @@ public interface KnowledgeArticleRepository extends JpaRepository<KnowledgeArtic
             @Param("defectIds") Collection<UUID> defectIds,
             @Param("kind") String kind
     );
+
+    @Query(nativeQuery = true, value = """
+        select
+            count(a.id) as totalArticles,
+            count(a.id) filter (where a.kind = 'LESSON_LEARNED') as lessonLearned,
+            count(a.id) filter (where a.kind = 'PROCEDURE') as procedures,
+            count(a.id) filter (where a.kind = 'TROUBLESHOOTING') as troubleshooting
+        from knowledge_articles a
+        where a.is_deleted = false
+          and (cast(:equipmentId as varchar) is null or a.equipment_id = cast(:equipmentId as uuid))
+          and (cast(:equipmentTypeId as varchar) is null or a.equipment_type_id = cast(:equipmentTypeId as uuid))
+          and (cast(:kind as varchar) is null or a.kind = cast(:kind as varchar))
+    """)
+    KnowledgeStatsProjection getKnowledgeStats(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("equipmentTypeId") UUID equipmentTypeId,
+            @Param("kind") String kind
+    );
 }
