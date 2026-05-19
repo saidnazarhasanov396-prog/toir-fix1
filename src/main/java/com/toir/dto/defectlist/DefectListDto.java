@@ -1,0 +1,44 @@
+package com.toir.dto.defectlist;
+
+import com.toir.entity.defects.DefectList;
+import com.toir.enums.DefectListStatus;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+public record DefectListDto(
+        UUID id,
+        Instant createdAt,
+        String code,
+        String title,
+        UUID equipmentId,
+        UUID repairRequestId,
+        UUID workOrderId,
+        UUID createdById,
+        UUID approvedById,
+        DefectListStatus status,
+        double totalLaborHours,
+        double totalEstimatedCost,
+        String notes,
+        List<DefectListLineDto> lines
+) {
+    public static DefectListDto from(DefectList d) {
+        return new DefectListDto(
+                d.getId(),
+                d.getCreatedAt(),
+                d.getCode(),
+                d.getTitle(),
+                d.getEquipmentId(),
+                d.getRepairRequestId(),
+                d.getWorkOrderId(),
+                d.getCreatedById(),
+                d.getApprovedById(),
+                d.getStatus(),
+                d.getTotalLaborHours(),
+                d.getTotalEstimatedCost(),
+                d.getNotes(),
+                d.getLines().stream().map(DefectListLineDto::from).toList()
+        );
+    }
+}

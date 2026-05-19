@@ -1,0 +1,121 @@
+package com.toir.config;
+
+import com.toir.entity.users.Role;
+import com.toir.entity.users.User;
+import com.toir.repository.users.UserRepository;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.JwtService;
+import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
+import lombok.RequiredArgsConstructor;
+import org.hibernate.Hibernate;
+import org.springdoc.core.customizers.OpenApiCustomizer;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.*;
+
+@Configuration
+@RequiredArgsConstructor
+public class OpenApiConfig {
+
+    private static final String SCHEME_NAME = "bearerAuth";
+    private final UserRepository userRepository;
+    private final JwtService jwtService;
+
+    @Value("${app.openapi.prod-url:https://api-toir.tenzorsoft.uz}")
+    private String prodUrl;
+
+    @Value("${app.openapi.dev-url:http://localhost:8080}")
+    private String devUrl;
+
+    @Value("${spring.profiles.default}")
+    private String defaultProfile;
+
+
+    @Bean
+    public OpenAPI toirOpenAPI() {
+        List<Server> servers = new ArrayList<>();
+
+        Server prodServer = new Server();
+        prodServer.setUrl(prodUrl);
+        prodServer.setDescription("Production");
+
+        Server devServer = new Server();
+        devServer.setUrl(devUrl);
+        devServer.setDescription("Local");
+
+        if (defaultProfile.contains("dev")) {
+            servers.add(devServer);
+            servers.add(prodServer);
+        } else {
+            servers.add(prodServer);
+            servers.add(devServer);
+        }
+        return new OpenAPI()
+                .info(new Info()
+                        .title("TOIR Backend API")
+                        .description("### Admin Token:\n```text\nLoading...\n```")
+                        .version("1.0.0"))
+                .servers(servers)
+                .addSecurityItem(new SecurityRequirement().addList(SCHEME_NAME))
+                .components(new Components().addSecuritySchemes(SCHEME_NAME,
+                        new SecurityScheme()
+                                .name(SCHEME_NAME)
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("JWT")));
+    }
+
+    @Bean
+    public OpenApiCustomizer adminTokenCustomizer() {
+        return openApi -> openApi.getInfo()
+                .setDescription("### Admin Token:\n```text\n" + getAdminToken() + "\n```");
+    }
+
+    private String getAdminToken() {
+        Optional<User> admin = userRepository.findByUsernameAndIsDeletedFalse("admin");
+        if (admin.isPresent()) {
+            User user = admin.get();
+            Hibernate.initialize(user.getRoles());
+            Hibernate.initialize(user.getPrimaryRole());
+
+            Set<String> permissions = new LinkedHashSet<>();
+            Set<Role> roles = user.getRoles();
+            Set<String> authorityCodes = new LinkedHashSet<>(roles.stream().map(Role::getCode).toList());
+            for (Role role : roles) {
+                if (role.getPermissions() != null) permissions.addAll(role.getPermissions());
+            }
+            if (user.getPrimaryRole() != null && user.getPrimaryRole().getPermissions() != null) {
+                permissions.addAll(user.getPrimaryRole().getPermissions());
+            }
+
+            String primaryRoleCode = user.getPrimaryRole() != null ? user.getPrimaryRole().getCode() : null;
+            if (primaryRoleCode != null) authorityCodes.add(primaryRoleCode);
+            AuthenticatedUser principal = new AuthenticatedUser(
+                    user.getId().toString(),
+                    user.getUsername(),
+                    user.getEmail(),
+                    user.getFullName(),
+                    user.getDepartmentId() != null ? user.getDepartmentId().toString() : null,
+                    primaryRoleCode,
+                    List.copyOf(permissions)
+            );
+
+            Map<String, Object> extra = new HashMap<>();
+            extra.put("email", user.getEmail());
+            extra.put("fullName", user.getFullName());
+            extra.put("departmentId", principal.departmentId());
+            extra.put("primaryRoleCode", primaryRoleCode);
+            extra.put("permissions", principal.permissions());
+
+            return jwtService.generateToken(principal.id(), principal.username(), List.copyOf(authorityCodes), extra);
+        }
+        return "TOKEN NOT FOUND!";
+    }
+}

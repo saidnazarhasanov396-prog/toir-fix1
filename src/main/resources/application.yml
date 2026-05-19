@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: toir-backend
+  profiles:
+    default: prod
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/manual/*.sql
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+
+springdoc:
+  cache:
+    disabled: true

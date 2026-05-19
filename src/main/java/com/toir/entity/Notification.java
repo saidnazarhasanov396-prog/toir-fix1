@@ -1,0 +1,50 @@
+package com.toir.entity;
+import com.toir.enums.NotificationChannel;
+import com.toir.enums.NotificationSeverity;
+import com.toir.enums.NotificationStatus;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.Instant;
+import java.util.UUID;
+
+@Entity
+@Table(name = "notifications")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
+public class Notification extends BaseEntity {
+
+    @Column(name = "recipient_id", nullable = false)
+    private UUID recipientId;
+
+    @Column(nullable = false)
+    private String title;
+
+    @Column(nullable = false, columnDefinition = "text")
+    private String message;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private NotificationChannel channel = NotificationChannel.WEB;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private NotificationStatus status = NotificationStatus.PENDING;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private NotificationSeverity severity = NotificationSeverity.INFO;
+
+    @Column(name = "entity_type")
+    private String entityType;
+
+    @Column(name = "entity_id")
+    private String entityId;
+
+    @Column(name = "read_at")
+    private Instant readAt;
+}
