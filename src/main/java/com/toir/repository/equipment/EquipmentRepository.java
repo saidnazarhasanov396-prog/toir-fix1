@@ -92,6 +92,17 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                            @Param("searchPattern") String searchPattern,
                            Pageable pageable);
 
+    @Query("select e from Equipment e where e.isDeleted = false " +
+            "and (:equipmentId is null or e.id = :equipmentId) " +
+            "and (:searchPattern is null or " +
+            "lower(e.code) like :searchPattern or " +
+            "lower(e.name) like :searchPattern or " +
+            "lower(e.inventoryNumber) like :searchPattern) " +
+            "order by e.updatedAt desc")
+    Page<Equipment> searchForPassport(@Param("equipmentId") UUID equipmentId,
+                                      @Param("searchPattern") String searchPattern,
+                                      Pageable pageable);
+
     @Query("""
             select e
             from Equipment e

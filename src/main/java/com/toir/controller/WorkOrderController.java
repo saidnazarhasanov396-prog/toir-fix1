@@ -1,4 +1,5 @@
 package com.toir.controller;
+
 import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
@@ -42,9 +43,9 @@ public class WorkOrderController {
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
-            @RequestParam(required = false) String search
-    ) {
-        return ResponseEntity.ok(service.search(status, scopedDepartment(departmentId), equipmentId, page, size, search));
+            @RequestParam(required = false) String search) {
+        return ResponseEntity
+                .ok(service.search(status, scopedDepartment(departmentId), equipmentId, page, size, search));
     }
 
     @GetMapping("/stats")
@@ -53,8 +54,7 @@ public class WorkOrderController {
             @RequestParam(required = false) WorkOrderStatus status,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
-            @RequestParam(required = false) String search
-    ) {
+            @RequestParam(required = false) String search) {
         return ResponseEntity.ok(service.getStats(status, scopedDepartment(departmentId), equipmentId, search));
     }
 
@@ -65,8 +65,7 @@ public class WorkOrderController {
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "20") int size
-    ) {
+            @RequestParam(name = "size", defaultValue = "20") int size) {
         return ResponseEntity.ok(service.mobileFeed(scopedDepartment(departmentId), equipmentId, search, page, size));
     }
 
@@ -100,14 +99,16 @@ public class WorkOrderController {
 
     @PostMapping("/{id}/complete")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_COMPLETE')")
-    public ResponseEntity<WorkOrderDto> complete(@PathVariable UUID id, @Valid @RequestBody CompleteWorkOrderRequest request) {
+    public ResponseEntity<WorkOrderDto> complete(@PathVariable UUID id,
+            @Valid @RequestBody CompleteWorkOrderRequest request) {
         assertCanAccessWorkOrder(workOrderOrThrow(id));
         return ResponseEntity.ok(service.complete(id, request));
     }
 
     @PostMapping("/{id}/close")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_CLOSE')")
-    public ResponseEntity<WorkOrderDto> close(@PathVariable UUID id, @Valid @RequestBody CloseWorkOrderRequest request) {
+    public ResponseEntity<WorkOrderDto> close(@PathVariable UUID id,
+            @Valid @RequestBody CloseWorkOrderRequest request) {
         assertCanAccessWorkOrder(workOrderOrThrow(id));
         return ResponseEntity.ok(service.close(id, request));
     }
