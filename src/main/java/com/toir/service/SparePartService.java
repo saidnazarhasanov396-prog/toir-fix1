@@ -3,17 +3,22 @@ package com.toir.service;
 import com.toir.dto.sparepart.SparePartDto;
 import com.toir.dto.sparepart.SparePartRequest;
 import com.toir.entity.SparePart;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.InventoryItemKind;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,23 +33,68 @@ public class SparePartService {
 
     private final SparePartRepository repository;
     private final WarehouseStockRepository stockRepository;
+    private final WarehouseRepository warehouseRepository;
+    private final ScopeAccessService scopeAccessService;
     private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
-    public Page<SparePartDto> findAll(Integer pageSize, Integer page, String itemType, String search) {
+    public Page<SparePartDto> findAll(Integer pageSize, Integer page, String itemType, String search, UUID warehouseId) {
         int safePage = Math.max(page != null ? page : 0, 0);
         int safePageSize = Math.max(pageSize != null ? pageSize : 20, 1);
-        InventoryItemKind inventoryItemKind = map(itemType);
-        Page<SparePart> parts = repository.findAllByFilter(
-                inventoryItemKind,
-                toSearchPattern(search),
-                PaginationUtils.pageRequest(safePage, safePageSize)
-        );
+        Pageable pageable = PaginationUtils.pageRequest(safePage, safePageSize);
+        InventoryItemKind inventoryItemKind = mapItemType(itemType);
+        String searchPattern = toSearchPattern(search);
+
+        List<UUID> scopedWarehouseIds = null;
+        Page<SparePart> parts;
+        if (warehouseId != null) {
+            assertCanAccessWarehouseId(warehouseId);
+            parts = repository.findAllByFilterAndWarehouseId(
+                    inventoryItemKind,
+                    searchPattern,
+                    warehouseId,
+                    pageable
+            );
+        } else if (scopeAccessService.isScopeAdmin()) {
+            parts = repository.findAllByFilter(
+                    inventoryItemKind,
+                    searchPattern,
+                    pageable
+            );
+        } else {
+            scopedWarehouseIds = accessibleWarehouseIds();
+            if (scopedWarehouseIds.isEmpty()) {
+                return Page.empty(pageable);
+            }
+            parts = repository.findAllByFilterAndWarehouseIds(
+                    inventoryItemKind,
+                    searchPattern,
+                    scopedWarehouseIds,
+                    pageable
+            );
+        }
+
         if (parts.isEmpty()) {
             return parts.map(SparePartDto::from);
         }
-        Map<UUID, List<WarehouseStock>> stocksByPart = stockRepository
-                .findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(parts.getContent().stream().map(SparePart::getId).toList())
+
+        List<UUID> sparePartIds = parts.getContent().stream().map(SparePart::getId).toList();
+        List<WarehouseStock> scopedStocks;
+        if (warehouseId != null) {
+            scopedStocks = stockRepository.findAllBySparePartIdInAndWarehouseIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                    sparePartIds,
+                    warehouseId
+            );
+        } else if (scopeAccessService.isScopeAdmin()) {
+            scopedStocks = stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(sparePartIds);
+        } else {
+            scopedStocks = stockRepository.findAllBySparePartIdInAndWarehouseIdInAndIsDeletedFalseOrderByUpdatedAtDesc(
+                    sparePartIds,
+                    scopedWarehouseIds
+            );
+        }
+
+        Map<UUID, List<WarehouseStock>> stocksByPart = scopedStocks
                 .stream()
                 .filter(s -> s.getSparePartId() != null)
                 .collect(Collectors.groupingBy(WarehouseStock::getSparePartId));
@@ -58,9 +108,20 @@ public class SparePartService {
                 });
     }
 
-    private InventoryItemKind map(String itemType) {
-        if (itemType == null || itemType.equalsIgnoreCase("ALL")) return null;
-        return InventoryItemKind.valueOf(itemType.toUpperCase());
+    private InventoryItemKind mapItemType(String itemType) {
+        if (itemType == null) {
+            return null;
+        }
+        String normalized = itemType.trim();
+        if (normalized.isEmpty() || normalized.equalsIgnoreCase("ALL")) {
+            return null;
+        }
+        return switch (normalized.toUpperCase()) {
+            case "SPARE_PART", "SPARE_PARTS" -> InventoryItemKind.SPARE_PART;
+            case "MATERIAL", "MATERIALS" -> InventoryItemKind.MATERIAL;
+            case "CONSUMABLE", "CONSUMABLES" -> InventoryItemKind.CONSUMABLE;
+            default -> throw RestException.badRequest("Invalid itemType: " + itemType);
+        };
     }
 
     @Transactional(readOnly = true)
@@ -151,5 +212,31 @@ public class SparePartService {
             return null;
         }
         return "%" + search.trim().toLowerCase() + "%";
+    }
+
+    private List<UUID> accessibleWarehouseIds() {
+        return warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(this::canAccessWarehouse)
+                .map(Warehouse::getId)
+                .toList();
+    }
+
+    private void assertCanAccessWarehouseId(UUID warehouseId) {
+        Warehouse warehouse = warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
+                .orElseThrow(() -> RestException.notFound("Warehouse not found: " + warehouseId));
+        if (!canAccessWarehouse(warehouse)) {
+            throw new AccessDeniedException("Access denied by warehouse scope");
+        }
+    }
+
+    private boolean canAccessWarehouse(Warehouse warehouse) {
+        if (warehouse == null) {
+            return false;
+        }
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        return (warehouse.getDepartmentId() != null && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId()))
+                || (warehouse.getResponsibleId() != null && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId()));
     }
 }
