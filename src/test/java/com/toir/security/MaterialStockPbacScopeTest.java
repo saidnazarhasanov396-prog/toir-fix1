@@ -1,6 +1,7 @@
 package com.toir.security;
 
 import com.toir.dto.stockmovement.StockMovementRequest;
+import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
@@ -55,7 +56,8 @@ class MaterialStockPbacScopeTest {
                 warehouseRepository,
                 scopeAccessService
         );
-        reorderService = new WarehouseReorderService(stockRepository, warehouseRepository, scopeAccessService);
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+        reorderService = new WarehouseReorderService(stockRepository, warehouseRepository, sparePartRepository, scopeAccessService);
     }
 
     @Test
@@ -116,25 +118,32 @@ class MaterialStockPbacScopeTest {
     }
 
     @Test
-    void reorderSuggestionsDoNotLeakForbiddenWarehouseStock() {
+    void reorderSuggestionsDoNotLeakForbiddenWarehouseStockWithEnrichment() {
         UUID allowedWarehouseId = UUID.randomUUID();
         UUID forbiddenWarehouseId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
-        WarehouseStock allowed = stock(allowedWarehouseId, UUID.randomUUID(), 1, 0);
+        UUID allowedSparePartId = UUID.randomUUID();
+        UUID forbiddenSparePartId = UUID.randomUUID();
+        WarehouseStock allowed = stock(allowedWarehouseId, allowedSparePartId, 1, 0);
         allowed.setMinQty(5);
-        WarehouseStock forbidden = stock(forbiddenWarehouseId, UUID.randomUUID(), 1, 0);
+        WarehouseStock forbidden = stock(forbiddenWarehouseId, forbiddenSparePartId, 1, 0);
         forbidden.setMinQty(5);
         when(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(allowed, forbidden));
-        when(warehouseRepository.findByIdAndIsDeletedFalse(allowedWarehouseId))
-                .thenReturn(Optional.of(warehouse(allowedWarehouseId, departmentId)));
-        when(warehouseRepository.findByIdAndIsDeletedFalse(forbiddenWarehouseId))
-                .thenReturn(Optional.of(warehouse(forbiddenWarehouseId, UUID.randomUUID())));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(any()))
+                .thenReturn(List.of(
+                        warehouse(allowedWarehouseId, departmentId),
+                        warehouse(forbiddenWarehouseId, UUID.randomUUID())
+                ));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any()))
+                .thenReturn(List.of(sparePart(allowedSparePartId, "SP-ALLOWED", "Allowed Part", "PCS")));
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
 
         var result = reorderService.suggestions(null, 0, 20);
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().getFirst().warehouseId()).isEqualTo(allowedWarehouseId);
+        assertThat(result.getContent().getFirst().sparePartId()).isEqualTo(allowedSparePartId);
+        assertThat(result.getContent().getFirst().sparePartName()).isEqualTo("Allowed Part");
     }
 
     @Test
@@ -183,5 +192,14 @@ class MaterialStockPbacScopeTest {
         stock.setReservedQty(reservedQty);
         stock.setMinQty(0);
         return stock;
+    }
+
+    private SparePart sparePart(UUID id, String code, String name, String unit) {
+        SparePart sparePart = new SparePart();
+        sparePart.setId(id);
+        sparePart.setCode(code);
+        sparePart.setName(name);
+        sparePart.setUnit(unit);
+        return sparePart;
     }
 }
