@@ -47,4 +47,50 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
     Page<SparePart> findAllByFilter(@Param("itemType") InventoryItemKind itemType,
                                     @Param("searchPattern") String searchPattern,
                                     Pageable pageable);
+
+    @Query(value = """
+        select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
+        and (:searchPattern is null
+            or lower(sp.code) like :searchPattern
+            or lower(sp.name) like :searchPattern
+            or lower(sp.manufacturer) like :searchPattern
+            or lower(sp.sku) like :searchPattern
+            or lower(sp.specification) like :searchPattern)
+        and sp.isDeleted = false
+        and exists (
+            select 1
+            from WarehouseStock ws
+            where ws.sparePartId = sp.id
+              and ws.warehouseId = :warehouseId
+              and ws.isDeleted = false
+        )
+        order by sp.updatedAt desc
+""")
+    Page<SparePart> findAllByFilterAndWarehouseId(@Param("itemType") InventoryItemKind itemType,
+                                                  @Param("searchPattern") String searchPattern,
+                                                  @Param("warehouseId") UUID warehouseId,
+                                                  Pageable pageable);
+
+    @Query(value = """
+        select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
+        and (:searchPattern is null
+            or lower(sp.code) like :searchPattern
+            or lower(sp.name) like :searchPattern
+            or lower(sp.manufacturer) like :searchPattern
+            or lower(sp.sku) like :searchPattern
+            or lower(sp.specification) like :searchPattern)
+        and sp.isDeleted = false
+        and exists (
+            select 1
+            from WarehouseStock ws
+            where ws.sparePartId = sp.id
+              and ws.warehouseId in :warehouseIds
+              and ws.isDeleted = false
+        )
+        order by sp.updatedAt desc
+""")
+    Page<SparePart> findAllByFilterAndWarehouseIds(@Param("itemType") InventoryItemKind itemType,
+                                                   @Param("searchPattern") String searchPattern,
+                                                   @Param("warehouseIds") Collection<UUID> warehouseIds,
+                                                   Pageable pageable);
 }

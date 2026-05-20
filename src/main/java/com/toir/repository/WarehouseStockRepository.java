@@ -39,6 +39,10 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
 
     List<WarehouseStock> findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(Collection<UUID> sparePartIds);
 
+    List<WarehouseStock> findAllBySparePartIdInAndWarehouseIdAndIsDeletedFalseOrderByUpdatedAtDesc(Collection<UUID> sparePartIds, UUID warehouseId);
+
+    List<WarehouseStock> findAllBySparePartIdInAndWarehouseIdInAndIsDeletedFalseOrderByUpdatedAtDesc(Collection<UUID> sparePartIds, Collection<UUID> warehouseIds);
+
     @Query(value = """
             SELECT
                 (SELECT COUNT(DISTINCT ws.spare_part_id)

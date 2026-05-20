@@ -1,4 +1,5 @@
 package com.toir.controller;
+import com.toir.dto.warehouse.ReorderStatsDto;
 import com.toir.dto.warehouse.ReorderSuggestionDto;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.WarehouseStockRepository;
@@ -34,5 +35,13 @@ public class WarehouseReorderController {
             @RequestParam(defaultValue = "20") int size
     ) {
         return ResponseEntity.ok(reorderService.suggestions(warehouseId, page, size));
+    }
+
+    @GetMapping("/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<ReorderStatsDto> stats(
+            @RequestParam(required = false) UUID warehouseId
+    ) {
+        return ResponseEntity.ok(reorderService.getStats(warehouseId));
     }
 }
