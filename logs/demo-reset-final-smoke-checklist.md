@@ -3,6 +3,8 @@
 Date: 2026-05-20
 Branch: `behzod`
 
+Status note: this checklist records the successful compact seed dry-run. B3.1 expanded the seed draft afterward; the expanded dataset requires a fresh restored-demo dry-run before real execution approval.
+
 ## 1. Local Restored DB Identity
 
 Source: `logs/demo_reset_preflight_output.txt` and `logs/demo_reset_validation_output.txt`.
