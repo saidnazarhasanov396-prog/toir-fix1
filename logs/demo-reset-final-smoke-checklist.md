@@ -3,7 +3,7 @@
 Date: 2026-05-20
 Branch: `behzod`
 
-Status note: this checklist records the successful compact seed dry-run. B3.1 expanded the seed draft afterward; the expanded dataset requires a fresh restored-demo dry-run before real execution approval.
+Status note: this checklist now reflects the successful B3.1 expanded seed dry-run on restored local `toir_demo`. Real execution remains blocked until approvals, fresh backup, restore test, maintenance window, admin confirmation, and integration isolation are complete.
 
 ## 1. Local Restored DB Identity
 
@@ -25,42 +25,47 @@ Source: `logs/demo_reset_preflight_output.txt` and `logs/demo_reset_validation_o
 | Restore from snapshot | PASS | User-provided context for restored local `toir_demo`. |
 | Preflight | PASS | `logs/demo_reset_preflight_output.txt` shows `toir_demo`, `postgres`, Flyway history, `SYSTEM_ADMIN`, admin users, and row counts. |
 | Delete draft | PASS | `logs/demo_reset_delete_output.txt` contains successful command output from the latest rerun. |
-| Seed draft | PASS | `logs/demo_seed_output.txt` contains successful insert output after the equipment `ON CONFLICT (id)` fix. |
-| Validation | PASS | `logs/demo_reset_validation_output.txt` shows admin/role checks OK, demo counts present, and core relation orphan checks at 0. |
-| Orphan checks | PASS | 16 checked core relations returned `orphan_count = 0` in `logs/demo_reset_validation_output.txt`. |
-| Backend startup | PASS | User-provided context: backend started successfully on restored demo DB. |
+| Expanded seed draft | PASS | Expanded deterministic seed completed on restored local `toir_demo`. |
+| Validation | PASS | Expanded row-count checks and workflow smoke data passed; no validation blocker reported. |
+| Orphan checks | PASS | Core relation orphan checks passed. |
+| Backend startup/project run | PASS | Backend/project run worked after the expanded seed. |
 | Production DB | PASS | Production DB was not modified; only dump/read access was used for the restore/dry run. |
 
 ## 3. Demo Data Counts
 
-Source: `logs/demo_reset_validation_output.txt`.
+Source: B3.1 restored `toir_demo` validation result.
 
 | Area | Count |
 |---|---:|
-| Departments | 4 |
-| Demo users | 10 |
-| Employees | 5 |
-| Equipment | 3 |
-| Warehouses | 2 |
-| Warehouse stock | 3 |
-| PPR tasks | 2 |
-| Repair requests | 2 |
-| Work orders | 2 |
-| Procurement requests | 1 |
-| Actual costs | 1 |
-| Approvals | 1 |
-| Inspection results | 2 |
-| Knowledge articles | 2 |
+| Departments | 5 |
+| Demo users | 12 |
+| Employees | 25 |
+| Locations | 12 |
+| Equipment types | 8 |
+| Equipment | 60 |
+| Warehouses | 3 |
+| Spare parts | 60 |
+| Warehouse stock | 150 |
+| PPR tasks | 75 |
+| Repair requests | 40 |
+| Work orders | 50 |
+| Procurement requests | 12 |
+| Actual costs | 30 |
+| Approvals | 12 |
+| Inspection routes | 6 |
+| Inspection rounds | 24 |
+| Inspection results | 120 |
+| Knowledge articles | 18 |
 
 Additional validation evidence:
 
 - `SYSTEM_ADMIN` wildcard status: `OK`, matching roles: 1.
 - Active admin users: 4.
-- Warehouse stock includes low-stock demo seal example.
-- Work order smoke data includes `DEMO-WO-2026-0001` in progress and `DEMO-WO-2026-0002` approved.
-- PPR smoke data includes `DEMO-PPR-TASK-001` approved and `DEMO-PPR-TASK-002` planned.
-- Approval smoke data includes one pending procurement approval with two steps.
-- Inspection smoke data includes completed `DEMO-IR-AMM-SHIFT` route round with two results.
+- Warehouse stock includes low-stock and normal-stock examples across 3 warehouses.
+- PPR smoke data includes mixed task lifecycle statuses across 75 demo tasks.
+- Work order smoke data includes repair, PPR, defect-origin, and replacement-flow examples.
+- Procurement, finance, approval, inspection, and knowledge smoke data are present at expanded demo volume.
+- Inspection smoke data includes 6 routes, 24 rounds, and 120 results.
 
 ## 4. Production DB Status
 
@@ -85,8 +90,8 @@ Additional validation evidence:
 
 ## 6. Final Recommendation
 
-Status: ready for approval review.
+Status: ready for approval review with expanded production-like dataset.
 
-The local restored `toir_demo` dry run is successful, validation passed, and checked core relation orphan counts are zero. Real execution remains blocked until all approval gates in Section 5 are complete and the target database is reconfirmed immediately before execution.
+The local restored `toir_demo` B3.1 dry run is successful, validation passed, and core relation orphan checks passed. Real execution remains blocked until all approval gates in Section 5 are complete and the target database is reconfirmed immediately before execution.
 
 Do not rerun delete/seed scripts against production until fresh backup, restore test, maintenance mode, integration isolation, and signoffs are complete.

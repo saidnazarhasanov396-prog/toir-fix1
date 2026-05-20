@@ -2,7 +2,7 @@
 
 Date: 2026-05-20
 Branch: `behzod`
-Status: Ready for approval review for the compact seed; B3.1 expanded seed is pending restored-demo dry-run.
+Status: Ready for approval review with the expanded production-like seed; not approved for real execution yet.
 
 ## 1. Executive Summary
 
@@ -12,7 +12,7 @@ The reset scripts were dry-run successfully on a restored local production snaps
 
 Production was not modified. Real execution remains blocked until all required signoffs, a fresh backup, restore test, maintenance window, and integration isolation are complete.
 
-Note: B3.1 expanded the manual seed draft after this approval package was first prepared. The expanded dataset must not be treated as approved for execution until `logs/demo-large-seed-expansion-report.md` is updated with a successful restored-demo dry-run.
+Note: B3.1 expanded the manual seed draft after this approval package was first prepared. The expanded dataset has now passed restored local `toir_demo` dry-run. See `logs/demo-large-seed-expansion-report.md`.
 
 ## 2. What Was Tested
 
@@ -24,6 +24,7 @@ Note: B3.1 expanded the manual seed draft after this approval package was first 
 | Seed script | Deterministic demo seed ran on restored local DB after fixing equipment seed conflict target to `ON CONFLICT (id) DO NOTHING`. |
 | Validation | Admin/role checks, demo counts, workflow smoke data, and core relation orphan checks passed. |
 | Backend startup | Backend started successfully against restored demo DB. |
+| B3.1 expanded seed | Expanded production-like dataset passed restored local `toir_demo` dry-run. |
 
 ## 3. Dry-Run Evidence
 
@@ -44,27 +45,29 @@ Evidence files:
 | Delete draft | PASS | `logs/demo_reset_delete_output.txt`. |
 | Seed draft | PASS | `logs/demo_seed_output.txt`. |
 | Validation | PASS | `logs/demo_reset_validation_output.txt`. |
-| Core orphan checks | PASS | 16 checked core relations returned `orphan_count = 0`. |
+| Core orphan checks | PASS | Core relation orphan checks passed; no validation blocker reported. |
 | Backend startup | PASS | Backend started successfully on restored `toir_demo`. |
 
 Validated demo data counts from the final checklist:
 
 | Area | Count |
 |---|---:|
-| Departments | 4 |
-| Demo users | 10 |
-| Employees | 5 |
-| Equipment | 3 |
-| Warehouses | 2 |
-| Warehouse stock | 3 |
-| PPR tasks | 2 |
-| Repair requests | 2 |
-| Work orders | 2 |
-| Procurement requests | 1 |
-| Actual costs | 1 |
-| Approvals | 1 |
-| Inspection results | 2 |
-| Knowledge articles | 2 |
+| Departments | 5 |
+| Demo users | 12 |
+| Employees | 25 |
+| Equipment | 60 |
+| Warehouses | 3 |
+| Warehouse stock | 150 |
+| PPR tasks | 75 |
+| Repair requests | 40 |
+| Work orders | 50 |
+| Procurement requests | 12 |
+| Actual costs | 30 |
+| Approvals | 12 |
+| Inspection routes | 6 |
+| Inspection rounds | 24 |
+| Inspection results | 120 |
+| Knowledge articles | 18 |
 
 ## 4. Production Safety
 
