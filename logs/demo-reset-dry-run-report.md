@@ -6,9 +6,17 @@ Workspace: D:\Projects\toir-backend
 ## B3.1 Expanded Seed Status
 
 - Expanded seed draft prepared on 2026-05-20.
-- Dry-run was not executed in the current local shell because `toir_demo` was not reachable on `localhost:5433`, `127.0.0.1:5433`, or `host.docker.internal:5433`, and no `DATABASE_URL` / `LOCAL_DEMO_URL` was set.
+- Expanded seed dry-run was rerun successfully on restored local `toir_demo`.
+- Restore from snapshot: **PASS**.
+- Preflight: **PASS**.
+- Delete draft: **PASS**.
+- Expanded seed: **PASS**.
+- Validation: **PASS**.
+- Core orphan checks: **PASS**, no validation blocker reported.
+- Backend/project run after seed: **PASS**.
+- Production DB was not modified.
 - See `logs/demo-large-seed-expansion-report.md`.
-- The PASS evidence below remains valid for the previous compact seed only.
+- Final recommendation: ready for approval review with expanded production-like dataset; not ready for real execution until approvals, fresh backup, restore test, maintenance window, admin credential confirmation, and integration isolation are complete.
 
 ## B2 Follow-Up: ON CONFLICT Fix (toir_demo)
 

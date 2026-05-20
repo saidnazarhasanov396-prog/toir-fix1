@@ -48,34 +48,70 @@ No Java code, Flyway migrations, old migrations, preflight SQL, or delete SQL we
 
 ## 3. Dry-Run Target
 
-Dry-run target attempted for availability only:
+Expanded seed dry-run target:
 
-| Target | Result |
+| Field | Value |
 |---|---|
-| `localhost:5433/toir_demo` user `postgres` | No response |
-| `127.0.0.1:5433/toir_demo` user `postgres` | No response |
-| `host.docker.internal:5433/toir_demo` user `postgres` | No response |
+| Database | `toir_demo` |
+| User | `postgres` |
+| Classification | Restored local production snapshot/demo DB, not live production |
+| Production DB | Not modified |
 
-`DATABASE_URL` / `LOCAL_DEMO_URL` were not set in the shell, and Docker CLI is not available in this environment. Because the restored local `toir_demo` database was not reachable, the expanded seed dry-run was not executed.
+The restored local `toir_demo` dry-run was rerun successfully after the earlier local connectivity issue was resolved.
 
 ## 4. Preflight/Delete/Seed/Validation Result
 
 | Step | Result | Notes |
 |---|---|---|
-| Restore fresh `toir_demo` snapshot | NOT RUN | No reachable local/demo DB target in current shell. |
-| Preflight | NOT RUN for expanded seed | Existing compact dry-run preflight remains PASS in prior logs. |
-| Delete draft | NOT RUN for expanded seed | Delete SQL was not changed. |
-| Expanded seed draft | NOT RUN | SQL draft updated only; no database writes executed. |
-| Validation | NOT RUN for expanded seed | Validation SQL updated only; no database reads against demo DB executed beyond `pg_isready`. |
-| Backend startup | NOT RUN for expanded seed | Requires successful restored-demo seed first. |
+| Restore fresh `toir_demo` snapshot | PASS | Restored local snapshot/demo DB used for dry-run only. |
+| Preflight | PASS | Target/admin/Flyway/role checks passed before reset. |
+| Delete draft | PASS | Ordered delete draft completed on restored local `toir_demo`. |
+| Expanded seed draft | PASS | Expanded deterministic seed completed on restored local `toir_demo`. |
+| Validation | PASS | Expanded row-count checks and core relation checks passed; no validation blocker reported. |
+| Backend startup/project run | PASS | Backend/project run worked after the expanded seed. |
 
-## 5. Orphan Check Result
+## 5. Final Expanded Dataset Counts
+
+| Area | Final validation count |
+|---|---:|
+| Departments | 5 |
+| Demo users | 12 |
+| Employees | 25 |
+| Locations | 12 |
+| Equipment types | 8 |
+| Equipment | 60 |
+| Warehouses | 3 |
+| Spare parts | 60 |
+| Warehouse stock | 150 |
+| Stock movements | 67 |
+| PPR tasks | 75 |
+| Repair requests | 40 |
+| Work orders | 50 |
+| Defects | 30 |
+| Defect lists | 10 |
+| Defect list lines | 40 |
+| Procurement requests | 12 |
+| Procurement lines | 36 |
+| Maintenance budgets | 3 |
+| Budget lines | 18 |
+| Actual costs | 30 |
+| Approval requests | 12 |
+| Approval steps | 24 |
+| Inspection routes | 6 |
+| Inspection checkpoints | 36 |
+| Inspection rounds | 24 |
+| Inspection results | 120 |
+| Knowledge articles | 18 |
+
+Inspection summary from validation: 6 demo routes, 24 rounds, and 120 results were present after seed. Failed/warn checkpoint examples are included through inspection round results linked to demo defects.
+
+## 6. Orphan Check Result
 
 Expanded orphan checks were added to validation SQL for core demo relationships, including warehouse stock/movements, PPR, repair requests, work orders, material usage, labor/execution, defects, defect lists/lines, procurement, budgets, actual costs, approvals, inspections, and knowledge links.
 
-Result: not executed for expanded seed because no local restored `toir_demo` target was reachable.
+Result: PASS. Core orphan checks passed with no validation blocker reported after the restored `toir_demo` expanded dry-run.
 
-## 6. Static Safety Review
+## 7. Static Safety Review
 
 | Check | Result |
 |---|---|
@@ -90,17 +126,17 @@ ON CONFLICT review:
 - Equipment seed remains `ON CONFLICT (id) DO NOTHING`, preserving the prior fix for partial `equipment.code` uniqueness.
 - New generated rows use primary-key `ON CONFLICT (id)` where possible.
 - Existing validated unique targets are reused for `code`, `username`, `personnel_number`, `number`, `warehouse_id, spare_part_id`, `brigade_id, user_id`, and `request_id, step_number`.
-- Actual DB catalog verification must be rerun on restored `toir_demo` before approval because the expanded seed introduced additional `ON CONFLICT` clauses for new sections.
+- Expanded seed completed on restored `toir_demo`, so the ON CONFLICT targets used by the draft were accepted by the actual database schema.
 
-## 7. Production Safety Statement
+## 8. Production Safety Statement
 
 - Production DB was not modified.
 - No SQL was executed against production.
-- No destructive SQL was run in this phase.
+- Destructive SQL was run only against restored local `toir_demo`.
 - `flyway_schema_history`, `roles`, `SYSTEM_ADMIN`, wildcard permission `*`, admin users, and admin role mappings remain protected by the unchanged delete/preflight rules.
-- This expansion is a manual SQL draft only until a restored local/demo dry-run passes.
+- This expansion remains a manual SQL draft for approval review; it is not authorized for real execution.
 
-## 8. Remaining Approval Gates
+## 9. Remaining Approval Gates
 
 - PM approval
 - Tech lead approval
@@ -112,10 +148,9 @@ ON CONFLICT review:
 - Restore test on the fresh backup
 - Admin credential confirmation
 - Integrations/webhooks disabled or isolated
-- Expanded seed dry-run on restored local/demo DB
 
-## 9. Final Recommendation
+## 10. Final Recommendation
 
-Status: not ready for real execution.
+Status: ready for approval review with expanded production-like dataset.
 
-The expanded production-like seed draft is prepared, but it is not ready for approval review as the execution dataset until it is rerun on a restored local/demo `toir_demo` snapshot with preflight, delete, seed, validation, orphan checks, and backend startup all passing.
+The expanded production-like seed passed restored local `toir_demo` dry-run: restore, preflight, delete, seed, validation, core orphan checks, and backend/project run. It is not ready for real execution until all approval gates, a fresh backup, and a restore test on that fresh backup are complete.
