@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.warehouse.ReorderStatsDto;
 import com.toir.dto.warehouse.ReorderSuggestionDto;
 import com.toir.entity.SparePart;
 import com.toir.entity.warehouse.Warehouse;
@@ -35,6 +36,23 @@ public class WarehouseReorderService {
 
     @Transactional(readOnly = true)
     public Page<ReorderSuggestionDto> suggestions(UUID warehouseId, int page, int size) {
+        return PaginationUtils.page(loadAllSuggestions(warehouseId), page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public ReorderStatsDto getStats(UUID warehouseId) {
+        List<ReorderSuggestionDto> all = loadAllSuggestions(warehouseId);
+        long critical = all.stream().filter(s -> "CRITICAL".equals(s.urgency())).count();
+        long warning  = all.stream().filter(s -> "WARNING".equals(s.urgency())).count();
+        long total    = all.size();
+        long affectedWarehouses = all.stream()
+                .map(ReorderSuggestionDto::warehouseId)
+                .distinct()
+                .count();
+        return new ReorderStatsDto(critical, warning, total, affectedWarehouses);
+    }
+
+    private List<ReorderSuggestionDto> loadAllSuggestions(UUID warehouseId) {
         List<WarehouseStock> stocks;
         Map<UUID, Warehouse> warehousesById;
         if (warehouseId != null) {
@@ -56,7 +74,7 @@ public class WarehouseReorderService {
         for (WarehouseStock stock : stocks) {
             buildSuggestion(stock, warehouseNames, sparePartsById).ifPresent(suggestions::add);
         }
-        return PaginationUtils.page(suggestions, page, size);
+        return suggestions;
     }
 
     private List<WarehouseStock> stocksForWarehouse(UUID warehouseId) {
