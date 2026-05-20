@@ -269,12 +269,13 @@ class WorkOrderServiceTest {
                 });
         UUID repairRequestId = UUID.randomUUID();
         UUID defectId = UUID.randomUUID();
-        WorkOrderRequest request = requestWithLinks(repairRequestId, defectId);
+        UUID equipmentId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, defectId, equipmentId);
         mockSuccessfulCreateDependencies(request);
         when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
-                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN)));
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN, equipmentId)));
         when(defectRepository.findByIdAndIsDeletedFalse(defectId))
-                .thenReturn(Optional.of(defect(defectId, repairRequestId)));
+                .thenReturn(Optional.of(defect(defectId, repairRequestId, equipmentId)));
 
         WorkOrderDto result = service.create(request);
 
@@ -287,17 +288,73 @@ class WorkOrderServiceTest {
         UUID repairRequestId = UUID.randomUUID();
         UUID otherRepairRequestId = UUID.randomUUID();
         UUID defectId = UUID.randomUUID();
-        WorkOrderRequest request = requestWithLinks(repairRequestId, defectId);
+        UUID equipmentId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, defectId, equipmentId);
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
         when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
-                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN)));
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN, equipmentId)));
         when(defectRepository.findByIdAndIsDeletedFalse(defectId))
-                .thenReturn(Optional.of(defect(defectId, otherRepairRequestId)));
+                .thenReturn(Optional.of(defect(defectId, otherRepairRequestId, equipmentId)));
 
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("belongs to a different repair request");
+                });
+    }
+
+    @Test
+    void createWithDefectFromDifferentEquipmentReturns400() {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID otherEquipmentId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, defectId, equipmentId);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN, equipmentId)));
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId))
+                .thenReturn(Optional.of(defect(defectId, repairRequestId, otherEquipmentId)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("belongs to a different equipment");
+                });
+    }
+
+    @Test
+    void createWithRepairRequestFromDifferentEquipmentReturns400() {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID otherEquipmentId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, defectId, equipmentId);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN, otherEquipmentId)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Repair request belongs to a different equipment");
+                });
+    }
+
+    @Test
+    void createWithDefectLinkedToRepairRequestRequiresRepairRequestId() {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(null, defectId, equipmentId);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId))
+                .thenReturn(Optional.of(defect(defectId, repairRequestId, equipmentId)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("repairRequestId is required");
                 });
     }
 
@@ -1535,10 +1592,38 @@ class WorkOrderServiceTest {
         );
     }
 
+    private WorkOrderRequest requestWithLinks(UUID repairRequestId, UUID defectId, UUID equipmentId) {
+        WorkOrderRequest base = requestWithLinks(repairRequestId, defectId);
+        return new WorkOrderRequest(
+                base.number(),
+                base.title(),
+                equipmentId,
+                base.departmentId(),
+                base.repairRequestId(),
+                base.defectId(),
+                base.pprTaskId(),
+                base.contractorId(),
+                base.type(),
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                base.startPlannedAt(),
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary()
+        );
+    }
+
     private RepairRequest repairRequest(UUID id, RequestStatus status) {
+        return repairRequest(id, status, null);
+    }
+
+    private RepairRequest repairRequest(UUID id, RequestStatus status, UUID equipmentId) {
         RepairRequest repairRequest = new RepairRequest();
         repairRequest.setId(id);
         repairRequest.setNumber("RR-2026-1001");
+        repairRequest.setEquipmentId(equipmentId);
         repairRequest.setPriority(PriorityLevel.MEDIUM);
         repairRequest.setTitle("Repair request");
         repairRequest.setDescription("Short description");
@@ -1548,6 +1633,12 @@ class WorkOrderServiceTest {
 
     private Defect defect(UUID id, UUID repairRequestId) {
         return defect(id, repairRequestId, DefectStatus.OPEN);
+    }
+
+    private Defect defect(UUID id, UUID repairRequestId, UUID equipmentId) {
+        Defect defect = defect(id, repairRequestId, DefectStatus.OPEN);
+        defect.setEquipmentId(equipmentId);
+        return defect;
     }
 
     private Defect defect(UUID id, UUID repairRequestId, DefectStatus status) {

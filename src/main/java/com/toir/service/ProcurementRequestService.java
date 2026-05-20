@@ -4,6 +4,7 @@ import com.toir.dto.procurement.ProcurementLineRequest;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.entity.SparePart;
+import com.toir.entity.StockMovement;
 import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.warehouse.Warehouse;
@@ -11,9 +12,11 @@ import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
@@ -35,6 +38,7 @@ public class ProcurementRequestService {
     private final ProcurementRequestRepository repo;
     private final SparePartRepository sparePartRepository;
     private final WarehouseStockRepository stockRepository;
+    private final StockMovementRepository stockMovementRepository;
     private final AuditBuilderService auditBuilderService;
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
@@ -231,9 +235,8 @@ public class ProcurementRequestService {
         if (!scopeAccessService.isScopeAdmin() && p.getWarehouseId() != null) {
             assertCanAccessWarehouse(p.getWarehouseId());
         }
-        if (p.getStatus() != ProcurementRequestStatus.ORDERED) {
-            throw RestException.badRequest("Only ORDERED can be marked RECEIVED");
-        }
+        List<ProcurementRequestLine> receiptLines = validateReceivable(p);
+        applyReceiptToStock(p, receiptLines);
         p.setStatus(ProcurementRequestStatus.RECEIVED);
         p.setReceivedAt(Instant.now());
         ProcurementRequest saved = repo.save(p);
@@ -247,6 +250,72 @@ public class ProcurementRequestService {
                 saved
         );
         return ProcurementRequestDto.from(p);
+    }
+
+    private List<ProcurementRequestLine> validateReceivable(ProcurementRequest request) {
+        if (request.getStatus() == ProcurementRequestStatus.RECEIVED) {
+            throw RestException.badRequest("Procurement request is already RECEIVED");
+        }
+        if (request.getStatus() != ProcurementRequestStatus.ORDERED) {
+            throw RestException.badRequest("Only ORDERED can be marked RECEIVED");
+        }
+        if (request.getWarehouseId() == null) {
+            throw RestException.badRequest("Procurement request warehouseId is required before receipt");
+        }
+
+        List<ProcurementRequestLine> receiptLines = request.getLines() == null
+                ? List.of()
+                : request.getLines().stream()
+                .filter(line -> !line.isDeleted())
+                .toList();
+        if (receiptLines.isEmpty()) {
+            throw RestException.badRequest("Procurement request must have at least one line before receipt");
+        }
+        for (ProcurementRequestLine line : receiptLines) {
+            if (line.getSparePartId() == null) {
+                throw RestException.badRequest("Procurement line sparePartId is required before receipt");
+            }
+            if (line.getQuantity() <= 0) {
+                throw RestException.badRequest("Procurement line quantity must be greater than 0 before receipt");
+            }
+        }
+        return receiptLines;
+    }
+
+    private void applyReceiptToStock(ProcurementRequest request, List<ProcurementRequestLine> receiptLines) {
+        UUID warehouseId = request.getWarehouseId();
+        for (ProcurementRequestLine line : receiptLines) {
+            WarehouseStock stock = stockRepository
+                    .findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, line.getSparePartId())
+                    .orElseGet(() -> createEmptyStock(warehouseId, line.getSparePartId()));
+            stock.setQuantity(stock.getQuantity() + line.getQuantity());
+            stockRepository.save(stock);
+            stockMovementRepository.save(receiptMovement(request, line));
+        }
+    }
+
+    private WarehouseStock createEmptyStock(UUID warehouseId, UUID sparePartId) {
+        SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)
+                .orElseThrow(() -> RestException.notFound("Spare part not found: " + sparePartId));
+        WarehouseStock stock = new WarehouseStock();
+        stock.setWarehouseId(warehouseId);
+        stock.setSparePart(sparePart);
+        stock.setQuantity(0);
+        stock.setReservedQty(0);
+        stock.setMinQty(0);
+        return stock;
+    }
+
+    private StockMovement receiptMovement(ProcurementRequest request, ProcurementRequestLine line) {
+        StockMovement movement = new StockMovement();
+        movement.setWarehouseId(request.getWarehouseId());
+        movement.setSparePartId(line.getSparePartId());
+        movement.setType(StockMovementType.RECEIPT);
+        movement.setQuantity(line.getQuantity());
+        movement.setUnitCost(line.getUnitPrice());
+        movement.setDocumentNumber(request.getNumber());
+        movement.setNotes("Procurement receipt: " + request.getId());
+        return movement;
     }
 
     @Transactional
