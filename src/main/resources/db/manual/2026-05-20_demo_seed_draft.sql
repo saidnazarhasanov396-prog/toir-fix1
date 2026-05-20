@@ -626,6 +626,7 @@ INSERT INTO procurement_request_lines (id, created_at, updated_at, is_deleted, r
 SELECT ('00000000-0000-0000-0000-' || '0000000a' || lpad((100 + gs)::text, 4, '0'))::uuid, now(), now(), false,
        ('00000000-0000-0000-0000-' || '0000000a' || lpad((1 + ((gs - 1) % 12))::text, 4, '0'))::uuid,
        ('00000000-0000-0000-0000-' || '00000004' || lpad((1 + ((gs - 1) % 60))::text, 4, '0'))::uuid,
+       (2 + (gs % 10)),
        (ARRAY['pc','set','l','kg'])[1 + ((gs - 1) % 4)],
        90000 + (gs * 12500),
        (2 + (gs % 10)) * (90000 + (gs * 12500)),
