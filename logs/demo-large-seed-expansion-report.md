@@ -3,6 +3,22 @@
 Date: 2026-05-20
 Branch: `behzod`
 
+## 0. Follow-Up Fix Note (2026-05-20)
+
+Root cause:
+
+- In expanded `procurement_request_lines` seed SQL, the target column list included `quantity`, but the `SELECT` list skipped it and jumped from `spare_part_id` to `unit`.
+- This created a target/SELECT misalignment and broke the intended deterministic insert mapping.
+
+Fix applied:
+
+- File updated: `src/main/resources/db/manual/2026-05-20_demo_seed_draft.sql`
+- In the `procurement_request_lines` expanded insert block, added deterministic quantity expression immediately after `spare_part_id`:
+  - `(2 + (gs % 10)),`
+- This restores column-expression alignment for:
+  - `request_id, spare_part_id, quantity, unit, unit_price, estimated_cost, notes`
+- Dataset size was not reduced.
+
 ## 1. Files Changed
 
 | File | Change |

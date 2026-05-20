@@ -118,6 +118,8 @@ public class EquipmentTypeService {
 
     private void apply(EquipmentType entity, EquipmentTypeRequest request) {
         entity.setName(request.name());
+        entity.setNameUz(request.nameUz());
+        entity.setNameEn(request.nameEn());
         entity.setCategory(request.category());
         entity.setDescription(request.description());
     }
