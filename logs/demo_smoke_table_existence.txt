@@ -1,0 +1,18 @@
+﻿         logical_check          | table_exists 
+--------------------------------+--------------
+ approval demo rows             | f
+ defects demo rows              | f
+ departments demo rows          | f
+ equipment demo rows            | f
+ finance demo rows              | f
+ inspection demo rows           | f
+ knowledge demo rows            | f
+ ppr demo rows                  | f
+ procurement demo rows          | f
+ repair requests demo rows      | f
+ roles table (SYSTEM_ADMIN/*)   | f
+ users table (admin/demo users) | f
+ warehouse demo rows            | f
+ work orders demo rows          | f
+(14 rows)
+
