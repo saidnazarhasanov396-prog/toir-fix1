@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/toir
+    url: jdbc:postgresql://localhost:5433/toir_demo
     username: postgres
     password: root123
     driver-class-name: org.postgresql.Driver

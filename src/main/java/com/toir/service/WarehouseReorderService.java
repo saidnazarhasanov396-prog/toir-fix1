@@ -1,9 +1,11 @@
 package com.toir.service;
 
 import com.toir.dto.warehouse.ReorderSuggestionDto;
+import com.toir.entity.SparePart;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.exception.RestException;
+import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
@@ -28,26 +30,31 @@ public class WarehouseReorderService {
 
     private final WarehouseStockRepository stockRepository;
     private final WarehouseRepository warehouseRepository;
+    private final SparePartRepository sparePartRepository;
     private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public Page<ReorderSuggestionDto> suggestions(UUID warehouseId, int page, int size) {
-        List<WarehouseStock> stocks = warehouseId != null
-                ? stocksForWarehouse(warehouseId)
-                : stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(stock -> canAccessWarehouseId(stock.getWarehouseId()))
-                .toList();
+        List<WarehouseStock> stocks;
+        Map<UUID, Warehouse> warehousesById;
+        if (warehouseId != null) {
+            stocks = stocksForWarehouse(warehouseId);
+            warehousesById = loadWarehousesById(stocks);
+        } else {
+            List<WarehouseStock> allStocks = stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+            warehousesById = loadWarehousesById(allStocks);
+            stocks = allStocks.stream()
+                    .filter(stock -> canAccessWarehouse(warehousesById.get(stock.getWarehouseId())))
+                    .toList();
+        }
 
-        Set<UUID> warehouseIds = stocks.stream()
-                .map(WarehouseStock::getWarehouseId)
-                .collect(Collectors.toSet());
-
-        Map<UUID, String> warehouseNames = warehouseRepository.findAllByIdInAndIsDeletedFalse(warehouseIds).stream()
+        Map<UUID, String> warehouseNames = warehousesById.values().stream()
                 .collect(Collectors.toMap(Warehouse::getId, Warehouse::getName));
+        Map<UUID, SparePart> sparePartsById = loadSparePartsById(stocks);
 
         List<ReorderSuggestionDto> suggestions = new ArrayList<>();
         for (WarehouseStock stock : stocks) {
-            buildSuggestion(stock, warehouseNames).ifPresent(suggestions::add);
+            buildSuggestion(stock, warehouseNames, sparePartsById).ifPresent(suggestions::add);
         }
         return PaginationUtils.page(suggestions, page, size);
     }
@@ -57,7 +64,33 @@ public class WarehouseReorderService {
         return stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId);
     }
 
-    private Optional<ReorderSuggestionDto> buildSuggestion(WarehouseStock stock, Map<UUID, String> warehouseNames) {
+    private Map<UUID, Warehouse> loadWarehousesById(List<WarehouseStock> stocks) {
+        Set<UUID> warehouseIds = stocks.stream()
+                .map(WarehouseStock::getWarehouseId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+        if (warehouseIds.isEmpty()) {
+            return Map.of();
+        }
+        return warehouseRepository.findAllByIdInAndIsDeletedFalse(warehouseIds).stream()
+                .collect(Collectors.toMap(Warehouse::getId, warehouse -> warehouse));
+    }
+
+    private Map<UUID, SparePart> loadSparePartsById(List<WarehouseStock> stocks) {
+        Set<UUID> sparePartIds = stocks.stream()
+                .map(WarehouseStock::getSparePartId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+        if (sparePartIds.isEmpty()) {
+            return Map.of();
+        }
+        return sparePartRepository.findAllByIdInAndIsDeletedFalse(sparePartIds).stream()
+                .collect(Collectors.toMap(SparePart::getId, sparePart -> sparePart));
+    }
+
+    private Optional<ReorderSuggestionDto> buildSuggestion(WarehouseStock stock,
+                                                           Map<UUID, String> warehouseNames,
+                                                           Map<UUID, SparePart> sparePartsById) {
         double available = stock.getAvailable();
         Double reorderPoint = stock.getReorderPoint();
         double minQty = stock.getMinQty();
@@ -77,12 +110,19 @@ public class WarehouseReorderService {
         }
 
         String warehouseName = warehouseNames.getOrDefault(stock.getWarehouseId(), "");
+        SparePart sparePart = sparePartsById.get(stock.getSparePartId());
+        String sparePartName = sparePart != null ? sparePart.getName() : null;
+        String sparePartCode = sparePart != null ? sparePart.getCode() : null;
+        String sparePartUnit = sparePart != null ? sparePart.getUnit() : null;
 
         return Optional.of(new ReorderSuggestionDto(
                 stock.getId(),
                 stock.getWarehouseId(),
                 warehouseName,
                 stock.getSparePartId(),
+                sparePartName,
+                sparePartCode,
+                sparePartUnit,
                 stock.getQuantity(),
                 available,
                 minQty,
@@ -101,13 +141,10 @@ public class WarehouseReorderService {
         }
     }
 
-    private boolean canAccessWarehouseId(UUID warehouseId) {
-        return warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
-                .map(this::canAccessWarehouse)
-                .orElse(false);
-    }
-
     private boolean canAccessWarehouse(Warehouse warehouse) {
+        if (warehouse == null) {
+            return false;
+        }
         if (scopeAccessService.isScopeAdmin()) {
             return true;
         }
