@@ -38,4 +38,56 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
     List<WarehouseStock> findAllBySparePartIdAndIsDeletedFalse(@Param("sparePartId") UUID sparePartId);
 
     List<WarehouseStock> findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(Collection<UUID> sparePartIds);
+
+    @Query(value = """
+            SELECT
+                (SELECT COUNT(DISTINCT ws.spare_part_id)
+                   FROM warehouse_stocks ws
+                  WHERE ws.is_deleted = false) AS nomenclature,
+                (SELECT COUNT(r.id)
+                   FROM reservations r
+                   JOIN warehouse_stocks ws ON ws.id = r.warehouse_stock_id
+                  WHERE r.is_deleted = false
+                    AND ws.is_deleted = false
+                    AND r.status = 'ACTIVE') AS activeReservations,
+                (SELECT COUNT(ws.id)
+                   FROM warehouse_stocks ws
+                  WHERE ws.is_deleted = false
+                    AND COALESCE(ws.reorder_point, ws.min_qty) > 0
+                    AND (ws.quantity - ws.reserved_qty) <= COALESCE(ws.reorder_point, ws.min_qty)) AS lowStockItems,
+                (SELECT COALESCE(SUM(sm.quantity), 0)
+                   FROM stock_movements sm
+                  WHERE sm.is_deleted = false
+                    AND sm.type = 'ISSUE'
+                    AND sm.work_order_id IS NOT NULL) AS issuedToWork
+            """, nativeQuery = true)
+    SparePartsWarehouseStatsProjection getSparePartsWarehouseStats();
+
+    @Query(value = """
+            SELECT
+                (SELECT COUNT(DISTINCT ws.spare_part_id)
+                   FROM warehouse_stocks ws
+                  WHERE ws.is_deleted = false
+                    AND ws.warehouse_id IN (:warehouseIds)) AS nomenclature,
+                (SELECT COUNT(r.id)
+                   FROM reservations r
+                   JOIN warehouse_stocks ws ON ws.id = r.warehouse_stock_id
+                  WHERE r.is_deleted = false
+                    AND ws.is_deleted = false
+                    AND r.status = 'ACTIVE'
+                    AND ws.warehouse_id IN (:warehouseIds)) AS activeReservations,
+                (SELECT COUNT(ws.id)
+                   FROM warehouse_stocks ws
+                  WHERE ws.is_deleted = false
+                    AND ws.warehouse_id IN (:warehouseIds)
+                    AND COALESCE(ws.reorder_point, ws.min_qty) > 0
+                    AND (ws.quantity - ws.reserved_qty) <= COALESCE(ws.reorder_point, ws.min_qty)) AS lowStockItems,
+                (SELECT COALESCE(SUM(sm.quantity), 0)
+                   FROM stock_movements sm
+                  WHERE sm.is_deleted = false
+                    AND sm.type = 'ISSUE'
+                    AND sm.work_order_id IS NOT NULL
+                    AND sm.warehouse_id IN (:warehouseIds)) AS issuedToWork
+            """, nativeQuery = true)
+    SparePartsWarehouseStatsProjection getSparePartsWarehouseStatsByWarehouseIds(@Param("warehouseIds") Collection<UUID> warehouseIds);
 }

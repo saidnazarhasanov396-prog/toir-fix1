@@ -40,7 +40,7 @@ class WarehouseReorderControllerContractTest {
     }
 
     @Test
-    void getSuggestionsReturnsPagedSuggestions() throws Exception {
+    void getSuggestionsReturnsSparePartDisplayFields() throws Exception {
         UUID stockId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
@@ -49,6 +49,9 @@ class WarehouseReorderControllerContractTest {
                 warehouseId,
                 "Central Warehouse",
                 sparePartId,
+                "Engine Oil",
+                "OIL-001",
+                "LITRE",
                 10.0,
                 5.0,
                 8.0,
@@ -67,6 +70,9 @@ class WarehouseReorderControllerContractTest {
                 .andExpect(jsonPath("$.content[0].warehouseId").value(warehouseId.toString()))
                 .andExpect(jsonPath("$.content[0].warehouseName").value("Central Warehouse"))
                 .andExpect(jsonPath("$.content[0].sparePartId").value(sparePartId.toString()))
+                .andExpect(jsonPath("$.content[0].sparePartName").value("Engine Oil"))
+                .andExpect(jsonPath("$.content[0].sparePartCode").value("OIL-001"))
+                .andExpect(jsonPath("$.content[0].sparePartUnit").value("LITRE"))
                 .andExpect(jsonPath("$.content[0].urgency").value("CRITICAL"))
                 .andExpect(jsonPath("$.totalElements").value(1));
 
