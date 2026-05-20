@@ -77,11 +77,22 @@ public class RepairRequestController {
     }
 
     @PostMapping("/{id}/status")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or " +
-            "(#status.name() == 'APPROVED' ? hasAuthority('REPAIR_REQUEST_APPROVE') : hasAuthority('REPAIR_REQUEST_UPDATE'))")
-    public ResponseEntity<RepairRequestDto> changeStatus(@PathVariable UUID id, @RequestParam RequestStatus status) {
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*')")
+    public ResponseEntity<RepairRequestDto> changeStatus(
+            @PathVariable UUID id,
+            @RequestParam RequestStatus status,
+            @RequestParam(required = false) String reason,
+            @RequestParam(required = false) String comment
+    ) {
         assertCanMutateRequest(requestOrThrow(id));
-        return ResponseEntity.ok(service.changeStatus(id, status));
+        return ResponseEntity.ok(service.changeStatus(id, status, reason != null ? reason : comment));
+    }
+
+    @PostMapping("/{id}/approve")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_APPROVE')")
+    public ResponseEntity<RepairRequestDto> approve(@PathVariable UUID id) {
+        assertCanMutateRequest(requestOrThrow(id));
+        return ResponseEntity.ok(service.approve(id));
     }
 
     @PostMapping("/{id}/close")

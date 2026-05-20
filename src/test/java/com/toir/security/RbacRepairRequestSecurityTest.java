@@ -174,16 +174,15 @@ class RbacRepairRequestSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.REPAIR_REQUEST_UPDATE)
-    void repairRequestUpdateCanChangeStatusAndRequestClarification() throws Exception {
+    void repairRequestUpdateCanRequestClarificationButCannotUseGenericStatusOverride() throws Exception {
         UUID requestId = UUID.randomUUID();
-        when(repairRequestService.changeStatus(requestId, RequestStatus.IN_REVIEW))
-                .thenReturn(repairRequestDto(requestId));
         when(repairRequestService.requestClarification(requestId, "Need more photos"))
                 .thenReturn(repairRequestDto(requestId));
 
         mockMvc.perform(post("/api/v1/repair-requests/{id}/status", requestId)
-                        .param("status", "IN_REVIEW"))
-                .andExpect(status().isOk());
+                        .param("status", "IN_REVIEW")
+                        .param("reason", "manual correction"))
+                .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/repair-requests/{id}/request-clarification", requestId)
                         .param("comment", "Need more photos"))
                 .andExpect(status().isOk());
@@ -191,21 +190,25 @@ class RbacRepairRequestSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.REPAIR_REQUEST_APPROVE)
-    void repairRequestApproveCanSetApprovedStatus() throws Exception {
+    void repairRequestApproveCanUseExplicitApproveButCannotUseGenericStatusOverride() throws Exception {
         UUID requestId = UUID.randomUUID();
-        when(repairRequestService.changeStatus(requestId, RequestStatus.APPROVED))
+        when(repairRequestService.approve(requestId))
                 .thenReturn(repairRequestDto(requestId));
 
-        mockMvc.perform(post("/api/v1/repair-requests/{id}/status", requestId)
-                        .param("status", "APPROVED"))
+        mockMvc.perform(post("/api/v1/repair-requests/{id}/approve", requestId))
                 .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/repair-requests/{id}/status", requestId)
+                        .param("status", "APPROVED")
+                        .param("reason", "manual correction"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
     @WithMockUser(authorities = PermissionConstants.REPAIR_REQUEST_UPDATE)
     void repairRequestUpdateCannotSetApprovedStatus() throws Exception {
         mockMvc.perform(post("/api/v1/repair-requests/{id}/status", UUID.randomUUID())
-                        .param("status", "APPROVED"))
+                        .param("status", "APPROVED")
+                        .param("reason", "manual correction"))
                 .andExpect(status().isForbidden());
     }
 
@@ -213,8 +216,35 @@ class RbacRepairRequestSecurityTest {
     @WithMockUser(authorities = PermissionConstants.REPAIR_REQUEST_READ)
     void repairRequestReadCannotChangeStatus() throws Exception {
         mockMvc.perform(post("/api/v1/repair-requests/{id}/status", UUID.randomUUID())
-                        .param("status", "IN_REVIEW"))
+                        .param("status", "IN_REVIEW")
+                        .param("reason", "manual correction"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = "SYSTEM_ADMIN")
+    void systemAdminCanUseGenericStatusOverrideWithReason() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        when(repairRequestService.changeStatus(requestId, RequestStatus.CANCELLED, "duplicate request"))
+                .thenReturn(repairRequestDto(requestId));
+
+        mockMvc.perform(post("/api/v1/repair-requests/{id}/status", requestId)
+                        .param("status", "CANCELLED")
+                        .param("reason", "duplicate request"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.WILDCARD)
+    void wildcardCanUseGenericStatusOverrideWithReason() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        when(repairRequestService.changeStatus(requestId, RequestStatus.CANCELLED, "duplicate request"))
+                .thenReturn(repairRequestDto(requestId));
+
+        mockMvc.perform(post("/api/v1/repair-requests/{id}/status", requestId)
+                        .param("status", "CANCELLED")
+                        .param("reason", "duplicate request"))
+                .andExpect(status().isOk());
     }
 
     @Test

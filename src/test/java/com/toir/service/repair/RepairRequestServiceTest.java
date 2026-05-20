@@ -2,6 +2,7 @@ package com.toir.service.repair;
 
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
+import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
@@ -19,6 +20,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.users.UserRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,8 +37,10 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,6 +70,9 @@ class RepairRequestServiceTest {
 
     @Mock
     AuditBuilderService auditBuilderService;
+
+    @Mock
+    ScopeAccessService scopeAccessService;
 
     @InjectMocks
     RepairRequestService service;
@@ -157,6 +164,60 @@ class RepairRequestServiceTest {
     }
 
     @Test
+    void requestClarificationBlocksTerminalStatuses() {
+        for (RequestStatus status : List.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED, RequestStatus.COMPLETED)) {
+            UUID id = UUID.randomUUID();
+            RepairRequest entity = repairRequest(id);
+            entity.setStatus(status);
+            when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+
+            assertThatThrownBy(() -> service.requestClarification(id, "Need more photos"))
+                    .hasMessageContaining("Cannot request clarification");
+        }
+    }
+
+    @Test
+    void approveAllowsReviewableStatusesOnly() {
+        for (RequestStatus status : List.of(
+                RequestStatus.OPEN,
+                RequestStatus.REGISTERED,
+                RequestStatus.IN_REVIEW,
+                RequestStatus.NEEDS_CLARIFICATION
+        )) {
+            UUID id = UUID.randomUUID();
+            RepairRequest entity = repairRequest(id);
+            entity.setStatus(status);
+            stubFindSaveAndDtoLookups(id, entity);
+
+            RepairRequestDto result = service.approve(id);
+
+            assertThat(result.status()).isEqualTo(RequestStatus.APPROVED);
+        }
+    }
+
+    @Test
+    void approveBlocksInvalidAndTerminalStatuses() {
+        for (RequestStatus status : List.of(
+                RequestStatus.DRAFT,
+                RequestStatus.APPROVED,
+                RequestStatus.ASSIGNED,
+                RequestStatus.IN_PROGRESS,
+                RequestStatus.COMPLETED,
+                RequestStatus.REJECTED,
+                RequestStatus.CLOSED,
+                RequestStatus.CANCELLED
+        )) {
+            UUID id = UUID.randomUUID();
+            RepairRequest entity = repairRequest(id);
+            entity.setStatus(status);
+            when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+
+            assertThatThrownBy(() -> service.approve(id))
+                    .hasMessageContaining("Cannot approve");
+        }
+    }
+
+    @Test
     void rejectSetsRejectedAndRejectionReason() {
         UUID id = UUID.randomUUID();
         RepairRequest entity = repairRequest(id);
@@ -181,6 +242,189 @@ class RepairRequestServiceTest {
 
         assertThat(result.clarificationReason()).isNull();
         assertThat(entity.getClarificationReason()).isNull();
+    }
+
+    @Test
+    void rejectBlocksInvalidAndTerminalStatuses() {
+        for (RequestStatus status : List.of(
+                RequestStatus.DRAFT,
+                RequestStatus.APPROVED,
+                RequestStatus.ASSIGNED,
+                RequestStatus.IN_PROGRESS,
+                RequestStatus.COMPLETED,
+                RequestStatus.REJECTED,
+                RequestStatus.CLOSED,
+                RequestStatus.CANCELLED
+        )) {
+            UUID id = UUID.randomUUID();
+            RepairRequest entity = repairRequest(id);
+            entity.setStatus(status);
+            when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+
+            assertThatThrownBy(() -> service.reject(id, "Invalid request"))
+                    .hasMessageContaining("Cannot reject");
+        }
+    }
+
+    @Test
+    void assignRequiresApprovedStatus() {
+        UUID id = UUID.randomUUID();
+        UUID assigneeId = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.APPROVED);
+
+        stubFindSaveAndDtoLookups(id, entity);
+
+        RepairRequestDto result = service.assign(id, assigneeId);
+
+        assertThat(result.status()).isEqualTo(RequestStatus.ASSIGNED);
+        assertThat(result.assignedToId()).isEqualTo(assigneeId);
+    }
+
+    @Test
+    void assignBlocksAllNonApprovedStatuses() {
+        for (RequestStatus status : List.of(
+                RequestStatus.DRAFT,
+                RequestStatus.OPEN,
+                RequestStatus.REGISTERED,
+                RequestStatus.IN_REVIEW,
+                RequestStatus.NEEDS_CLARIFICATION,
+                RequestStatus.ASSIGNED,
+                RequestStatus.IN_PROGRESS,
+                RequestStatus.COMPLETED,
+                RequestStatus.REJECTED,
+                RequestStatus.CLOSED,
+                RequestStatus.CANCELLED
+        )) {
+            UUID id = UUID.randomUUID();
+            RepairRequest entity = repairRequest(id);
+            entity.setStatus(status);
+            when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+
+            assertThatThrownBy(() -> service.assign(id, UUID.randomUUID()))
+                    .hasMessageContaining("Cannot assign");
+        }
+    }
+
+    @Test
+    void genericStatusChangeRequiresAdminOverride() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+
+        assertThatThrownBy(() -> service.changeStatus(id, RequestStatus.CLOSED, "manual correction"))
+                .hasMessageContaining("Only SYSTEM_ADMIN");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void genericStatusChangeRequiresOverrideReason() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+
+        assertThatThrownBy(() -> service.changeStatus(id, RequestStatus.CLOSED, "   "))
+                .hasMessageContaining("Override reason is required");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void genericStatusChangeAllowsAdminOverrideWithReason() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        stubFindSaveAndDtoLookups(id, entity);
+
+        RepairRequestDto result = service.changeStatus(id, RequestStatus.CLOSED, "data correction");
+
+        assertThat(result.status()).isEqualTo(RequestStatus.CLOSED);
+    }
+
+    @Test
+    void closeBlocksWhenLinkedWorkOrderIsActive() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.COMPLETED);
+        WorkOrder activeWorkOrder = workOrder(id);
+        activeWorkOrder.setStatus(WorkOrderStatus.IN_PROGRESS);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(activeWorkOrder));
+
+        assertThatThrownBy(() -> service.close(id, new CloseRequestRequest("Resolved")))
+                .hasMessageContaining("active linked work orders");
+    }
+
+    @Test
+    void closeBlocksWhenLinkedDefectIsOpen() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.COMPLETED);
+        WorkOrder closedWorkOrder = workOrder(id);
+        closedWorkOrder.setStatus(WorkOrderStatus.CLOSED);
+        Defect openDefect = defect(id);
+        openDefect.setStatus(DefectStatus.OPEN);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(closedWorkOrder));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(openDefect));
+
+        assertThatThrownBy(() -> service.close(id, new CloseRequestRequest("Resolved")))
+                .hasMessageContaining("open linked defects");
+    }
+
+    @Test
+    void closeBlocksWithoutLinkedWorkOrderEvidence() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.COMPLETED);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.close(id, new CloseRequestRequest("Resolved")))
+                .hasMessageContaining("execution evidence");
+    }
+
+    @Test
+    void closeAllowsTerminalWorkOrdersAndResolvedDefects() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.COMPLETED);
+        WorkOrder closedWorkOrder = workOrder(id);
+        closedWorkOrder.setStatus(WorkOrderStatus.CLOSED);
+        Defect resolvedDefect = defect(id);
+        resolvedDefect.setStatus(DefectStatus.RESOLVED);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubNameLookups(entity);
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(closedWorkOrder));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(resolvedDefect));
+
+        RepairRequestDto result = service.close(id, new CloseRequestRequest("Resolved"));
+
+        assertThat(result.status()).isEqualTo(RequestStatus.CLOSED);
+        assertThat(result.closeResult()).isEqualTo("Resolved");
+    }
+
+    @Test
+    void closePreservesNotFoundForMissingRequest() {
+        UUID id = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.close(id, new CloseRequestRequest("Resolved")))
+                .hasMessageContaining("Repair request not found");
     }
 
     @Test
@@ -467,13 +711,17 @@ class RepairRequestServiceTest {
     }
 
     private void stubDtoLookups(RepairRequest entity) {
-        when(equipmentRepository.findByIdAndIsDeletedFalse(entity.getEquipmentId())).thenReturn(Optional.empty());
-        when(departmentRepository.findByIdAndIsDeletedFalse(entity.getDepartmentId())).thenReturn(Optional.empty());
-        when(userRepository.findByIdAndIsDeletedFalse(entity.getReporterId())).thenReturn(Optional.empty());
+        stubNameLookups(entity);
         when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(entity.getId()))
                 .thenReturn(List.of());
         when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(entity.getId()))
                 .thenReturn(List.of());
+    }
+
+    private void stubNameLookups(RepairRequest entity) {
+        when(equipmentRepository.findByIdAndIsDeletedFalse(entity.getEquipmentId())).thenReturn(Optional.empty());
+        when(departmentRepository.findByIdAndIsDeletedFalse(entity.getDepartmentId())).thenReturn(Optional.empty());
+        when(userRepository.findByIdAndIsDeletedFalse(entity.getReporterId())).thenReturn(Optional.empty());
     }
 
     private RepairRequest repairRequest(UUID id) {

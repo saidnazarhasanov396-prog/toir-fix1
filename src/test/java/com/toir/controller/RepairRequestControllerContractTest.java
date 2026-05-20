@@ -38,6 +38,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -286,6 +287,35 @@ class RepairRequestControllerContractTest {
 
         verify(scopeAccessService).enforceDepartmentScope(departmentId);
         verify(service).getStats(scopedDepartmentId, equipmentId, "pump");
+    }
+
+    @Test
+    void approveEndpointDelegatesToExplicitApproveTransition() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithLinks(requestId);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
+        when(service.approve(requestId)).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/repair-requests/{id}/approve", requestId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(requestId.toString()));
+
+        verify(service).approve(requestId);
+    }
+
+    @Test
+    void statusEndpointPassesOverrideReasonToService() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithLinks(requestId);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
+        when(service.changeStatus(requestId, RequestStatus.CANCELLED, "duplicate cleanup")).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/repair-requests/{id}/status", requestId)
+                        .param("status", "CANCELLED")
+                        .param("reason", "duplicate cleanup"))
+                .andExpect(status().isOk());
+
+        verify(service).changeStatus(requestId, RequestStatus.CANCELLED, "duplicate cleanup");
     }
 
     private RepairRequest entityFromDto(RepairRequestDto dto) {

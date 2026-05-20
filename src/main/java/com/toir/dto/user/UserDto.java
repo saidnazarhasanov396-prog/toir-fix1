@@ -34,6 +34,11 @@ public record UserDto(
         List<UserRoleAssignment> assignments = user.getRoles().stream()
                 .map(r -> new UserRoleAssignment(r.getId(), new RoleRef(r.getId(), r.getCode(), r.getName()), null))
                 .toList();
+        DepartmentRef departmentRef = null;
+        if (user.getDepartment() != null) {
+            com.toir.entity.Department d = user.getDepartment();
+            departmentRef = new DepartmentRef(d.getId(), d.getCode(), d.getName());
+        }
         return new UserDto(
                 user.getId(),
                 user.getUsername(),
@@ -42,7 +47,7 @@ public record UserDto(
                 user.getPosition(),
                 user.getPhone(),
                 user.getStatus(),
-                null,
+                departmentRef,
                 primary,
                 assignments,
                 user.getLastLoginAt()

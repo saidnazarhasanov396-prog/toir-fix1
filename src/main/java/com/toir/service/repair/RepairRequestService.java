@@ -11,6 +11,8 @@ import com.toir.dto.triad.TriadLinkMapper;
 import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.DefectStatus;
+import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -22,6 +24,7 @@ import com.toir.repository.users.UserRepository;
 
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import com.toir.exception.RestException;
@@ -35,8 +38,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -52,6 +57,29 @@ public class RepairRequestService {
     private final DefectRepository defectRepository;
     private final WorkOrderRepository workOrderRepository;
     private final AuditBuilderService auditBuilderService;
+    private final ScopeAccessService scopeAccessService;
+
+    private static final Set<RequestStatus> REVIEWABLE_STATUSES = EnumSet.of(
+            RequestStatus.OPEN,
+            RequestStatus.REGISTERED,
+            RequestStatus.IN_REVIEW,
+            RequestStatus.NEEDS_CLARIFICATION
+    );
+    private static final Set<RequestStatus> TERMINAL_REQUEST_STATUSES = EnumSet.of(
+            RequestStatus.REJECTED,
+            RequestStatus.CLOSED,
+            RequestStatus.CANCELLED
+    );
+    private static final Set<WorkOrderStatus> TERMINAL_WORK_ORDER_STATUSES = EnumSet.of(
+            WorkOrderStatus.COMPLETED,
+            WorkOrderStatus.CLOSED,
+            WorkOrderStatus.CANCELLED
+    );
+    private static final Set<DefectStatus> TERMINAL_DEFECT_STATUSES = EnumSet.of(
+            DefectStatus.RESOLVED,
+            DefectStatus.CLOSED,
+            DefectStatus.CANCELLED
+    );
 
 
     @Transactional(readOnly = true)
@@ -111,7 +139,14 @@ public class RepairRequestService {
 
     @Transactional
     public RepairRequestDto changeStatus(UUID id, RequestStatus newStatus) {
+        return changeStatus(id, newStatus, null);
+    }
+
+    @Transactional
+    public RepairRequestDto changeStatus(UUID id, RequestStatus newStatus, String overrideReason) {
         RepairRequest entity = getOrThrow(id);
+        assertAdminOverride();
+        requireOverrideReason(overrideReason);
 
         captureReaction(entity, newStatus);
         entity.setStatus(newStatus);
@@ -123,20 +158,48 @@ public class RepairRequestService {
                 String.valueOf(save.getId()),
                 AuditAction.UPDATE,
                 AuditModule.REPAIR_REQUEST,
-                "Заявка " + entity.getNumber() + " переведена в " + newStatus,
+                "Admin override: заявка " + entity.getNumber() + " переведена в " + newStatus
+                        + ". Reason: " + overrideReason.trim(),
                 entity,
                 save
         );
         return toDtoWithLinks(entity);
     }
 
+    @Transactional
+    public RepairRequestDto approve(UUID id) {
+        RepairRequest entity = getOrThrow(id);
+        assertCanTransition(entity, RequestStatus.APPROVED, REVIEWABLE_STATUSES, "Cannot approve repair request from status ");
+
+        captureReaction(entity, RequestStatus.APPROVED);
+        entity.setStatus(RequestStatus.APPROVED);
+        entity.setRejectionReason(null);
+        RepairRequest save = repository.save(entity);
+
+        auditBuilderService.log(
+                "repair_request",
+                String.valueOf(save.getId()),
+                AuditAction.APPROVE,
+                AuditModule.REPAIR_REQUEST,
+                "Заявка " + entity.getNumber() + " утверждена",
+                entity,
+                save
+        );
+        return toDtoWithLinks(entity);
+    }
 
     @Transactional
     public RepairRequestDto assign(UUID id, UUID assigneeId) {
         RepairRequest entity = getOrThrow(id);
-        if (entity.getStatus() == RequestStatus.CLOSED || entity.getStatus() == RequestStatus.CANCELLED) {
-            throw RestException.badRequest("Cannot assign a closed/cancelled request");
+        if (assigneeId == null) {
+            throw RestException.badRequest("Assignee is required");
         }
+        assertCanTransition(
+                entity,
+                RequestStatus.ASSIGNED,
+                Set.of(RequestStatus.APPROVED),
+                "Cannot assign repair request from status "
+        );
 
         captureReaction(entity, RequestStatus.ASSIGNED);
         entity.setAssignedToId(assigneeId);
@@ -161,9 +224,7 @@ public class RepairRequestService {
             throw RestException.badRequest("Rejection reason is required");
         }
         RepairRequest entity = getOrThrow(id);
-        if (entity.getStatus() == RequestStatus.CLOSED || entity.getStatus() == RequestStatus.CANCELLED) {
-            throw RestException.badRequest("Cannot reject a closed/cancelled request");
-        }
+        assertCanTransition(entity, RequestStatus.REJECTED, REVIEWABLE_STATUSES, "Cannot reject repair request from status ");
 
         captureReaction(entity, RequestStatus.REJECTED);
         entity.setStatus(RequestStatus.REJECTED);
@@ -189,6 +250,12 @@ public class RepairRequestService {
             throw RestException.badRequest("Clarification comment is required");
         }
         RepairRequest entity = getOrThrow(id);
+        assertCanTransition(
+                entity,
+                RequestStatus.NEEDS_CLARIFICATION,
+                REVIEWABLE_STATUSES,
+                "Cannot request clarification for repair request from status "
+        );
         captureReaction(entity, RequestStatus.NEEDS_CLARIFICATION);
         entity.setStatus(RequestStatus.NEEDS_CLARIFICATION);
         entity.setClarificationReason(comment);
@@ -267,6 +334,7 @@ public class RepairRequestService {
         if (request.closeResult() == null || request.closeResult().isBlank()) {
             throw RestException.badRequest("Close result is required");
         }
+        assertCanClose(entity);
 
         entity.setCloseResult(request.closeResult());
         entity.setActualCompletionAt(Instant.now());
@@ -279,11 +347,81 @@ public class RepairRequestService {
                 String.valueOf(save.getId()),
                 AuditAction.CLOSE,
                 AuditModule.REPAIR_REQUEST,
-                "Закрыта заявка " + entity.getNumber(),
+                isAdminOverride()
+                        ? "Admin override: закрыта заявка " + entity.getNumber() + ". Reason: " + request.closeResult().trim()
+                        : "Закрыта заявка " + entity.getNumber(),
                 entity,
                 save
         );
         return toDtoWithLinks(entity);
+    }
+
+    private void assertCanTransition(
+            RepairRequest entity,
+            RequestStatus nextStatus,
+            Set<RequestStatus> allowedFrom,
+            String messagePrefix
+    ) {
+        if (!allowedFrom.contains(entity.getStatus())) {
+            throw RestException.badRequest(messagePrefix + entity.getStatus());
+        }
+        if (TERMINAL_REQUEST_STATUSES.contains(entity.getStatus())) {
+            throw RestException.badRequest(messagePrefix + entity.getStatus());
+        }
+    }
+
+    private void assertCanClose(RepairRequest entity) {
+        if (entity.getStatus() == RequestStatus.CLOSED) {
+            throw RestException.badRequest("Cannot close repair request from status " + entity.getStatus());
+        }
+        if (entity.getStatus() == RequestStatus.REJECTED || entity.getStatus() == RequestStatus.CANCELLED) {
+            throw RestException.badRequest("Cannot close terminal repair request from status " + entity.getStatus());
+        }
+        if (isAdminOverride()) {
+            return;
+        }
+        if (entity.getStatus() != RequestStatus.COMPLETED) {
+            throw RestException.badRequest("Cannot close repair request from status " + entity.getStatus());
+        }
+
+        List<WorkOrder> linkedWorkOrders = workOrderRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(entity.getId());
+        if (linkedWorkOrders.isEmpty()) {
+            throw RestException.badRequest("Cannot close repair request without linked work order execution evidence");
+        }
+        if (linkedWorkOrders.stream().anyMatch(workOrder -> !isWorkOrderTerminal(workOrder))) {
+            throw RestException.badRequest("Cannot close repair request while active linked work orders exist");
+        }
+
+        List<Defect> linkedDefects = defectRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(entity.getId());
+        if (linkedDefects.stream().anyMatch(defect -> !isDefectTerminal(defect))) {
+            throw RestException.badRequest("Cannot close repair request while open linked defects exist");
+        }
+    }
+
+    private boolean isWorkOrderTerminal(WorkOrder workOrder) {
+        return workOrder != null && TERMINAL_WORK_ORDER_STATUSES.contains(workOrder.getStatus());
+    }
+
+    private boolean isDefectTerminal(Defect defect) {
+        return defect != null && TERMINAL_DEFECT_STATUSES.contains(defect.getStatus());
+    }
+
+    private boolean isAdminOverride() {
+        return scopeAccessService.isScopeAdmin();
+    }
+
+    private void assertAdminOverride() {
+        if (!isAdminOverride()) {
+            throw RestException.forbidden("Only SYSTEM_ADMIN or wildcard can override repair request status");
+        }
+    }
+
+    private void requireOverrideReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw RestException.badRequest("Override reason is required");
+        }
     }
 
     private RepairRequestDto toDto(RepairRequest r,
@@ -386,4 +524,3 @@ public class RepairRequestService {
                 .orElseThrow(() -> RestException.notFound("Repair request not found: " + id));
     }
 }
-

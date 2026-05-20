@@ -191,10 +191,11 @@ class RepairRequestPbacScopeTest {
         doDenyDepartment(departmentId);
 
         mockMvc.perform(post("/api/v1/repair-requests/{id}/status", requestId)
-                        .param("status", "IN_REVIEW"))
+                        .param("status", "IN_REVIEW")
+                        .param("reason", "manual correction"))
                 .andExpect(status().isForbidden());
 
-        verify(service, never()).changeStatus(any(), any());
+        verify(service, never()).changeStatus(any(), any(), any());
     }
 
     @Test

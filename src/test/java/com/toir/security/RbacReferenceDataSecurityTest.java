@@ -519,6 +519,8 @@ class RbacReferenceDataSecurityTest {
                 {
                   "code": "LOC-001",
                   "name": "Workshop",
+                  "nameUz": "Sex",
+                  "nameEn": "Workshop",
                   "type": "WORKSHOP"
                 }
                 """;
@@ -528,6 +530,8 @@ class RbacReferenceDataSecurityTest {
         return """
                 {
                   "name": "Pump",
+                  "nameUz": "Nasos",
+                  "nameEn": "Pump",
                   "category": "PUMP"
                 }
                 """;
