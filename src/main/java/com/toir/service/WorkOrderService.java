@@ -607,6 +607,11 @@ public class WorkOrderService {
                 throw RestException.badRequest(
                         "Cannot create work order for repair request in status " + repairRequest.getStatus());
             }
+            if (request.equipmentId() != null
+                    && repairRequest.getEquipmentId() != null
+                    && !request.equipmentId().equals(repairRequest.getEquipmentId())) {
+                throw RestException.badRequest("Repair request belongs to a different equipment");
+            }
         }
 
         if (request.defectId() == null) {
@@ -615,10 +620,18 @@ public class WorkOrderService {
         Defect defect = defectRepository.findByIdAndIsDeletedFalse(request.defectId())
                 .orElseThrow(() -> RestException.notFound("Defect not found: " + request.defectId()));
 
-        if (request.repairRequestId() == null) {
-            return;
+        if (request.equipmentId() != null
+                && defect.getEquipmentId() != null
+                && !request.equipmentId().equals(defect.getEquipmentId())) {
+            throw RestException.badRequest(
+                    "Defect " + request.defectId() + " belongs to a different equipment");
         }
+
         UUID defectRepairRequestId = defect.getRepairRequestId();
+        if (defectRepairRequestId != null && request.repairRequestId() == null) {
+            throw RestException.badRequest(
+                    "Defect " + request.defectId() + " belongs to a repair request; repairRequestId is required");
+        }
         if (defectRepairRequestId != null && !defectRepairRequestId.equals(request.repairRequestId())) {
             throw RestException.badRequest(
                     "Defect " + request.defectId() + " belongs to a different repair request");
