@@ -5,6 +5,7 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
@@ -160,6 +161,7 @@ class MaterialUsagePbacScopeTest {
         WorkOrder workOrder = new WorkOrder();
         workOrder.setId(id);
         workOrder.setDepartmentId(departmentId);
+        workOrder.setStatus(WorkOrderStatus.APPROVED);
         return workOrder;
     }
 

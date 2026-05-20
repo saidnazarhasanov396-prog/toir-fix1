@@ -215,7 +215,7 @@ public class DefectService {
         entity.setTitle(request.title());
         entity.setDescription(request.description());
         entity.setEquipmentId(request.equipmentId());
-        validateRepairRequestLink(request.repairRequestId());
+        validateRepairRequestLink(request.repairRequestId(), request.equipmentId());
         entity.setRepairRequestId(request.repairRequestId());
         entity.setCategory(request.category());
         entity.setSeverity(request.severity());
@@ -268,7 +268,7 @@ public class DefectService {
                 && normalized.contains("code"));
     }
 
-    private void validateRepairRequestLink(UUID repairRequestId) {
+    private void validateRepairRequestLink(UUID repairRequestId, UUID equipmentId) {
         if (repairRequestId == null) {
             return;
         }
@@ -277,6 +277,12 @@ public class DefectService {
         if (DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_DEFECT_LINK.contains(repairRequest.getStatus())) {
             throw RestException.badRequest(
                     "Cannot link defect to repair request in status " + repairRequest.getStatus());
+        }
+        if (equipmentId != null
+                && repairRequest.getEquipmentId() != null
+                && !equipmentId.equals(repairRequest.getEquipmentId())) {
+            throw RestException.badRequest(
+                    "Repair request belongs to a different equipment");
         }
     }
 

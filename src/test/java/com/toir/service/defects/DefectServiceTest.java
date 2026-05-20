@@ -191,6 +191,24 @@ class DefectServiceTest {
     }
 
     @Test
+    void createWithRepairRequestFromDifferentEquipmentReturns400() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID otherEquipmentId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        when(repository.existsByCode(anyString())).thenReturn(false);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN, otherEquipmentId)));
+
+        assertThatThrownBy(() -> service.create(request(equipmentId, repairRequestId)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("different equipment");
+                });
+        verify(repository, never()).save(any(Defect.class));
+    }
+
+    @Test
     void createWithoutRepairRequestStillWorks() {
         UUID equipmentId = UUID.randomUUID();
         when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
@@ -328,6 +346,31 @@ class DefectServiceTest {
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
                     assertThat(ex.getMessage()).contains("Repair request not found");
+                });
+        verify(repository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void updateWithRepairRequestFromDifferentEquipmentReturns400() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID otherEquipmentId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        Defect defect = Defect.builder()
+                .code("DEF-2026-0001")
+                .title("Existing defect")
+                .description("Existing description")
+                .equipmentId(equipmentId)
+                .build();
+        defect.setId(defectId);
+        when(repository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN, otherEquipmentId)));
+
+        assertThatThrownBy(() -> service.update(defectId, request(equipmentId, repairRequestId)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("different equipment");
                 });
         verify(repository, never()).save(any(Defect.class));
     }
@@ -681,9 +724,14 @@ class DefectServiceTest {
     }
 
     private RepairRequest repairRequest(UUID id, RequestStatus status) {
+        return repairRequest(id, status, null);
+    }
+
+    private RepairRequest repairRequest(UUID id, RequestStatus status, UUID equipmentId) {
         RepairRequest repairRequest = new RepairRequest();
         repairRequest.setId(id);
         repairRequest.setNumber("RR-2026-1001");
+        repairRequest.setEquipmentId(equipmentId);
         repairRequest.setPriority(PriorityLevel.MEDIUM);
         repairRequest.setTitle("Repair request");
         repairRequest.setDescription("Short description");

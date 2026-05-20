@@ -9,6 +9,7 @@ import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
@@ -23,11 +24,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class RepairMaterialUsageService {
+
+    private static final Set<WorkOrderStatus> MATERIAL_ISSUE_ALLOWED_STATUSES = Set.of(
+            WorkOrderStatus.APPROVED,
+            WorkOrderStatus.IN_PROGRESS
+    );
 
     private final RepairMaterialUsageRepository repository;
     private final WarehouseStockRepository stockRepository;
@@ -52,6 +59,7 @@ public class RepairMaterialUsageService {
     public RepairMaterialUsageDto register(UUID workOrderId, RepairMaterialUsageDto r) {
         WorkOrder workOrder = workOrderOrThrow(workOrderId);
         assertCanAccessWorkOrder(workOrder);
+        assertWorkOrderAllowsMaterialIssue(workOrder);
         assertCanAccessWarehouseId(r.warehouseId());
         if (r.quantity() <= 0) {
             throw RestException.badRequest("Quantity must be greater than 0");
@@ -100,6 +108,17 @@ public class RepairMaterialUsageService {
     private WorkOrder workOrderOrThrow(UUID workOrderId) {
         return workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + workOrderId));
+    }
+
+    private void assertWorkOrderAllowsMaterialIssue(WorkOrder workOrder) {
+        if (!isMaterialIssueAllowedStatus(workOrder.getStatus())) {
+            throw RestException.badRequest(
+                    "Materials can be issued only for approved or in-progress work orders");
+        }
+    }
+
+    private boolean isMaterialIssueAllowedStatus(WorkOrderStatus status) {
+        return MATERIAL_ISSUE_ALLOWED_STATUSES.contains(status);
     }
 
     private void assertCanAccessWorkOrder(WorkOrder workOrder) {

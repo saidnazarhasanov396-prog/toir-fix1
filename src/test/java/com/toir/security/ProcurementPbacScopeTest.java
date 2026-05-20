@@ -10,6 +10,7 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.service.ProcurementRequestService;
@@ -36,6 +37,7 @@ class ProcurementPbacScopeTest {
     ProcurementRequestRepository repository;
     SparePartRepository sparePartRepository;
     WarehouseStockRepository stockRepository;
+    StockMovementRepository stockMovementRepository;
     WarehouseRepository warehouseRepository;
     AuditBuilderService auditBuilderService;
     ScopeAccessService scopeAccessService;
@@ -46,6 +48,7 @@ class ProcurementPbacScopeTest {
         repository = mock(ProcurementRequestRepository.class);
         sparePartRepository = mock(SparePartRepository.class);
         stockRepository = mock(WarehouseStockRepository.class);
+        stockMovementRepository = mock(StockMovementRepository.class);
         warehouseRepository = mock(WarehouseRepository.class);
         auditBuilderService = mock(AuditBuilderService.class);
         scopeAccessService = mock(ScopeAccessService.class);
@@ -53,6 +56,7 @@ class ProcurementPbacScopeTest {
                 repository,
                 sparePartRepository,
                 stockRepository,
+                stockMovementRepository,
                 auditBuilderService,
                 warehouseRepository,
                 scopeAccessService

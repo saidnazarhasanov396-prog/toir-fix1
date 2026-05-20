@@ -7,6 +7,7 @@ import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
@@ -92,7 +93,7 @@ class RepairMaterialUsageServiceTest {
         stock.setReservedQty(4);
 
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
-                .thenReturn(Optional.of(workOrder(workOrderId)));
+                .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
 
@@ -112,7 +113,7 @@ class RepairMaterialUsageServiceTest {
     void registerFailsForZeroOrNegativeQuantity() {
         UUID workOrderId = UUID.randomUUID();
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
-                .thenReturn(Optional.of(workOrder(workOrderId)));
+                .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
 
         assertThatThrownBy(() -> service.register(workOrderId, usageDto(0)))
                 .isInstanceOf(RestException.class)
@@ -138,7 +139,7 @@ class RepairMaterialUsageServiceTest {
         stock.setReservedQty(3);
 
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
-                .thenReturn(Optional.of(workOrder(workOrderId)));
+                .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
         when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -175,6 +176,76 @@ class RepairMaterialUsageServiceTest {
         assertThat(movement.getUnitCost()).isEqualTo(12.5);
     }
 
+    @Test
+    void registerSucceedsForInProgressWorkOrder() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WarehouseStock stock = stock(warehouseId, sparePartId, 10, 0);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.IN_PROGRESS)));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(RepairMaterialUsage.class)))
+                .thenAnswer(invocation -> {
+                    RepairMaterialUsage usage = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(usage, "id", UUID.randomUUID());
+                    return usage;
+                });
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RepairMaterialUsageDto result = service.register(
+                workOrderId,
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 3, null)
+        );
+
+        assertThat(result.workOrderId()).isEqualTo(workOrderId);
+        assertThat(stock.getQuantity()).isEqualTo(7);
+    }
+
+    @Test
+    void registerFailsForDraftWorkOrder() {
+        assertRegisterBlockedForStatus(WorkOrderStatus.DRAFT);
+    }
+
+    @Test
+    void registerFailsForPlannedWorkOrder() {
+        assertRegisterBlockedForStatus(WorkOrderStatus.PLANNED);
+    }
+
+    @Test
+    void registerFailsForSuspendedWorkOrder() {
+        assertRegisterBlockedForStatus(WorkOrderStatus.SUSPENDED);
+    }
+
+    @Test
+    void registerFailsForCompletedWorkOrder() {
+        assertRegisterBlockedForStatus(WorkOrderStatus.COMPLETED);
+    }
+
+    @Test
+    void registerFailsForClosedWorkOrder() {
+        assertRegisterBlockedForStatus(WorkOrderStatus.CLOSED);
+    }
+
+    @Test
+    void registerFailsForCancelledWorkOrder() {
+        assertRegisterBlockedForStatus(WorkOrderStatus.CANCELLED);
+    }
+
+    private void assertRegisterBlockedForStatus(WorkOrderStatus status) {
+        UUID workOrderId = UUID.randomUUID();
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, status)));
+
+        assertThatThrownBy(() -> service.register(workOrderId, usageDto(1)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Materials can be issued only for approved or in-progress work orders");
+
+        verifyNoInteractions(stockRepository, repository, stockMovementRepository);
+    }
+
     private RepairMaterialUsageDto usageDto(double quantity) {
         return new RepairMaterialUsageDto(
                 null,
@@ -186,11 +257,21 @@ class RepairMaterialUsageServiceTest {
         );
     }
 
-    private WorkOrder workOrder(UUID workOrderId) {
+    private WorkOrder workOrder(UUID workOrderId, WorkOrderStatus status) {
         WorkOrder workOrder = new WorkOrder();
         workOrder.setId(workOrderId);
         workOrder.setDepartmentId(UUID.randomUUID());
+        workOrder.setStatus(status);
         return workOrder;
+    }
+
+    private WarehouseStock stock(UUID warehouseId, UUID sparePartId, double quantity, double reservedQty) {
+        WarehouseStock stock = new WarehouseStock();
+        stock.setWarehouseId(warehouseId);
+        stock.setSparePartId(sparePartId);
+        stock.setQuantity(quantity);
+        stock.setReservedQty(reservedQty);
+        return stock;
     }
 
     private Warehouse warehouse(UUID warehouseId) {

@@ -88,6 +88,25 @@ class DefectControllerContractTest {
     }
 
     @Test
+    void listWithRepairRequestIdAndEquipmentIdPassesIntersectionFilters() throws Exception {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        DefectResponse response = defectResponse(equipmentId, repairRequestId);
+        when(service.search(equipmentId, repairRequestId, 0, 100, null))
+                .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
+
+        mockMvc.perform(get("/api/v1/defects")
+                        .param("repairRequestId", repairRequestId.toString())
+                        .param("equipmentId", equipmentId.toString())
+                        .param("size", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.content[0].repairRequestId").value(repairRequestId.toString()));
+
+        verify(service).search(equipmentId, repairRequestId, 0, 100, null);
+    }
+
+    @Test
     void listWithRepairRequestIdReturnsEmptyWhenNoMatches() throws Exception {
         UUID repairRequestId = UUID.randomUUID();
         when(service.search(null, repairRequestId, 0, 100, null))
