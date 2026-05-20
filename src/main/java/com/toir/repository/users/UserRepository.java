@@ -31,10 +31,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     long countByIsDeletedFalse();
 
 
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole WHERE u.username = :username AND u.isDeleted = false")
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole LEFT JOIN FETCH u.department WHERE u.username = :username AND u.isDeleted = false")
     Optional<User> findByUsernameAndIsDeletedFalse(@Param("username") String username);
 
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole WHERE u.isDeleted = false")
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole LEFT JOIN FETCH u.department WHERE u.isDeleted = false")
     List<User> findAllWithRolesAndIsDeletedFalse();
 
     @Query(value = """
@@ -50,10 +50,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             """)
     Page<UUID> searchIds(@Param("search") String search, Pageable pageable);
 
-    @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole WHERE u.id IN :ids AND u.isDeleted = false")
+    @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole LEFT JOIN FETCH u.department WHERE u.id IN :ids AND u.isDeleted = false")
     List<User> findAllWithRolesByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole WHERE u.email = :email AND u.isDeleted = false")
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.primaryRole LEFT JOIN FETCH u.department WHERE u.email = :email AND u.isDeleted = false")
     Optional<User> findByEmailAndIsDeletedFalse(@Param("email") String email);
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM users WHERE username = :username AND is_deleted = false)", nativeQuery = true)
