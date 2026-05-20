@@ -70,11 +70,11 @@ class ProcurementRequestServiceTest {
                 warehouseRepository,
                 scopeAccessService
         );
-        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
     }
 
     @Test
     void receivingOrderedRequestUpdatesExistingStockAndCreatesReceiptMovement() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
@@ -108,6 +108,7 @@ class ProcurementRequestServiceTest {
 
     @Test
     void receivingCreatesStockRowWhenMissing() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
@@ -136,6 +137,7 @@ class ProcurementRequestServiceTest {
 
     @Test
     void receivingCreatesReceiptMovementPerLine() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
         UUID firstSparePartId = UUID.randomUUID();
@@ -162,6 +164,7 @@ class ProcurementRequestServiceTest {
 
     @Test
     void repeatedReceiveIsBlocked() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.RECEIVED,
                 List.of(line(UUID.randomUUID(), 1, null)));
@@ -177,6 +180,7 @@ class ProcurementRequestServiceTest {
 
     @Test
     void receivingWithoutWarehouseIsBlocked() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, null, ProcurementRequestStatus.ORDERED,
                 List.of(line(UUID.randomUUID(), 1, null)));
@@ -192,6 +196,7 @@ class ProcurementRequestServiceTest {
 
     @Test
     void receivingWithoutLinesIsBlocked() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.ORDERED, List.of());
         when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
@@ -206,6 +211,7 @@ class ProcurementRequestServiceTest {
 
     @Test
     void receivingInvalidStatusesIsBlocked() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         for (ProcurementRequestStatus status : List.of(
                 ProcurementRequestStatus.DRAFT,
                 ProcurementRequestStatus.SUBMITTED,
@@ -228,6 +234,7 @@ class ProcurementRequestServiceTest {
 
     @Test
     void receivingLineWithoutSparePartIsBlocked() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.ORDERED,
                 List.of(line(null, 1, null)));
@@ -243,6 +250,7 @@ class ProcurementRequestServiceTest {
 
     @Test
     void receivingLineWithNonPositiveQuantityIsBlocked() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.ORDERED,
                 List.of(line(UUID.randomUUID(), 0, null)));
@@ -265,8 +273,10 @@ class ProcurementRequestServiceTest {
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Procurement request not found");
 
+        verify(repository, never()).save(any());
         verify(stockRepository, never()).save(any());
         verify(stockMovementRepository, never()).save(any());
+        verify(sparePartRepository, never()).findByIdAndIsDeletedFalse(any());
     }
 
     private ProcurementRequest request(UUID id,
