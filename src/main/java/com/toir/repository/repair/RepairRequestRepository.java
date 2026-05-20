@@ -19,6 +19,9 @@ public interface RepairRequestRepository extends JpaRepository<RepairRequest, UU
     @Query(value = "SELECT * FROM repair_requests WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<RepairRequest> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT * FROM repair_requests WHERE number = :number AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<RepairRequest> findByNumberAndIsDeletedFalse(@Param("number") String number);
+
     @Query(value = "SELECT * FROM repair_requests WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<RepairRequest> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 

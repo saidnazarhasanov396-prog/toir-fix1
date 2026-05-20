@@ -69,19 +69,20 @@ public class WorkOrderService {
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
-    private static final Set<WorkOrderStatus> TERMINAL_WORK_ORDER_STATUSES =
-            EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
-    private static final Set<WorkOrderStatus> ACTIVE_WORK_ORDER_STATUSES =
-            EnumSet.of(WorkOrderStatus.DRAFT, WorkOrderStatus.PLANNED, WorkOrderStatus.APPROVED, WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.SUSPENDED);
-    private static final Set<RequestStatus> TERMINAL_REPAIR_REQUEST_STATUSES =
-            EnumSet.of(RequestStatus.REJECTED, RequestStatus.COMPLETED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
-    private static final Set<DefectStatus> TERMINAL_DEFECT_STATUSES =
-            EnumSet.of(DefectStatus.RESOLVED, DefectStatus.CLOSED, DefectStatus.CANCELLED);
-    private static final Set<DefectStatus> RESOLVED_OR_CLOSED_DEFECT_STATUSES =
-            EnumSet.of(DefectStatus.RESOLVED, DefectStatus.CLOSED);
-    private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_WORK_ORDER_CREATE =
-            EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
-
+    private static final Set<WorkOrderStatus> TERMINAL_WORK_ORDER_STATUSES = EnumSet.of(WorkOrderStatus.COMPLETED,
+            WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
+    private static final Set<WorkOrderStatus> ACTIVE_WORK_ORDER_STATUSES = EnumSet.of(WorkOrderStatus.DRAFT,
+            WorkOrderStatus.PLANNED, WorkOrderStatus.APPROVED, WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.SUSPENDED);
+    private static final Set<RequestStatus> TERMINAL_REPAIR_REQUEST_STATUSES = EnumSet.of(RequestStatus.REJECTED,
+            RequestStatus.COMPLETED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
+    private static final Set<DefectStatus> TERMINAL_DEFECT_STATUSES = EnumSet.of(DefectStatus.RESOLVED,
+            DefectStatus.CLOSED, DefectStatus.CANCELLED);
+    private static final Set<DefectStatus> RESOLVED_OR_CLOSED_DEFECT_STATUSES = EnumSet.of(DefectStatus.RESOLVED,
+            DefectStatus.CLOSED);
+    private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_WORK_ORDER_CREATE = EnumSet
+            .of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
+    private static final Set<PlanStatus> ALLOWED_PARENT_PLAN_STATUSES_FOR_WORK_ORDER_CREATE = EnumSet
+            .of(PlanStatus.APPROVED, PlanStatus.IN_PROGRESS);
 
     @Transactional(readOnly = true)
     public List<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId) {
@@ -89,7 +90,8 @@ public class WorkOrderService {
     }
 
     @Transactional(readOnly = true)
-    public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page, int pageSize, String search) {
+    public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page,
+            int pageSize, String search) {
         var pageable = PaginationUtils.pageRequest(page, pageSize);
         String normalizedSearch = normalizeSearch(search);
         Page<WorkOrder> resultPage = repository.searchPaginated(
@@ -97,8 +99,7 @@ public class WorkOrderService {
                 departmentId,
                 equipmentId,
                 normalizedSearch,
-                pageable
-        );
+                pageable);
         return toDtoPage(resultPage);
     }
 
@@ -111,8 +112,7 @@ public class WorkOrderService {
                 stats.getTotalOrders() == null ? 0 : stats.getTotalOrders(),
                 stats.getOpenOrders() == null ? 0 : stats.getOpenOrders(),
                 stats.getCompletedOrders() == null ? 0 : stats.getCompletedOrders(),
-                stats.getOverdueOrders() == null ? 0 : stats.getOverdueOrders()
-        );
+                stats.getOverdueOrders() == null ? 0 : stats.getOverdueOrders());
     }
 
     @Transactional(readOnly = true)
@@ -121,8 +121,7 @@ public class WorkOrderService {
                 departmentId,
                 equipmentId,
                 search,
-                PaginationUtils.pageRequest(page, pageSize)
-        );
+                PaginationUtils.pageRequest(page, pageSize));
         return toDtoPage(resultPage);
     }
 
@@ -157,7 +156,8 @@ public class WorkOrderService {
         entity.setWorkType(effectiveWorkType);
         entity.setWarehouseId(request.warehouseId());
         entity.setReplacementEquipmentId(request.replacementEquipmentId());
-        if (request.priority() != null) entity.setPriority(request.priority());
+        if (request.priority() != null)
+            entity.setPriority(request.priority());
         entity.setStartPlannedAt(request.startPlannedAt());
         entity.setEndPlannedAt(request.endPlannedAt());
         entity.setCreatedById(request.createdById());
@@ -247,8 +247,7 @@ public class WorkOrderService {
             warehouseEquipmentItemService.transferEquipmentToWarehouse(
                     entity.getEquipmentId(),
                     request.oldEquipmentReturnWarehouseId(),
-                    WarehouseEquipmentStatus.OUT_OF_SERVICE
-            );
+                    WarehouseEquipmentStatus.OUT_OF_SERVICE);
         }
         completeLinkedPprTask(entity);
 
@@ -294,7 +293,6 @@ public class WorkOrderService {
                 saved,
                 null);
 
-
         return toDto(saved);
     }
 
@@ -330,8 +328,7 @@ public class WorkOrderService {
                 AuditModule.PPR_TASK,
                 "PPR task completed from linked work order " + workOrder.getNumber(),
                 task,
-                saved
-        );
+                saved);
         recalculatePlanStatus(task.getPlan());
     }
 
@@ -372,8 +369,7 @@ public class WorkOrderService {
                 AuditModule.PPR_PLAN,
                 "PPR plan status recalculated from child task progress",
                 plan,
-                savedPlan
-        );
+                savedPlan);
     }
 
     private void syncLinkedOnStart(WorkOrder workOrder) {
@@ -412,8 +408,7 @@ public class WorkOrderService {
                             AuditModule.REPAIR_REQUEST,
                             "Repair request moved to IN_PROGRESS from linked work order start",
                             request,
-                            saved
-                    );
+                            saved);
                 });
     }
 
@@ -438,8 +433,7 @@ public class WorkOrderService {
                             AuditModule.DEFECT,
                             "Defect moved to IN_PROGRESS from linked work order start",
                             defect,
-                            saved
-                    );
+                            saved);
                 });
     }
 
@@ -465,8 +459,7 @@ public class WorkOrderService {
                             AuditModule.DEFECT,
                             "Defect resolved after linked work orders became non-active",
                             defect,
-                            saved
-                    );
+                            saved);
                 });
     }
 
@@ -494,8 +487,7 @@ public class WorkOrderService {
                             AuditModule.REPAIR_REQUEST,
                             "Repair request moved to COMPLETED after linked work order completion",
                             request,
-                            saved
-                    );
+                            saved);
                 });
     }
 
@@ -523,8 +515,7 @@ public class WorkOrderService {
                             AuditModule.DEFECT,
                             "Defect closed after linked work orders reached terminal state",
                             defect,
-                            saved
-                    );
+                            saved);
                 });
     }
 
@@ -556,8 +547,7 @@ public class WorkOrderService {
                             AuditModule.REPAIR_REQUEST,
                             "Заявка " + saved.getNumber() + " закрыта после закрытия связанных нарядов",
                             request,
-                            saved
-                    );
+                            saved);
                 });
     }
 
@@ -602,7 +592,8 @@ public class WorkOrderService {
     private void validateCreateRelations(WorkOrderRequest request) {
         if (request.repairRequestId() != null) {
             RepairRequest repairRequest = repairRequestRepository.findByIdAndIsDeletedFalse(request.repairRequestId())
-                    .orElseThrow(() -> RestException.notFound("Repair request not found: " + request.repairRequestId()));
+                    .orElseThrow(
+                            () -> RestException.notFound("Repair request not found: " + request.repairRequestId()));
             if (DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_WORK_ORDER_CREATE.contains(repairRequest.getStatus())) {
                 throw RestException.badRequest(
                         "Cannot create work order for repair request in status " + repairRequest.getStatus());
@@ -613,6 +604,8 @@ public class WorkOrderService {
                 throw RestException.badRequest("Repair request belongs to a different equipment");
             }
         }
+
+        validatePprTaskRelationForCreate(request.pprTaskId());
 
         if (request.defectId() == null) {
             return;
@@ -635,6 +628,24 @@ public class WorkOrderService {
         if (defectRepairRequestId != null && !defectRepairRequestId.equals(request.repairRequestId())) {
             throw RestException.badRequest(
                     "Defect " + request.defectId() + " belongs to a different repair request");
+        }
+    }
+
+    private void validatePprTaskRelationForCreate(UUID pprTaskId) {
+        if (pprTaskId == null) {
+            return;
+        }
+        PprTask task = pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(pprTaskId)
+                .orElseThrow(() -> RestException.notFound("PPR task not found: " + pprTaskId));
+        if (task.getStatus() != PprTaskStatus.APPROVED) {
+            throw RestException.badRequest("Only APPROVED PPR tasks can generate work orders");
+        }
+        PprPlan plan = task.getPlan();
+        if (plan == null || plan.getId() == null) {
+            throw RestException.notFound("Parent PPR plan not found for task: " + pprTaskId);
+        }
+        if (!ALLOWED_PARENT_PLAN_STATUSES_FOR_WORK_ORDER_CREATE.contains(plan.getStatus())) {
+            throw RestException.badRequest("Work order can be created only after the parent PPR plan is approved");
         }
     }
 
@@ -673,13 +684,14 @@ public class WorkOrderService {
 
     private WarehouseEquipmentItem getReplacementWarehouseEquipmentItemOrThrow(WorkOrder workOrder) {
         if (workOrder.getWarehouseId() == null || workOrder.getReplacementEquipmentId() == null) {
-            throw RestException.badRequest("warehouseId and replacementEquipmentId are required for replacement work orders");
+            throw RestException
+                    .badRequest("warehouseId and replacementEquipmentId are required for replacement work orders");
         }
         return warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
-                        workOrder.getWarehouseId(),
-                        workOrder.getReplacementEquipmentId()
-                )
-                .orElseThrow(() -> RestException.badRequest("Replacement equipment item not found in selected warehouse"));
+                workOrder.getWarehouseId(),
+                workOrder.getReplacementEquipmentId())
+                .orElseThrow(
+                        () -> RestException.badRequest("Replacement equipment item not found in selected warehouse"));
     }
 
     private void validateReplacementFields(WorkOrderRequest request, WorkType effectiveWorkType) {
@@ -696,26 +708,28 @@ public class WorkOrderService {
             warehouseRepository.findByIdAndIsDeletedFalse(request.warehouseId())
                     .orElseThrow(() -> RestException.notFound("Warehouse not found: " + request.warehouseId()));
             equipmentRepository.findByIdAndIsDeletedFalse(request.replacementEquipmentId())
-                    .orElseThrow(() -> RestException.notFound("Replacement equipment not found: " + request.replacementEquipmentId()));
+                    .orElseThrow(() -> RestException
+                            .notFound("Replacement equipment not found: " + request.replacementEquipmentId()));
             WarehouseEquipmentItem warehouseEquipmentItem = warehouseEquipmentItemRepository
                     .findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
                             request.warehouseId(),
-                            request.replacementEquipmentId()
-                    ).orElseThrow(() -> RestException.badRequest("Replacement equipment does not belong to selected warehouse"));
+                            request.replacementEquipmentId())
+                    .orElseThrow(() -> RestException
+                            .badRequest("Replacement equipment does not belong to selected warehouse"));
             if (warehouseEquipmentItem.getStatus() != WarehouseEquipmentStatus.AVAILABLE) {
                 throw RestException.badRequest("Replacement equipment must be AVAILABLE");
             }
             if (repository.existsActiveReplacementAssignment(
                     request.replacementEquipmentId(),
                     WorkType.REPLACEMENT,
-                    TERMINAL_WORK_ORDER_STATUSES
-            )) {
+                    TERMINAL_WORK_ORDER_STATUSES)) {
                 throw RestException.conflict("Replacement equipment is already assigned to another active work order");
             }
             return;
         }
         if (request.warehouseId() != null || request.replacementEquipmentId() != null) {
-            throw RestException.badRequest("warehouseId and replacementEquipmentId must be null when workType is not REPLACEMENT");
+            throw RestException
+                    .badRequest("warehouseId and replacementEquipmentId must be null when workType is not REPLACEMENT");
         }
     }
 
@@ -726,9 +740,9 @@ public class WorkOrderService {
         WarehouseEquipmentItem item = warehouseEquipmentItemRepository
                 .findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
                         request.warehouseId(),
-                        request.replacementEquipmentId()
-                )
-                .orElseThrow(() -> RestException.badRequest("Replacement equipment does not belong to selected warehouse"));
+                        request.replacementEquipmentId())
+                .orElseThrow(
+                        () -> RestException.badRequest("Replacement equipment does not belong to selected warehouse"));
         if (item.getStatus() != WarehouseEquipmentStatus.AVAILABLE) {
             throw RestException.badRequest("Replacement equipment must be AVAILABLE");
         }
@@ -739,20 +753,25 @@ public class WorkOrderService {
     private void validateCompleteRequestForReplacement(WorkOrder entity, CompleteWorkOrderRequest request) {
         if (isReplacementWorkOrder(entity)) {
             if (request.oldEquipmentReturnWarehouseId() == null) {
-                throw RestException.badRequest("oldEquipmentReturnWarehouseId is required when workType is REPLACEMENT");
+                throw RestException
+                        .badRequest("oldEquipmentReturnWarehouseId is required when workType is REPLACEMENT");
             }
             warehouseRepository.findByIdAndIsDeletedFalse(request.oldEquipmentReturnWarehouseId())
-                    .orElseThrow(() -> RestException.notFound("Warehouse not found: " + request.oldEquipmentReturnWarehouseId()));
+                    .orElseThrow(() -> RestException
+                            .notFound("Warehouse not found: " + request.oldEquipmentReturnWarehouseId()));
             return;
         }
         if (request.oldEquipmentReturnWarehouseId() != null) {
-            throw RestException.badRequest("oldEquipmentReturnWarehouseId must be null when workType is not REPLACEMENT");
+            throw RestException
+                    .badRequest("oldEquipmentReturnWarehouseId must be null when workType is not REPLACEMENT");
         }
     }
 
     private void assignReplacementEquipmentToWorkOrderDepartment(WorkOrder workOrder) {
-        Equipment replacementEquipment = equipmentRepository.findByIdAndIsDeletedFalse(workOrder.getReplacementEquipmentId())
-                .orElseThrow(() -> RestException.notFound("Replacement equipment not found: " + workOrder.getReplacementEquipmentId()));
+        Equipment replacementEquipment = equipmentRepository
+                .findByIdAndIsDeletedFalse(workOrder.getReplacementEquipmentId())
+                .orElseThrow(() -> RestException
+                        .notFound("Replacement equipment not found: " + workOrder.getReplacementEquipmentId()));
         replacementEquipment.setDepartmentId(workOrder.getDepartmentId());
         equipmentRepository.save(replacementEquipment);
     }
@@ -775,15 +794,14 @@ public class WorkOrderService {
                 linkedRepairRequest,
                 linkedDefect,
                 resolveCount(entity.getId(), operationsCountByWorkOrderId),
-                resolveCount(entity.getId(), materialsCountByWorkOrderId)
-        );
+                resolveCount(entity.getId(), materialsCountByWorkOrderId));
     }
 
     private WorkOrderDto toDto(WorkOrder entity,
-                               RepairRequest linkedRepairRequest,
-                               Defect linkedDefect,
-                               int operationsCount,
-                               int materialsCount) {
+            RepairRequest linkedRepairRequest,
+            Defect linkedDefect,
+            int operationsCount,
+            int materialsCount) {
         String equipmentName = equipmentRepository.findById(entity.getEquipmentId())
                 .map(Equipment::getName)
                 .orElse(null);
@@ -793,10 +811,11 @@ public class WorkOrderService {
         String replacementEquipmentName = entity.getReplacementEquipmentId() == null
                 ? null
                 : equipmentRepository.findById(entity.getReplacementEquipmentId())
-                .map(Equipment::getName)
-                .orElse(null);
+                        .map(Equipment::getName)
+                        .orElse(null);
         return new WorkOrderDto(
-                entity.getId(), entity.getNumber(), entity.getTitle(), entity.getEquipmentId(), entity.getDepartmentId(),
+                entity.getId(), entity.getNumber(), entity.getTitle(), entity.getEquipmentId(),
+                entity.getDepartmentId(),
                 equipmentName, departmentName,
                 entity.getRepairRequestId(), entity.getDefectId(), entity.getPprTaskId(), entity.getContractorId(),
                 entity.getStatus(), entity.getType(), entity.getWorkType(), entity.getPriority(),
@@ -808,8 +827,7 @@ public class WorkOrderService {
                 TriadLinkMapper.toRepairRequestBrief(linkedRepairRequest),
                 TriadLinkMapper.toDefectBrief(linkedDefect),
                 operationsCount,
-                materialsCount
-        );
+                materialsCount);
     }
 
     private List<WorkOrderDto> toDtos(List<WorkOrder> entities) {
@@ -833,8 +851,8 @@ public class WorkOrderService {
         Map<UUID, RepairRequest> repairRequestById = repairRequestIds.isEmpty()
                 ? Map.of()
                 : repairRequestRepository.findAllByIdInAndIsDeletedFalse(repairRequestIds)
-                .stream()
-                .collect(Collectors.toMap(RepairRequest::getId, Function.identity()));
+                        .stream()
+                        .collect(Collectors.toMap(RepairRequest::getId, Function.identity()));
 
         List<UUID> defectIds = entities.stream()
                 .map(WorkOrder::getDefectId)
@@ -844,8 +862,8 @@ public class WorkOrderService {
         Map<UUID, Defect> defectById = defectIds.isEmpty()
                 ? Map.of()
                 : defectRepository.findAllByIdInAndIsDeletedFalse(defectIds)
-                .stream()
-                .collect(Collectors.toMap(Defect::getId, Function.identity()));
+                        .stream()
+                        .collect(Collectors.toMap(Defect::getId, Function.identity()));
 
         return entities.stream()
                 .map(entity -> toDto(
@@ -853,8 +871,7 @@ public class WorkOrderService {
                         resolveRepairRequestBrief(entity.getRepairRequestId(), repairRequestById),
                         resolveDefectBrief(entity.getDefectId(), defectById),
                         resolveCount(entity.getId(), operationsCountByWorkOrderId),
-                        resolveCount(entity.getId(), materialsCountByWorkOrderId)
-                ))
+                        resolveCount(entity.getId(), materialsCountByWorkOrderId)))
                 .toList();
     }
 
@@ -865,8 +882,7 @@ public class WorkOrderService {
         return workExecutionRepository.countByWorkOrderIds(workOrderIds).stream()
                 .collect(Collectors.toMap(
                         projection -> projection.getWorkOrderId(),
-                        projection -> safeCount(projection.getCount())
-                ));
+                        projection -> safeCount(projection.getCount())));
     }
 
     private Map<UUID, Integer> loadMaterialsCountMap(List<UUID> workOrderIds) {
@@ -876,8 +892,7 @@ public class WorkOrderService {
         return repairMaterialUsageRepository.countByWorkOrderIds(workOrderIds).stream()
                 .collect(Collectors.toMap(
                         projection -> projection.getWorkOrderId(),
-                        projection -> safeCount(projection.getCount())
-                ));
+                        projection -> safeCount(projection.getCount())));
     }
 
     private int resolveCount(UUID workOrderId, Map<UUID, Integer> countByWorkOrderId) {

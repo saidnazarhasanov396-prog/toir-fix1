@@ -77,7 +77,7 @@ class RbacSparePartSecurityTest {
     void sparePartReadCanReadListAndDetail() throws Exception {
         UUID sparePartId = UUID.randomUUID();
         Page<SparePartDto> page = new PageImpl<>(List.of(sparePartDto(sparePartId)));
-        when(sparePartService.findAll(1, 0, null, "")).thenReturn(page);
+        when(sparePartService.findAll(1, 0, null, "", null)).thenReturn(page);
         when(sparePartService.findById(sparePartId)).thenReturn(sparePartDto(sparePartId));
 
         mockMvc.perform(get("/api/v1/spare-parts?page=0&size=1"))
@@ -89,7 +89,7 @@ class RbacSparePartSecurityTest {
     @Test
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void systemAdminCanReadSpareParts() throws Exception {
-        when(sparePartService.findAll(1, 0, null, "")).thenReturn(Page.empty());
+        when(sparePartService.findAll(1, 0, null, "", null)).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/v1/spare-parts?page=0&size=1"))
                 .andExpect(status().isOk());
@@ -98,7 +98,7 @@ class RbacSparePartSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.WILDCARD)
     void wildcardCanReadSpareParts() throws Exception {
-        when(sparePartService.findAll(1, 0, null, "")).thenReturn(Page.empty());
+        when(sparePartService.findAll(1, 0, null, "", null)).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/v1/spare-parts?page=0&size=1"))
                 .andExpect(status().isOk());

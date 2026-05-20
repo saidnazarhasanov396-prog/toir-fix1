@@ -2,19 +2,26 @@ package com.toir.service;
 
 import com.toir.dto.inspection.*;
 import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.inspection.InspectionCheckpoint;
 import com.toir.entity.inspection.InspectionRound;
 import com.toir.entity.inspection.InspectionRoundResult;
 import com.toir.entity.inspection.InspectionRoute;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.CriticalityLevel;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.InspectionRoundStatus;
+import com.toir.enums.PriorityLevel;
+import com.toir.enums.RequestSource;
 import com.toir.exception.RestException;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.inspection.InspectionCheckpointRepository;
 import com.toir.repository.inspection.InspectionRoundRepository;
 import com.toir.repository.inspection.InspectionRouteRepository;
+import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +30,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -34,9 +44,18 @@ public class InspectionService {
     private final InspectionCheckpointRepository checkpointRepo;
     private final InspectionRoundRepository roundRepo;
     private final DefectRepository defectRepo;
+    private final RepairRequestRepository repairRequestRepository;
+    private final EquipmentRepository equipmentRepository;
     private final UnitOfMeasurementService unitOfMeasurementService;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
+    private static final String INSPECTION_DEFECT_CODE_PREFIX = "INS-DEF-";
+    private static final String INSPECTION_REPAIR_REQUEST_PREFIX = "INS-RR-";
+    private static final Set<DefectStatus> OPEN_TRIAGE_DEFECT_STATUSES = EnumSet.of(
+            DefectStatus.OPEN,
+            DefectStatus.IN_ANALYSIS,
+            DefectStatus.IN_PROGRESS
+    );
 
 
 
@@ -214,9 +233,10 @@ public class InspectionService {
         if (round.getStatus() != InspectionRoundStatus.IN_PROGRESS) {
             throw RestException.badRequest("Cannot add results to a completed round");
         }
+        InspectionCheckpoint checkpoint = loadCheckpoint(r.checkpointId());
         InspectionRoundResult result = new InspectionRoundResult();
         result.setRound(round);
-        result.setCheckpointId(r.checkpointId());
+        result.setCheckpointId(checkpoint.getId());
         result.setStatus(r.status());
         result.setMeasuredValue(r.measuredValue());
         result.setMeasuredUnit(unitOfMeasurementService.normalizeOptionalUnitOrNull(r.measuredUnit()));
@@ -226,11 +246,8 @@ public class InspectionService {
         if ("FAIL".equals(r.status())) {
             round.setAlarmCount(round.getAlarmCount() + 1);
             round.setFindingsCount(round.getFindingsCount() + 1);
-            InspectionCheckpoint cp = checkpointRepo.findByIdAndIsDeletedFalse(r.checkpointId()).orElse(null);
-            if (cp != null && cp.getEquipmentId() != null) {
-                Defect d = autoCreateDefect(cp, r.comment(), round.getId());
-                if (d != null) result.setDefectId(d.getId());
-            }
+            Defect d = createOrReuseFailureTriage(round, checkpoint, r.comment());
+            result.setDefectId(d.getId());
         } else if ("WARN".equals(r.status())) {
             round.setFindingsCount(round.getFindingsCount() + 1);
         }
@@ -262,17 +279,149 @@ public class InspectionService {
         return InspectionRoundResultDto.from(result);
     }
 
-    private Defect autoCreateDefect(InspectionCheckpoint cp, String comment, UUID roundId) {
+    private Defect createOrReuseFailureTriage(InspectionRound round, InspectionCheckpoint checkpoint, String comment) {
+        if (checkpoint.getEquipmentId() == null) {
+            throw RestException.badRequest("Failed inspection checkpoint must be linked to equipment for defect triage");
+        }
+        String defectCode = inspectionDefectCode(round.getId(), checkpoint.getId());
+        Optional<Defect> existingDefect = defectRepo.findByCodeAndIsDeletedFalse(defectCode);
+        if (existingDefect.isPresent()) {
+            Defect defect = existingDefect.get();
+            if (OPEN_TRIAGE_DEFECT_STATUSES.contains(defect.getStatus()) && defect.getRepairRequestId() == null) {
+                createRepairRequestIfPossible(round, checkpoint, comment)
+                        .map(RepairRequest::getId)
+                        .ifPresent(defect::setRepairRequestId);
+                if (defect.getRepairRequestId() != null) {
+                    Defect saved = defectRepo.save(defect);
+                    auditBuilderService.log(
+                            "defect",
+                            saved.getId().toString(),
+                            AuditAction.UPDATE,
+                            AuditModule.DEFECT,
+                            "Inspection failure linked to repair request",
+                            defect,
+                            saved
+                    );
+                    return saved;
+                }
+            }
+            return defect;
+        }
+
+        Defect defect = buildInspectionDefect(round, checkpoint, comment, defectCode);
+        createRepairRequestIfPossible(round, checkpoint, comment)
+                .map(RepairRequest::getId)
+                .ifPresent(defect::setRepairRequestId);
+        Defect saved = defectRepo.save(defect);
+        auditBuilderService.log(
+                "defect",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.DEFECT,
+                "Inspection failure defect created",
+                null,
+                saved
+        );
+        return saved;
+    }
+
+    private Defect buildInspectionDefect(InspectionRound round,
+                                         InspectionCheckpoint checkpoint,
+                                         String comment,
+                                         String defectCode) {
         Defect d = new Defect();
-        d.setCode("AUTO-INS-" + Instant.now().toEpochMilli());
-        d.setTitle("Auto: " + cp.getTitle());
-        d.setDescription("Обнаружено при обходе (round " + roundId + "). "
-                + (comment != null ? comment : "Позиция чек-листа провалена."));
-        d.setEquipmentId(cp.getEquipmentId());
+        d.setCode(defectCode);
+        d.setTitle(inspectionTitle(checkpoint));
+        d.setDescription(inspectionDescription(round, checkpoint, comment));
+        d.setEquipmentId(checkpoint.getEquipmentId());
         d.setCategory("INSPECTION");
-        d.setSeverity("MAJOR");
+        d.setSeverity("CRITICAL");
         d.setStatus(DefectStatus.OPEN);
-        return defectRepo.save(d);
+        return d;
+    }
+
+    private Optional<RepairRequest> createRepairRequestIfPossible(InspectionRound round,
+                                                                  InspectionCheckpoint checkpoint,
+                                                                  String comment) {
+        UUID equipmentId = checkpoint.getEquipmentId();
+        UUID reporterId = round.getPerformedBy();
+        UUID departmentId = inspectionDepartmentId(round, equipmentId);
+        if (equipmentId == null || reporterId == null || departmentId == null) {
+            return Optional.empty();
+        }
+        String number = inspectionRepairRequestNumber(round.getId(), checkpoint.getId());
+        Optional<RepairRequest> existing = repairRequestRepository.findByNumberAndIsDeletedFalse(number);
+        if (existing.isPresent()) {
+            return existing;
+        }
+        if (repairRequestRepository.existsByNumberAndIsDeletedFalse(number)) {
+            return Optional.empty();
+        }
+
+        RepairRequest request = new RepairRequest();
+        request.setNumber(number);
+        request.setTitle(inspectionTitle(checkpoint));
+        request.setDescription(inspectionDescription(round, checkpoint, comment));
+        request.setEquipmentId(equipmentId);
+        request.setDepartmentId(departmentId);
+        request.setLocationId(checkpoint.getLocationId());
+        request.setReporterId(reporterId);
+        request.setPriority(PriorityLevel.HIGH);
+        request.setCriticality(CriticalityLevel.CRITICAL);
+        request.setSource(RequestSource.INSPECTION);
+        RepairRequest saved = repairRequestRepository.save(request);
+        auditBuilderService.log(
+                "repair_request",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.REPAIR_REQUEST,
+                "Inspection failure repair request created",
+                null,
+                saved
+        );
+        return Optional.of(saved);
+    }
+
+    private UUID inspectionDepartmentId(InspectionRound round, UUID equipmentId) {
+        InspectionRoute route = round.getRoute();
+        if (route != null && route.getDepartmentId() != null) {
+            return route.getDepartmentId();
+        }
+        return equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .map(Equipment::getDepartmentId)
+                .orElse(null);
+    }
+
+    private String inspectionTitle(InspectionCheckpoint checkpoint) {
+        return "Inspection failure: " + checkpoint.getTitle();
+    }
+
+    private String inspectionDescription(InspectionRound round, InspectionCheckpoint checkpoint, String comment) {
+        return "Inspection FAIL triage. roundId=%s; checkpointId=%s; checkpoint=%s. %s".formatted(
+                round.getId(),
+                checkpoint.getId(),
+                checkpoint.getTitle(),
+                comment != null && !comment.isBlank()
+                        ? comment.trim()
+                        : "Checkpoint failed and requires maintenance triage."
+        );
+    }
+
+    private String inspectionDefectCode(UUID roundId, UUID checkpointId) {
+        return INSPECTION_DEFECT_CODE_PREFIX + shortId(roundId) + "-" + shortId(checkpointId);
+    }
+
+    private String inspectionRepairRequestNumber(UUID roundId, UUID checkpointId) {
+        return INSPECTION_REPAIR_REQUEST_PREFIX + shortId(roundId) + "-" + shortId(checkpointId);
+    }
+
+    private String shortId(UUID id) {
+        return id.toString().substring(0, 8);
+    }
+
+    private InspectionCheckpoint loadCheckpoint(UUID id) {
+        return checkpointRepo.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Inspection checkpoint not found: " + id));
     }
 
     @Transactional

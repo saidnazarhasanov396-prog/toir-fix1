@@ -33,4 +33,7 @@ public interface DowntimeEventRepository extends JpaRepository<DowntimeEvent, UU
 
     @Query(value = "SELECT * FROM downtime_events WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<DowntimeEvent> findAllByDepartmentIdAndIsDeletedFalseOrderByStartAtDesc(@Param("departmentId") UUID departmentId);
+
+    @Query(value = "SELECT * FROM downtime_events WHERE equipment_id IN (:equipmentIds) AND is_deleted = false ORDER BY start_at DESC", nativeQuery = true)
+    List<DowntimeEvent> findAllByEquipmentIdInAndIsDeletedFalse(@Param("equipmentIds") Collection<UUID> equipmentIds);
 }
