@@ -128,7 +128,9 @@ class LocationServiceTest {
     private LocationRequest request() {
         return new LocationRequest(
                 null,
-                "Main Workshop",
+                "Главная мастерская",
+                "Asosiy ustaxona",
+                "Main workshop",
                 LocationType.WORKSHOP,
                 null,
                 UUID.randomUUID(),

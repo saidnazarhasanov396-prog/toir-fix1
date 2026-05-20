@@ -66,6 +66,9 @@ public class UserService {
         User user = getOrThrow(id);
         Hibernate.initialize(user.getRoles());
         Hibernate.initialize(user.getPrimaryRole());
+        if (user.getDepartment() != null) {
+            Hibernate.initialize(user.getDepartment());
+        }
         return UserDto.from(user);
     }
 

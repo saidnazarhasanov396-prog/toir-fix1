@@ -114,6 +114,8 @@ public class LocationService {
 
     private void apply(Location entity, LocationRequest request) {
         entity.setName(request.name());
+        entity.setNameUz(request.nameUz());
+        entity.setNameEn(request.nameEn());
         entity.setType(request.type());
         entity.setParentId(request.parentId());
         entity.setDepartmentId(request.departmentId());

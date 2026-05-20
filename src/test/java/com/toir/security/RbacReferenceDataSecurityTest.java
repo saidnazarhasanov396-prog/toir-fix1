@@ -528,6 +528,8 @@ class RbacReferenceDataSecurityTest {
         return """
                 {
                   "name": "Pump",
+                  "nameUz": "Nasos",
+                  "nameEn": "Pump",
                   "category": "PUMP"
                 }
                 """;

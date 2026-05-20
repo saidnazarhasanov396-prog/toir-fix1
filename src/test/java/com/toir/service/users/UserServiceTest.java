@@ -89,6 +89,32 @@ class UserServiceTest {
         assertThat(searchCaptor.getValue()).isEqualTo("Ali");
     }
 
+    @Test
+    void findByIdPopulatesDepartmentIfPresent() {
+        UUID userId = UUID.randomUUID();
+        UUID deptId = UUID.randomUUID();
+
+        com.toir.entity.Department department = new com.toir.entity.Department();
+        department.setId(deptId);
+        department.setCode("DEP-TEST");
+        department.setName("Test Department");
+
+        User user = user(userId, "test.user");
+        user.setDepartmentId(deptId);
+        user.setDepartment(department);
+
+        when(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(java.util.Optional.of(user));
+
+        UserDto result = service.findById(userId);
+
+        assertThat(result.department()).isNotNull();
+        assertThat(result.department().id()).isEqualTo(deptId);
+        assertThat(result.department().code()).isEqualTo("DEP-TEST");
+        assertThat(result.department().name()).isEqualTo("Test Department");
+
+        verify(userRepository).findByIdAndIsDeletedFalse(userId);
+    }
+
     private User user(UUID id, String username) {
         User user = new User();
         user.setId(id);
