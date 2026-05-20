@@ -81,6 +81,8 @@ public class WorkOrderService {
             DefectStatus.CLOSED);
     private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_WORK_ORDER_CREATE = EnumSet
             .of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
+    private static final Set<PlanStatus> ALLOWED_PARENT_PLAN_STATUSES_FOR_WORK_ORDER_CREATE = EnumSet
+            .of(PlanStatus.APPROVED, PlanStatus.IN_PROGRESS);
 
     @Transactional(readOnly = true)
     public List<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId) {
@@ -603,6 +605,8 @@ public class WorkOrderService {
             }
         }
 
+        validatePprTaskRelationForCreate(request.pprTaskId());
+
         if (request.defectId() == null) {
             return;
         }
@@ -624,6 +628,24 @@ public class WorkOrderService {
         if (defectRepairRequestId != null && !defectRepairRequestId.equals(request.repairRequestId())) {
             throw RestException.badRequest(
                     "Defect " + request.defectId() + " belongs to a different repair request");
+        }
+    }
+
+    private void validatePprTaskRelationForCreate(UUID pprTaskId) {
+        if (pprTaskId == null) {
+            return;
+        }
+        PprTask task = pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(pprTaskId)
+                .orElseThrow(() -> RestException.notFound("PPR task not found: " + pprTaskId));
+        if (task.getStatus() != PprTaskStatus.APPROVED) {
+            throw RestException.badRequest("Only APPROVED PPR tasks can generate work orders");
+        }
+        PprPlan plan = task.getPlan();
+        if (plan == null || plan.getId() == null) {
+            throw RestException.notFound("Parent PPR plan not found for task: " + pprTaskId);
+        }
+        if (!ALLOWED_PARENT_PLAN_STATUSES_FOR_WORK_ORDER_CREATE.contains(plan.getStatus())) {
+            throw RestException.badRequest("Work order can be created only after the parent PPR plan is approved");
         }
     }
 
