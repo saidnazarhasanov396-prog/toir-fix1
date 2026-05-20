@@ -519,6 +519,8 @@ class RbacReferenceDataSecurityTest {
                 {
                   "code": "LOC-001",
                   "name": "Workshop",
+                  "nameUz": "Sex",
+                  "nameEn": "Workshop",
                   "type": "WORKSHOP"
                 }
                 """;
