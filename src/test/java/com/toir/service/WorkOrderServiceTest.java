@@ -15,6 +15,7 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
@@ -257,6 +258,65 @@ class WorkOrderServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
                     assertThat(ex.getMessage()).contains("Defect not found");
                 });
+    }
+
+    @Test
+    void createWithPprTaskFromDraftPlanReturns400() {
+        UUID taskId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPprTask(taskId);
+        PprPlan plan = pprPlan(UUID.randomUUID(), PlanStatus.DRAFT);
+        PprTask task = pprTask(taskId, plan, PprTaskStatus.APPROVED);
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(taskId)).thenReturn(Optional.of(task));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("parent PPR plan is approved");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createWithPlannedPprTaskReturns400() {
+        UUID taskId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPprTask(taskId);
+        PprPlan plan = pprPlan(UUID.randomUUID(), PlanStatus.APPROVED);
+        PprTask task = pprTask(taskId, plan, PprTaskStatus.PLANNED);
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(taskId)).thenReturn(Optional.of(task));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Only APPROVED PPR tasks can generate work orders");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createWithApprovedPprPlanAndTaskSucceeds() {
+        UUID taskId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPprTask(taskId);
+        PprPlan plan = pprPlan(UUID.randomUUID(), PlanStatus.APPROVED);
+        PprTask task = pprTask(taskId, plan, PprTaskStatus.APPROVED);
+
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+        when(pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(taskId)).thenReturn(Optional.of(task));
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.pprTaskId()).isEqualTo(taskId);
     }
 
     @Test
@@ -1602,6 +1662,29 @@ class WorkOrderServiceTest {
                 base.repairRequestId(),
                 base.defectId(),
                 base.pprTaskId(),
+                base.contractorId(),
+                base.type(),
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                base.startPlannedAt(),
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary()
+        );
+    }
+
+    private WorkOrderRequest requestWithPprTask(UUID pprTaskId) {
+        WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        return new WorkOrderRequest(
+                base.number(),
+                base.title(),
+                base.equipmentId(),
+                base.departmentId(),
+                base.repairRequestId(),
+                base.defectId(),
+                pprTaskId,
                 base.contractorId(),
                 base.type(),
                 base.workType(),

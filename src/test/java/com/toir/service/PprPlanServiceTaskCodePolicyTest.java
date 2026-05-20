@@ -6,6 +6,7 @@ import com.toir.dto.pprplanning.PprTaskDto;
 import com.toir.dto.pprplanning.PprTaskRequest;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
+import com.toir.enums.PlanStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
@@ -193,7 +194,7 @@ class PprPlanServiceTaskCodePolicyTest {
         PprTask existingTask = new PprTask();
         existingTask.setId(taskId);
         existingTask.setCode(originalCode);
-        existingTask.setPlan(plan(planId));
+        existingTask.setPlan(plan(planId, PlanStatus.APPROVED));
         existingTask.setStatus(PprTaskStatus.PLANNED);
 
         when(taskRepository.findByIdAndIsDeletedFalse(taskId)).thenReturn(Optional.of(existingTask));
@@ -313,14 +314,14 @@ class PprPlanServiceTaskCodePolicyTest {
         PprTask task = new PprTask();
         task.setId(taskId);
         task.setCode("PPR-TASK-2026-0001");
-        task.setPlan(plan(planId));
+        task.setPlan(plan(planId, PlanStatus.APPROVED));
         task.setRegulationId(UUID.randomUUID());
         task.setEquipmentId(UUID.randomUUID());
         task.setTitle("Manual PPR task");
         task.setScheduledStart(LocalDateTime.of(2026, 5, 1, 9, 0));
         task.setScheduledEnd(LocalDateTime.of(2026, 5, 10, 18, 0));
         task.setDueDate(LocalDateTime.of(2026, 5, 10, 18, 0));
-        task.setStatus(PprTaskStatus.PLANNED);
+        task.setStatus(PprTaskStatus.APPROVED);
         task.setPriority(PriorityLevel.MEDIUM);
         task.setPlannedLaborHours(2.0);
 
@@ -341,8 +342,13 @@ class PprPlanServiceTaskCodePolicyTest {
     }
 
     private PprPlan plan(UUID id) {
+        return plan(id, PlanStatus.DRAFT);
+    }
+
+    private PprPlan plan(UUID id, PlanStatus status) {
         PprPlan plan = new PprPlan();
         plan.setId(id);
+        plan.setStatus(status);
         plan.setTasks(new ArrayList<>());
         return plan;
     }

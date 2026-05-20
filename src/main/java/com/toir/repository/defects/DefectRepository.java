@@ -21,6 +21,9 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
     @Query(value = "SELECT * FROM defects WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<Defect> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT * FROM defects WHERE code = :code AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<Defect> findByCodeAndIsDeletedFalse(@Param("code") String code);
+
     @Query(value = "SELECT * FROM defects WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Defect> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 

@@ -19,7 +19,9 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -31,13 +33,15 @@ public class PprGeneratorService {
     private final MaintenanceRegulationRepository regulationRepository;
     private final EquipmentRepository equipmentRepository;
     private final AuditBuilderService auditBuilderService;
+    private static final Set<PlanStatus> PLAN_TASK_GENERATION_STATUSES =
+            EnumSet.of(PlanStatus.DRAFT, PlanStatus.GENERATED);
 
     @Transactional
     public GenerationResult generateForPlan(UUID planId) {
         PprPlan plan = planRepository.findByIdAndIsDeletedFalse(planId)
                 .orElseThrow(() -> RestException.notFound("PPR plan not found: " + planId));
-        if (plan.getStatus() == PlanStatus.CLOSED || plan.getStatus() == PlanStatus.CANCELLED) {
-            throw RestException.badRequest("Cannot generate tasks for closed/cancelled plan");
+        if (!PLAN_TASK_GENERATION_STATUSES.contains(plan.getStatus())) {
+            throw RestException.badRequest("PPR tasks can be generated only for DRAFT or GENERATED plans");
         }
 
         YearMonth planMonth = YearMonth.of(plan.getYear(), plan.getMonth());

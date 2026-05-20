@@ -81,6 +81,8 @@ public class WorkOrderService {
             EnumSet.of(DefectStatus.RESOLVED, DefectStatus.CLOSED);
     private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_WORK_ORDER_CREATE =
             EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
+    private static final Set<PlanStatus> PPR_PLAN_EXECUTION_STATUSES =
+            EnumSet.of(PlanStatus.APPROVED, PlanStatus.IN_PROGRESS);
 
 
     @Transactional(readOnly = true)
@@ -614,6 +616,8 @@ public class WorkOrderService {
             }
         }
 
+        validatePprTaskAllowsWorkOrderCreate(request);
+
         if (request.defectId() == null) {
             return;
         }
@@ -635,6 +639,21 @@ public class WorkOrderService {
         if (defectRepairRequestId != null && !defectRepairRequestId.equals(request.repairRequestId())) {
             throw RestException.badRequest(
                     "Defect " + request.defectId() + " belongs to a different repair request");
+        }
+    }
+
+    private void validatePprTaskAllowsWorkOrderCreate(WorkOrderRequest request) {
+        if (request.pprTaskId() == null) {
+            return;
+        }
+        PprTask task = pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(request.pprTaskId())
+                .orElseThrow(() -> RestException.notFound("PPR task not found: " + request.pprTaskId()));
+        PprPlan plan = task.getPlan();
+        if (plan == null || !PPR_PLAN_EXECUTION_STATUSES.contains(plan.getStatus())) {
+            throw RestException.badRequest("Work order can be generated only after the parent PPR plan is approved");
+        }
+        if (task.getStatus() != PprTaskStatus.APPROVED) {
+            throw RestException.badRequest("Only APPROVED PPR tasks can generate work orders");
         }
     }
 

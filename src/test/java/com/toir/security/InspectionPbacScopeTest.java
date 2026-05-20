@@ -2,14 +2,17 @@ package com.toir.security;
 
 import com.toir.dto.inspection.InspectionRoundResultRequest;
 import com.toir.dto.inspection.InspectionRouteRequest;
+import com.toir.entity.inspection.InspectionCheckpoint;
 import com.toir.entity.inspection.InspectionRound;
 import com.toir.entity.inspection.InspectionRoute;
 import com.toir.enums.InspectionRoundStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.inspection.InspectionCheckpointRepository;
 import com.toir.repository.inspection.InspectionRoundRepository;
 import com.toir.repository.inspection.InspectionRouteRepository;
+import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.InspectionService;
 import com.toir.service.UnitOfMeasurementService;
 import com.toir.util.AuditBuilderService;
@@ -53,6 +56,12 @@ class InspectionPbacScopeTest {
     DefectRepository defectRepo;
 
     @Mock
+    RepairRequestRepository repairRequestRepository;
+
+    @Mock
+    EquipmentRepository equipmentRepository;
+
+    @Mock
     UnitOfMeasurementService unitOfMeasurementService;
 
     @Mock
@@ -67,6 +76,13 @@ class InspectionPbacScopeTest {
     @BeforeEach
     void setUp() {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        lenient().when(checkpointRepo.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> {
+            UUID checkpointId = invocation.getArgument(0);
+            InspectionCheckpoint checkpoint = new InspectionCheckpoint();
+            ReflectionTestUtils.setField(checkpoint, "id", checkpointId);
+            checkpoint.setTitle("Checkpoint");
+            return Optional.of(checkpoint);
+        });
     }
 
     @Test
