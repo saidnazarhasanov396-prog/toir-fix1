@@ -21,7 +21,6 @@ import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.service.FinanceScopeService;
 import com.toir.util.AuditBuilderService;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -74,12 +73,6 @@ class ContractorWorkServiceTest {
     @InjectMocks
     ContractorWorkService service;
 
-    @BeforeEach
-    void setUp() {
-        when(repository.save(any(ContractorWork.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(actualCostRepository.save(any(ActualCost.class))).thenAnswer(invocation -> invocation.getArgument(0));
-    }
-
     @Test
     void startShouldFailWhenContractorIsInactive() {
         UUID contractorId = UUID.randomUUID();
@@ -94,6 +87,8 @@ class ContractorWorkServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("Contractor must be ACTIVE");
                 });
+        verify(repository, never()).save(any(ContractorWork.class));
+        verify(actualCostRepository, never()).save(any(ActualCost.class));
     }
 
     @Test
@@ -113,6 +108,8 @@ class ContractorWorkServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("ACTIVE contract valid by date");
                 });
+        verify(repository, never()).save(any(ContractorWork.class));
+        verify(actualCostRepository, never()).save(any(ActualCost.class));
     }
 
     @Test
@@ -134,6 +131,8 @@ class ContractorWorkServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("Linked work order must be APPROVED or IN_PROGRESS");
                 });
+        verify(repository, never()).save(any(ContractorWork.class));
+        verify(actualCostRepository, never()).save(any(ActualCost.class));
     }
 
     @Test
@@ -149,6 +148,7 @@ class ContractorWorkServiceTest {
                 .thenReturn(List.of(contract(contractorId, ContractStatus.ACTIVE, LocalDate.now().minusDays(1), LocalDate.now().plusDays(30))));
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
+        stubSaveContractorWorkReturnsArgument();
 
         ContractorWorkDto result = service.start(workId);
 
@@ -167,6 +167,8 @@ class ContractorWorkServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("Only IN_PROGRESS contractor works can be completed");
                 });
+        verify(repository, never()).save(any(ContractorWork.class));
+        verify(actualCostRepository, never()).save(any(ActualCost.class));
     }
 
     @Test
@@ -180,6 +182,8 @@ class ContractorWorkServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("Result is required");
                 });
+        verify(repository, never()).save(any(ContractorWork.class));
+        verify(actualCostRepository, never()).save(any(ActualCost.class));
     }
 
     @Test
@@ -193,6 +197,8 @@ class ContractorWorkServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("Only completed works can be accepted");
                 });
+        verify(repository, never()).save(any(ContractorWork.class));
+        verify(actualCostRepository, never()).save(any(ActualCost.class));
     }
 
     @Test
@@ -215,6 +221,8 @@ class ContractorWorkServiceTest {
                 .thenReturn(Optional.empty());
         when(actualCostRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
                 .thenReturn(List.of(actualCost(workOrderId, costCategoryId, 100d)));
+        stubActualCostSaveReturnsArgument();
+        stubSaveContractorWorkReturnsArgument();
 
         ContractorWorkDto result = service.accept(workId, acceptedById, "Accepted after inspection");
 
@@ -248,6 +256,7 @@ class ContractorWorkServiceTest {
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.COMPLETED)));
         when(actualCostRepository.findTopByContractorWorkIdAndIsDeletedFalseOrderByUpdatedAtDesc(workId))
                 .thenReturn(Optional.of(actualCost(workOrderId, UUID.randomUUID(), 180d)));
+        stubSaveContractorWorkReturnsArgument();
 
         service.accept(workId, acceptedById, "Accepted");
 
@@ -272,6 +281,8 @@ class ContractorWorkServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
                     assertThat(ex.getMessage()).contains("Work order not found");
                 });
+        verify(repository, never()).save(any(ContractorWork.class));
+        verify(actualCostRepository, never()).save(any(ActualCost.class));
     }
 
     @Test
@@ -305,6 +316,8 @@ class ContractorWorkServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
                     assertThat(ex.getMessage()).contains("Work order not found");
                 });
+        verify(repository, never()).save(any(ContractorWork.class));
+        verify(actualCostRepository, never()).save(any(ActualCost.class));
     }
 
     @Test
@@ -320,6 +333,8 @@ class ContractorWorkServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
                     assertThat(ex.getMessage()).contains("Contractor not found");
                 });
+        verify(repository, never()).save(any(ContractorWork.class));
+        verify(actualCostRepository, never()).save(any(ActualCost.class));
     }
 
     @Test
@@ -347,12 +362,22 @@ class ContractorWorkServiceTest {
         ReflectionTestUtils.setField(category, "id", costCategoryId);
         when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("CTR"))
                 .thenReturn(Optional.of(category));
+        stubActualCostSaveReturnsArgument();
+        stubSaveContractorWorkReturnsArgument();
 
         service.accept(workId, acceptedById, "Accepted with fallback category");
 
         ArgumentCaptor<ActualCost> captor = ArgumentCaptor.forClass(ActualCost.class);
         verify(actualCostRepository).save(captor.capture());
         assertThat(captor.getValue().getCostCategoryId()).isEqualTo(costCategoryId);
+    }
+
+    private void stubSaveContractorWorkReturnsArgument() {
+        when(repository.save(any(ContractorWork.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private void stubActualCostSaveReturnsArgument() {
+        when(actualCostRepository.save(any(ActualCost.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     private Contractor contractor(UUID id, ContractorStatus status) {
