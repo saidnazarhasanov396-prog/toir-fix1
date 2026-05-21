@@ -5,8 +5,10 @@ import com.toir.dto.approval.DecisionRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.projects.ProcurementRequest;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalStatus;
+import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.PprPlanRepository;
@@ -19,6 +21,8 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.ApprovalScopeService;
 import com.toir.service.ApprovalService;
 import com.toir.service.FinanceScopeService;
+import com.toir.service.PprPlanService;
+import com.toir.service.WorkOrderService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,6 +45,11 @@ class ApprovalPbacScopeTest {
     ApprovalRequestRepository requestRepository;
     AuditBuilderService auditBuilderService;
     ApprovalScopeService approvalScopeService;
+    ProcurementRequestRepository procurementRequestRepository;
+    MaintenanceBudgetRepository maintenanceBudgetRepository;
+    WorkOrderService workOrderService;
+    PprPlanService pprPlanService;
+    ScopeAccessService scopeAccessService;
     ApprovalService service;
 
     @BeforeEach
@@ -47,7 +57,21 @@ class ApprovalPbacScopeTest {
         requestRepository = mock(ApprovalRequestRepository.class);
         auditBuilderService = mock(AuditBuilderService.class);
         approvalScopeService = mock(ApprovalScopeService.class);
-        service = new ApprovalService(requestRepository, auditBuilderService, approvalScopeService);
+        procurementRequestRepository = mock(ProcurementRequestRepository.class);
+        maintenanceBudgetRepository = mock(MaintenanceBudgetRepository.class);
+        workOrderService = mock(WorkOrderService.class);
+        pprPlanService = mock(PprPlanService.class);
+        scopeAccessService = mock(ScopeAccessService.class);
+        service = new ApprovalService(
+                requestRepository,
+                procurementRequestRepository,
+                maintenanceBudgetRepository,
+                workOrderService,
+                pprPlanService,
+                auditBuilderService,
+                approvalScopeService,
+                scopeAccessService
+        );
     }
 
     @Test
@@ -316,6 +340,69 @@ class ApprovalPbacScopeTest {
                 .isInstanceOf(AccessDeniedException.class);
     }
 
+    @Test
+    void createOrReuseReturnsExistingPendingApprovalForIntegratedDocument() {
+        UUID documentId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        ApprovalRequest existing = approval(UUID.randomUUID(), requesterId, approverId, documentId);
+        existing.setDocumentType("WORK_ORDER");
+        when(requestRepository.findFirstByDocumentTypeAndDocumentIdAndStatusAndIsDeletedFalseOrderByCreatedAtDesc(
+                "WORK_ORDER",
+                documentId,
+                ApprovalStatus.PENDING
+        )).thenReturn(Optional.of(existing));
+
+        var result = service.createOrReuseApprovalForDocument(
+                "WORK_ORDER",
+                documentId,
+                requesterId,
+                approverId,
+                "WORK_ORDER_APPROVER",
+                "Work order approval",
+                "Approval request"
+        );
+
+        assertThat(result.id()).isEqualTo(existing.getId());
+        verify(requestRepository, never()).save(any(ApprovalRequest.class));
+    }
+
+    @Test
+    void finalApprovalStepAppliesWorkOrderApprovalCallback() {
+        UUID approvalId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        ApprovalRequest approval = approval(approvalId, UUID.randomUUID(), approverId, documentId);
+        approval.setDocumentType("WORK_ORDER");
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(requestRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.approve(approvalId, new DecisionRequest(approverId, "ok"));
+
+        verify(workOrderService).approve(documentId, approverId);
+        assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
+    }
+
+    @Test
+    void rejectionFinalizationAppliesProcurementRejectionCallback() {
+        UUID approvalId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        ApprovalRequest approval = approval(approvalId, UUID.randomUUID(), approverId, documentId);
+        approval.setDocumentType("PROCUREMENT_REQUEST");
+        ProcurementRequest procurementRequest = procurementRequest(documentId, ProcurementRequestStatus.SUBMITTED);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(requestRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(procurementRequestRepository.findByIdAndIsDeletedFalse(documentId)).thenReturn(Optional.of(procurementRequest));
+        when(procurementRequestRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.reject(approvalId, new DecisionRequest(approverId, "missing invoice"));
+
+        assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.REJECTED);
+        assertThat(procurementRequest.getStatus()).isEqualTo(ProcurementRequestStatus.REJECTED);
+        assertThat(procurementRequest.getRejectionReason()).isEqualTo("missing invoice");
+    }
+
     private ApprovalRequest approval(UUID id, UUID requesterId, UUID approverId, UUID documentId) {
         ApprovalRequest approval = new ApprovalRequest();
         approval.setId(id);
@@ -378,5 +465,14 @@ class ApprovalPbacScopeTest {
         workOrder.setId(UUID.randomUUID());
         workOrder.setDepartmentId(departmentId);
         return workOrder;
+    }
+
+    private ProcurementRequest procurementRequest(UUID id, ProcurementRequestStatus status) {
+        ProcurementRequest request = new ProcurementRequest();
+        request.setId(id);
+        request.setStatus(status);
+        request.setNumber("PR-2026-0001");
+        request.setTitle("Procurement");
+        return request;
     }
 }

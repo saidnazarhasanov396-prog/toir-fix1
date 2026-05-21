@@ -14,6 +14,7 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
+import com.toir.service.ApprovalService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -62,6 +63,7 @@ public class PprPlanController {
             "hasAnyAuthority('PPR_TASK_CANCEL','SYSTEM_ADMIN','*')";
 
     private final PprPlanService service;
+    private final ApprovalService approvalService;
     private final PprGeneratorService generatorService;
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
@@ -122,8 +124,22 @@ public class PprPlanController {
     @PostMapping("/{id}/approve")
     @PreAuthorize(PPR_PLAN_APPROVE_AUTH)
     public ResponseEntity<PprPlanDto> approve(@PathVariable UUID id, @RequestParam UUID approverId) {
-        assertCanAccessPlan(planOrThrow(id));
-        return ResponseEntity.ok(service.approve(id, approverId));
+        PprPlan plan = planOrThrow(id);
+        assertCanAccessPlan(plan);
+        if (plan.getStatus() != com.toir.enums.PlanStatus.DRAFT
+                && plan.getStatus() != com.toir.enums.PlanStatus.GENERATED) {
+            throw RestException.badRequest("Only DRAFT/GENERATED plans can be approved");
+        }
+        approvalService.createOrReuseApprovalForDocument(
+                "PPR_PLAN",
+                id,
+                approverId,
+                approverId,
+                "PPR_PLAN_APPROVER",
+                "PPR plan approval: " + plan.getCode(),
+                "Approval workflow request for PPR plan " + plan.getCode()
+        );
+        return ResponseEntity.ok(service.findById(id));
     }
 
     @PostMapping("/{id}/generate")

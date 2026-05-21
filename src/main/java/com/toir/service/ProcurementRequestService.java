@@ -182,6 +182,16 @@ public class ProcurementRequestService {
         return ProcurementRequestDto.from(p);
     }
 
+    @Transactional(readOnly = true)
+    public ProcurementRequestDto validateCanApprove(UUID id) {
+        ProcurementRequest p = load(id);
+        assertCanMutate(p);
+        if (p.getStatus() != ProcurementRequestStatus.SUBMITTED) {
+            throw RestException.badRequest("Only SUBMITTED can be approved");
+        }
+        return ProcurementRequestDto.from(p);
+    }
+
     @Transactional
     public ProcurementRequestDto reject(UUID id, String reason) {
         ProcurementRequest p = load(id);

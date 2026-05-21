@@ -8,6 +8,7 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.service.ApprovalService;
 import com.toir.service.WorkOrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,6 +64,9 @@ class RbacWorkOrderSecurityTest {
 
     @MockBean
     ScopeAccessService scopeAccessService;
+
+    @MockBean
+    ApprovalService approvalService;
 
     @BeforeEach
     void setUpPbacBypass() {
@@ -176,7 +180,7 @@ class RbacWorkOrderSecurityTest {
     void workOrderApproveCanApproveWorkOrder() throws Exception {
         UUID workOrderId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();
-        when(workOrderService.approve(workOrderId, approverId)).thenReturn(workOrderDto(workOrderId));
+        when(workOrderService.findById(workOrderId)).thenReturn(workOrderDto(workOrderId));
 
         mockMvc.perform(post("/api/v1/work-orders/{id}/approve", workOrderId)
                         .param("approverId", approverId.toString()))

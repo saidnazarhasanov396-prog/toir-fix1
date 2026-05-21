@@ -6,6 +6,7 @@ import com.toir.entity.PprPlan;
 import com.toir.enums.PlanStatus;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.service.ApprovalService;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
 import org.junit.jupiter.api.Test;
@@ -58,6 +59,9 @@ class PprPlanEndpointSecurityTest {
 
     @MockBean
     ScopeAccessService scopeAccessService;
+
+    @MockBean
+    ApprovalService approvalService;
 
     @TestConfiguration
     static class SecurityBeans {

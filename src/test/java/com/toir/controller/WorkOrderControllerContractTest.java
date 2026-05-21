@@ -14,6 +14,7 @@ import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.ApprovalService;
 import com.toir.service.WorkOrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,9 @@ class WorkOrderControllerContractTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    ApprovalService approvalService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -61,7 +65,7 @@ class WorkOrderControllerContractTest {
         lenient().when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
         lenient().when(repository.findByIdAndIsDeletedFalse(any(UUID.class)))
                 .thenAnswer(invocation -> Optional.of(workOrderEntity(invocation.getArgument(0), UUID.randomUUID())));
-        mockMvc = MockMvcBuilders.standaloneSetup(new WorkOrderController(service, repository, scopeAccessService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new WorkOrderController(service, approvalService, repository, scopeAccessService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

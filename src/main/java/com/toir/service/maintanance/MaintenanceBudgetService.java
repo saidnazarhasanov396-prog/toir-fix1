@@ -94,6 +94,16 @@ public class MaintenanceBudgetService {
         return MaintenanceBudgetDto.from(save);
     }
 
+    @Transactional(readOnly = true)
+    public MaintenanceBudgetDto validateCanApprove(UUID id) {
+        MaintenanceBudget b = getOrThrow(id);
+        assertCanAccessBudget(b);
+        if (b.getStatus() != BudgetStatus.DRAFT) {
+            throw RestException.badRequest("Only DRAFT budgets can be approved");
+        }
+        return MaintenanceBudgetDto.from(b);
+    }
+
     @Transactional
     public BudgetLineDto addLine(UUID budgetId, BudgetLineDto r) {
         MaintenanceBudget b = getOrThrow(budgetId);

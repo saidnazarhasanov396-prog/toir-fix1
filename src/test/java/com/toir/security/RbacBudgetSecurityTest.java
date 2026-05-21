@@ -10,6 +10,7 @@ import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.ApprovalService;
 import com.toir.service.FinanceScopeService;
 import com.toir.service.maintanance.MaintenanceBudgetService;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,6 +76,9 @@ class RbacBudgetSecurityTest {
 
     @MockBean
     FinanceScopeService financeScopeService;
+
+    @MockBean
+    ApprovalService approvalService;
 
     @BeforeEach
     void setUpFinanceScope() {
@@ -158,7 +162,8 @@ class RbacBudgetSecurityTest {
     @WithMockUser(authorities = PermissionConstants.BUDGET_APPROVE)
     void budgetApproveCanApproveBudget() throws Exception {
         UUID budgetId = UUID.randomUUID();
-        when(budgetService.approve(budgetId)).thenReturn(budgetDto(budgetId));
+        when(budgetService.validateCanApprove(budgetId)).thenReturn(budgetDto(budgetId));
+        when(budgetService.findById(budgetId)).thenReturn(budgetDto(budgetId));
 
         mockMvc.perform(post("/api/v1/budgets/{id}/approve", budgetId))
                 .andExpect(status().isOk());

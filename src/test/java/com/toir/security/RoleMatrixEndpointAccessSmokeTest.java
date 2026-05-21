@@ -27,6 +27,7 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.service.ActualCostService;
+import com.toir.service.ApprovalService;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
 import com.toir.service.ProcurementRequestService;
@@ -120,6 +121,9 @@ class RoleMatrixEndpointAccessSmokeTest {
 
     @MockBean
     ActualCostService actualCostService;
+
+    @MockBean
+    ApprovalService approvalService;
 
     @BeforeEach
     void setUp() {
@@ -318,7 +322,8 @@ class RoleMatrixEndpointAccessSmokeTest {
         UUID actualCostId = UUID.randomUUID();
         when(warehouseService.findAll(null, null, null, null, null)).thenReturn(List.of());
         when(warehouseService.create(any(WarehouseRequest.class))).thenReturn(warehouseDto(warehouseId));
-        when(procurementRequestService.approve(requestId)).thenReturn(procurementRequestDto(requestId));
+        when(procurementRequestService.validateCanApprove(requestId)).thenReturn(procurementRequestDto(requestId));
+        when(procurementRequestService.findById(requestId)).thenReturn(procurementRequestDto(requestId));
         when(actualCostService.review(eq(actualCostId), eq(true), any(UUID.class), eq("Approved")))
                 .thenReturn(actualCostDto(ActualCostStatus.APPROVED));
 
