@@ -3,7 +3,9 @@ package com.toir.controller;
 import com.toir.controller.equipment.EquipmentController;
 import com.toir.dto.equipment.EquipmentDetailDto;
 import com.toir.dto.equipment.EquipmentDto;
+import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.entity.equipment.Equipment;
+import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.PlacementType;
@@ -16,6 +18,7 @@ import com.toir.service.equipment.EquipmentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -31,6 +34,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -89,6 +93,41 @@ class EquipmentControllerContractTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(id.toString()))
                 .andExpect(jsonPath("$.code").value("EQ-2026-0020"));
+    }
+
+    @Test
+    void createAcceptsDynamicAttributesPayload() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, departmentId);
+        when(service.create(any())).thenReturn(dto);
+
+        mockMvc.perform(post("/api/v1/equipment")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Pump P-101",
+                                  "inventoryNumber": "INV-P-101",
+                                  "equipmentTypeId": "%s",
+                                  "departmentId": "%s",
+                                  "attributes": [
+                                    {
+                                      "key": "motor_power",
+                                      "valueNumber": 75
+                                    }
+                                  ]
+                                }
+                                """.formatted(equipmentTypeId, departmentId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(id.toString()));
+
+        ArgumentCaptor<com.toir.dto.equipment.EquipmentCreateRequest> captor =
+                ArgumentCaptor.forClass(com.toir.dto.equipment.EquipmentCreateRequest.class);
+        verify(service).create(captor.capture());
+        assertThat(captor.getValue().attributes()).hasSize(1);
+        assertThat(captor.getValue().attributes().getFirst().key()).isEqualTo("motor_power");
+        assertThat(captor.getValue().attributes().getFirst().valueNumber()).isEqualTo(75.0);
     }
 
     @Test
@@ -261,6 +300,38 @@ class EquipmentControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(id.toString()))
                 .andExpect(jsonPath("$.departmentId").value(departmentId.toString()));
+    }
+
+    @Test
+    void updateAcceptsDynamicAttributesPayload() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        EquipmentDto dto = equipmentDto(id, equipmentTypeId, departmentId);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(equipmentEntity(id, departmentId)));
+        when(service.update(eq(id), any())).thenReturn(dto);
+
+        mockMvc.perform(put("/api/v1/equipment/{id}", id)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Pump P-101 Updated",
+                                  "attributes": [
+                                    {
+                                      "key": "motor_power",
+                                      "valueNumber": 90
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()));
+
+        ArgumentCaptor<com.toir.dto.equipment.EquipmentUpdateRequest> captor =
+                ArgumentCaptor.forClass(com.toir.dto.equipment.EquipmentUpdateRequest.class);
+        verify(service).update(eq(id), captor.capture());
+        assertThat(captor.getValue().attributes()).hasSize(1);
+        assertThat(captor.getValue().attributes().getFirst().valueNumber()).isEqualTo(90.0);
     }
 
     @Test
@@ -503,6 +574,51 @@ class EquipmentControllerContractTest {
                 .andExpect(jsonPath("$.workOrders.length()").value(0))
                 .andExpect(jsonPath("$.downtimeEvents").isArray())
                 .andExpect(jsonPath("$.downtimeEvents.length()").value(0));
+    }
+
+    @Test
+    void detailResponseIncludesDynamicAttributes() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID definitionId = UUID.randomUUID();
+        EquipmentDto equipment = equipmentDto(id, equipmentTypeId, null);
+        EquipmentDetailDto detail = new EquipmentDetailDto(
+                equipment,
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(new EquipmentAttributeValueDto(
+                        UUID.randomUUID(),
+                        id,
+                        definitionId,
+                        "motor_power",
+                        "Motor Power",
+                        "Мощность двигателя",
+                        "Dvigatel quvvati",
+                        EquipmentAttributeDataType.NUMBER,
+                        "kW",
+                        true,
+                        List.of(),
+                        "Motor",
+                        10,
+                        null,
+                        75.0,
+                        null,
+                        null,
+                        null,
+                        null
+                ))
+        );
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(equipmentEntity(id, null)));
+        when(service.findDetailById(id)).thenReturn(detail);
+
+        mockMvc.perform(get("/api/v1/equipment/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attributes").isArray())
+                .andExpect(jsonPath("$.attributes[0].key").value("motor_power"))
+                .andExpect(jsonPath("$.attributes[0].unit").value("kW"))
+                .andExpect(jsonPath("$.attributes[0].valueNumber").value(75.0));
     }
 
     @Test

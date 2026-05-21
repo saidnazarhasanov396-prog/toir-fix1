@@ -62,6 +62,7 @@ public class EquipmentService {
     private final DefectRepository defectRepository;
     private final WorkOrderRepository workOrderRepository;
     private final DowntimeEventRepository downtimeEventRepository;
+    private final EquipmentAttributeService equipmentAttributeService;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private final AuditBuilderService auditBuilderService;
     private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
@@ -190,7 +191,8 @@ public class EquipmentService {
                 repairRequests,
                 defects,
                 workOrders,
-                downtimeEvents
+                downtimeEvents,
+                equipmentAttributeService == null ? List.of() : equipmentAttributeService.findValues(id)
         );
     }
 
@@ -214,6 +216,9 @@ public class EquipmentService {
         entity.setCode(nextCode());
         apply(entity, request);
         Equipment saved = repository.save(entity);
+        if (equipmentAttributeService != null) {
+            equipmentAttributeService.upsertValues(saved, request.attributes());
+        }
         if (request.warehouseId() != null) {
             warehouseEquipmentItemService.assign(
                     request.warehouseId(),
@@ -244,6 +249,9 @@ public class EquipmentService {
         validateParent(entity.getId(), entity.getParentId());
 
         Equipment saved = repository.save(entity);
+        if (equipmentAttributeService != null && request.attributes() != null) {
+            equipmentAttributeService.upsertValues(saved, request.attributes());
+        }
 
         auditBuilderService.log(
                 "equipment",

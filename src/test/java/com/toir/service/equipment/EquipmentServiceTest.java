@@ -5,6 +5,8 @@ import com.toir.dto.equipment.EquipmentCreateRequest;
 import com.toir.dto.equipment.EquipmentDetailDto;
 import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.equipment.EquipmentUpdateRequest;
+import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
+import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
 import com.toir.entity.Department;
@@ -19,6 +21,7 @@ import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.DowntimeType;
 import com.toir.enums.EquipmentCategory;
+import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
@@ -108,6 +111,9 @@ class EquipmentServiceTest {
 
     @Mock
     DowntimeEventRepository downtimeEventRepository;
+
+    @Mock
+    EquipmentAttributeService equipmentAttributeService;
 
     @Mock
     AuditBuilderService auditBuilderService;
@@ -420,6 +426,48 @@ class EquipmentServiceTest {
         assertThat(detail.defects()).isNotNull().isEmpty();
         assertThat(detail.workOrders()).isNotNull().isEmpty();
         assertThat(detail.downtimeEvents()).isNotNull().isEmpty();
+    }
+
+    @Test
+    void findByIdDetailIncludesDynamicAttributes() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID definitionId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-DETAIL-ATTR");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        stubEnrichment();
+
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId)).thenReturn(List.of());
+        when(equipmentAttributeService.findValues(equipmentId)).thenReturn(List.of(new EquipmentAttributeValueDto(
+                UUID.randomUUID(),
+                equipmentId,
+                definitionId,
+                "motor_power",
+                "Motor Power",
+                null,
+                null,
+                EquipmentAttributeDataType.NUMBER,
+                "kW",
+                true,
+                List.of(),
+                "Motor",
+                10,
+                null,
+                75.0,
+                null,
+                null,
+                null,
+                null
+        )));
+
+        EquipmentDetailDto detail = service.findDetailById(equipmentId);
+
+        assertThat(detail.attributes()).hasSize(1);
+        assertThat(detail.attributes().getFirst().key()).isEqualTo("motor_power");
+        assertThat(detail.attributes().getFirst().valueNumber()).isEqualTo(75.0);
     }
 
     @Test
@@ -1427,6 +1475,91 @@ class EquipmentServiceTest {
         ))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("warehouseStatus for WAREHOUSE target must be AVAILABLE or OUT_OF_SERVICE");
+    }
+
+    @Test
+    void createPersistsDynamicAttributesAfterEquipmentSave() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        EquipmentCreateRequest request = new EquipmentCreateRequest(
+                null,
+                "Pump P-101",
+                "INV-P-101",
+                "TN-P-101",
+                "SN-P-101",
+                "CPK 150-400",
+                equipmentTypeId,
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "KSB",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                "Pump",
+                List.of(new EquipmentAttributeValueRequest(null, "motor_power", null, 75.0, null, null, null, null))
+        );
+        stubCreateFlow("INV-P-101");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
+
+        EquipmentDto created = service.create(request);
+
+        assertThat(created.name()).isEqualTo("Pump P-101");
+        verify(equipmentAttributeService).upsertValues(any(Equipment.class), eq(request.attributes()));
+    }
+
+    @Test
+    void updateWithAttributesPersistsDynamicAttributeChanges() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-UPDATE-ATTR");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+
+        EquipmentUpdateRequest request = new EquipmentUpdateRequest(
+                null,
+                "Pump P-101 Updated",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(new EquipmentAttributeValueRequest(null, "motor_power", null, 90.0, null, null, null, null))
+        );
+
+        service.update(equipmentId, request);
+
+        verify(equipmentAttributeService).upsertValues(any(Equipment.class), eq(request.attributes()));
+    }
+
+    @Test
+    void updateWithoutAttributesPreservesExistingDynamicAttributes() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-UPDATE-NO-ATTR");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+
+        service.update(equipmentId, updateRequestWithCode(null));
+
+        verify(equipmentAttributeService, never()).upsertValues(any(), any());
     }
 
 
