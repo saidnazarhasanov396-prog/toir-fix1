@@ -14,7 +14,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-
 @Repository
 public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     @Query(value = "SELECT * FROM work_orders WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
@@ -39,24 +38,27 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     long countByStatusAndIsDeletedFalse(@Param("status") String status);
 
     @Query(value = "SELECT * FROM work_orders WHERE repair_request_id = cast(:repairRequestId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<WorkOrder> findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("repairRequestId") UUID repairRequestId);
+    List<WorkOrder> findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+            @Param("repairRequestId") UUID repairRequestId);
 
     @Query(value = "SELECT * FROM work_orders WHERE defect_id = cast(:defectId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<WorkOrder> findAllByDefectIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("defectId") UUID defectId);
 
     @Query(value = "SELECT * FROM work_orders WHERE repair_request_id IN (:repairRequestIds) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<WorkOrder> findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("repairRequestIds") Collection<UUID> repairRequestIds);
+    List<WorkOrder> findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(
+            @Param("repairRequestIds") Collection<UUID> repairRequestIds);
 
     @Query(value = "SELECT * FROM work_orders WHERE defect_id IN (:defectIds) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<WorkOrder> findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("defectIds") Collection<UUID> defectIds);
+    List<WorkOrder> findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(
+            @Param("defectIds") Collection<UUID> defectIds);
 
     @Query("SELECT w FROM WorkOrder w WHERE w.isDeleted = false " +
             "AND (:status IS NULL OR w.status = :status) " +
             "AND (:departmentId IS NULL OR w.departmentId = :departmentId) " +
             "AND (:equipmentId IS NULL OR w.equipmentId = :equipmentId)")
     List<WorkOrder> search(@Param("status") WorkOrderStatus status,
-                           @Param("departmentId") UUID departmentId,
-                           @Param("equipmentId") UUID equipmentId);
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId);
 
     @Query(nativeQuery = true, value = """
             select
@@ -118,10 +120,10 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
                     or lower(coalesce(to_jsonb(w)->>'closure_notes', '')) like lower(concat('%', cast(:search as varchar), '%'))
                 )""")
     Page<WorkOrder> searchPaginated(@Param("status") WorkOrderStatus status,
-                                    @Param("departmentId") UUID departmentId,
-                                    @Param("equipmentId") UUID equipmentId,
-                                    @Param("search") String search,
-                                    Pageable pageable);
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId,
+            @Param("search") String search,
+            Pageable pageable);
 
     @Query(nativeQuery = true, value = """
             select * from work_orders w where
@@ -142,9 +144,9 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
             or lower(w.title) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(w.summary) like lower(concat('%', cast(:search as varchar), '%')))""")
     Page<WorkOrder> searchMobileFeed(@Param("departmentId") UUID departmentId,
-                                     @Param("equipmentId") UUID equipmentId,
-                                     @Param("search") String search,
-                                     Pageable pageable);
+            @Param("equipmentId") UUID equipmentId,
+            @Param("search") String search,
+            Pageable pageable);
 
     @Query("""
             select case when count(w) > 0 then true else false end
@@ -155,37 +157,36 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
               and w.status not in :finalStatuses
             """)
     boolean existsActiveReplacementAssignment(@Param("replacementEquipmentId") UUID replacementEquipmentId,
-                                              @Param("workType") WorkType workType,
-                                              @Param("finalStatuses") Collection<WorkOrderStatus> finalStatuses);
+            @Param("workType") WorkType workType,
+            @Param("finalStatuses") Collection<WorkOrderStatus> finalStatuses);
 
     @Query(nativeQuery = true, value = """
-        select
-            count(w.id) as totalOrders,
-            count(w.id) filter (where w.status in ('DRAFT', 'PLANNED', 'APPROVED', 'IN_PROGRESS', 'SUSPENDED')) as openOrders,
-            count(w.id) filter (where w.status in ('COMPLETED', 'CLOSED')) as completedOrders,
-            count(w.id) filter (
-                where w.status not in ('COMPLETED', 'CLOSED', 'CANCELLED')
-                  and w.end_planned_at is not null
-                  and w.end_planned_at < current_timestamp
-            ) as overdueOrders
-        from work_orders w
-        where w.is_deleted = false
-          and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
-          and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
-          and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
-          and (
-              nullif(trim(cast(:search as varchar)), '') is null
-              or lower(coalesce(to_jsonb(w)->>'number', '')) like lower(concat('%', cast(:search as varchar), '%'))
-              or lower(coalesce(to_jsonb(w)->>'title', '')) like lower(concat('%', cast(:search as varchar), '%'))
-              or lower(coalesce(to_jsonb(w)->>'summary', '')) like lower(concat('%', cast(:search as varchar), '%'))
-              or lower(coalesce(to_jsonb(w)->>'result', '')) like lower(concat('%', cast(:search as varchar), '%'))
-              or lower(coalesce(to_jsonb(w)->>'closure_notes', '')) like lower(concat('%', cast(:search as varchar), '%'))
-          )
-    """)
+                select
+                    count(w.id) as totalOrders,
+                    count(w.id) filter (where w.status in ('DRAFT', 'PLANNED', 'APPROVED', 'IN_PROGRESS', 'SUSPENDED')) as openOrders,
+                    count(w.id) filter (where w.status in ('COMPLETED', 'CLOSED')) as completedOrders,
+                    count(w.id) filter (
+                        where w.status not in ('COMPLETED', 'CLOSED', 'CANCELLED')
+                          and w.end_planned_at is not null
+                          and w.end_planned_at < current_timestamp
+                    ) as overdueOrders
+                from work_orders w
+                where w.is_deleted = false
+                  and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
+                  and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+                  and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
+                  and (
+                      nullif(trim(cast(:search as varchar)), '') is null
+                      or lower(coalesce(to_jsonb(w)->>'number', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                      or lower(coalesce(to_jsonb(w)->>'title', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                      or lower(coalesce(to_jsonb(w)->>'summary', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                      or lower(coalesce(to_jsonb(w)->>'result', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                      or lower(coalesce(to_jsonb(w)->>'closure_notes', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                  )
+            """)
     WorkOrderStatsProjection getWorkOrderStats(
             @Param("status") String status,
             @Param("departmentId") UUID departmentId,
             @Param("equipmentId") UUID equipmentId,
-            @Param("search") String search
-    );
+            @Param("search") String search);
 }

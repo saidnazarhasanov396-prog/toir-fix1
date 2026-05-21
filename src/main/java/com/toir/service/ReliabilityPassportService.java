@@ -10,7 +10,10 @@ import com.toir.exception.RestException;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +35,48 @@ public class ReliabilityPassportService {
     private final DowntimeEventRepository downtimeRepository;
 
     @Transactional(readOnly = true)
+    public Page<ReliabilityPassport> list(UUID equipmentId, String search, int page, int size) {
+        String searchPattern = search == null || search.isBlank()
+                ? null
+                : "%" + search.toLowerCase() + "%";
+
+        Page<Equipment> equipmentPage = equipmentRepository.searchForPassport(
+                equipmentId,
+                searchPattern,
+                PaginationUtils.pageRequest(page, size)
+        );
+
+        List<UUID> ids = equipmentPage.getContent().stream()
+                .map(Equipment::getId)
+                .toList();
+
+        if (ids.isEmpty()) {
+            return new PageImpl<>(List.of(), equipmentPage.getPageable(), equipmentPage.getTotalElements());
+        }
+
+        Map<UUID, List<Defect>> defectsByEquipment = defectRepository
+                .findAllByEquipmentIdInAndIsDeletedFalse(ids)
+                .stream()
+                .collect(Collectors.groupingBy(Defect::getEquipmentId));
+
+        Map<UUID, List<DowntimeEvent>> downtimesByEquipment = downtimeRepository
+                .findAllByEquipmentIdInAndIsDeletedFalse(ids)
+                .stream()
+                .collect(Collectors.groupingBy(DowntimeEvent::getEquipmentId));
+
+        Instant now = Instant.now();
+        List<ReliabilityPassport> passports = equipmentPage.getContent().stream()
+                .map(eq -> buildPassport(
+                        eq,
+                        defectsByEquipment.getOrDefault(eq.getId(), List.of()),
+                        downtimesByEquipment.getOrDefault(eq.getId(), List.of()),
+                        now))
+                .toList();
+
+        return new PageImpl<>(passports, equipmentPage.getPageable(), equipmentPage.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
     public ReliabilityPassport passport(UUID equipmentId) {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
@@ -38,6 +84,13 @@ public class ReliabilityPassportService {
         List<Defect> defects = defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
         List<DowntimeEvent> downtimes = downtimeRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId);
 
+        return buildPassport(equipment, defects, downtimes, Instant.now());
+    }
+
+    private ReliabilityPassport buildPassport(Equipment equipment,
+                                              List<Defect> defects,
+                                              List<DowntimeEvent> downtimes,
+                                              Instant now) {
         int openDefects = (int) defects.stream().filter(d -> d.getStatus() != DefectStatus.CLOSED).count();
 
         long totalDowntimeMinutes = 0;
@@ -64,7 +117,6 @@ public class ReliabilityPassportService {
             mtbfHours = uptimeHours / (double) downtimes.size();
         }
 
-        Instant now = Instant.now();
         Instant horizon = now.minusSeconds(60L * 60 * 24 * 365);
         long periodHours = Duration.between(horizon, now).toHours();
         long downtimeLastYearMinutes = downtimes.stream()

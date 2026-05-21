@@ -227,15 +227,15 @@ public class PprPlanService {
 
         if (plan.getStatus() == PlanStatus.APPROVED) {
             plan.setStatus(PlanStatus.IN_PROGRESS);
-            PprPlan savedPlan = planRepository.save(plan);
+            planRepository.save(plan);
             auditBuilderService.log(
                     "ppr_plan",
-                    savedPlan.getId().toString(),
+                    plan.getId().toString(),
                     AuditAction.UPDATE,
                     AuditModule.PPR_PLAN,
                     "ППР план переведен в работу",
                     plan,
-                    savedPlan
+                    plan
             );
         }
         task.setStatus(PprTaskStatus.IN_PROGRESS);

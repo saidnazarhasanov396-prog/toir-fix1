@@ -1,18 +1,16 @@
 package com.toir.controller;
 
-import com.toir.entity.defects.Defect;
 import com.toir.service.ReliabilityPassportService;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.time.Instant;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/equipment")
@@ -39,8 +37,14 @@ public class ReliabilityPassportController {
             Instant generatedAt
     ) {}
 
-    @GetMapping("/{id}/reliability-passport")
-    public ResponseEntity<ReliabilityPassport> passport(@PathVariable UUID id) {
-        return ResponseEntity.ok(reliabilityPassportService.passport(id));
+    @GetMapping("/reliability-passport")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Page<ReliabilityPassport>> list(
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, page, size));
     }
 }
