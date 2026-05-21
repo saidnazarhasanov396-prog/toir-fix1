@@ -2,13 +2,18 @@ package com.toir.service.maintanance;
 
 import com.toir.repository.equipment.EquipmentTypeRepository;
 
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MeterType;
+import com.toir.enums.MaintenanceRegulationConditionOperator;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.exception.RestException;
+import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -21,6 +26,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 
 import java.time.Year;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +47,12 @@ class MaintenanceRegulationServiceTest {
 
     @Mock
     EquipmentTypeRepository equipmentTypeRepository;
+
+    @Mock
+    EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
+
+    @Mock
+    MaintenanceRegulationAttributeConditionRepository conditionRepository;
 
     @InjectMocks
     MaintenanceRegulationService service;
@@ -151,6 +164,96 @@ class MaintenanceRegulationServiceTest {
         verify(repository, times(2)).save(any(MaintenanceRegulation.class));
     }
 
+    @Test
+    void createWithAttributeConditionPersistsCondition() {
+        int year = Year.now().getValue();
+        String codePrefix = "MR-" + year + "-";
+        String expectedCode = "MR-" + year + "-0001";
+        UUID typeId = UUID.randomUUID();
+
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(repository.save(any(MaintenanceRegulation.class))).thenAnswer(invocation -> {
+            MaintenanceRegulation regulation = invocation.getArgument(0);
+            regulation.setId(UUID.randomUUID());
+            regulation.setEquipmentTypeId(typeId);
+            return regulation;
+        });
+        when(attributeDefinitionRepository.existsActiveByEquipmentTypeIdAndKey(typeId, "motor_power")).thenReturn(true);
+        when(conditionRepository.findAllByRegulationIdAndIsDeletedFalse(any())).thenReturn(List.of());
+
+        MaintenanceRegulationDto created = service.create(requestWithCondition(null, typeId, "motor_power"));
+
+        assertThat(created.code()).isEqualTo(expectedCode);
+        ArgumentCaptor<Iterable<MaintenanceRegulationAttributeCondition>> captor =
+                ArgumentCaptor.forClass(Iterable.class);
+        verify(conditionRepository).saveAll(captor.capture());
+        MaintenanceRegulationAttributeCondition condition =
+                ((List<MaintenanceRegulationAttributeCondition>) captor.getValue()).getFirst();
+        assertThat(condition.getAttributeKey()).isEqualTo("motor_power");
+        assertThat(condition.getOperator()).isEqualTo(MaintenanceRegulationConditionOperator.GREATER_THAN);
+        assertThat(condition.getValueNumber()).isEqualTo(50.0);
+    }
+
+    @Test
+    void createWithUnknownConditionAttributeReturns400() {
+        int year = Year.now().getValue();
+        String expectedCode = "MR-" + year + "-0001";
+        UUID typeId = UUID.randomUUID();
+        when(repository.maxSequenceByCodePrefix("MR-" + year + "-")).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(repository.save(any(MaintenanceRegulation.class))).thenAnswer(invocation -> {
+            MaintenanceRegulation regulation = invocation.getArgument(0);
+            regulation.setId(UUID.randomUUID());
+            regulation.setEquipmentTypeId(typeId);
+            return regulation;
+        });
+        when(attributeDefinitionRepository.existsActiveByEquipmentTypeIdAndKey(typeId, "unknown_key")).thenReturn(false);
+        when(conditionRepository.findAllByRegulationIdAndIsDeletedFalse(any())).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.create(requestWithCondition(null, typeId, "unknown_key")))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Unknown equipment attribute key");
+                });
+    }
+
+    @Test
+    void findByIdIncludesAttributeConditions() {
+        UUID regulationId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        MaintenanceRegulation regulation = new MaintenanceRegulation();
+        regulation.setId(regulationId);
+        regulation.setCode("MR-2026-0001");
+        regulation.setName("High-power pump regulation");
+        regulation.setEquipmentTypeId(typeId);
+        regulation.setMaintenanceKind(MaintenanceKind.PREVENTIVE);
+        regulation.setNormativeLaborHours(4.0);
+        regulation.setActive(true);
+        regulation.setPeriodicityUnit(PeriodicityUnit.MONTH);
+        regulation.setPeriodicityValue(1);
+        regulation.setRequiresShutdown(false);
+
+        MaintenanceRegulationAttributeCondition condition = new MaintenanceRegulationAttributeCondition();
+        condition.setId(UUID.randomUUID());
+        condition.setRegulationId(regulationId);
+        condition.setAttributeKey("motor_power");
+        condition.setOperator(MaintenanceRegulationConditionOperator.GREATER_THAN);
+        condition.setValueNumber(50.0);
+
+        when(repository.findByIdAndIsDeletedFalse(regulationId)).thenReturn(Optional.of(regulation));
+        when(equipmentTypeRepository.findByIdAndIsDeletedFalse(typeId)).thenReturn(Optional.empty());
+        when(conditionRepository.findAllByRegulationIdAndIsDeletedFalse(regulationId)).thenReturn(List.of(condition));
+
+        MaintenanceRegulationDto dto = service.findById(regulationId);
+
+        assertThat(dto.attributeConditions()).hasSize(1);
+        assertThat(dto.attributeConditions().getFirst().attributeKey()).isEqualTo("motor_power");
+        assertThat(dto.attributeConditions().getFirst().operator())
+                .isEqualTo(MaintenanceRegulationConditionOperator.GREATER_THAN);
+        assertThat(dto.attributeConditions().getFirst().valueNumber()).isEqualTo(50.0);
+    }
+
     private MaintenanceRegulationRequest request(String code) {
         return new MaintenanceRegulationRequest(
                 code,
@@ -166,6 +269,33 @@ class MaintenanceRegulationServiceTest {
                 false,
                 MeterType.CUSTOM,
                 10.0
+        );
+    }
+
+    private MaintenanceRegulationRequest requestWithCondition(String code, UUID typeId, String attributeKey) {
+        return new MaintenanceRegulationRequest(
+                code,
+                "High-power pump regulation",
+                "Only pumps above 50 kW",
+                typeId,
+                MaintenanceKind.PREVENTIVE,
+                4.0,
+                true,
+                PeriodicityUnit.MONTH,
+                1,
+                3,
+                false,
+                MeterType.CUSTOM,
+                10.0,
+                List.of(new MaintenanceRegulationAttributeConditionRequest(
+                        attributeKey,
+                        MaintenanceRegulationConditionOperator.GREATER_THAN,
+                        null,
+                        50.0,
+                        null,
+                        null,
+                        null
+                ))
         );
     }
 }

@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 
+import java.util.List;
 import java.util.UUID;
 
 public record MaintenanceRegulationRequest(
@@ -23,5 +24,26 @@ public record MaintenanceRegulationRequest(
         Integer toleranceDays,
         boolean requiresShutdown,
         MeterType triggerMeterType,
-        Double triggerMeterInterval
-) {}
+        Double triggerMeterInterval,
+        List<MaintenanceRegulationAttributeConditionRequest> attributeConditions
+) {
+        public MaintenanceRegulationRequest(
+                String code,
+                String name,
+                String description,
+                UUID equipmentTypeId,
+                MaintenanceKind maintenanceKind,
+                double normativeLaborHours,
+                Boolean active,
+                PeriodicityUnit periodicityUnit,
+                int periodicityValue,
+                Integer toleranceDays,
+                boolean requiresShutdown,
+                MeterType triggerMeterType,
+                Double triggerMeterInterval
+        ) {
+                this(code, name, description, equipmentTypeId, maintenanceKind, normativeLaborHours, active,
+                        periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
+                        triggerMeterInterval, null);
+        }
+}
