@@ -1,13 +1,19 @@
 package com.toir.service.maintanance;
 
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionDto;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
+import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.MaintenanceRegulationConditionOperator;
 import com.toir.exception.RestException;
 import com.toir.entity.equipment.EquipmentType;
+import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -31,7 +37,9 @@ import java.util.stream.Collectors;
 public class MaintenanceRegulationService {
 
     private final MaintenanceRegulationRepository repository;
+    private final MaintenanceRegulationAttributeConditionRepository conditionRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
+    private final EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
     private final AuditBuilderService auditBuilderService;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
     private static final String CLIENT_CODE_REJECT_MESSAGE =
@@ -67,6 +75,7 @@ public class MaintenanceRegulationService {
     public MaintenanceRegulationDto create(MaintenanceRegulationRequest request) {
         validateClientProvidedCode(request.code());
         MaintenanceRegulation saved = saveWithGeneratedCode(request);
+        replaceConditions(saved.getId(), saved.getEquipmentTypeId(), request.attributeConditions());
 
         auditBuilderService.log(
                 "maintenance_regulation",
@@ -87,6 +96,7 @@ public class MaintenanceRegulationService {
         applyMutableFields(entity, request);
 
         MaintenanceRegulation save = repository.save(entity);
+        replaceConditions(save.getId(), save.getEquipmentTypeId(), request.attributeConditions());
 
         auditBuilderService.log(
                 "maintenance_regulation",
@@ -135,6 +145,81 @@ public class MaintenanceRegulationService {
         entity.setRequiresShutdown(request.requiresShutdown());
         entity.setTriggerMeterType(request.triggerMeterType());
         entity.setTriggerMeterInterval(request.triggerMeterInterval());
+    }
+
+    private void replaceConditions(UUID regulationId,
+                                   UUID equipmentTypeId,
+                                   List<MaintenanceRegulationAttributeConditionRequest> requests) {
+        if (requests == null) {
+            return;
+        }
+        if (conditionRepository == null) {
+            return;
+        }
+        List<MaintenanceRegulationAttributeCondition> existing =
+                conditionRepository.findAllByRegulationIdAndIsDeletedFalse(regulationId);
+        for (MaintenanceRegulationAttributeCondition condition : existing) {
+            condition.setDeleted(true);
+        }
+        if (!existing.isEmpty()) {
+            conditionRepository.saveAll(existing);
+        }
+
+        List<MaintenanceRegulationAttributeCondition> toSave = requests.stream()
+                .map(request -> toCondition(regulationId, equipmentTypeId, request))
+                .toList();
+        if (!toSave.isEmpty()) {
+            conditionRepository.saveAll(toSave);
+        }
+    }
+
+    private MaintenanceRegulationAttributeCondition toCondition(UUID regulationId,
+                                                               UUID equipmentTypeId,
+                                                               MaintenanceRegulationAttributeConditionRequest request) {
+        if (request == null) {
+            throw RestException.badRequest("Attribute condition is required");
+        }
+        String key = normalizeAttributeKey(request.attributeKey());
+        if (!attributeDefinitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, key)) {
+            throw RestException.badRequest("Unknown equipment attribute key for regulation type: " + key);
+        }
+        validateConditionValue(request);
+
+        MaintenanceRegulationAttributeCondition condition = new MaintenanceRegulationAttributeCondition();
+        condition.setRegulationId(regulationId);
+        condition.setAttributeKey(key);
+        condition.setOperator(request.operator());
+        condition.setValueText(request.valueText());
+        condition.setValueNumber(request.valueNumber());
+        condition.setValueDate(request.valueDate());
+        condition.setValueBoolean(request.valueBoolean());
+        condition.setValueOption(request.valueOption());
+        return condition;
+    }
+
+    private void validateConditionValue(MaintenanceRegulationAttributeConditionRequest request) {
+        if (request.operator() == null) {
+            throw RestException.badRequest("Condition operator is required");
+        }
+        if (request.operator() == MaintenanceRegulationConditionOperator.EXISTS
+                || request.operator() == MaintenanceRegulationConditionOperator.NOT_EXISTS) {
+            return;
+        }
+        boolean hasValue = request.valueText() != null
+                || request.valueNumber() != null
+                || request.valueDate() != null
+                || request.valueBoolean() != null
+                || request.valueOption() != null;
+        if (!hasValue) {
+            throw RestException.badRequest("Condition value is required");
+        }
+    }
+
+    private String normalizeAttributeKey(String key) {
+        if (key == null || key.isBlank()) {
+            throw RestException.badRequest("Attribute condition key is required");
+        }
+        return key.trim().toLowerCase(Locale.ROOT);
     }
 
     private void validateClientProvidedCode(String code) {
@@ -190,13 +275,14 @@ public class MaintenanceRegulationService {
 
     private MaintenanceRegulationDto toDto(MaintenanceRegulation r) {
         if (r == null) return null;
+        List<MaintenanceRegulationAttributeConditionDto> conditions = conditionDtos(r.getId());
         if (r.getEquipmentTypeId() == null) {
-            return MaintenanceRegulationDto.from(r, null);
+            return MaintenanceRegulationDto.from(r, null, conditions);
         }
         String equipmentTypeName = equipmentTypeRepository.findByIdAndIsDeletedFalse(r.getEquipmentTypeId())
                 .map(EquipmentType::getName)
                 .orElse(null);
-        return MaintenanceRegulationDto.from(r, equipmentTypeName);
+        return MaintenanceRegulationDto.from(r, equipmentTypeName, conditions);
     }
 
     private List<MaintenanceRegulationDto> toDtoList(List<MaintenanceRegulation> regulations) {
@@ -207,8 +293,37 @@ public class MaintenanceRegulationService {
                 .collect(Collectors.toSet());
         Map<UUID, String> eqTypeNames = equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(eqTypeIds).stream()
                 .collect(Collectors.toMap(EquipmentType::getId, EquipmentType::getName));
+        Set<UUID> regulationIds = regulations.stream().map(MaintenanceRegulation::getId).collect(Collectors.toSet());
+        Map<UUID, List<MaintenanceRegulationAttributeConditionDto>> conditionsByRegulationId =
+                conditionDtosByRegulationId(regulationIds);
         return regulations.stream()
-                .map(r -> MaintenanceRegulationDto.from(r, eqTypeNames.getOrDefault(r.getEquipmentTypeId(), null)))
+                .map(r -> MaintenanceRegulationDto.from(
+                        r,
+                        eqTypeNames.getOrDefault(r.getEquipmentTypeId(), null),
+                        conditionsByRegulationId.getOrDefault(r.getId(), List.of())
+                ))
                 .toList();
+    }
+
+    private List<MaintenanceRegulationAttributeConditionDto> conditionDtos(UUID regulationId) {
+        if (conditionRepository == null) {
+            return List.of();
+        }
+        return conditionRepository.findAllByRegulationIdAndIsDeletedFalse(regulationId)
+                .stream()
+                .map(MaintenanceRegulationAttributeConditionDto::from)
+                .toList();
+    }
+
+    private Map<UUID, List<MaintenanceRegulationAttributeConditionDto>> conditionDtosByRegulationId(Set<UUID> regulationIds) {
+        if (conditionRepository == null || regulationIds.isEmpty()) {
+            return Map.of();
+        }
+        return conditionRepository.findAllByRegulationIdInAndIsDeletedFalse(regulationIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        MaintenanceRegulationAttributeCondition::getRegulationId,
+                        Collectors.mapping(MaintenanceRegulationAttributeConditionDto::from, Collectors.toList())
+                ));
     }
 }
