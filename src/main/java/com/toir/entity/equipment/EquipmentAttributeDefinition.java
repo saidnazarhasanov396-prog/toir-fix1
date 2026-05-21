@@ -1,8 +1,9 @@
 package com.toir.entity.equipment;
 
+import com.toir.dto.equipmentattribute.EquipmentAttributeOptionDto;
 import com.toir.entity.BaseEntity;
 import com.toir.enums.EquipmentAttributeDataType;
-import com.toir.persistence.StringListJsonConverter;
+import com.toir.persistence.EquipmentAttributeOptionListJsonConverter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
@@ -57,9 +58,12 @@ public class EquipmentAttributeDefinition extends BaseEntity {
     @Column(name = "max_value")
     private Double maxValue;
 
-    @Convert(converter = StringListJsonConverter.class)
+    @Column(name = "option_source_id")
+    private UUID optionSourceId;
+
+    @Convert(converter = EquipmentAttributeOptionListJsonConverter.class)
     @Column(name = "options_json", columnDefinition = "text")
-    private List<String> options;
+    private List<EquipmentAttributeOptionDto> options;
 
     @Column(name = "group_name")
     private String groupName;

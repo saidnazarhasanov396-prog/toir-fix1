@@ -18,7 +18,8 @@ public record EquipmentAttributeDefinitionDto(
         boolean required,
         Double minValue,
         Double maxValue,
-        List<String> options,
+        UUID optionSourceId,
+        List<EquipmentAttributeOptionDto> options,
         String groupName,
         Integer sortOrder
 ) {
@@ -35,6 +36,7 @@ public record EquipmentAttributeDefinitionDto(
                 definition.isRequired(),
                 definition.getMinValue(),
                 definition.getMaxValue(),
+                definition.getOptionSourceId(),
                 definition.getOptions() == null ? List.of() : definition.getOptions(),
                 definition.getGroupName(),
                 definition.getSortOrder()

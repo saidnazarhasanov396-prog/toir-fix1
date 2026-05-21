@@ -2,6 +2,8 @@ package com.toir.controller;
 
 import com.toir.controller.equipment.EquipmentAttributeController;
 import com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionDto;
+import com.toir.dto.equipmentattribute.EquipmentAttributeOptionDto;
+import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.exception.GlobalExceptionHandler;
@@ -57,6 +59,51 @@ class EquipmentAttributeControllerContractTest {
                 .andExpect(jsonPath("$[0].dataType").value("NUMBER"))
                 .andExpect(jsonPath("$[0].unit").value("kW"))
                 .andExpect(jsonPath("$[0].required").value(true));
+    }
+
+    @Test
+    void createOptionSourceAndReplaceOptionsContracts() throws Exception {
+        UUID sourceId = UUID.randomUUID();
+        when(service.createOptionSource(any())).thenReturn(new EquipmentAttributeOptionSourceDto(
+                sourceId,
+                "seal_types",
+                "Seal Types",
+                null,
+                null,
+                "Pump seal options"
+        ));
+        when(service.replaceOptions(eq(sourceId), any())).thenReturn(List.of(
+                new EquipmentAttributeOptionDto("mechanical_seal", "Mechanical seal", null, null, 10, true)
+        ));
+
+        mockMvc.perform(post("/api/v1/equipment-attribute-option-sources")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "code": "seal_types",
+                                  "name": "Seal Types",
+                                  "description": "Pump seal options"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(sourceId.toString()))
+                .andExpect(jsonPath("$.code").value("seal_types"));
+
+        mockMvc.perform(put("/api/v1/equipment-attribute-option-sources/{sourceId}/options", sourceId)
+                        .contentType("application/json")
+                        .content("""
+                                [
+                                  {
+                                    "id": "mechanical_seal",
+                                    "label": "Mechanical seal",
+                                    "sortOrder": 10,
+                                    "active": true
+                                  }
+                                ]
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("mechanical_seal"))
+                .andExpect(jsonPath("$[0].label").value("Mechanical seal"));
     }
 
     @Test
@@ -154,12 +201,34 @@ class EquipmentAttributeControllerContractTest {
                                   },
                                   {
                                     "attributeDefinitionId": "%s",
-                                    "valueOption": "Mechanical seal"
+                                    "valueOption": "mechanical_seal"
                                   }
                                 ]
                                 """.formatted(definitionId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].valueNumber").value(90.0));
+    }
+
+    @Test
+    void saveValuesPostAcceptsReusableAttributeValuesPayload() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID definitionId = UUID.randomUUID();
+        when(service.replaceValues(eq(equipmentId), any())).thenReturn(List.of(valueDto(equipmentId, definitionId, 75.0)));
+
+        mockMvc.perform(post("/api/v1/equipment/{equipmentId}/attributes", equipmentId)
+                        .contentType("application/json")
+                        .content("""
+                                [
+                                  {
+                                    "key": "motor_power",
+                                    "valueNumber": 75
+                                  }
+                                ]
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$[0].key").value("motor_power"))
+                .andExpect(jsonPath("$[0].valueNumber").value(75.0));
     }
 
     @Test
@@ -195,7 +264,8 @@ class EquipmentAttributeControllerContractTest {
                 true,
                 0.0,
                 500.0,
-                List.of(),
+                null,
+                List.of(new EquipmentAttributeOptionDto("mechanical_seal", "Mechanical seal", null, null, 10, true)),
                 "Motor",
                 10
         );
@@ -213,6 +283,7 @@ class EquipmentAttributeControllerContractTest {
                 EquipmentAttributeDataType.NUMBER,
                 "kW",
                 true,
+                null,
                 List.of(),
                 "Motor",
                 10,

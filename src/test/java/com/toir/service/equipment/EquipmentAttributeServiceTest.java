@@ -1,6 +1,7 @@
 package com.toir.service.equipment;
 
 import com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionRequest;
+import com.toir.dto.equipmentattribute.EquipmentAttributeOptionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.entity.equipment.Equipment;
@@ -53,6 +54,12 @@ class EquipmentAttributeServiceTest {
     @Mock
     EquipmentRepository equipmentRepository;
 
+    @Mock
+    com.toir.repository.equipment.EquipmentAttributeOptionSourceRepository optionSourceRepository;
+
+    @Mock
+    com.toir.repository.equipment.EquipmentAttributeOptionItemRepository optionItemRepository;
+
     @InjectMocks
     EquipmentAttributeService service;
 
@@ -77,6 +84,7 @@ class EquipmentAttributeServiceTest {
                 true,
                 0.0,
                 500.0,
+                null,
                 List.of(),
                 "Motor",
                 10
@@ -138,13 +146,13 @@ class EquipmentAttributeServiceTest {
         motorPower.setMaxValue(500.0);
         EquipmentAttributeDefinition sealType = definition(UUID.randomUUID(), typeId, "seal_type",
                 EquipmentAttributeDataType.SELECT, false);
-        sealType.setOptions(List.of("Mechanical seal", "Packing"));
+        sealType.setOptions(List.of(option("mechanical_seal", "Mechanical seal"), option("packing", "Packing")));
         when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(motorPower, sealType));
         when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
 
         service.upsertValues(equipment, List.of(
                 new EquipmentAttributeValueRequest(null, "motor_power", null, 75.0, null, null, null, null),
-                new EquipmentAttributeValueRequest(null, "seal_type", null, null, null, null, "Mechanical seal", null)
+                new EquipmentAttributeValueRequest(null, "seal_type", null, null, null, null, "mechanical_seal", null)
         ));
 
         ArgumentCaptor<Iterable<EquipmentAttributeValue>> captor = ArgumentCaptor.forClass(Iterable.class);
@@ -157,7 +165,7 @@ class EquipmentAttributeServiceTest {
         });
         assertThat(saved).anySatisfy(value -> {
             assertThat(value.getAttributeDefinitionId()).isEqualTo(sealType.getId());
-            assertThat(value.getValueOption()).isEqualTo("Mechanical seal");
+            assertThat(value.getValueOption()).isEqualTo("mechanical_seal");
         });
     }
 
@@ -329,12 +337,33 @@ class EquipmentAttributeServiceTest {
         Equipment equipment = equipment(UUID.randomUUID(), typeId);
         EquipmentAttributeDefinition sealType = definition(UUID.randomUUID(), typeId, "seal_type",
                 EquipmentAttributeDataType.SELECT, false);
-        sealType.setOptions(List.of("Mechanical seal", "Packing"));
+        sealType.setOptions(List.of(option("mechanical_seal", "Mechanical seal"), option("packing", "Packing")));
         when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(sealType));
         when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipment.getId())).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.upsertValues(equipment, List.of(
                 new EquipmentAttributeValueRequest(null, "seal_type", null, null, null, null, "Invalid seal", null)
+        ))).isInstanceOfSatisfying(RestException.class, ex -> {
+            assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(ex.getMessage()).contains("option is not allowed");
+        });
+    }
+
+    @Test
+    void upsertValuesRejectsInactiveSelectOptionId() {
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(UUID.randomUUID(), typeId);
+        EquipmentAttributeDefinition sealType = definition(UUID.randomUUID(), typeId, "seal_type",
+                EquipmentAttributeDataType.SELECT, false);
+        sealType.setOptions(List.of(
+                option("mechanical_seal", "Mechanical seal"),
+                new EquipmentAttributeOptionDto("obsolete_seal", "Obsolete seal", null, null, 20, false)
+        ));
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(sealType));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipment.getId())).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.upsertValues(equipment, List.of(
+                new EquipmentAttributeValueRequest(null, "seal_type", null, null, null, null, "obsolete_seal", null)
         ))).isInstanceOfSatisfying(RestException.class, ex -> {
             assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
             assertThat(ex.getMessage()).contains("option is not allowed");
@@ -416,6 +445,7 @@ class EquipmentAttributeServiceTest {
                 true,
                 0.0,
                 500.0,
+                null,
                 List.of(),
                 "Motor",
                 10
@@ -449,6 +479,10 @@ class EquipmentAttributeServiceTest {
         definition.setSortOrder(0);
         definition.setOptions(List.of());
         return definition;
+    }
+
+    private EquipmentAttributeOptionDto option(String id, String label) {
+        return new EquipmentAttributeOptionDto(id, label, null, null, null, true);
     }
 
     private EquipmentAttributeValue value(UUID equipmentId, UUID definitionId) {
