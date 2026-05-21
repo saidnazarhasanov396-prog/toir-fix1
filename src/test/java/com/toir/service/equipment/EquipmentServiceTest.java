@@ -452,6 +452,7 @@ class EquipmentServiceTest {
                 EquipmentAttributeDataType.NUMBER,
                 "kW",
                 true,
+                null,
                 List.of(),
                 "Motor",
                 10,

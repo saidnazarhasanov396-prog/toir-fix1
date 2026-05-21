@@ -2,6 +2,9 @@ package com.toir.controller.equipment;
 
 import com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionRequest;
+import com.toir.dto.equipmentattribute.EquipmentAttributeOptionDto;
+import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceDto;
+import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.service.equipment.EquipmentAttributeService;
@@ -31,6 +34,33 @@ import java.util.UUID;
 public class EquipmentAttributeController {
 
     private final EquipmentAttributeService service;
+
+    @GetMapping("/equipment-attribute-option-sources")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TYPE_READ')")
+    public ResponseEntity<List<EquipmentAttributeOptionSourceDto>> listOptionSources() {
+        return ResponseEntity.ok(service.findOptionSources());
+    }
+
+    @PostMapping("/equipment-attribute-option-sources")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TYPE_UPDATE')")
+    public ResponseEntity<EquipmentAttributeOptionSourceDto> createOptionSource(
+            @Valid @RequestBody EquipmentAttributeOptionSourceRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createOptionSource(request));
+    }
+
+    @GetMapping("/equipment-attribute-option-sources/{sourceId}/options")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TYPE_READ')")
+    public ResponseEntity<List<EquipmentAttributeOptionDto>> listOptions(@PathVariable UUID sourceId) {
+        return ResponseEntity.ok(service.findOptions(sourceId));
+    }
+
+    @PutMapping("/equipment-attribute-option-sources/{sourceId}/options")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TYPE_UPDATE')")
+    public ResponseEntity<List<EquipmentAttributeOptionDto>> replaceOptions(
+            @PathVariable UUID sourceId,
+            @RequestBody List<EquipmentAttributeOptionDto> request) {
+        return ResponseEntity.ok(service.replaceOptions(sourceId, request));
+    }
 
     @GetMapping("/equipment-types/{equipmentTypeId}/attributes")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TYPE_READ')")

@@ -48,6 +48,42 @@ PUT /api/v1/equipment/{equipmentId}/attributes
 
 `POST` and `PUT` both save submitted attribute values. Use `POST` from forms when adding/saving values after equipment already exists. `PUT` remains supported for existing clients.
 
+### Reusable Option Dictionaries
+
+Use these endpoints to manage shared dropdown dictionaries.
+
+```http
+GET /api/v1/equipment-attribute-option-sources
+POST /api/v1/equipment-attribute-option-sources
+GET /api/v1/equipment-attribute-option-sources/{sourceId}/options
+PUT /api/v1/equipment-attribute-option-sources/{sourceId}/options
+```
+
+Example source:
+
+```json
+{
+  "code": "seal_types",
+  "name": "Seal Types",
+  "description": "Reusable pump seal options"
+}
+```
+
+Example options:
+
+```json
+[
+  {
+    "id": "mechanical_seal",
+    "label": "Mechanical seal",
+    "labelRu": "Механическое уплотнение",
+    "labelUz": "Mexanik salnik",
+    "sortOrder": 10,
+    "active": true
+  }
+]
+```
+
 ## Attribute Definition Response
 
 Used by the frontend to render a dynamic form.
@@ -65,7 +101,17 @@ Used by the frontend to render a dynamic form.
   "required": true,
   "minValue": 0,
   "maxValue": 500,
-  "options": [],
+  "optionSourceId": "uuid",
+  "options": [
+    {
+      "id": "mechanical_seal",
+      "label": "Mechanical seal",
+      "labelRu": "Механическое уплотнение",
+      "labelUz": "Mexanik salnik",
+      "sortOrder": 10,
+      "active": true
+    }
+  ],
   "groupName": "Motor",
   "sortOrder": 10
 }
@@ -119,6 +165,8 @@ valueJson
 
 Frontend should send the matching value field based on `dataType`.
 
+For `SELECT`, `valueOption` must be the selected option `id`, not the display label.
+
 ## Data Type Mapping
 
 | dataType | Frontend control | Send field |
@@ -134,7 +182,9 @@ Frontend should send the matching value field based on `dataType`.
 | `RANGE` | Number/range input | `valueNumber` |
 | `JSON` | Structured editor / hidden serialized payload | `valueJson` |
 
-For `SELECT`, use the `options` array from the definition.
+For `SELECT`, prefer `optionSourceId`. Load the source's options from `/api/v1/equipment-attribute-option-sources/{sourceId}/options`. Store/send the stable option `id` in `valueOption`; display `label`, `labelRu`, or `labelUz` in the UI.
+
+The inline `options` array is still supported as a fallback for simple/local dropdowns, but reusable dictionaries should use `optionSourceId`.
 
 ## Create Equipment With Attributes
 
@@ -170,7 +220,7 @@ Example request:
     },
     {
       "key": "seal_type",
-      "valueOption": "Mechanical seal"
+      "valueOption": "mechanical_seal"
     }
   ]
 }

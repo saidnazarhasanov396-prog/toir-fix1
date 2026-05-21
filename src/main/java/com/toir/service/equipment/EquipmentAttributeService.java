@@ -1,15 +1,22 @@
 package com.toir.service.equipment;
 
+import com.toir.dto.equipmentattribute.EquipmentAttributeOptionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionRequest;
+import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceDto;
+import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
+import com.toir.entity.equipment.EquipmentAttributeOptionItem;
+import com.toir.entity.equipment.EquipmentAttributeOptionSource;
 import com.toir.entity.equipment.EquipmentAttributeValue;
 import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
+import com.toir.repository.equipment.EquipmentAttributeOptionItemRepository;
+import com.toir.repository.equipment.EquipmentAttributeOptionSourceRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
@@ -37,6 +44,60 @@ public class EquipmentAttributeService {
     private final EquipmentAttributeValueRepository valueRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentRepository equipmentRepository;
+    private final EquipmentAttributeOptionSourceRepository optionSourceRepository;
+    private final EquipmentAttributeOptionItemRepository optionItemRepository;
+
+    @Transactional(readOnly = true)
+    public List<EquipmentAttributeOptionSourceDto> findOptionSources() {
+        return optionSourceRepository.findAllByIsDeletedFalseOrderByCodeAsc()
+                .stream()
+                .map(EquipmentAttributeOptionSourceDto::from)
+                .toList();
+    }
+
+    @Transactional
+    public EquipmentAttributeOptionSourceDto createOptionSource(EquipmentAttributeOptionSourceRequest request) {
+        String code = normalizeKey(request.code());
+        if (optionSourceRepository.existsByCodeAndIsDeletedFalse(code)) {
+            throw RestException.conflict("Equipment attribute option source already exists: " + code);
+        }
+        EquipmentAttributeOptionSource source = new EquipmentAttributeOptionSource();
+        source.setCode(code);
+        source.setName(request.name());
+        source.setNameRu(request.nameRu());
+        source.setNameUz(request.nameUz());
+        source.setDescription(request.description());
+        return EquipmentAttributeOptionSourceDto.from(optionSourceRepository.save(source));
+    }
+
+    @Transactional(readOnly = true)
+    public List<EquipmentAttributeOptionDto> findOptions(UUID sourceId) {
+        ensureOptionSourceExists(sourceId);
+        return optionItemRepository.findAllBySourceIdAndIsDeletedFalse(sourceId)
+                .stream()
+                .map(this::toOptionDto)
+                .toList();
+    }
+
+    @Transactional
+    public List<EquipmentAttributeOptionDto> replaceOptions(UUID sourceId, List<EquipmentAttributeOptionDto> options) {
+        ensureOptionSourceExists(sourceId);
+        List<EquipmentAttributeOptionItem> existing = optionItemRepository.findAllBySourceIdAndIsDeletedFalse(sourceId);
+        for (EquipmentAttributeOptionItem item : existing) {
+            item.setDeleted(true);
+        }
+        if (!existing.isEmpty()) {
+            optionItemRepository.saveAll(existing);
+        }
+        List<EquipmentAttributeOptionItem> toSave = (options == null ? List.<EquipmentAttributeOptionDto>of() : options)
+                .stream()
+                .map(option -> toOptionItem(sourceId, option))
+                .toList();
+        if (!toSave.isEmpty()) {
+            optionItemRepository.saveAll(toSave);
+        }
+        return findOptions(sourceId);
+    }
 
     @Transactional(readOnly = true)
     public List<EquipmentAttributeDefinitionDto> findDefinitions(UUID equipmentTypeId) {
@@ -173,6 +234,10 @@ public class EquipmentAttributeService {
         definition.setRequired(request.required());
         definition.setMinValue(request.minValue());
         definition.setMaxValue(request.maxValue());
+        definition.setOptionSourceId(request.optionSourceId());
+        if (request.optionSourceId() != null) {
+            ensureOptionSourceExists(request.optionSourceId());
+        }
         definition.setOptions(request.options() == null ? List.of() : request.options());
         definition.setGroupName(request.groupName());
         definition.setSortOrder(request.sortOrder() == null ? 0 : request.sortOrder());
@@ -297,8 +362,20 @@ public class EquipmentAttributeService {
     }
 
     private void validateOption(EquipmentAttributeDefinition definition, String value) {
-        List<String> options = definition.getOptions() == null ? List.of() : definition.getOptions();
-        if (!options.isEmpty() && !options.contains(value)) {
+        if (definition.getOptionSourceId() != null) {
+            if (!optionItemRepository.existsActiveBySourceIdAndOptionId(definition.getOptionSourceId(), value)) {
+                throw RestException.badRequest("Attribute option is not allowed: " + definition.getKey());
+            }
+            return;
+        }
+        List<EquipmentAttributeOptionDto> options = definition.getOptions() == null ? List.of() : definition.getOptions();
+        if (options.isEmpty()) {
+            return;
+        }
+        boolean allowed = options.stream()
+                .filter(option -> option.active() == null || option.active())
+                .anyMatch(option -> option.id().equals(value));
+        if (!allowed) {
             throw RestException.badRequest("Attribute option is not allowed: " + definition.getKey());
         }
     }
@@ -355,5 +432,42 @@ public class EquipmentAttributeService {
         }
         equipmentTypeRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment type not found: " + id));
+    }
+
+    private void ensureOptionSourceExists(UUID id) {
+        if (id == null) {
+            return;
+        }
+        optionSourceRepository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Equipment attribute option source not found: " + id));
+    }
+
+    private EquipmentAttributeOptionItem toOptionItem(UUID sourceId, EquipmentAttributeOptionDto option) {
+        if (option == null || option.id() == null || option.id().isBlank()) {
+            throw RestException.badRequest("Option id is required");
+        }
+        if (option.label() == null || option.label().isBlank()) {
+            throw RestException.badRequest("Option label is required");
+        }
+        EquipmentAttributeOptionItem item = new EquipmentAttributeOptionItem();
+        item.setOptionSourceId(sourceId);
+        item.setOptionId(option.id().trim());
+        item.setLabel(option.label());
+        item.setLabelRu(option.labelRu());
+        item.setLabelUz(option.labelUz());
+        item.setSortOrder(option.sortOrder() == null ? 0 : option.sortOrder());
+        item.setActive(option.active() == null || option.active());
+        return item;
+    }
+
+    private EquipmentAttributeOptionDto toOptionDto(EquipmentAttributeOptionItem item) {
+        return new EquipmentAttributeOptionDto(
+                item.getOptionId(),
+                item.getLabel(),
+                item.getLabelRu(),
+                item.getLabelUz(),
+                item.getSortOrder(),
+                item.isActive()
+        );
     }
 }

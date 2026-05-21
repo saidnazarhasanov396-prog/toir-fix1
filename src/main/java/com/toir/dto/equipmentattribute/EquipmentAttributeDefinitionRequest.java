@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
+import java.util.UUID;
 
 public record EquipmentAttributeDefinitionRequest(
         @NotBlank String key,
@@ -16,7 +17,8 @@ public record EquipmentAttributeDefinitionRequest(
         boolean required,
         Double minValue,
         Double maxValue,
-        List<String> options,
+        UUID optionSourceId,
+        List<EquipmentAttributeOptionDto> options,
         String groupName,
         Integer sortOrder
 ) {}
