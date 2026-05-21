@@ -33,6 +33,18 @@ public interface ActualCostRepository extends JpaRepository<ActualCost, UUID> {
     List<ActualCost> findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("workOrderId") UUID workOrderId);
 
     @Query(value = """
+            SELECT *
+            FROM actual_costs
+            WHERE contractor_work_id = cast(:contractorWorkId as uuid)
+              AND is_deleted = false
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """, nativeQuery = true)
+    Optional<ActualCost> findTopByContractorWorkIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+            @Param("contractorWorkId") UUID contractorWorkId
+    );
+
+    @Query(value = """
             SELECT ac.*
             FROM actual_costs ac
             LEFT JOIN work_orders wo ON wo.id = ac.work_order_id AND wo.is_deleted = false
