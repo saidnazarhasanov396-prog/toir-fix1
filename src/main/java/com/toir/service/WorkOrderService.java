@@ -6,14 +6,17 @@ import com.toir.entity.Department;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.PlanStatus;
+import com.toir.repository.CompletionActRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.SafetyPermitRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -23,6 +26,8 @@ import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.SafetyPermitStatus;
+import com.toir.enums.TaskExecutionStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
@@ -69,6 +74,10 @@ public class WorkOrderService {
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
+    private final SafetyPermitRepository safetyPermitRepository;
+    private final CompletionActRepository completionActRepository;
+    private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
+            EnumSet.of(WorkOrderStatus.APPROVED, WorkOrderStatus.IN_PROGRESS);
     private static final Set<WorkOrderStatus> TERMINAL_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
     private static final Set<WorkOrderStatus> ACTIVE_WORK_ORDER_STATUSES =
@@ -230,12 +239,7 @@ public class WorkOrderService {
     @Transactional
     public WorkOrderDto complete(UUID id, CompleteWorkOrderRequest request) {
         WorkOrder entity = getOrThrow(id);
-        if (entity.getStatus() != WorkOrderStatus.IN_PROGRESS) {
-            throw RestException.badRequest("Only in-progress work orders can be completed");
-        }
-        if (request.result() == null || request.result().isBlank()) {
-            throw RestException.badRequest("Result is required to complete a work order");
-        }
+        assertCanComplete(entity, request);
         entity.setResult(request.result());
         if (request.summary() != null && !request.summary().isBlank()) {
             entity.setSummary(request.summary());
@@ -271,12 +275,8 @@ public class WorkOrderService {
     @Transactional
     public WorkOrderDto close(UUID id, CloseWorkOrderRequest request) {
         WorkOrder entity = getOrThrow(id);
-        if (entity.getStatus() != WorkOrderStatus.COMPLETED) {
-            throw RestException.badRequest("Only completed work orders can be closed");
-        }
-        if (request.result() == null || request.result().isBlank()) {
-            throw RestException.badRequest("Result is required to close a work order");
-        }
+        assertCanClose(entity, request);
+        assertClosureEvidenceReady(entity);
         entity.setResult(request.result());
         entity.setClosureNotes(request.closureNotes());
         entity.setStatus(WorkOrderStatus.CLOSED);
@@ -299,6 +299,68 @@ public class WorkOrderService {
 
         return toDto(saved);
     }
+
+    private void assertCanComplete(WorkOrder entity, CompleteWorkOrderRequest request) {
+        if (!COMPLETE_ALLOWED_WORK_ORDER_STATUSES.contains(entity.getStatus())) {
+            throw RestException.badRequest("Only APPROVED or IN_PROGRESS work orders can be completed");
+        }
+        if (request.result() == null || request.result().isBlank()) {
+            throw RestException.badRequest("Result is required to complete a work order");
+        }
+    }
+
+    private void assertCanClose(WorkOrder entity, CloseWorkOrderRequest request) {
+        if (entity.getStatus() != WorkOrderStatus.COMPLETED) {
+            throw RestException.badRequest("Only completed work orders can be closed");
+        }
+        if (request.result() == null || request.result().isBlank()) {
+            throw RestException.badRequest("Result is required to close a work order");
+        }
+    }
+
+    private void assertClosureEvidenceReady(WorkOrder entity) {
+        ClosureReadiness readiness = buildClosureReadiness(entity);
+        if (!readiness.ready()) {
+            throw RestException.badRequest("Cannot close work order; missing evidence: "
+                    + String.join("; ", readiness.missingEvidence()));
+        }
+    }
+
+    private ClosureReadiness buildClosureReadiness(WorkOrder entity) {
+        List<String> missingEvidence = new java.util.ArrayList<>();
+
+        List<String> incompleteTasks = entity.getTasks() == null
+                ? List.of()
+                : entity.getTasks().stream()
+                .filter(task -> task.getStatus() != TaskExecutionStatus.DONE)
+                .map(this::taskEvidenceName)
+                .toList();
+        if (!incompleteTasks.isEmpty()) {
+            missingEvidence.add("Incomplete tasks/checklist items: " + String.join(", ", incompleteTasks));
+        }
+
+        safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(entity.getId())
+                .filter(permit -> permit.getStatus() != SafetyPermitStatus.CLOSED)
+                .ifPresent(permit -> missingEvidence.add(
+                        "Safety permit must be CLOSED"
+                                + (permit.getStatus() == null ? "" : " (current: " + permit.getStatus() + ")")
+                ));
+
+        completionActRepository.findByWorkOrderIdAndIsDeletedFalse(entity.getId())
+                .filter(act -> act.getSignedAt() == null || act.getSignedById() == null)
+                .ifPresent(act -> missingEvidence.add("Completion act must be signed"));
+
+        return new ClosureReadiness(missingEvidence.isEmpty(), missingEvidence);
+    }
+
+    private String taskEvidenceName(WorkOrderTask task) {
+        if (task.getTitle() != null && !task.getTitle().isBlank()) {
+            return task.getTitle();
+        }
+        return task.getId() == null ? "unnamed task" : task.getId().toString();
+    }
+
+    private record ClosureReadiness(boolean ready, List<String> missingEvidence) {}
 
     @Transactional
     public WorkOrderDto recalculateLinkedPprPlanForWorkOrder(UUID id) {
