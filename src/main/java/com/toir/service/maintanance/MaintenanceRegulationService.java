@@ -309,8 +309,12 @@ public class MaintenanceRegulationService {
         if (conditionRepository == null) {
             return List.of();
         }
-        return conditionRepository.findAllByRegulationIdAndIsDeletedFalse(regulationId)
-                .stream()
+        List<MaintenanceRegulationAttributeCondition> conditions =
+                conditionRepository.findAllByRegulationIdAndIsDeletedFalse(regulationId);
+        if (conditions == null || conditions.isEmpty()) {
+            return List.of();
+        }
+        return conditions.stream()
                 .map(MaintenanceRegulationAttributeConditionDto::from)
                 .toList();
     }
@@ -319,8 +323,12 @@ public class MaintenanceRegulationService {
         if (conditionRepository == null || regulationIds.isEmpty()) {
             return Map.of();
         }
-        return conditionRepository.findAllByRegulationIdInAndIsDeletedFalse(regulationIds)
-                .stream()
+        List<MaintenanceRegulationAttributeCondition> conditions =
+                conditionRepository.findAllByRegulationIdInAndIsDeletedFalse(regulationIds);
+        if (conditions == null || conditions.isEmpty()) {
+            return Map.of();
+        }
+        return conditions.stream()
                 .collect(Collectors.groupingBy(
                         MaintenanceRegulationAttributeCondition::getRegulationId,
                         Collectors.mapping(MaintenanceRegulationAttributeConditionDto::from, Collectors.toList())

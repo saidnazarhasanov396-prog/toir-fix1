@@ -226,17 +226,19 @@ public class EquipmentAttributeService {
 
     private void validateValue(EquipmentAttributeDefinition definition, EquipmentAttributeValueRequest request) {
         EquipmentAttributeDataType dataType = definition.getDataType();
-        if (isBlankForType(dataType, request)) {
+        int populatedValueFields = populatedValueFieldCount(request);
+        if (populatedValueFields == 0) {
             if (definition.isRequired()) {
                 throw RestException.badRequest("Attribute is required: " + definition.getKey());
             }
             return;
         }
+        if (populatedValueFields > 1) {
+            throw RestException.badRequest("Attribute value must use only one value field: " + definition.getKey());
+        }
+        validateExpectedValueField(definition, request);
         if (dataType == EquipmentAttributeDataType.NUMBER || dataType == EquipmentAttributeDataType.RANGE) {
             Double value = request.valueNumber();
-            if (value == null) {
-                throw RestException.badRequest("Attribute requires valueNumber: " + definition.getKey());
-            }
             if (definition.getMinValue() != null && value < definition.getMinValue()) {
                 throw RestException.badRequest("Attribute value is below minValue: " + definition.getKey());
             }
@@ -253,6 +255,45 @@ public class EquipmentAttributeService {
                 throw RestException.badRequest("Attribute requires valueJson: " + definition.getKey());
             }
         }
+    }
+
+    private void validateExpectedValueField(EquipmentAttributeDefinition definition,
+                                            EquipmentAttributeValueRequest request) {
+        boolean valid = switch (definition.getDataType()) {
+            case TEXT, FILE, REFERENCE -> request.valueText() != null && !request.valueText().isBlank();
+            case NUMBER, RANGE -> request.valueNumber() != null;
+            case DATE -> request.valueDate() != null;
+            case BOOLEAN -> request.valueBoolean() != null;
+            case SELECT -> request.valueOption() != null && !request.valueOption().isBlank();
+            case MULTI_SELECT, JSON -> request.valueJson() != null && !request.valueJson().isBlank();
+        };
+        if (!valid) {
+            throw RestException.badRequest(
+                    "Attribute requires " + expectedValueField(definition.getDataType()) + ": " + definition.getKey()
+            );
+        }
+    }
+
+    private String expectedValueField(EquipmentAttributeDataType dataType) {
+        return switch (dataType) {
+            case TEXT, FILE, REFERENCE -> "valueText";
+            case NUMBER, RANGE -> "valueNumber";
+            case DATE -> "valueDate";
+            case BOOLEAN -> "valueBoolean";
+            case SELECT -> "valueOption";
+            case MULTI_SELECT, JSON -> "valueJson";
+        };
+    }
+
+    private int populatedValueFieldCount(EquipmentAttributeValueRequest request) {
+        int count = 0;
+        if (request.valueText() != null && !request.valueText().isBlank()) count++;
+        if (request.valueNumber() != null) count++;
+        if (request.valueDate() != null) count++;
+        if (request.valueBoolean() != null) count++;
+        if (request.valueOption() != null && !request.valueOption().isBlank()) count++;
+        if (request.valueJson() != null && !request.valueJson().isBlank()) count++;
+        return count;
     }
 
     private void validateOption(EquipmentAttributeDefinition definition, String value) {
