@@ -7,9 +7,12 @@ import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
+import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.ActualCostService;
@@ -38,6 +41,8 @@ class ActualCostPbacScopeTest {
     AuditBuilderService auditBuilderService;
     WorkOrderRepository workOrderRepository;
     RepairRequestRepository repairRequestRepository;
+    ContractorWorkRepository contractorWorkRepository;
+    MaintenanceBudgetRepository maintenanceBudgetRepository;
     BudgetLineRepository budgetLineRepository;
     ScopeAccessService scopeAccessService;
     ActualCostService service;
@@ -48,6 +53,8 @@ class ActualCostPbacScopeTest {
         auditBuilderService = mock(AuditBuilderService.class);
         workOrderRepository = mock(WorkOrderRepository.class);
         repairRequestRepository = mock(RepairRequestRepository.class);
+        contractorWorkRepository = mock(ContractorWorkRepository.class);
+        maintenanceBudgetRepository = mock(MaintenanceBudgetRepository.class);
         budgetLineRepository = mock(BudgetLineRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
         FinanceScopeService financeScopeService = new FinanceScopeService(
@@ -57,7 +64,16 @@ class ActualCostPbacScopeTest {
                 repairRequestRepository,
                 budgetLineRepository
         );
-        service = new ActualCostService(repository, auditBuilderService, financeScopeService);
+        service = new ActualCostService(
+                repository,
+                workOrderRepository,
+                repairRequestRepository,
+                contractorWorkRepository,
+                budgetLineRepository,
+                maintenanceBudgetRepository,
+                auditBuilderService,
+                financeScopeService
+        );
     }
 
     @Test
@@ -97,9 +113,10 @@ class ActualCostPbacScopeTest {
     }
 
     @Test
-    void createWithoutScopeResolvableLinkDeniedForNonAdmin() {
+    void createWithoutBusinessSourceReturns400() {
         assertThatThrownBy(() -> service.create(dto(null, null, null, null)))
-                .isInstanceOf(AccessDeniedException.class);
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("must be linked to at least one source");
 
         verify(repository, never()).save(any(ActualCost.class));
     }
@@ -147,7 +164,7 @@ class ActualCostPbacScopeTest {
         when(scopeAccessService.canAccessDepartment(workOrderDepartmentId)).thenReturn(true);
         when(scopeAccessService.canAccessDepartment(repairDepartmentId)).thenReturn(true);
 
-        assertThatThrownBy(() -> service.review(id, true, UUID.randomUUID(), null))
+        assertThatThrownBy(() -> service.review(id, true, UUID.randomUUID(), "Approved"))
                 .isInstanceOf(AccessDeniedException.class);
     }
 
@@ -218,6 +235,7 @@ class ActualCostPbacScopeTest {
         MaintenanceBudget budget = new MaintenanceBudget();
         budget.setId(UUID.randomUUID());
         budget.setDepartmentId(departmentId);
+        budget.setStatus(BudgetStatus.APPROVED);
         BudgetLine line = new BudgetLine();
         line.setId(id);
         line.setBudget(budget);

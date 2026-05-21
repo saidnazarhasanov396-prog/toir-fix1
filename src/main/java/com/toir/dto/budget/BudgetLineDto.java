@@ -2,7 +2,7 @@ package com.toir.dto.budget;
 
 import com.toir.entity.projects.BudgetLine;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Positive;
 
 import java.util.UUID;
 
@@ -10,7 +10,7 @@ public record BudgetLineDto(
         UUID id,
         @NotNull UUID costCategoryId,
         String description,
-        @PositiveOrZero double plannedAmount,
+        @Positive double plannedAmount,
         double actualAmount
 ) {
     public static BudgetLineDto from(BudgetLine l) {

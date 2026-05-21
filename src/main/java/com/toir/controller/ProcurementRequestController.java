@@ -4,6 +4,7 @@ import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.security.RequiresSensitiveAccess;
+import com.toir.service.ApprovalService;
 import com.toir.service.ProcurementRequestService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 public class ProcurementRequestController {
 
     private final ProcurementRequestService service;
+    private final ApprovalService approvalService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_READ')")
@@ -58,7 +60,20 @@ public class ProcurementRequestController {
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_APPROVE')")
-    public ResponseEntity<ProcurementRequestDto> approve(@PathVariable UUID id) { return ResponseEntity.ok(service.approve(id)); }
+    public ResponseEntity<ProcurementRequestDto> approve(@PathVariable UUID id,
+                                                         @RequestParam(required = false) UUID approverId) {
+        ProcurementRequestDto current = service.validateCanApprove(id);
+        approvalService.createOrReuseApprovalForDocument(
+                "PROCUREMENT_REQUEST",
+                id,
+                approverId,
+                approverId,
+                "PROCUREMENT_APPROVER",
+                "Procurement request approval: " + current.number(),
+                "Approval workflow request for procurement request " + current.number()
+        );
+        return ResponseEntity.ok(service.findById(id));
+    }
 
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_REJECT')")

@@ -4,12 +4,15 @@ import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
+import com.toir.entity.CompletionAct;
 import com.toir.entity.Department;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
+import com.toir.entity.SafetyPermit;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
@@ -18,13 +21,17 @@ import com.toir.enums.DefectStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.SafetyPermitStatus;
+import com.toir.enums.TaskExecutionStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
+import com.toir.repository.CompletionActRepository;
 import com.toir.repository.PprPlanRepository;
 import com.toir.exception.RestException;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.SafetyPermitRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -103,6 +110,12 @@ class WorkOrderServiceTest {
 
     @Mock
     WarehouseEquipmentItemService warehouseEquipmentItemService;
+
+    @Mock
+    SafetyPermitRepository safetyPermitRepository;
+
+    @Mock
+    CompletionActRepository completionActRepository;
 
     @InjectMocks
     WorkOrderService service;
@@ -1298,14 +1311,61 @@ class WorkOrderServiceTest {
     }
 
     @Test
-    void completeFromApprovedShouldFail() {
+    void completeFromApprovedShouldSucceed() {
         UUID workOrderId = UUID.randomUUID();
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
+
+        assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
+        assertThat(result.result()).isEqualTo("done");
+    }
+
+    @Test
+    void completeFromDraftShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
 
         assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Only in-progress work orders can be completed");
+                .hasMessageContaining("Only APPROVED or IN_PROGRESS work orders can be completed");
+    }
+
+    @Test
+    void completeFromPlannedShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.PLANNED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only APPROVED or IN_PROGRESS work orders can be completed");
+    }
+
+    @Test
+    void completeFromClosedShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.CLOSED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only APPROVED or IN_PROGRESS work orders can be completed");
+    }
+
+    @Test
+    void completeFromCancelledShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.CANCELLED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only APPROVED or IN_PROGRESS work orders can be completed");
     }
 
     @Test
@@ -1395,11 +1455,83 @@ class WorkOrderServiceTest {
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
         stubLifecycleDtoLookups(workOrder);
 
         WorkOrderDto result = service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes"));
 
         assertThat(result.status()).isEqualTo(WorkOrderStatus.CLOSED);
+    }
+
+    @Test
+    void closeWithBlankResultShouldFail() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.close(workOrderId, new CloseWorkOrderRequest(" ", "notes")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Result is required to close a work order");
+    }
+
+    @Test
+    void closeMissingWorkOrderShouldRemainNotFound() {
+        UUID workOrderId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes")))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(ex.getMessage()).contains("Work order not found");
+                });
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void closeWithIncompleteTaskShouldFailWithEvidenceMessage() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        workOrder.getTasks().add(workOrderTask(workOrder, "Lockout checklist", TaskExecutionStatus.IN_PROGRESS));
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Cannot close work order; missing evidence")
+                .hasMessageContaining("Incomplete tasks/checklist items: Lockout checklist");
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void closeWithExistingNonClosedSafetyPermitShouldFailWithEvidenceMessage() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        SafetyPermit permit = safetyPermit(workOrderId, SafetyPermitStatus.ISSUED);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(permit));
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Cannot close work order; missing evidence")
+                .hasMessageContaining("Safety permit must be CLOSED");
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void closeWithExistingUnsignedCompletionActShouldFailWithEvidenceMessage() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        CompletionAct act = completionAct(workOrderId, false);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(act));
+
+        assertThatThrownBy(() -> service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Cannot close work order; missing evidence")
+                .hasMessageContaining("Completion act must be signed");
+        verify(repository, never()).save(any(WorkOrder.class));
     }
 
     @Test
@@ -1777,6 +1909,36 @@ class WorkOrderServiceTest {
         item.setActive(true);
         item.setDeleted(false);
         return item;
+    }
+
+    private WorkOrderTask workOrderTask(WorkOrder workOrder, String title, TaskExecutionStatus status) {
+        WorkOrderTask task = new WorkOrderTask();
+        ReflectionTestUtils.setField(task, "id", UUID.randomUUID());
+        task.setWorkOrder(workOrder);
+        task.setTitle(title);
+        task.setStatus(status);
+        return task;
+    }
+
+    private SafetyPermit safetyPermit(UUID workOrderId, SafetyPermitStatus status) {
+        SafetyPermit permit = new SafetyPermit();
+        permit.setId(UUID.randomUUID());
+        permit.setWorkOrderId(workOrderId);
+        permit.setPermitNumber("SP-" + workOrderId.toString().substring(0, 8));
+        permit.setStatus(status);
+        return permit;
+    }
+
+    private CompletionAct completionAct(UUID workOrderId, boolean signed) {
+        CompletionAct act = new CompletionAct();
+        act.setId(UUID.randomUUID());
+        act.setWorkOrderId(workOrderId);
+        act.setActNumber("CA-" + workOrderId.toString().substring(0, 8));
+        if (signed) {
+            act.setSignedById(UUID.randomUUID());
+            act.setSignedAt(java.time.Instant.now());
+        }
+        return act;
     }
 
     private void stubLifecycleDtoLookups(WorkOrder workOrder) {

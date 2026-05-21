@@ -3,6 +3,7 @@ package com.toir.security;
 import com.toir.controller.ProcurementRequestController;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.service.ApprovalService;
 import com.toir.service.ProcurementRequestService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,6 +47,9 @@ class RbacProcurementSecurityTest {
 
     @MockBean
     ProcurementRequestService procurementRequestService;
+
+    @MockBean
+    ApprovalService approvalService;
 
     @TestConfiguration
     static class SecurityBeans {
@@ -137,7 +141,8 @@ class RbacProcurementSecurityTest {
     @WithMockUser(authorities = PermissionConstants.PROCUREMENT_APPROVE)
     void procurementApproveCanApproveRequest() throws Exception {
         UUID requestId = UUID.randomUUID();
-        when(procurementRequestService.approve(requestId)).thenReturn(procurementRequestDto(requestId));
+        when(procurementRequestService.validateCanApprove(requestId)).thenReturn(procurementRequestDto(requestId));
+        when(procurementRequestService.findById(requestId)).thenReturn(procurementRequestDto(requestId));
 
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/approve", requestId))
                 .andExpect(status().isOk());

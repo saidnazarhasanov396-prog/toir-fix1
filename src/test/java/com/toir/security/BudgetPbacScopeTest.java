@@ -151,6 +151,36 @@ class BudgetPbacScopeTest {
         assertThat(existing.getTotalPlanned()).isEqualTo(100);
     }
 
+    @Test
+    void addLineToApprovedBudgetIsBlocked() {
+        UUID budgetId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        MaintenanceBudget existing = budget(budgetId, departmentId, BudgetStatus.APPROVED);
+        when(repository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(existing));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.addLine(
+                budgetId,
+                new BudgetLineDto(null, UUID.randomUUID(), "Line", 100, 0)
+        )).isInstanceOf(RestException.class)
+                .hasMessageContaining("only for DRAFT budgets");
+    }
+
+    @Test
+    void addLineRequiresPositivePlannedAmount() {
+        UUID budgetId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        MaintenanceBudget existing = budget(budgetId, departmentId, BudgetStatus.DRAFT);
+        when(repository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(existing));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.addLine(
+                budgetId,
+                new BudgetLineDto(null, UUID.randomUUID(), "Line", 0, 0)
+        )).isInstanceOf(RestException.class)
+                .hasMessageContaining("must be positive");
+    }
+
     private MaintenanceBudget budget(UUID id, UUID departmentId, BudgetStatus status) {
         MaintenanceBudget budget = new MaintenanceBudget();
         budget.setId(id);

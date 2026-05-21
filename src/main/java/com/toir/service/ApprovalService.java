@@ -5,19 +5,29 @@ import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
+import com.toir.entity.projects.MaintenanceBudget;
+import com.toir.entity.projects.ProcurementRequest;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.BudgetStatus;
+import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.ApprovalRequestRepository;
+import com.toir.repository.maintenance.MaintenanceBudgetRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -25,9 +35,21 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ApprovalService {
 
+    private static final Set<String> INTEGRATED_DOCUMENT_TYPES = Set.of(
+            "WORK_ORDER",
+            "PPR_PLAN",
+            "PROCUREMENT_REQUEST",
+            "MAINTENANCE_BUDGET"
+    );
+
     private final ApprovalRequestRepository requestRepository;
+    private final ProcurementRequestRepository procurementRequestRepository;
+    private final MaintenanceBudgetRepository maintenanceBudgetRepository;
+    private final WorkOrderService workOrderService;
+    private final PprPlanService pprPlanService;
     private final AuditBuilderService auditBuilderService;
     private final ApprovalScopeService approvalScopeService;
+    private final ScopeAccessService scopeAccessService;
 
 
     @Transactional(readOnly = true)
@@ -61,38 +83,61 @@ public class ApprovalService {
     @Transactional
     public ApprovalRequestDto create(CreateApprovalRequest r) {
         approvalScopeService.assertCanCreateApproval(r);
-        ApprovalRequest request = new ApprovalRequest();
-        request.setDocumentType(r.documentType());
-        request.setDocumentId(r.documentId());
-        request.setTitle(r.title());
-        request.setRequesterId(r.requesterId());
-        request.setDescription(r.description());
-        request.setStatus(ApprovalStatus.PENDING);
-        request.setCurrentStep(1);
-
-        int idx = 1;
-        for (CreateApprovalRequest.StepInput input : r.steps()) {
-            ApprovalStep step = new ApprovalStep();
-            step.setRequest(request);
-            step.setStepNumber(idx++);
-            step.setApproverId(input.approverId());
-            step.setApproverRole(input.approverRole());
-            step.setDecision(ApprovalDecision.PENDING);
-            request.getSteps().add(step);
-        }
-        ApprovalRequest saved = requestRepository.save(request);
-
-        auditBuilderService.log(
-                "approval_request",
-                saved.getId().toString(),
-                AuditAction.CREATE,
-                AuditModule.APPROVAL_REQUEST,
-                "Заявка на согласование создана",
-                null,
-                saved
+        return createNewApproval(
+                normalizeDocumentType(r.documentType()),
+                r.documentId(),
+                r.title(),
+                r.requesterId(),
+                r.description(),
+                r.steps()
         );
+    }
 
-        return ApprovalRequestDto.from(saved);
+    @Transactional
+    public ApprovalRequestDto createOrReuseApprovalForDocument(String documentType,
+                                                               UUID documentId,
+                                                               UUID requesterId,
+                                                               UUID approverId,
+                                                               String approverRole,
+                                                               String title,
+                                                               String description) {
+        String normalizedType = normalizeDocumentType(documentType);
+        if (!INTEGRATED_DOCUMENT_TYPES.contains(normalizedType)) {
+            throw RestException.badRequest("Unsupported approval-integrated document type: " + normalizedType);
+        }
+        if (documentId == null) {
+            throw RestException.badRequest("documentId is required");
+        }
+
+        UUID effectiveRequesterId = requesterId != null ? requesterId : scopeAccessService.currentUserIdOrNull();
+        UUID effectiveApproverId = approverId != null ? approverId : effectiveRequesterId;
+        if (effectiveRequesterId == null || effectiveApproverId == null) {
+            throw RestException.badRequest("requesterId/approverId is required to create approval request");
+        }
+        approvalScopeService.assertCanCreateApproval(new CreateApprovalRequest(
+                normalizedType,
+                documentId,
+                StringUtils.hasText(title) ? title : normalizedType + " approval",
+                effectiveRequesterId,
+                description,
+                List.of(new CreateApprovalRequest.StepInput(effectiveApproverId, approverRole))
+        ));
+
+        return requestRepository
+                .findFirstByDocumentTypeAndDocumentIdAndStatusAndIsDeletedFalseOrderByCreatedAtDesc(
+                        normalizedType,
+                        documentId,
+                        ApprovalStatus.PENDING
+                )
+                .map(ApprovalRequestDto::from)
+                .orElseGet(() -> createNewApproval(
+                        normalizedType,
+                        documentId,
+                        StringUtils.hasText(title) ? title : normalizedType + " approval",
+                        effectiveRequesterId,
+                        description,
+                        List.of(new CreateApprovalRequest.StepInput(effectiveApproverId, approverRole))
+                ));
     }
 
     @Transactional
@@ -148,9 +193,11 @@ public class ApprovalService {
         current.setDecidedAt(Instant.now());
         current.setComment(decision.comment());
 
+        boolean isTerminal = false;
         if (outcome == ApprovalDecision.REJECTED) {
             request.setStatus(ApprovalStatus.REJECTED);
             request.setCompletedAt(Instant.now());
+            isTerminal = true;
         } else {
             int next = request.getCurrentStep() + 1;
             boolean hasNext = request.getSteps().stream().anyMatch(s -> s.getStepNumber() == next);
@@ -159,7 +206,12 @@ public class ApprovalService {
             } else {
                 request.setStatus(ApprovalStatus.APPROVED);
                 request.setCompletedAt(Instant.now());
+                isTerminal = true;
             }
+        }
+
+        if (isTerminal) {
+            completeApprovalAndApplyBusinessDecision(request, decision, outcome);
         }
 
         ApprovalRequest saved = requestRepository.save(request);
@@ -176,6 +228,144 @@ public class ApprovalService {
 
 
         return ApprovalRequestDto.from(request);
+    }
+
+    private void completeApprovalAndApplyBusinessDecision(ApprovalRequest request,
+                                                          DecisionRequest decision,
+                                                          ApprovalDecision outcome) {
+        String type = normalizeDocumentType(request.getDocumentType());
+        UUID documentId = request.getDocumentId();
+        switch (type) {
+            case "WORK_ORDER" -> {
+                if (outcome == ApprovalDecision.APPROVED) {
+                    applyWorkOrderApproval(documentId, decision.approverId());
+                }
+            }
+            case "PPR_PLAN" -> {
+                if (outcome == ApprovalDecision.APPROVED) {
+                    applyPprPlanApproval(documentId, decision.approverId());
+                }
+            }
+            case "PROCUREMENT_REQUEST" -> applyProcurementDecision(documentId, outcome, decision.comment());
+            case "MAINTENANCE_BUDGET" -> {
+                if (outcome == ApprovalDecision.APPROVED) {
+                    applyMaintenanceBudgetApproval(documentId);
+                }
+            }
+            default -> {
+                // Not an integrated document type in this phase.
+            }
+        }
+    }
+
+    private void applyWorkOrderApproval(UUID workOrderId, UUID approverId) {
+        workOrderService.approve(workOrderId, approverId);
+    }
+
+    private void applyPprPlanApproval(UUID planId, UUID approverId) {
+        pprPlanService.approve(planId, approverId);
+    }
+
+    private void applyProcurementDecision(UUID requestId, ApprovalDecision outcome, String comment) {
+        ProcurementRequest request = procurementRequestRepository.findByIdAndIsDeletedFalse(requestId)
+                .orElseThrow(() -> RestException.notFound("Procurement request not found: " + requestId));
+        if (outcome == ApprovalDecision.APPROVED) {
+            if (request.getStatus() != ProcurementRequestStatus.SUBMITTED) {
+                throw RestException.badRequest("Procurement request approval can be finalized only from SUBMITTED status");
+            }
+            request.setStatus(ProcurementRequestStatus.APPROVED);
+            request.setApprovedAt(Instant.now());
+            request.setRejectionReason(null);
+            procurementRequestRepository.save(request);
+            return;
+        }
+        if (request.getStatus() == ProcurementRequestStatus.RECEIVED
+                || request.getStatus() == ProcurementRequestStatus.CANCELLED) {
+            throw RestException.badRequest("Cannot reject completed procurement request");
+        }
+        request.setStatus(ProcurementRequestStatus.REJECTED);
+        request.setRejectionReason(StringUtils.hasText(comment) ? comment.trim() : "Rejected by approval workflow");
+        procurementRequestRepository.save(request);
+    }
+
+    private void applyMaintenanceBudgetApproval(UUID budgetId) {
+        MaintenanceBudget budget = maintenanceBudgetRepository.findByIdAndIsDeletedFalse(budgetId)
+                .orElseThrow(() -> RestException.notFound("Budget not found: " + budgetId));
+        if (budget.getStatus() != BudgetStatus.DRAFT) {
+            throw RestException.badRequest("Budget approval request can be finalized only from DRAFT status");
+        }
+        budget.setStatus(BudgetStatus.APPROVED);
+        maintenanceBudgetRepository.save(budget);
+    }
+
+    private ApprovalRequestDto createNewApproval(String normalizedDocumentType,
+                                                 UUID documentId,
+                                                 String title,
+                                                 UUID requesterId,
+                                                 String description,
+                                                 List<CreateApprovalRequest.StepInput> steps) {
+        if (!StringUtils.hasText(normalizedDocumentType)) {
+            throw RestException.badRequest("documentType is required");
+        }
+        if (documentId == null) {
+            throw RestException.badRequest("documentId is required");
+        }
+        if (requesterId == null) {
+            throw RestException.badRequest("requesterId is required");
+        }
+        if (!StringUtils.hasText(title)) {
+            throw RestException.badRequest("title is required");
+        }
+        if (steps == null || steps.isEmpty()) {
+            throw RestException.badRequest("At least one approval step is required");
+        }
+
+        ApprovalRequest request = new ApprovalRequest();
+        request.setDocumentType(normalizedDocumentType);
+        request.setDocumentId(documentId);
+        request.setTitle(title.trim());
+        request.setRequesterId(requesterId);
+        request.setDescription(description);
+        request.setStatus(ApprovalStatus.PENDING);
+        request.setCurrentStep(1);
+
+        int idx = 1;
+        for (CreateApprovalRequest.StepInput input : steps) {
+            if (input.approverId() == null) {
+                throw RestException.badRequest("approverId is required for each step");
+            }
+            ApprovalStep step = new ApprovalStep();
+            step.setRequest(request);
+            step.setStepNumber(idx++);
+            step.setApproverId(input.approverId());
+            step.setApproverRole(input.approverRole());
+            step.setDecision(ApprovalDecision.PENDING);
+            request.getSteps().add(step);
+        }
+
+        ApprovalRequest saved = requestRepository.save(request);
+
+        auditBuilderService.log(
+                "approval_request",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.APPROVAL_REQUEST,
+                "Заявка на согласование создана",
+                null,
+                saved
+        );
+
+        return ApprovalRequestDto.from(saved);
+    }
+
+    private String normalizeDocumentType(String documentType) {
+        if (!StringUtils.hasText(documentType)) {
+            return "";
+        }
+        return documentType.trim()
+                .replace('-', '_')
+                .replace(' ', '_')
+                .toUpperCase(Locale.ROOT);
     }
 
     private ApprovalRequest getOrThrow(UUID id) {

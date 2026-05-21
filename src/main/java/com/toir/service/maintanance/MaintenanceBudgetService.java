@@ -94,12 +94,25 @@ public class MaintenanceBudgetService {
         return MaintenanceBudgetDto.from(save);
     }
 
+    @Transactional(readOnly = true)
+    public MaintenanceBudgetDto validateCanApprove(UUID id) {
+        MaintenanceBudget b = getOrThrow(id);
+        assertCanAccessBudget(b);
+        if (b.getStatus() != BudgetStatus.DRAFT) {
+            throw RestException.badRequest("Only DRAFT budgets can be approved");
+        }
+        return MaintenanceBudgetDto.from(b);
+    }
+
     @Transactional
     public BudgetLineDto addLine(UUID budgetId, BudgetLineDto r) {
         MaintenanceBudget b = getOrThrow(budgetId);
         assertCanAccessBudget(b);
-        if (b.getStatus() == BudgetStatus.LOCKED || b.getStatus() == BudgetStatus.CLOSED) {
-            throw RestException.badRequest("Cannot add lines to locked/closed budget");
+        if (b.getStatus() != BudgetStatus.DRAFT) {
+            throw RestException.badRequest("Budget lines can be added only for DRAFT budgets");
+        }
+        if (r.plannedAmount() <= 0) {
+            throw RestException.badRequest("Budget line planned amount must be positive");
         }
         BudgetLine line = new BudgetLine();
         line.setBudget(b);

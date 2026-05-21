@@ -11,6 +11,7 @@ import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.service.ApprovalService;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
 import org.junit.jupiter.api.BeforeEach;
@@ -77,6 +78,9 @@ class RbacPprSecurityTest {
 
     @MockBean
     ScopeAccessService scopeAccessService;
+
+    @MockBean
+    ApprovalService approvalService;
 
     @BeforeEach
     void setUpPbacBypass() {
@@ -200,7 +204,7 @@ class RbacPprSecurityTest {
     void pprPlanApproveCanApprovePlan() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();
-        when(pprPlanService.approve(planId, approverId)).thenReturn(planDto(planId));
+        when(pprPlanService.findById(planId)).thenReturn(planDto(planId));
 
         mockMvc.perform(post("/api/v1/ppr-plans/{id}/approve", planId)
                         .param("approverId", approverId.toString()))

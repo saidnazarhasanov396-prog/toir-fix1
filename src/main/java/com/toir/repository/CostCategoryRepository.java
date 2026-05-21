@@ -35,6 +35,15 @@ public interface CostCategoryRepository extends JpaRepository<CostCategory, UUID
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query(value = """
+            SELECT *
+            FROM cost_categories
+            WHERE lower(code) = lower(:code)
+              AND is_deleted = false
+            LIMIT 1
+            """, nativeQuery = true)
+    Optional<CostCategory> findFirstByCodeAndIsDeletedFalse(@Param("code") String code);
+
+    @Query(value = """
             SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
             FROM cost_categories
             WHERE code LIKE CONCAT(:prefix, '%')

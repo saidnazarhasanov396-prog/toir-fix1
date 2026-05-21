@@ -1,6 +1,7 @@
 package com.toir.repository.contarctor;
 
 import com.toir.entity.contractors.ContractorContract;
+import com.toir.enums.ContractStatus;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -33,4 +34,17 @@ public interface ContractorContractRepository extends JpaRepository<ContractorCo
 
     @Query(value = "SELECT * FROM contractor_contracts WHERE contractor_id = :contractorId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ContractorContract> findAllByContractorIdAndIsDeletedFalse(@Param("contractorId") UUID contractorId);
+
+    @Query(value = """
+            SELECT *
+            FROM contractor_contracts
+            WHERE contractor_id = :contractorId
+              AND status = cast(:status as varchar)
+              AND is_deleted = false
+            ORDER BY updated_at DESC
+            """, nativeQuery = true)
+    List<ContractorContract> findAllByContractorIdAndStatusAndIsDeletedFalse(
+            @Param("contractorId") UUID contractorId,
+            @Param("status") ContractStatus status
+    );
 }

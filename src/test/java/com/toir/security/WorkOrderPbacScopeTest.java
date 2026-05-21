@@ -11,6 +11,7 @@ import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.service.ApprovalService;
 import com.toir.service.WorkOrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,12 +52,15 @@ class WorkOrderPbacScopeTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    ApprovalService approvalService;
+
     MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new WorkOrderController(service, repository, scopeAccessService)
+                        new WorkOrderController(service, approvalService, repository, scopeAccessService)
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -173,7 +177,7 @@ class WorkOrderPbacScopeTest {
         when(repository.findByIdAndIsDeletedFalse(workOrderId))
                 .thenReturn(Optional.of(workOrder(workOrderId, departmentId)));
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
-        when(service.approve(workOrderId, approverId)).thenReturn(dto(workOrderId, departmentId));
+        when(service.findById(workOrderId)).thenReturn(dto(workOrderId, departmentId));
 
         mockMvc.perform(post("/api/v1/work-orders/{id}/approve", workOrderId)
                         .param("approverId", approverId.toString()))
