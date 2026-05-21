@@ -98,8 +98,11 @@ public class MaintenanceBudgetService {
     public BudgetLineDto addLine(UUID budgetId, BudgetLineDto r) {
         MaintenanceBudget b = getOrThrow(budgetId);
         assertCanAccessBudget(b);
-        if (b.getStatus() == BudgetStatus.LOCKED || b.getStatus() == BudgetStatus.CLOSED) {
-            throw RestException.badRequest("Cannot add lines to locked/closed budget");
+        if (b.getStatus() != BudgetStatus.DRAFT) {
+            throw RestException.badRequest("Budget lines can be added only for DRAFT budgets");
+        }
+        if (r.plannedAmount() <= 0) {
+            throw RestException.badRequest("Budget line planned amount must be positive");
         }
         BudgetLine line = new BudgetLine();
         line.setBudget(b);
