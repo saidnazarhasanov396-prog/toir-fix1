@@ -163,6 +163,28 @@ class EquipmentAttributeControllerContractTest {
     }
 
     @Test
+    void saveValuesPostAcceptsReusableAttributeValuesPayload() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID definitionId = UUID.randomUUID();
+        when(service.replaceValues(eq(equipmentId), any())).thenReturn(List.of(valueDto(equipmentId, definitionId, 75.0)));
+
+        mockMvc.perform(post("/api/v1/equipment/{equipmentId}/attributes", equipmentId)
+                        .contentType("application/json")
+                        .content("""
+                                [
+                                  {
+                                    "key": "motor_power",
+                                    "valueNumber": 75
+                                  }
+                                ]
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$[0].key").value("motor_power"))
+                .andExpect(jsonPath("$[0].valueNumber").value(75.0));
+    }
+
+    @Test
     void replaceValuesValidationErrorReturnsBadRequest() throws Exception {
         UUID equipmentId = UUID.randomUUID();
         when(service.replaceValues(eq(equipmentId), any()))

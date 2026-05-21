@@ -42,8 +42,11 @@ Use these endpoints to read and save actual values for a specific equipment item
 
 ```http
 GET /api/v1/equipment/{equipmentId}/attributes
+POST /api/v1/equipment/{equipmentId}/attributes
 PUT /api/v1/equipment/{equipmentId}/attributes
 ```
+
+`POST` and `PUT` both save submitted attribute values. Use `POST` from forms when adding/saving values after equipment already exists. `PUT` remains supported for existing clients.
 
 ## Attribute Definition Response
 

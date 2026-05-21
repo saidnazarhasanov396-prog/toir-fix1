@@ -77,4 +77,12 @@ public class EquipmentAttributeController {
             @RequestBody List<EquipmentAttributeValueRequest> request) {
         return ResponseEntity.ok(service.replaceValues(equipmentId, request));
     }
+
+    @PostMapping("/equipment/{equipmentId}/attributes")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    public ResponseEntity<List<EquipmentAttributeValueDto>> saveValues(
+            @PathVariable UUID equipmentId,
+            @RequestBody List<EquipmentAttributeValueRequest> request) {
+        return ResponseEntity.ok(service.replaceValues(equipmentId, request));
+    }
 }
