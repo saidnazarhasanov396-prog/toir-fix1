@@ -11,6 +11,7 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.BudgetStatus;
+import com.toir.enums.NotificationSeverity;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
@@ -45,6 +46,7 @@ public class ActualCostService {
     private final MaintenanceBudgetRepository maintenanceBudgetRepository;
     private final AuditBuilderService auditBuilderService;
     private final FinanceScopeService financeScopeService;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
@@ -97,6 +99,15 @@ public class ActualCostService {
                 "Фактическая стоимость создана",
                 null,
                 saved
+        );
+        notificationService.notifyDepartmentByPermission(
+                resolveActualCostDepartment(effectiveWorkOrder, repairRequest, budgetLine),
+                com.toir.security.PermissionConstants.ACTUAL_COST_APPROVE,
+                "Actual cost pending review",
+                "Actual cost " + saved.getId() + " requires finance review.",
+                NotificationSeverity.INFO,
+                "ActualCost",
+                saved.getId().toString()
         );
 
         return ActualCostDto.from(saved);
@@ -232,6 +243,19 @@ public class ActualCostService {
             return null;
         }
         return requireWorkOrder(contractorWork.getWorkOrderId());
+    }
+
+    private UUID resolveActualCostDepartment(WorkOrder workOrder, RepairRequest repairRequest, BudgetLine budgetLine) {
+        if (workOrder != null && workOrder.getDepartmentId() != null) {
+            return workOrder.getDepartmentId();
+        }
+        if (repairRequest != null && repairRequest.getDepartmentId() != null) {
+            return repairRequest.getDepartmentId();
+        }
+        if (budgetLine != null && budgetLine.getBudget() != null) {
+            return budgetLine.getBudget().getDepartmentId();
+        }
+        return null;
     }
 
     private WorkOrder requireWorkOrderIfPresent(UUID workOrderId) {
