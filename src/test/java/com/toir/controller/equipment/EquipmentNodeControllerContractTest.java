@@ -1,9 +1,11 @@
 package com.toir.controller.equipment;
 
 import com.toir.dto.equipmentnode.EquipmentNodeDto;
+import com.toir.dto.equipmentnode.EquipmentNodeLifecycleDto;
 import com.toir.enums.EquipmentNodeType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
+import com.toir.service.equipment.EquipmentNodeLifecycleService;
 import com.toir.service.equipment.EquipmentNodeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +18,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 import java.util.UUID;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -34,11 +37,14 @@ class EquipmentNodeControllerContractTest {
     @Mock
     EquipmentNodeService service;
 
+    @Mock
+    EquipmentNodeLifecycleService lifecycleService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new EquipmentNodeController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new EquipmentNodeController(service, lifecycleService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -131,6 +137,81 @@ class EquipmentNodeControllerContractTest {
                                 """.formatted(parentId)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Circular equipment node hierarchy"));
+    }
+
+    @Test
+    void getNodeLifecycle_returnsExpectedShape() throws Exception {
+        UUID nodeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        EquipmentNodeLifecycleDto response = new EquipmentNodeLifecycleDto(
+                new EquipmentNodeLifecycleDto.NodeSummary(
+                        nodeId,
+                        equipmentId,
+                        null,
+                        "BRG-01",
+                        "Bearing",
+                        EquipmentNodeType.COMPONENT,
+                        "SN-1"
+                ),
+                new EquipmentNodeLifecycleDto.Counts(1, 1, 1),
+                List.of(new EquipmentNodeLifecycleDto.DefectItem(
+                        defectId,
+                        "DEF-1",
+                        "Bearing overheating",
+                        "OPEN",
+                        "HIGH",
+                        Instant.parse("2026-05-23T10:00:00Z"),
+                        Instant.parse("2026-05-23T11:00:00Z")
+                )),
+                List.of(new EquipmentNodeLifecycleDto.WorkOrderItem(
+                        workOrderId,
+                        "WO-1",
+                        "Replace bearing",
+                        "IN_PROGRESS",
+                        "DEFECT",
+                        "REPAIR",
+                        "HIGH",
+                        Instant.parse("2026-05-23T12:00:00Z"),
+                        Instant.parse("2026-05-23T13:00:00Z")
+                )),
+                List.of(new EquipmentNodeLifecycleDto.DocumentItem(
+                        documentId,
+                        "Bearing drawing",
+                        "DRAWING",
+                        "R1",
+                        java.time.LocalDate.of(2026, 5, 23),
+                        null,
+                        Instant.parse("2026-05-23T14:00:00Z"),
+                        Instant.parse("2026-05-23T15:00:00Z")
+                )),
+                List.of(new EquipmentNodeLifecycleDto.TimelineItem(
+                        "WORK_ORDER",
+                        workOrderId,
+                        "Replace bearing",
+                        "IN_PROGRESS",
+                        "DEFECT",
+                        Instant.parse("2026-05-23T13:00:00Z"),
+                        Instant.parse("2026-05-23T12:00:00Z")
+                ))
+        );
+        when(lifecycleService.getLifecycle(nodeId, true, 50)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/equipment-nodes/{nodeId}/lifecycle", nodeId)
+                        .param("includeTimeline", "true")
+                        .param("limit", "50"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.node.id").value(nodeId.toString()))
+                .andExpect(jsonPath("$.node.code").value("BRG-01"))
+                .andExpect(jsonPath("$.counts.defects").value(1))
+                .andExpect(jsonPath("$.defects[0].code").value("DEF-1"))
+                .andExpect(jsonPath("$.workOrders[0].number").value("WO-1"))
+                .andExpect(jsonPath("$.documents[0].title").value("Bearing drawing"))
+                .andExpect(jsonPath("$.timeline[0].type").value("WORK_ORDER"));
+
+        verify(lifecycleService).getLifecycle(nodeId, true, 50);
     }
 
     private EquipmentNodeDto node(UUID id,
