@@ -21,6 +21,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.ApprovalScopeService;
 import com.toir.service.ApprovalService;
 import com.toir.service.FinanceScopeService;
+import com.toir.service.NotificationService;
 import com.toir.service.PprPlanService;
 import com.toir.service.WorkOrderService;
 import com.toir.util.AuditBuilderService;
@@ -35,6 +36,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -50,6 +52,7 @@ class ApprovalPbacScopeTest {
     WorkOrderService workOrderService;
     PprPlanService pprPlanService;
     ScopeAccessService scopeAccessService;
+    NotificationService notificationService;
     ApprovalService service;
 
     @BeforeEach
@@ -62,6 +65,7 @@ class ApprovalPbacScopeTest {
         workOrderService = mock(WorkOrderService.class);
         pprPlanService = mock(PprPlanService.class);
         scopeAccessService = mock(ScopeAccessService.class);
+        notificationService = mock(NotificationService.class);
         service = new ApprovalService(
                 requestRepository,
                 procurementRequestRepository,
@@ -70,7 +74,8 @@ class ApprovalPbacScopeTest {
                 pprPlanService,
                 auditBuilderService,
                 approvalScopeService,
-                scopeAccessService
+                scopeAccessService,
+                notificationService
         );
     }
 
@@ -137,6 +142,31 @@ class ApprovalPbacScopeTest {
     }
 
     @Test
+    void createNotifiesCurrentApproverWithoutChangingApprovalScopeValidation() {
+        UUID documentId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        CreateApprovalRequest request = createRequest(requesterId, approverId, documentId);
+        when(requestRepository.save(any())).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        service.create(request);
+
+        verify(approvalScopeService).assertCanCreateApproval(request);
+        verify(notificationService).notifyUser(
+                eq(approverId),
+                org.mockito.ArgumentMatchers.contains("Approval requested"),
+                org.mockito.ArgumentMatchers.contains("requires your decision"),
+                eq(com.toir.enums.NotificationSeverity.INFO),
+                eq("ApprovalRequest"),
+                org.mockito.ArgumentMatchers.anyString()
+        );
+    }
+
+    @Test
     void currentPendingApproverCanApprove() {
         UUID approvalId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();
@@ -148,6 +178,14 @@ class ApprovalPbacScopeTest {
 
         verify(approvalScopeService).assertCanDecideApproval(approval, approval.getSteps().getFirst());
         assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.APPROVED);
+        verify(notificationService).notifyUser(
+                eq(approval.getRequesterId()),
+                org.mockito.ArgumentMatchers.contains("Approval approved"),
+                org.mockito.ArgumentMatchers.contains("approved"),
+                eq(com.toir.enums.NotificationSeverity.INFO),
+                eq("WorkOrder"),
+                eq(approval.getDocumentId().toString())
+        );
     }
 
     @Test

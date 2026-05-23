@@ -12,6 +12,7 @@ import com.toir.enums.ApprovalStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.BudgetStatus;
+import com.toir.enums.NotificationSeverity;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ProcurementRequestRepository;
@@ -50,6 +51,7 @@ public class ApprovalService {
     private final AuditBuilderService auditBuilderService;
     private final ApprovalScopeService approvalScopeService;
     private final ScopeAccessService scopeAccessService;
+    private final NotificationService notificationService;
 
 
     @Transactional(readOnly = true)
@@ -129,7 +131,10 @@ public class ApprovalService {
                         documentId,
                         ApprovalStatus.PENDING
                 )
-                .map(ApprovalRequestDto::from)
+                .map(existing -> {
+                    notifyCurrentStep(existing);
+                    return ApprovalRequestDto.from(existing);
+                })
                 .orElseGet(() -> createNewApproval(
                         normalizedType,
                         documentId,
@@ -215,6 +220,11 @@ public class ApprovalService {
         }
 
         ApprovalRequest saved = requestRepository.save(request);
+        if (isTerminal) {
+            notifyFinalDecision(saved, outcome);
+        } else {
+            notifyCurrentStep(saved);
+        }
 
         auditBuilderService.log(
                 "approval_request",
@@ -344,6 +354,7 @@ public class ApprovalService {
         }
 
         ApprovalRequest saved = requestRepository.save(request);
+        notifyCurrentStep(saved);
 
         auditBuilderService.log(
                 "approval_request",
@@ -356,6 +367,43 @@ public class ApprovalService {
         );
 
         return ApprovalRequestDto.from(saved);
+    }
+
+    private void notifyCurrentStep(ApprovalRequest request) {
+        request.getSteps().stream()
+                .filter(step -> step.getStepNumber() == request.getCurrentStep())
+                .filter(step -> step.getDecision() == ApprovalDecision.PENDING)
+                .findFirst()
+                .ifPresent(step -> notificationService.notifyUser(
+                        step.getApproverId(),
+                        "Approval requested: " + request.getTitle(),
+                        "Approval request " + request.getTitle() + " requires your decision.",
+                        NotificationSeverity.INFO,
+                        "ApprovalRequest",
+                        request.getId() == null ? null : request.getId().toString()
+                ));
+    }
+
+    private void notifyFinalDecision(ApprovalRequest request, ApprovalDecision outcome) {
+        String decisionText = outcome == ApprovalDecision.APPROVED ? "approved" : "rejected";
+        notificationService.notifyUser(
+                request.getRequesterId(),
+                "Approval " + decisionText + ": " + request.getTitle(),
+                "Approval request " + request.getTitle() + " was " + decisionText + ".",
+                outcome == ApprovalDecision.APPROVED ? NotificationSeverity.INFO : NotificationSeverity.WARNING,
+                notificationEntityType(request.getDocumentType()),
+                request.getDocumentId() == null ? null : request.getDocumentId().toString()
+        );
+    }
+
+    private String notificationEntityType(String documentType) {
+        return switch (normalizeDocumentType(documentType)) {
+            case "WORK_ORDER" -> "WorkOrder";
+            case "PPR_PLAN" -> "PprPlan";
+            case "PROCUREMENT_REQUEST" -> "ProcurementRequest";
+            case "MAINTENANCE_BUDGET" -> "MaintenanceBudget";
+            default -> "ApprovalRequest";
+        };
     }
 
     private String normalizeDocumentType(String documentType) {

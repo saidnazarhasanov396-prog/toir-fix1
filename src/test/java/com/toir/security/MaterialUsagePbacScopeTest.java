@@ -12,6 +12,7 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +40,7 @@ class MaterialUsagePbacScopeTest {
     AuditBuilderService auditBuilderService;
     WarehouseRepository warehouseRepository;
     ScopeAccessService scopeAccessService;
+    EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     RepairMaterialUsageService service;
 
     @BeforeEach
@@ -50,6 +52,7 @@ class MaterialUsagePbacScopeTest {
         auditBuilderService = mock(AuditBuilderService.class);
         warehouseRepository = mock(WarehouseRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
+        equipmentStatusLifecycleService = mock(EquipmentStatusLifecycleService.class);
         service = new RepairMaterialUsageService(
                 repository,
                 stockRepository,
@@ -57,7 +60,8 @@ class MaterialUsagePbacScopeTest {
                 stockMovementRepository,
                 auditBuilderService,
                 warehouseRepository,
-                scopeAccessService
+                scopeAccessService,
+                equipmentStatusLifecycleService
         );
     }
 

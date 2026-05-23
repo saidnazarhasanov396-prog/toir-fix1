@@ -24,6 +24,7 @@ import com.toir.repository.WorkExecutionRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.EquipmentStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.SafetyPermitStatus;
@@ -37,6 +38,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -76,6 +78,7 @@ public class WorkOrderService {
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private final SafetyPermitRepository safetyPermitRepository;
     private final CompletionActRepository completionActRepository;
+    private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.APPROVED, WorkOrderStatus.IN_PROGRESS);
     private static final Set<WorkOrderStatus> TERMINAL_WORK_ORDER_STATUSES =
@@ -145,6 +148,7 @@ public class WorkOrderService {
         if (request.equipmentId() == null) {
             throw RestException.badRequest("Equipment is required to create a work order");
         }
+        equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create work order");
         WorkType effectiveWorkType = request.workType() != null ? request.workType() : WorkType.REPAIR;
         validateReplacementFields(request, effectiveWorkType);
         if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
@@ -221,6 +225,12 @@ public class WorkOrderService {
 
         WorkOrder saved = repository.save(entity);
         syncLinkedOnStart(saved);
+        equipmentStatusLifecycleService.recordWorkOrderTransition(
+                saved.getId(),
+                saved.getEquipmentId(),
+                EquipmentStatus.IN_REPAIR,
+                "Work order started: " + saved.getNumber()
+        );
 
         auditBuilderService.log(
                 "work_order",
@@ -257,6 +267,13 @@ public class WorkOrderService {
 
         WorkOrder saved = repository.save(entity);
         syncLinkedOnComplete(saved);
+        if (!isReplacementWorkOrder(saved)) {
+            equipmentStatusLifecycleService.recordWorkOrderReturn(
+                    saved.getId(),
+                    saved.getEquipmentId(),
+                    "Work order completed: " + saved.getNumber()
+            );
+        }
 
         auditBuilderService.log(
                 "work_order",
@@ -283,6 +300,13 @@ public class WorkOrderService {
 
         WorkOrder saved = repository.save(entity);
         syncLinkedOnClose(saved, request.result());
+        if (!isReplacementWorkOrder(saved)) {
+            equipmentStatusLifecycleService.recordWorkOrderReturn(
+                    saved.getId(),
+                    saved.getEquipmentId(),
+                    "Work order closed: " + saved.getNumber()
+            );
+        }
 
         auditBuilderService.log(
                 "work_order",

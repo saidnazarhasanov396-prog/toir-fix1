@@ -24,6 +24,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +52,7 @@ public class DefectService {
     private final WorkOrderRepository workOrderRepository;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
+    private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_DEFECT_LINK =
             EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
     private final KnowledgeArticleRepository knowledgeRepository;
@@ -130,6 +132,7 @@ public class DefectService {
     @Transactional
     public DefectResponse create(DefectRequest request) {
         assertCanAccessDefectRequest(request);
+        equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create defect");
         Defect saved = saveWithGeneratedCode(request);
 
         auditBuilderService.log(

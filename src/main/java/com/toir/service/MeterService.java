@@ -11,6 +11,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.MeterReadingRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,7 @@ public class MeterService {
     private final MeterReadingRepository readingRepository;
     private final EquipmentRepository equipmentRepository;
     private final AuditBuilderService auditBuilderService;
+    private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listByEquipment(UUID equipmentId) {
@@ -140,6 +142,7 @@ public class MeterService {
         if (!meter.isActive()) {
             throw RestException.conflict("Meter is not active: " + meter.getId());
         }
+        equipmentStatusLifecycleService.assertOperationallyAllowed(meter.getEquipmentId(), "add meter reading");
         double newValue = request.value();
         double previous = meter.getCurrentValue();
         Double delta = null;

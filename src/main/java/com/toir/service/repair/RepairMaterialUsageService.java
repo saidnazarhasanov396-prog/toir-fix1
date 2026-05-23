@@ -17,6 +17,7 @@ import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -43,6 +44,7 @@ public class RepairMaterialUsageService {
     private final AuditBuilderService auditBuilderService;
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
+    private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
 
     @Transactional(readOnly = true)
@@ -60,6 +62,7 @@ public class RepairMaterialUsageService {
         WorkOrder workOrder = workOrderOrThrow(workOrderId);
         assertCanAccessWorkOrder(workOrder);
         assertWorkOrderAllowsMaterialIssue(workOrder);
+        equipmentStatusLifecycleService.assertOperationallyAllowed(workOrder.getEquipmentId(), "add material usage");
         assertCanAccessWarehouseId(r.warehouseId());
         if (r.quantity() <= 0) {
             throw RestException.badRequest("Quantity must be greater than 0");
