@@ -40,24 +40,57 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             """, nativeQuery = true)
     long maxSequenceByCodePrefix(@Param("prefix") String prefix);
 
-    @Query(value = "SELECT * FROM ppr_plans WHERE year = :year AND month = :month AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<PprPlan> findAllByYearAndMonthAndIsDeletedFalse(@Param("year") int year, @Param("month") int month);
+    @Query(value = """
+            SELECT *
+            FROM ppr_plans
+            WHERE is_deleted = false
+              AND start_date <= :date
+              AND end_date >= :date
+            ORDER BY updated_at DESC
+            """, nativeQuery = true)
+    List<PprPlan> findAllActiveOnDate(@Param("date") java.time.LocalDate date);
 
     @Query(value = "SELECT * FROM ppr_plans WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<PprPlan> findAllByDepartmentIdAndIsDeletedFalse(@Param("departmentId") UUID departmentId);
 
-    @Query("""
-            select p
-            from PprPlan p
-            where p.isDeleted = false
-              and (:year is null or p.year = :year)
-              and (:month is null or p.month = :month)
-              and (:departmentId is null or p.departmentId = :departmentId)
-            order by p.year desc, p.month desc, p.updatedAt desc, p.id asc
-            """)
+    @Query(value = """
+            SELECT p.*
+            FROM ppr_plans p
+            WHERE p.is_deleted = false
+              AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
+              AND (
+                    (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
+                    OR EXISTS (
+                        SELECT 1
+                        FROM generate_series(p.start_date, p.end_date, interval '1 day') AS d(value)
+                        WHERE (cast(:year as integer) IS NULL OR extract(year from d.value)::integer = cast(:year as integer))
+                          AND (cast(:month as integer) IS NULL OR extract(month from d.value)::integer = cast(:month as integer))
+                          AND (cast(:day as integer) IS NULL OR extract(day from d.value)::integer = cast(:day as integer))
+                    )
+              )
+            ORDER BY p.start_date DESC, p.updated_at DESC, p.id ASC
+            """,
+            countQuery = """
+            SELECT count(*)
+            FROM ppr_plans p
+            WHERE p.is_deleted = false
+              AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
+              AND (
+                    (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
+                    OR EXISTS (
+                        SELECT 1
+                        FROM generate_series(p.start_date, p.end_date, interval '1 day') AS d(value)
+                        WHERE (cast(:year as integer) IS NULL OR extract(year from d.value)::integer = cast(:year as integer))
+                          AND (cast(:month as integer) IS NULL OR extract(month from d.value)::integer = cast(:month as integer))
+                          AND (cast(:day as integer) IS NULL OR extract(day from d.value)::integer = cast(:day as integer))
+                    )
+              )
+            """,
+            nativeQuery = true)
     Page<PprPlan> searchPlans(
             @Param("year") Integer year,
             @Param("month") Integer month,
+            @Param("day") Integer day,
             @Param("departmentId") UUID departmentId,
             Pageable pageable
     );
@@ -76,13 +109,22 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
                 on t.plan_id = p.id
                and t.is_deleted = false
             where p.is_deleted = false
-              and (cast(:year as integer) is null or p.year = cast(:year as integer))
-              and (cast(:month as integer) is null or p.month = cast(:month as integer))
               and (cast(:departmentId as uuid) is null or p.department_id = cast(:departmentId as uuid))
+              and (
+                    (cast(:year as integer) is null and cast(:month as integer) is null and cast(:day as integer) is null)
+                    or exists (
+                        select 1
+                        from generate_series(p.start_date, p.end_date, interval '1 day') as d(value)
+                        where (cast(:year as integer) is null or extract(year from d.value)::integer = cast(:year as integer))
+                          and (cast(:month as integer) is null or extract(month from d.value)::integer = cast(:month as integer))
+                          and (cast(:day as integer) is null or extract(day from d.value)::integer = cast(:day as integer))
+                    )
+              )
             """, nativeQuery = true)
     PprPlanStatsProjection getStats(
             @Param("year") Integer year,
             @Param("month") Integer month,
+            @Param("day") Integer day,
             @Param("departmentId") UUID departmentId
     );
 }

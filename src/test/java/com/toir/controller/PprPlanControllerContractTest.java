@@ -77,30 +77,31 @@ class PprPlanControllerContractTest {
     }
 
     @Test
-    void listPlansPassesFilterParamsToService() throws Exception {
+    void listPlansPassesDateAndDepartmentFiltersToService() throws Exception {
         UUID departmentId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
         PprPlanDto plan = new PprPlanDto(
                 planId,
                 "PPR-2026-0001",
                 "May plan",
-                2026,
-                5,
                 PlanStatus.DRAFT,
                 departmentId,
                 "Mechanical",
                 UUID.randomUUID(),
                 null,
                 null,
-                List.of()
+                List.of(),
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 5, 31)
         );
         when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
-        when(service.findAll(2026, 5, departmentId, 0, 20))
+        when(service.findAll(2026, 5, 12, departmentId, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/ppr-plans")
                         .param("year", "2026")
                         .param("month", "5")
+                        .param("day", "12")
                         .param("departmentId", departmentId.toString())
                         .param("page", "0")
                         .param("size", "20"))
@@ -108,12 +109,12 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.content[0].id").value(planId.toString()))
                 .andExpect(jsonPath("$.content[0].departmentId").value(departmentId.toString()));
 
-        verify(service).findAll(2026, 5, departmentId, 0, 20);
+        verify(service).findAll(2026, 5, 12, departmentId, 0, 20);
     }
 
     @Test
     void listPlansWithoutFiltersKeepsOldListBehavior() throws Exception {
-        when(service.findAll(null, null, null, 0, 20))
+        when(service.findAll(null, null, null, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/ppr-plans")
@@ -123,7 +124,7 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.totalElements").value(0));
 
-        verify(service).findAll(null, null, null, 0, 20);
+        verify(service).findAll(null, null, null, null, 0, 20);
     }
 
     @Test
@@ -134,18 +135,18 @@ class PprPlanControllerContractTest {
                 planId,
                 "PPR-2026-0099",
                 "June plan",
-                2026,
-                6,
                 PlanStatus.DRAFT,
                 departmentId,
                 "Instrumentation",
                 UUID.randomUUID(),
                 null,
                 null,
-                List.of()
+                List.of(),
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30)
         );
 
-        when(service.findAll(null, null, null, 0, 20))
+        when(service.findAll(null, null, null, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
         when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, departmentId)));
         when(service.findById(planId)).thenReturn(plan);
@@ -171,7 +172,7 @@ class PprPlanControllerContractTest {
     }
 
     @Test
-    void statsPassesFilterParamsToService() throws Exception {
+    void statsPassesDepartmentFilterToService() throws Exception {
         UUID departmentId = UUID.randomUUID();
         PprPlanStatsResponse stats = new PprPlanStatsResponse(
                 6,
@@ -183,11 +184,12 @@ class PprPlanControllerContractTest {
                 5
         );
         when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
-        when(service.getStats(2026, 5, departmentId)).thenReturn(stats);
+        when(service.getStats(2026, 5, 12, departmentId)).thenReturn(stats);
 
         mockMvc.perform(get("/api/v1/ppr-plans/stats")
                         .param("year", "2026")
                         .param("month", "5")
+                        .param("day", "12")
                         .param("departmentId", departmentId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalPlans").value(6))
@@ -198,19 +200,61 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.inProgressTasks").value(4))
                 .andExpect(jsonPath("$.completedTasks").value(5));
 
-        verify(service).getStats(2026, 5, departmentId);
+        verify(service).getStats(2026, 5, 12, departmentId);
     }
 
     @Test
     void statsRouteIsNotSwallowedByIdRoute() throws Exception {
-        when(service.getStats(null, null, null)).thenReturn(new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0));
+        when(service.getStats(null, null, null, null)).thenReturn(new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/v1/ppr-plans/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalPlans").value(0));
 
-        verify(service).getStats(null, null, null);
+        verify(service).getStats(null, null, null, null);
         verify(service, never()).findById(any(UUID.class));
+    }
+
+    @Test
+    void createPlanAcceptsDateRangeWithoutYearMonth() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID createdById = UUID.randomUUID();
+        PprPlanDto plan = new PprPlanDto(
+                planId,
+                "PPR-2026-0001",
+                "Q2 plan",
+                PlanStatus.DRAFT,
+                departmentId,
+                "Mechanical",
+                createdById,
+                null,
+                null,
+                List.of(),
+                LocalDate.of(2026, 4, 1),
+                LocalDate.of(2026, 6, 30)
+        );
+        when(service.create(any())).thenReturn(plan);
+
+        mockMvc.perform(post("/api/v1/ppr-plans")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Q2 plan",
+                                  "fromDate": "2026-04-01",
+                                  "toDate": "2026-06-30",
+                                  "departmentId": "%s",
+                                  "createdById": "%s"
+                                }
+                                """.formatted(departmentId, createdById)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(planId.toString()))
+                .andExpect(jsonPath("$.year").doesNotExist())
+                .andExpect(jsonPath("$.month").doesNotExist())
+                .andExpect(jsonPath("$.fromDate").value("2026-04-01"))
+                .andExpect(jsonPath("$.toDate").value("2026-06-30"));
+
+        verify(service).create(any());
     }
 
     @Test
@@ -264,6 +308,52 @@ class PprPlanControllerContractTest {
     }
 
     @Test
+    void createTaskAllowsMissingEquipment() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.of(2026, 6, 1, 9, 0);
+        String generatedCode = "PPR-TASK-" + Year.now().getValue() + "-0001";
+        PprTaskDto dto = new PprTaskDto(
+                taskId,
+                generatedCode,
+                planId,
+                regulationId,
+                null,
+                "Manual PPR task",
+                start,
+                start.plusHours(2),
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 1),
+                start.plusDays(1),
+                PprTaskStatus.PLANNED,
+                PriorityLevel.MEDIUM,
+                2.0,
+                null,
+                null
+        );
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, UUID.randomUUID())));
+        when(service.addTask(eq(planId), any())).thenReturn(dto);
+
+        mockMvc.perform(post("/api/v1/ppr-plans/{id}/tasks", planId)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "regulationId": "%s",
+                                  "title": "Manual PPR task",
+                                  "scheduledStart": "2026-06-01T09:00:00",
+                                  "scheduledEnd": "2026-06-01T11:00:00",
+                                  "dueDate": "2026-06-02T09:00:00",
+                                  "priority": "MEDIUM",
+                                  "plannedLaborHours": 2.0
+                                }
+                                """.formatted(regulationId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(taskId.toString()))
+                .andExpect(jsonPath("$.equipmentId").doesNotExist());
+    }
+
+    @Test
     void createTaskWithCodeReturnsBadRequest() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID regulationId = UUID.randomUUID();
@@ -297,8 +387,8 @@ class PprPlanControllerContractTest {
         plan.setId(id);
         plan.setCode("PPR-2026-0001");
         plan.setName("May plan");
-        plan.setYear(2026);
-        plan.setMonth(5);
+        plan.setStartDate(LocalDate.of(2026, 5, 1));
+        plan.setEndDate(LocalDate.of(2026, 5, 31));
         plan.setStatus(PlanStatus.DRAFT);
         plan.setDepartmentId(departmentId);
         plan.setCreatedById(UUID.randomUUID());

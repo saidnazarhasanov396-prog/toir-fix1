@@ -31,6 +31,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -183,8 +184,8 @@ class PprGeneratorDynamicConditionTest {
         plan.setId(id);
         plan.setCode("PPR-2026-0001");
         plan.setName("May PPR plan");
-        plan.setYear(2026);
-        plan.setMonth(5);
+        plan.setStartDate(LocalDate.of(2026, 5, 1));
+        plan.setEndDate(LocalDate.of(2026, 5, 31));
         plan.setStatus(PlanStatus.DRAFT);
         plan.setCreatedById(UUID.randomUUID());
         return plan;

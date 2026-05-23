@@ -22,6 +22,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.Year;
@@ -60,10 +61,12 @@ public class PprPlanService {
     }
 
     @Transactional(readOnly = true)
-    public Page<PprPlanDto> findAll(Integer year, Integer month, UUID departmentId, int page, int size) {
+    public Page<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId, int page, int size) {
+        validateDateFilterParts(year, month, day);
         Page<PprPlan> plans = planRepository.searchPlans(
                         year,
                         month,
+                        day,
                         departmentId,
                         PaginationUtils.pageRequest(page, size)
                 );
@@ -72,8 +75,9 @@ public class PprPlanService {
     }
 
     @Transactional(readOnly = true)
-    public PprPlanStatsResponse getStats(Integer year, Integer month, UUID departmentId) {
-        PprPlanStatsProjection stats = planRepository.getStats(year, month, departmentId);
+    public PprPlanStatsResponse getStats(Integer year, Integer month, Integer day, UUID departmentId) {
+        validateDateFilterParts(year, month, day);
+        PprPlanStatsProjection stats = planRepository.getStats(year, month, day, departmentId);
         if (stats == null) {
             return new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0);
         }
@@ -115,11 +119,7 @@ public class PprPlanService {
         if (plan.getStatus() != PlanStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT plans can be edited");
         }
-        plan.setName(request.name());
-        plan.setYear(request.year());
-        plan.setMonth(request.month());
-        plan.setDepartmentId(request.departmentId());
-        plan.setNotes(request.notes());
+        applyPlanMutableFields(plan, request, false);
 
         PprPlan saved = planRepository.save(plan);
         auditBuilderService.log(
@@ -493,7 +493,7 @@ public class PprPlanService {
 
             PprPlan plan = new PprPlan();
             plan.setCode(code);
-            applyPlanMutableFields(plan, request);
+            applyPlanMutableFields(plan, request, true);
 
             try {
                 return planRepository.save(plan);
@@ -508,13 +508,45 @@ public class PprPlanService {
         throw RestException.conflict("Could not generate unique PPR plan code");
     }
 
-    private void applyPlanMutableFields(PprPlan plan, PprPlanRequest request) {
+    private void applyPlanMutableFields(PprPlan plan, PprPlanRequest request, boolean includeCreatedBy) {
+        LocalDate fromDate = resolvePlanStartDate(request);
+        LocalDate toDate = resolvePlanEndDate(request);
+        validatePlanDateRange(fromDate, toDate);
+
         plan.setName(request.name());
-        plan.setYear(request.year());
-        plan.setMonth(request.month());
+        plan.setStartDate(fromDate);
+        plan.setEndDate(toDate);
         plan.setDepartmentId(request.departmentId());
-        plan.setCreatedById(request.createdById());
+        if (includeCreatedBy) {
+            plan.setCreatedById(request.createdById());
+        }
         plan.setNotes(request.notes());
+    }
+
+    private LocalDate resolvePlanStartDate(PprPlanRequest request) {
+        return request.fromDate();
+    }
+
+    private LocalDate resolvePlanEndDate(PprPlanRequest request) {
+        return request.toDate();
+    }
+
+    private void validatePlanDateRange(LocalDate fromDate, LocalDate toDate) {
+        if (toDate.isBefore(fromDate)) {
+            throw RestException.badRequest("PPR plan toDate must not be before fromDate");
+        }
+    }
+
+    private void validateDateFilterParts(Integer year, Integer month, Integer day) {
+        if (year != null && year < 1) {
+            throw RestException.badRequest("PPR plan year filter must be positive");
+        }
+        if (month != null && (month < 1 || month > 12)) {
+            throw RestException.badRequest("PPR plan month filter must be between 1 and 12");
+        }
+        if (day != null && (day < 1 || day > 31)) {
+            throw RestException.badRequest("PPR plan day filter must be between 1 and 31");
+        }
     }
 
     private boolean isPlanCodeConflict(DataIntegrityViolationException ex) {

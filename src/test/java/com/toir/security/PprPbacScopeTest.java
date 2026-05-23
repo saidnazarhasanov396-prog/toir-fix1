@@ -88,16 +88,17 @@ class PprPbacScopeTest {
         UUID currentDepartmentId = UUID.randomUUID();
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
         when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(currentDepartmentId);
-        when(service.findAll(2026, 5, currentDepartmentId, 0, 20))
+        when(service.findAll(2026, 5, 12, currentDepartmentId, 0, 20))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         mockMvc.perform(get("/api/v1/ppr-plans")
                         .param("year", "2026")
                         .param("month", "5")
+                        .param("day", "12")
                         .param("departmentId", requestedDepartmentId.toString()))
                 .andExpect(status().isOk());
 
-        verify(service).findAll(2026, 5, currentDepartmentId, 0, 20);
+        verify(service).findAll(2026, 5, 12, currentDepartmentId, 0, 20);
     }
 
     @Test
@@ -109,19 +110,19 @@ class PprPbacScopeTest {
         mockMvc.perform(get("/api/v1/ppr-plans/stats"))
                 .andExpect(status().isForbidden());
 
-        verify(service, never()).getStats(any(), any(), any());
+        verify(service, never()).getStats(any(), any(), any(), any());
     }
 
     @Test
     void adminCanRequestGlobalList() throws Exception {
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(service.findAll(null, null, null, 0, 20)).thenReturn(Page.empty(PageRequest.of(0, 20)));
+        when(service.findAll(null, null, null, null, 0, 20)).thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         mockMvc.perform(get("/api/v1/ppr-plans"))
                 .andExpect(status().isOk());
 
-        verify(service).findAll(null, null, null, 0, 20);
+        verify(service).findAll(null, null, null, null, 0, 20);
     }
 
     @Test
@@ -291,8 +292,8 @@ class PprPbacScopeTest {
         plan.setId(id);
         plan.setCode("PPR-2026-0001");
         plan.setName("May PPR");
-        plan.setYear(2026);
-        plan.setMonth(5);
+        plan.setStartDate(LocalDate.of(2026, 5, 1));
+        plan.setEndDate(LocalDate.of(2026, 5, 31));
         plan.setStatus(PlanStatus.DRAFT);
         plan.setDepartmentId(departmentId);
         plan.setCreatedById(UUID.randomUUID());
@@ -321,15 +322,15 @@ class PprPbacScopeTest {
                 id,
                 "PPR-2026-0001",
                 "May PPR",
-                2026,
-                5,
                 PlanStatus.DRAFT,
                 departmentId,
                 "Maintenance",
                 UUID.randomUUID(),
                 null,
                 null,
-                List.of()
+                List.of(),
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 5, 31)
         );
     }
 
@@ -359,10 +360,10 @@ class PprPbacScopeTest {
         return """
                 {
                   "name": "May PPR",
-                  "year": 2026,
-                  "month": 5,
                   "departmentId": "%s",
-                  "createdById": "%s"
+                  "createdById": "%s",
+                  "fromDate": "2026-05-01",
+                  "toDate": "2026-05-31"
                 }
                 """.formatted(departmentId, UUID.randomUUID());
     }

@@ -58,9 +58,16 @@ public class PprGeneratorService {
             throw RestException.badRequest("PPR tasks can be generated only for DRAFT or GENERATED plans");
         }
 
-        YearMonth planMonth = YearMonth.of(plan.getYear(), plan.getMonth());
-        LocalDate monthStart = planMonth.atDay(1);
-        LocalDate monthEnd = planMonth.atEndOfMonth();
+        LocalDate planStart = plan.getStartDate() != null
+                ? plan.getStartDate()
+                : null;
+        LocalDate planEnd = plan.getEndDate() != null
+                ? plan.getEndDate()
+                : null;
+        if (planStart == null || planEnd == null) {
+            throw RestException.badRequest("PPR plan date range is required before generating tasks");
+        }
+        YearMonth planMonth = YearMonth.from(planStart);
 
         List<MaintenanceRegulation> regulations = regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(MaintenanceRegulation::isActive)
@@ -107,7 +114,7 @@ public class PprGeneratorService {
 
             int seq = 1;
             for (Equipment eq : matching) {
-                String code = String.format("PT-%s-%02d-%s-%d", reg.getCode(), plan.getMonth(), eq.getCode(), seq++);
+                String code = String.format("PT-%s-%02d-%s-%d", reg.getCode(), planMonth.getMonthValue(), eq.getCode(), seq++);
                 if (existingCodes.contains(code)) {
                     skipped++;
                     continue;
@@ -119,10 +126,10 @@ public class PprGeneratorService {
                 task.setRegulationId(reg.getId());
                 task.setEquipmentId(eq.getId());
                 task.setTitle(reg.getName() + " — " + eq.getCode());
-                task.setScheduledStart(monthStart.atTime(LocalTime.of(9, 0)));
-                task.setScheduledEnd(monthStart.plusDays(Math.max(1, (int) Math.ceil(reg.getNormativeLaborHours() / 8)))
+                task.setScheduledStart(planStart.atTime(LocalTime.of(9, 0)));
+                task.setScheduledEnd(planStart.plusDays(Math.max(1, (int) Math.ceil(reg.getNormativeLaborHours() / 8)))
                         .atTime(LocalTime.of(18, 0)));
-                task.setDueDate(monthEnd.atTime(LocalTime.of(18, 0)));
+                task.setDueDate(planEnd.atTime(LocalTime.of(18, 0)));
                 task.setPlannedLaborHours(reg.getNormativeLaborHours());
                 task.setPriority(PriorityLevel.MEDIUM);
                 task.setStatus(PprTaskStatus.PLANNED);

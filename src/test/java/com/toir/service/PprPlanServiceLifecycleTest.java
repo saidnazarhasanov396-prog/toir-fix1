@@ -20,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Year;
 import java.util.ArrayList;
@@ -55,6 +56,56 @@ class PprPlanServiceLifecycleTest {
     PprPlanService service;
 
     @Test
+    void createPlanWithDateRangeDerivesLegacyYearMonth() {
+        UUID createdById = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        String codePrefix = "PPR-" + Year.now().getValue() + "-";
+        String expectedCode = "PPR-" + Year.now().getValue() + "-0001";
+        when(planRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(planRepository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
+        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> {
+            PprPlan plan = invocation.getArgument(0);
+            plan.setId(UUID.randomUUID());
+            return plan;
+        });
+
+        var result = service.create(new com.toir.dto.pprplanning.PprPlanRequest(
+                "Q2 plan",
+                departmentId,
+                createdById,
+                "quarterly",
+                LocalDate.of(2026, 4, 1),
+                LocalDate.of(2026, 6, 30)
+        ));
+
+        assertThat(result.fromDate()).isEqualTo(LocalDate.of(2026, 4, 1));
+        assertThat(result.toDate()).isEqualTo(LocalDate.of(2026, 6, 30));
+    }
+
+    @Test
+    void updatePlanRejectsDateRangeWhenToDateIsBeforeFromDate() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId, PlanStatus.DRAFT);
+        plan.setCreatedById(UUID.randomUUID());
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+
+        assertThatThrownBy(() -> service.update(planId, new com.toir.dto.pprplanning.PprPlanRequest(
+                "Invalid range",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 6, 30),
+                LocalDate.of(2026, 4, 1)
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("PPR plan toDate must not be before fromDate");
+                });
+
+        verify(planRepository, never()).save(any(PprPlan.class));
+    }
+
+    @Test
     void addTaskSucceedsForDraftAndGeneratedPlans() {
         for (PlanStatus status : new PlanStatus[]{PlanStatus.DRAFT, PlanStatus.GENERATED}) {
             UUID planId = UUID.randomUUID();
@@ -75,6 +126,28 @@ class PprPlanServiceLifecycleTest {
 
             assertThat(created.status()).isEqualTo(PprTaskStatus.PLANNED);
         }
+    }
+
+    @Test
+    void addTaskAcceptsMissingEquipment() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId, PlanStatus.DRAFT);
+        String codePrefix = "PPR-TASK-" + Year.now().getValue() + "-";
+        String expectedCode = "PPR-TASK-" + Year.now().getValue() + "-0001";
+
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(taskRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(taskRepository.existsByCode(expectedCode)).thenReturn(false);
+        when(taskRepository.save(any(PprTask.class))).thenAnswer(invocation -> {
+            PprTask task = invocation.getArgument(0);
+            task.setId(UUID.randomUUID());
+            return task;
+        });
+
+        PprTaskDto created = service.addTask(planId, taskRequest(null));
+
+        assertThat(created.equipmentId()).isNull();
+        assertThat(created.status()).isEqualTo(PprTaskStatus.PLANNED);
     }
 
     @Test
@@ -216,11 +289,15 @@ class PprPlanServiceLifecycleTest {
     }
 
     private PprTaskRequest taskRequest() {
+        return taskRequest(UUID.randomUUID());
+    }
+
+    private PprTaskRequest taskRequest(UUID equipmentId) {
         LocalDateTime start = LocalDateTime.of(2026, 6, 1, 9, 0);
         return new PprTaskRequest(
                 null,
                 UUID.randomUUID(),
-                UUID.randomUUID(),
+                equipmentId,
                 "Manual PPR task",
                 null,
                 null,

@@ -7,6 +7,7 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
+import com.toir.entity.equipment.EquipmentAttributeOptionItem;
 import com.toir.entity.equipment.EquipmentAttributeOptionSource;
 import com.toir.entity.equipment.EquipmentAttributeRequiredCriticality;
 import com.toir.entity.equipment.EquipmentAttributeValue;
@@ -91,13 +92,17 @@ class EquipmentAttributeServiceTest {
         source.setName("Seal Types");
         source.setDescription("Pump seal options");
         when(optionSourceRepository.findAllBySearch("seal")).thenReturn(List.of(source));
+        when(optionItemRepository.findAllBySourceIdInAndIsDeletedFalse(List.of(sourceId)))
+                .thenReturn(List.of(optionItem(sourceId, "mechanical"), optionItem(sourceId, "packing")));
 
         var result = service.findOptionSources(" seal ");
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().id()).isEqualTo(sourceId);
         assertThat(result.getFirst().code()).isEqualTo("seal_types");
+        assertThat(result.getFirst().optionCounts()).isEqualTo(2);
         verify(optionSourceRepository).findAllBySearch("seal");
+        verify(optionItemRepository).findAllBySourceIdInAndIsDeletedFalse(List.of(sourceId));
     }
 
     @Test
@@ -859,6 +864,17 @@ class EquipmentAttributeServiceTest {
 
     private EquipmentAttributeOptionDto option(String id, String label) {
         return new EquipmentAttributeOptionDto(id, label, null, null, null, true);
+    }
+
+    private EquipmentAttributeOptionItem optionItem(UUID sourceId, String optionId) {
+        EquipmentAttributeOptionItem item = new EquipmentAttributeOptionItem();
+        item.setId(UUID.randomUUID());
+        item.setOptionSourceId(sourceId);
+        item.setOptionId(optionId);
+        item.setLabel(optionId);
+        item.setSortOrder(0);
+        item.setActive(true);
+        return item;
     }
 
     private EquipmentAttributeValue value(UUID equipmentId, UUID definitionId) {

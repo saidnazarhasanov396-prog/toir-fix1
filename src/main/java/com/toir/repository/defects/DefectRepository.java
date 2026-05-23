@@ -74,6 +74,9 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defects WHERE equipment_node_id = cast(:equipmentNodeId as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByEquipmentNodeIdAndIsDeletedFalse(@Param("equipmentNodeId") UUID equipmentNodeId);
 
+    @Query(value = "SELECT * FROM defects WHERE equipment_node_id = cast(:equipmentNodeId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<Defect> findAllByEquipmentNodeIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("equipmentNodeId") UUID equipmentNodeId);
+
     boolean existsByCode(String code);
 
     @Query(value = """
