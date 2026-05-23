@@ -2,6 +2,7 @@ package com.toir.dto.equipmentattribute;
 
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
 import com.toir.enums.EquipmentAttributeDataType;
+import com.toir.dto.uom.UnitOfMeasurementDto;
 
 import java.util.List;
 import java.util.UUID;
@@ -14,7 +15,7 @@ public record EquipmentAttributeDefinitionDto(
         String labelRu,
         String labelUz,
         EquipmentAttributeDataType dataType,
-        String unit,
+        UnitOfMeasurementDto unit,
         boolean required,
         Double minValue,
         Double maxValue,
@@ -32,7 +33,7 @@ public record EquipmentAttributeDefinitionDto(
             String labelRu,
             String labelUz,
             EquipmentAttributeDataType dataType,
-            String unit,
+            UnitOfMeasurementDto unit,
             boolean required,
             Double minValue,
             Double maxValue,
@@ -46,10 +47,16 @@ public record EquipmentAttributeDefinitionDto(
     }
 
     public static EquipmentAttributeDefinitionDto from(EquipmentAttributeDefinition definition) {
-        return from(definition, List.of());
+        return from(definition, null, List.of());
     }
 
     public static EquipmentAttributeDefinitionDto from(EquipmentAttributeDefinition definition,
+                                                       List<UUID> requiredForCriticalityClassIds) {
+        return from(definition, null, requiredForCriticalityClassIds);
+    }
+
+    public static EquipmentAttributeDefinitionDto from(EquipmentAttributeDefinition definition,
+                                                       UnitOfMeasurementDto unit,
                                                        List<UUID> requiredForCriticalityClassIds) {
         return new EquipmentAttributeDefinitionDto(
                 definition.getId(),
@@ -59,7 +66,7 @@ public record EquipmentAttributeDefinitionDto(
                 definition.getLabelRu(),
                 definition.getLabelUz(),
                 definition.getDataType(),
-                definition.getUnit(),
+                unit,
                 definition.isRequired(),
                 definition.getMinValue(),
                 definition.getMaxValue(),

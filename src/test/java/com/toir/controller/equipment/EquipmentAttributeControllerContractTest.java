@@ -4,6 +4,7 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeOptionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueHistoryDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
+import com.toir.dto.uom.UnitOfMeasurementDto;
 import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentAttributeValueHistorySource;
 import com.toir.exception.GlobalExceptionHandler;
@@ -221,7 +222,7 @@ class EquipmentAttributeControllerContractTest {
                 null,
                 null,
                 EquipmentAttributeDataType.NUMBER,
-                "mm/s",
+                new UnitOfMeasurementDto(UUID.randomUUID(), "UOM-2026-0002", "mm/s", "Millimeters per second", null),
                 false,
                 null,
                 null,
@@ -267,7 +268,7 @@ class EquipmentAttributeControllerContractTest {
                 null,
                 null,
                 EquipmentAttributeDataType.NUMBER,
-                "mm/s",
+                new UnitOfMeasurementDto(UUID.randomUUID(), "UOM-2026-0002", "mm/s", "Millimeters per second", null),
                 false,
                 null,
                 null,
@@ -296,7 +297,7 @@ class EquipmentAttributeControllerContractTest {
                 null,
                 null,
                 EquipmentAttributeDataType.NUMBER,
-                "mm/s",
+                new UnitOfMeasurementDto(UUID.randomUUID(), "UOM-2026-0002", "mm/s", "Millimeters per second", null),
                 false,
                 null,
                 null,
