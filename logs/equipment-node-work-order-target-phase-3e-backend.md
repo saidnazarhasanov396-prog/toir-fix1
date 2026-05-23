@@ -21,7 +21,7 @@
 - `logs/equipment-node-work-order-target-phase-3e-frontend-impact.md`
 
 ## Migration Added
-- `src/main/resources/db/migration/V20260523_6__work_orders_equipment_node_target.sql`
+- `src/main/resources/db/migration/V20260523_7__work_orders_equipment_node_target.sql`
   - Adds nullable `work_orders.equipment_node_id`.
   - Adds partial index `idx_work_orders_equipment_node_id`.
   - Adds FK `fk_work_orders_equipment_node` to `equipment_nodes(id)`.
