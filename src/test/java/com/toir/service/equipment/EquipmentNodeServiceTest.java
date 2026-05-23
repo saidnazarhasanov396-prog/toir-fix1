@@ -4,6 +4,9 @@ import com.toir.dto.equipmentnode.EquipmentNodeDto;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.enums.EquipmentNodeType;
 import com.toir.exception.RestException;
+import com.toir.repository.TechnicalDocumentRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -31,6 +34,15 @@ class EquipmentNodeServiceTest {
 
     @Mock
     EquipmentNodeRepository repository;
+
+    @Mock
+    DefectRepository defectRepository;
+
+    @Mock
+    TechnicalDocumentRepository technicalDocumentRepository;
+
+    @Mock
+    WorkOrderRepository workOrderRepository;
 
     @Mock
     AuditBuilderService auditBuilderService;
@@ -121,6 +133,52 @@ class EquipmentNodeServiceTest {
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
                     assertThat(ex.getMessage()).contains("children");
+                });
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void deleteNode_withReferencedDefect_returnsConflict() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID nodeId = UUID.randomUUID();
+        when(repository.findAllByParentIdAndIsDeletedFalse(nodeId)).thenReturn(List.of());
+        when(defectRepository.existsByEquipmentNodeIdAndIsDeletedFalse(nodeId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.delete(nodeId))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).contains("referenced by active defects");
+                });
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void deleteNode_withReferencedTechnicalDocument_returnsConflict() {
+        UUID nodeId = UUID.randomUUID();
+        when(repository.findAllByParentIdAndIsDeletedFalse(nodeId)).thenReturn(List.of());
+        when(defectRepository.existsByEquipmentNodeIdAndIsDeletedFalse(nodeId)).thenReturn(false);
+        when(technicalDocumentRepository.existsByEquipmentNodeIdAndIsDeletedFalse(nodeId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.delete(nodeId))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).contains("technical documents");
+                });
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void deleteNode_withReferencedWorkOrder_returnsConflict() {
+        UUID nodeId = UUID.randomUUID();
+        when(repository.findAllByParentIdAndIsDeletedFalse(nodeId)).thenReturn(List.of());
+        when(defectRepository.existsByEquipmentNodeIdAndIsDeletedFalse(nodeId)).thenReturn(false);
+        when(technicalDocumentRepository.existsByEquipmentNodeIdAndIsDeletedFalse(nodeId)).thenReturn(false);
+        when(workOrderRepository.existsByEquipmentNodeIdAndIsDeletedFalse(nodeId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.delete(nodeId))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).contains("work orders");
                 });
         verify(repository, never()).save(any());
     }

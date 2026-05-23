@@ -5,6 +5,9 @@ import com.toir.entity.equipment.EquipmentNode;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
+import com.toir.repository.TechnicalDocumentRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +25,9 @@ import java.util.UUID;
 public class EquipmentNodeService {
 
     private final EquipmentNodeRepository repository;
+    private final DefectRepository defectRepository;
+    private final TechnicalDocumentRepository technicalDocumentRepository;
+    private final WorkOrderRepository workOrderRepository;
     private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
@@ -161,7 +167,16 @@ public class EquipmentNodeService {
         if (!repository.findAllByParentIdAndIsDeletedFalse(nodeId).isEmpty()) {
             throw RestException.conflict("Node has children");
         }
-        // Future operational references should be checked here: defects, documents, repair history, and work orders.
+        if (defectRepository.existsByEquipmentNodeIdAndIsDeletedFalse(nodeId)) {
+            throw RestException.conflict("Equipment node is referenced by active defects");
+        }
+        if (technicalDocumentRepository.existsByEquipmentNodeIdAndIsDeletedFalse(nodeId)) {
+            throw RestException.conflict("Equipment node is referenced by technical documents");
+        }
+        if (workOrderRepository.existsByEquipmentNodeIdAndIsDeletedFalse(nodeId)) {
+            throw RestException.conflict("Equipment node is referenced by work orders");
+        }
+        // Future operational references should be checked here: repair history.
     }
 
     private String requireText(String value, String fieldName) {

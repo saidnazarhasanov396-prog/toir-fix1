@@ -31,6 +31,13 @@ public class TechnicalDocumentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(equipmentId, r));
     }
 
+    @GetMapping("/equipment-nodes/{nodeId}/documents")
+    public ResponseEntity<Page<TechnicalDocumentDto>> listByNode(@PathVariable UUID nodeId,
+                                                                 @RequestParam(defaultValue = "0") int page,
+                                                                 @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByEquipmentNode(nodeId), page, size));
+    }
+
     @DeleteMapping("/technical-documents/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public ResponseEntity<Void> delete(@PathVariable UUID id) {

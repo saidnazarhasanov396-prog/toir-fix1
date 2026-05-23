@@ -10,6 +10,7 @@ import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.AuditAction;
@@ -20,6 +21,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.KnowledgeArticleRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
@@ -48,6 +50,7 @@ public class DefectService {
 
     private final DefectRepository repository;
     private final EquipmentRepository equipmentRepository;
+    private final EquipmentNodeRepository equipmentNodeRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final WorkOrderRepository workOrderRepository;
     private final AuditBuilderService auditBuilderService;
@@ -220,6 +223,8 @@ public class DefectService {
         entity.setEquipmentId(request.equipmentId());
         validateRepairRequestLink(request.repairRequestId(), request.equipmentId());
         entity.setRepairRequestId(request.repairRequestId());
+        validateEquipmentNodeLink(request.equipmentNodeId(), request.equipmentId());
+        entity.setEquipmentNodeId(request.equipmentNodeId());
         entity.setCategory(request.category());
         entity.setSeverity(request.severity());
         entity.setFailureReason(request.failureReason());
@@ -289,6 +294,17 @@ public class DefectService {
         }
     }
 
+    private void validateEquipmentNodeLink(UUID equipmentNodeId, UUID equipmentId) {
+        if (equipmentNodeId == null) {
+            return;
+        }
+        EquipmentNode node = equipmentNodeRepository.findByIdAndIsDeletedFalse(equipmentNodeId)
+                .orElseThrow(() -> RestException.notFound("Equipment node not found: " + equipmentNodeId));
+        if (!Objects.equals(node.getEquipmentId(), equipmentId)) {
+            throw RestException.badRequest("Equipment node belongs to a different equipment");
+        }
+    }
+
     private Page<DefectResponse> toResponsePage(Page<Defect> defectPage) {
         if (defectPage.isEmpty()) {
             return new PageImpl<>(List.of(), defectPage.getPageable(), defectPage.getTotalElements());
@@ -311,6 +327,18 @@ public class DefectService {
                 : equipmentRepository.findAllByIdInAndIsDeletedFalse(equipmentIds)
                 .stream()
                 .collect(Collectors.toMap(Equipment::getId, Equipment::getName));
+
+        List<UUID> equipmentNodeIds = defects.stream()
+                .map(Defect::getEquipmentNodeId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        Map<UUID, EquipmentNode> equipmentNodeById = equipmentNodeIds.isEmpty()
+                ? Map.of()
+                : equipmentNodeRepository.findAllByIdInAndIsDeletedFalse(equipmentNodeIds)
+                .stream()
+                .collect(Collectors.toMap(EquipmentNode::getId, Function.identity()));
 
         List<UUID> repairRequestIds = defects.stream()
                 .map(Defect::getRepairRequestId)
@@ -344,6 +372,7 @@ public class DefectService {
                 .map(defect -> toResponse(
                         defect,
                         equipmentNameById,
+                        equipmentNodeById,
                         repairRequestById,
                         workOrdersByDefectId,
                         defectIdsWithLesson))
@@ -469,6 +498,7 @@ public class DefectService {
 
     private DefectResponse toResponse(Defect defect,
                                       Map<UUID, String> equipmentNameById,
+                                      Map<UUID, EquipmentNode> equipmentNodeById,
                                       Map<UUID, RepairRequest> repairRequestById,
                                       Map<UUID, List<WorkOrder>> workOrdersByDefectId,
                                       Set<UUID> defectIdsWithLesson) {
@@ -476,10 +506,14 @@ public class DefectService {
 
         RepairRequestBriefDto repairRequest = getBriefDto(dto,repairRequestById);
         List<WorkOrderBriefDto> linkedWorkOrders = getLinkedWorkOrderBrief(dto,workOrdersByDefectId);
+        EquipmentNode equipmentNode = dto.equipmentNodeId() == null ? null : equipmentNodeById.get(dto.equipmentNodeId());
 
         return DefectResponse.from(
                 dto,
                 equipmentNameById.get(dto.equipmentId()),
+                equipmentNode == null ? null : equipmentNode.getCode(),
+                equipmentNode == null ? null : equipmentNode.getName(),
+                equipmentNode == null ? null : equipmentNode.getNodeType(),
                 repairRequest,
                 linkedWorkOrders,
                 defectIdsWithLesson.contains(dto.id())

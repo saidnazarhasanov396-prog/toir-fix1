@@ -6,6 +6,7 @@ import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.RepairRequestBriefDto;
+import com.toir.enums.EquipmentNodeType;
 
 import java.time.Instant;
 import java.util.List;
@@ -16,6 +17,10 @@ public record WorkOrderDto(
         String number,
         String title,
         UUID equipmentId,
+        UUID equipmentNodeId,
+        String equipmentNodeCode,
+        String equipmentNodeName,
+        EquipmentNodeType equipmentNodeType,
         UUID departmentId,
         String equipmentName,
         String departmentName,
@@ -45,6 +50,44 @@ public record WorkOrderDto(
         int operationsCount,
         int materialsCount
 ) {
+    public WorkOrderDto(UUID id,
+                        String number,
+                        String title,
+                        UUID equipmentId,
+                        UUID departmentId,
+                        String equipmentName,
+                        String departmentName,
+                        UUID repairRequestId,
+                        UUID defectId,
+                        UUID pprTaskId,
+                        UUID contractorId,
+                        WorkOrderStatus status,
+                        WorkOrderType type,
+                        WorkType workType,
+                        PriorityLevel priority,
+                        Instant startPlannedAt,
+                        Instant endPlannedAt,
+                        Instant startedAt,
+                        Instant completedAt,
+                        String summary,
+                        String result,
+                        String closureNotes,
+                        UUID createdById,
+                        UUID approvedById,
+                        UUID warehouseId,
+                        UUID replacementEquipmentId,
+                        String replacementEquipmentName,
+                        List<WorkOrderTaskDto> tasks,
+                        RepairRequestBriefDto repairRequest,
+                        DefectBriefDto defect,
+                        int operationsCount,
+                        int materialsCount) {
+        this(id, number, title, equipmentId, null, null, null, null, departmentId, equipmentName, departmentName,
+                repairRequestId, defectId, pprTaskId, contractorId, status, type, workType, priority,
+                startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
+                createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
+                tasks, repairRequest, defect, operationsCount, materialsCount);
+    }
 //    public static WorkOrderDto from(WorkOrder w) {
 //        return new WorkOrderDto(
 //                w.getId(), w.getNumber(), w.getTitle(), w.getEquipmentId(), w.getDepartmentId(),

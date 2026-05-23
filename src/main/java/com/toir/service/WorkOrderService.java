@@ -5,6 +5,7 @@ import com.toir.dto.triad.TriadLinkMapper;
 import com.toir.entity.Department;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.PprPlan;
@@ -37,6 +38,7 @@ import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
@@ -65,6 +67,7 @@ public class WorkOrderService {
 
     private final WorkOrderRepository repository;
     private final EquipmentRepository equipmentRepository;
+    private final EquipmentNodeRepository equipmentNodeRepository;
     private final DepartmentRepository departmentRepository;
     private final AuditBuilderService auditBuilderService;
     private final PprPlanRepository pprPlanRepository;
@@ -154,12 +157,15 @@ public class WorkOrderService {
         if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Work order number already exists: " + request.number());
         }
-        validateCreateRelations(request);
+        Defect linkedDefect = validateCreateRelations(request);
+        UUID effectiveEquipmentNodeId = resolveEffectiveEquipmentNodeId(request, linkedDefect);
+        EquipmentNode equipmentNode = validateEquipmentNodeLink(effectiveEquipmentNodeId, request.equipmentId());
         reserveReplacementEquipmentOnCreate(request, effectiveWorkType);
         WorkOrder entity = new WorkOrder();
         entity.setNumber(request.number());
         entity.setTitle(request.title());
         entity.setEquipmentId(request.equipmentId());
+        entity.setEquipmentNodeId(effectiveEquipmentNodeId);
         entity.setDepartmentId(request.departmentId());
         entity.setRepairRequestId(request.repairRequestId());
         entity.setDefectId(request.defectId());
@@ -186,7 +192,7 @@ public class WorkOrderService {
                 null,
                 saved);
 
-        return toDto(saved);
+        return toDto(saved, equipmentNode);
     }
 
     @Transactional
@@ -675,7 +681,7 @@ public class WorkOrderService {
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + id));
     }
 
-    private void validateCreateRelations(WorkOrderRequest request) {
+    private Defect validateCreateRelations(WorkOrderRequest request) {
         if (request.repairRequestId() != null) {
             RepairRequest repairRequest = repairRequestRepository.findByIdAndIsDeletedFalse(request.repairRequestId())
                     .orElseThrow(
@@ -694,7 +700,7 @@ public class WorkOrderService {
         validatePprTaskRelationForCreate(request.pprTaskId());
 
         if (request.defectId() == null) {
-            return;
+            return null;
         }
         Defect defect = defectRepository.findByIdAndIsDeletedFalse(request.defectId())
                 .orElseThrow(() -> RestException.notFound("Defect not found: " + request.defectId()));
@@ -715,6 +721,26 @@ public class WorkOrderService {
             throw RestException.badRequest(
                     "Defect " + request.defectId() + " belongs to a different repair request");
         }
+        return defect;
+    }
+
+    private UUID resolveEffectiveEquipmentNodeId(WorkOrderRequest request, Defect linkedDefect) {
+        if (request.equipmentNodeId() != null) {
+            return request.equipmentNodeId();
+        }
+        return linkedDefect == null ? null : linkedDefect.getEquipmentNodeId();
+    }
+
+    private EquipmentNode validateEquipmentNodeLink(UUID equipmentNodeId, UUID equipmentId) {
+        if (equipmentNodeId == null) {
+            return null;
+        }
+        EquipmentNode node = equipmentNodeRepository.findByIdAndIsDeletedFalse(equipmentNodeId)
+                .orElseThrow(() -> RestException.notFound("Equipment node not found: " + equipmentNodeId));
+        if (!node.getEquipmentId().equals(equipmentId)) {
+            throw RestException.badRequest("Equipment node belongs to a different equipment");
+        }
+        return node;
     }
 
     private void validatePprTaskRelationForCreate(UUID pprTaskId) {
@@ -863,6 +889,13 @@ public class WorkOrderService {
     }
 
     private WorkOrderDto toDto(WorkOrder entity) {
+        EquipmentNode equipmentNode = entity.getEquipmentNodeId() == null
+                ? null
+                : equipmentNodeRepository.findByIdAndIsDeletedFalse(entity.getEquipmentNodeId()).orElse(null);
+        return toDto(entity, equipmentNode);
+    }
+
+    private WorkOrderDto toDto(WorkOrder entity, EquipmentNode equipmentNode) {
         RepairRequest linkedRepairRequest = entity.getRepairRequestId() == null
                 ? null
                 : repairRequestRepository.findByIdAndIsDeletedFalse(entity.getRepairRequestId()).orElse(null);
@@ -877,6 +910,7 @@ public class WorkOrderService {
                 : List.of(entity.getId()));
         return toDto(
                 entity,
+                equipmentNode,
                 linkedRepairRequest,
                 linkedDefect,
                 resolveCount(entity.getId(), operationsCountByWorkOrderId),
@@ -884,6 +918,7 @@ public class WorkOrderService {
     }
 
     private WorkOrderDto toDto(WorkOrder entity,
+            EquipmentNode equipmentNode,
             RepairRequest linkedRepairRequest,
             Defect linkedDefect,
             int operationsCount,
@@ -901,6 +936,10 @@ public class WorkOrderService {
                         .orElse(null);
         return new WorkOrderDto(
                 entity.getId(), entity.getNumber(), entity.getTitle(), entity.getEquipmentId(),
+                entity.getEquipmentNodeId(),
+                equipmentNode == null ? null : equipmentNode.getCode(),
+                equipmentNode == null ? null : equipmentNode.getName(),
+                equipmentNode == null ? null : equipmentNode.getNodeType(),
                 entity.getDepartmentId(),
                 equipmentName, departmentName,
                 entity.getRepairRequestId(), entity.getDefectId(), entity.getPprTaskId(), entity.getContractorId(),
@@ -951,9 +990,21 @@ public class WorkOrderService {
                         .stream()
                         .collect(Collectors.toMap(Defect::getId, Function.identity()));
 
+        List<UUID> equipmentNodeIds = entities.stream()
+                .map(WorkOrder::getEquipmentNodeId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        Map<UUID, EquipmentNode> equipmentNodeById = equipmentNodeIds.isEmpty()
+                ? Map.of()
+                : equipmentNodeRepository.findAllByIdInAndIsDeletedFalse(equipmentNodeIds)
+                        .stream()
+                        .collect(Collectors.toMap(EquipmentNode::getId, Function.identity()));
+
         return entities.stream()
                 .map(entity -> toDto(
                         entity,
+                        resolveEquipmentNode(entity.getEquipmentNodeId(), equipmentNodeById),
                         resolveRepairRequestBrief(entity.getRepairRequestId(), repairRequestById),
                         resolveDefectBrief(entity.getDefectId(), defectById),
                         resolveCount(entity.getId(), operationsCountByWorkOrderId),
@@ -1004,6 +1055,13 @@ public class WorkOrderService {
             return null;
         }
         return defectById.get(defectId);
+    }
+
+    private EquipmentNode resolveEquipmentNode(UUID equipmentNodeId, Map<UUID, EquipmentNode> equipmentNodeById) {
+        if (equipmentNodeId == null) {
+            return null;
+        }
+        return equipmentNodeById.get(equipmentNodeId);
     }
 
     private Page<WorkOrderDto> toDtoPage(Page<WorkOrder> page) {
