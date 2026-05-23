@@ -119,10 +119,10 @@ class RbacPprSecurityTest {
     @WithMockUser(authorities = PermissionConstants.PPR_PLAN_READ)
     void pprPlanReadCanReadPlanListDetailAndStats() throws Exception {
         UUID planId = UUID.randomUUID();
-        when(pprPlanService.findAll(null, null, null, 0, 1))
+        when(pprPlanService.findAll(null, null, null, null, 0, 1))
                 .thenReturn(new PageImpl<>(List.of(planDto(planId)), PageRequest.of(0, 1), 1));
         when(pprPlanService.findById(planId)).thenReturn(planDto(planId));
-        when(pprPlanService.getStats(null, null, null))
+        when(pprPlanService.getStats(null, null, null, null))
                 .thenReturn(new PprPlanStatsResponse(1, 1, 0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/v1/ppr-plans?page=0&size=1"))
@@ -136,7 +136,7 @@ class RbacPprSecurityTest {
     @Test
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void systemAdminCanReadPprPlans() throws Exception {
-        when(pprPlanService.findAll(null, null, null, 0, 1)).thenReturn(Page.empty());
+        when(pprPlanService.findAll(null, null, null, null, 0, 1)).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/v1/ppr-plans?page=0&size=1"))
                 .andExpect(status().isOk());
@@ -145,7 +145,7 @@ class RbacPprSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.WILDCARD)
     void wildcardCanReadPprPlans() throws Exception {
-        when(pprPlanService.findAll(null, null, null, 0, 1)).thenReturn(Page.empty());
+        when(pprPlanService.findAll(null, null, null, null, 0, 1)).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/v1/ppr-plans?page=0&size=1"))
                 .andExpect(status().isOk());
@@ -343,9 +343,9 @@ class RbacPprSecurityTest {
         return """
                 {
                   "name": "June PPR",
-                  "year": 2026,
-                  "month": 6,
-                  "createdById": "%s"
+                  "createdById": "%s",
+                  "fromDate": "2026-06-01",
+                  "toDate": "2026-06-30"
                 }
                 """.formatted(UUID.randomUUID());
     }
@@ -369,15 +369,15 @@ class RbacPprSecurityTest {
                 planId,
                 "PPR-2026-0001",
                 "June PPR",
-                2026,
-                6,
                 PlanStatus.DRAFT,
                 UUID.randomUUID(),
                 "Maintenance",
                 UUID.randomUUID(),
                 null,
                 null,
-                List.of()
+                List.of(),
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30)
         );
     }
 
@@ -408,8 +408,8 @@ class RbacPprSecurityTest {
         plan.setId(id);
         plan.setCode("PPR-2026-0001");
         plan.setName("June PPR");
-        plan.setYear(2026);
-        plan.setMonth(6);
+        plan.setStartDate(LocalDate.of(2026, 6, 1));
+        plan.setEndDate(LocalDate.of(2026, 6, 30));
         plan.setStatus(PlanStatus.DRAFT);
         plan.setDepartmentId(departmentId);
         plan.setCreatedById(UUID.randomUUID());

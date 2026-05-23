@@ -19,6 +19,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -99,10 +100,10 @@ class PprPlanEndpointSecurityTest {
                         .content("""
                                 {
                                   "name": "June plan",
-                                  "year": 2026,
-                                  "month": 6,
                                   "departmentId": "%s",
                                   "createdById": "%s",
+                                  "fromDate": "2026-06-01",
+                                  "toDate": "2026-06-30",
                                   "notes": "Planned maintenance"
                                 }
                                 """.formatted(UUID.randomUUID(), UUID.randomUUID())))
@@ -126,10 +127,10 @@ class PprPlanEndpointSecurityTest {
                         .content("""
                                 {
                                   "name": "June plan",
-                                  "year": 2026,
-                                  "month": 6,
                                   "departmentId": "%s",
                                   "createdById": "%s",
+                                  "fromDate": "2026-06-01",
+                                  "toDate": "2026-06-30",
                                   "notes": "Planned maintenance"
                                 }
                                 """.formatted(UUID.randomUUID(), UUID.randomUUID())))
@@ -153,10 +154,10 @@ class PprPlanEndpointSecurityTest {
                         .content("""
                                 {
                                   "name": "July plan",
-                                  "year": 2026,
-                                  "month": 7,
                                   "departmentId": "%s",
                                   "createdById": "%s",
+                                  "fromDate": "2026-07-01",
+                                  "toDate": "2026-07-31",
                                   "notes": "Generated from regulations"
                                 }
                                 """.formatted(UUID.randomUUID(), UUID.randomUUID())))
@@ -168,15 +169,15 @@ class PprPlanEndpointSecurityTest {
                 id,
                 "PPR-2026-0001",
                 "May plan",
-                2026,
-                5,
                 PlanStatus.DRAFT,
                 UUID.randomUUID(),
                 "Mechanical",
                 UUID.randomUUID(),
                 null,
                 null,
-                List.of()
+                List.of(),
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 5, 31)
         );
     }
 
@@ -185,8 +186,8 @@ class PprPlanEndpointSecurityTest {
         plan.setId(id);
         plan.setCode("PPR-2026-0001");
         plan.setName("May plan");
-        plan.setYear(2026);
-        plan.setMonth(5);
+        plan.setStartDate(LocalDate.of(2026, 5, 1));
+        plan.setEndDate(LocalDate.of(2026, 5, 31));
         plan.setStatus(PlanStatus.DRAFT);
         plan.setDepartmentId(departmentId);
         plan.setCreatedById(UUID.randomUUID());

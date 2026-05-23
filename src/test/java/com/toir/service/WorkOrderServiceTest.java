@@ -1720,8 +1720,8 @@ class WorkOrderServiceTest {
         plan.setId(id);
         plan.setCode("PPR-2026-0001");
         plan.setName("Monthly PPR plan");
-        plan.setYear(2026);
-        plan.setMonth(5);
+        plan.setStartDate(java.time.LocalDate.of(2026, 5, 1));
+        plan.setEndDate(java.time.LocalDate.of(2026, 5, 31));
         plan.setStatus(status);
         plan.setCreatedById(UUID.randomUUID());
         return plan;

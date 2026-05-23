@@ -24,6 +24,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 
 import java.util.ArrayList;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -58,66 +59,45 @@ class PprPlanServiceListFilterTest {
     @Test
     void listWithoutFiltersKeepsOldBehavior() {
         PprPlan plan = plan(2026, 5, UUID.randomUUID());
-        when(planRepository.searchPlans(null, null, null, PageRequest.of(0, 20)))
+        when(planRepository.searchPlans(null, null, null, null, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
 
-        var result = service.findAll(null, null, null, 0, 20);
+        var result = service.findAll(null, null, null, null, 0, 20);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent()).extracting(PprPlanDto::id).containsExactly(plan.getId());
-        verify(planRepository).searchPlans(null, null, null, PageRequest.of(0, 20));
+        verify(planRepository).searchPlans(null, null, null, null, PageRequest.of(0, 20));
     }
 
     @Test
-    void listFiltersByYear() {
-        when(planRepository.searchPlans(2026, null, null, PageRequest.of(0, 20)))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-
-        service.findAll(2026, null, null, 0, 20);
-
-        verify(planRepository).searchPlans(2026, null, null, PageRequest.of(0, 20));
-    }
-
-    @Test
-    void listFiltersByMonth() {
-        when(planRepository.searchPlans(null, 5, null, PageRequest.of(0, 20)))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-
-        service.findAll(null, 5, null, 0, 20);
-
-        verify(planRepository).searchPlans(null, 5, null, PageRequest.of(0, 20));
-    }
-
-    @Test
-    void listFiltersByYearAndMonth() {
-        when(planRepository.searchPlans(2026, 5, null, PageRequest.of(0, 20)))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-
-        service.findAll(2026, 5, null, 0, 20);
-
-        verify(planRepository).searchPlans(2026, 5, null, PageRequest.of(0, 20));
-    }
-
-    @Test
-    void listFiltersByDepartmentId() {
+    void listFiltersByDatePartsAndDepartmentId() {
         UUID departmentId = UUID.randomUUID();
-        when(planRepository.searchPlans(null, null, departmentId, PageRequest.of(0, 20)))
+        when(planRepository.searchPlans(2026, 5, 12, departmentId, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
-        service.findAll(null, null, departmentId, 0, 20);
+        service.findAll(2026, 5, 12, departmentId, 0, 20);
 
-        verify(planRepository).searchPlans(null, null, departmentId, PageRequest.of(0, 20));
+        verify(planRepository).searchPlans(2026, 5, 12, departmentId, PageRequest.of(0, 20));
     }
 
     @Test
-    void listFiltersByYearMonthAndDepartmentId() {
+    void listUsesRequestedPageAndSize() {
         UUID departmentId = UUID.randomUUID();
-        when(planRepository.searchPlans(2026, 5, departmentId, PageRequest.of(1, 10)))
+        when(planRepository.searchPlans(null, null, null, departmentId, PageRequest.of(1, 10)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(1, 10), 0));
 
-        service.findAll(2026, 5, departmentId, 1, 10);
+        service.findAll(null, null, null, departmentId, 1, 10);
 
-        verify(planRepository).searchPlans(2026, 5, departmentId, PageRequest.of(1, 10));
+        verify(planRepository).searchPlans(null, null, null, departmentId, PageRequest.of(1, 10));
+    }
+
+    @Test
+    void listRejectsInvalidMonthFilter() {
+        assertThatThrownBy(() -> service.findAll(2026, 13, null, null, 0, 20))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("PPR plan month filter must be between 1 and 12");
+                });
     }
 
     @Test
@@ -125,11 +105,11 @@ class PprPlanServiceListFilterTest {
         UUID departmentId = UUID.randomUUID();
         PprPlan plan = plan(2026, 5, departmentId);
 
-        when(planRepository.searchPlans(null, null, null, PageRequest.of(0, 20)))
+        when(planRepository.searchPlans(null, null, null, null, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
         when(planRepository.findByIdAndIsDeletedFalse(plan.getId())).thenReturn(Optional.of(plan));
 
-        var listed = service.findAll(null, null, null, 0, 20);
+        var listed = service.findAll(null, null, null, null, 0, 20);
         var detailed = service.findById(plan.getId());
 
         assertThat(listed.getContent()).extracting(PprPlanDto::id).containsExactly(plan.getId());
@@ -163,10 +143,10 @@ class PprPlanServiceListFilterTest {
     @Test
     void nonExistingDepartmentIdReturnsEmptyPageFromRepository() {
         UUID departmentId = UUID.randomUUID();
-        when(planRepository.searchPlans(null, null, departmentId, PageRequest.of(0, 20)))
+        when(planRepository.searchPlans(null, null, null, departmentId, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
-        var result = service.findAll(null, null, departmentId, 0, 20);
+        var result = service.findAll(null, null, null, departmentId, 0, 20);
 
         assertThat(result.getContent()).isEmpty();
         assertThat(result.getTotalElements()).isZero();
@@ -180,12 +160,12 @@ class PprPlanServiceListFilterTest {
         department.setId(departmentId);
         department.setName("Mechanical");
 
-        when(planRepository.searchPlans(null, null, null, PageRequest.of(0, 20)))
+        when(planRepository.searchPlans(null, null, null, null, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
         when(departmentRepository.findAllByIdInAndIsDeletedFalse(List.of(departmentId)))
                 .thenReturn(List.of(department));
 
-        var result = service.findAll(null, null, null, 0, 20);
+        var result = service.findAll(null, null, null, null, 0, 20);
 
         PprPlanDto dto = result.getContent().getFirst();
         assertThat(dto.departmentId()).isEqualTo(departmentId);
@@ -194,9 +174,9 @@ class PprPlanServiceListFilterTest {
 
     @Test
     void statsWithoutFiltersReturnsCountsByStatus() {
-        when(planRepository.getStats(null, null, null)).thenReturn(stats(6, 1, 2, 3, 8, 4, 5));
+        when(planRepository.getStats(null, null, null, null)).thenReturn(stats(6, 1, 2, 3, 8, 4, 5));
 
-        var result = service.getStats(null, null, null);
+        var result = service.getStats(null, null, null, null);
 
         assertThat(result.totalPlans()).isEqualTo(6);
         assertThat(result.draftPlans()).isEqualTo(1);
@@ -205,32 +185,32 @@ class PprPlanServiceListFilterTest {
         assertThat(result.plannedTasks()).isEqualTo(8);
         assertThat(result.inProgressTasks()).isEqualTo(4);
         assertThat(result.completedTasks()).isEqualTo(5);
-        verify(planRepository).getStats(null, null, null);
+        verify(planRepository).getStats(null, null, null, null);
     }
 
     @Test
-    void statsWithYearMonthAndDepartmentUsesSameFilters() {
+    void statsWithDepartmentUsesSameFilter() {
         UUID departmentId = UUID.randomUUID();
-        when(planRepository.getStats(2026, 5, departmentId)).thenReturn(stats(2, 0, 1, 1, 3, 2, 1));
+        when(planRepository.getStats(2026, 5, 12, departmentId)).thenReturn(stats(2, 0, 1, 1, 3, 2, 1));
 
-        var result = service.getStats(2026, 5, departmentId);
+        var result = service.getStats(2026, 5, 12, departmentId);
 
         assertThat(result.totalPlans()).isEqualTo(2);
         assertThat(result.generatedPlans()).isEqualTo(1);
         assertThat(result.approvedPlans()).isEqualTo(1);
-        verify(planRepository).getStats(2026, 5, departmentId);
+        verify(planRepository).getStats(2026, 5, 12, departmentId);
     }
 
     @Test
     void statsForNonExistingDepartmentReturnsZeroCounts() {
         UUID departmentId = UUID.randomUUID();
-        when(planRepository.getStats(null, null, departmentId)).thenReturn(stats(0, 0, 0, 0, 0, 0, 0));
+        when(planRepository.getStats(null, null, null, departmentId)).thenReturn(stats(0, 0, 0, 0, 0, 0, 0));
 
-        var result = service.getStats(null, null, departmentId);
+        var result = service.getStats(null, null, null, departmentId);
 
         assertThat(result.totalPlans()).isZero();
         assertThat(result.plannedTasks()).isZero();
-        verify(planRepository).getStats(null, null, departmentId);
+        verify(planRepository).getStats(null, null, null, departmentId);
     }
 
     @Test
@@ -254,8 +234,8 @@ class PprPlanServiceListFilterTest {
         plan.setId(UUID.randomUUID());
         plan.setCode("PPR-2026-0001");
         plan.setName("May plan");
-        plan.setYear(year);
-        plan.setMonth(month);
+        plan.setStartDate(LocalDate.of(year, month, 1));
+        plan.setEndDate(LocalDate.of(year, month, 1).plusMonths(1).minusDays(1));
         plan.setStatus(PlanStatus.DRAFT);
         plan.setDepartmentId(departmentId);
         plan.setCreatedById(UUID.randomUUID());

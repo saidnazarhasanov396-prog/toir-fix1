@@ -12,7 +12,7 @@ import java.util.UUID;
 public record PprTaskRequest(
         String code,
         @NotNull UUID regulationId,
-        @NotNull UUID equipmentId,
+        UUID equipmentId,
         @NotBlank String title,
         LocalDate startDate,
         LocalDate endDate,

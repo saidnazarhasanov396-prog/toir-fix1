@@ -165,7 +165,7 @@ class RoleMatrixEndpointAccessSmokeTest {
     })
     void pprEngineerCanReadPprButCannotApprovePlan() throws Exception {
         UUID planId = UUID.randomUUID();
-        when(pprPlanService.findAll(null, null, null, 0, 1)).thenReturn(Page.empty());
+        when(pprPlanService.findAll(null, null, null, null, 0, 1)).thenReturn(Page.empty());
         when(pprPlanService.findTasksByPlan(planId)).thenReturn(List.of(taskDto(planId)));
 
         mockMvc.perform(get("/api/v1/ppr-plans?page=0&size=1"))
@@ -304,7 +304,7 @@ class RoleMatrixEndpointAccessSmokeTest {
             PermissionConstants.READ_LEGACY
     })
     void viewerCanReadNonSensitiveSampleRouteButCannotMutate() throws Exception {
-        when(pprPlanService.findAll(null, null, null, 0, 1)).thenReturn(Page.empty());
+        when(pprPlanService.findAll(null, null, null, null, 0, 1)).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/v1/ppr-plans?page=0&size=1"))
                 .andExpect(status().isOk());
@@ -346,15 +346,15 @@ class RoleMatrixEndpointAccessSmokeTest {
                 planId,
                 "PPR-2026-0001",
                 "June PPR",
-                2026,
-                6,
                 PlanStatus.DRAFT,
                 UUID.randomUUID(),
                 "Maintenance",
                 UUID.randomUUID(),
                 null,
                 null,
-                List.of()
+                List.of(),
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30)
         );
     }
 
@@ -385,8 +385,8 @@ class RoleMatrixEndpointAccessSmokeTest {
         plan.setId(id);
         plan.setCode("PPR-2026-0001");
         plan.setName("June PPR");
-        plan.setYear(2026);
-        plan.setMonth(6);
+        plan.setStartDate(LocalDate.of(2026, 6, 1));
+        plan.setEndDate(LocalDate.of(2026, 6, 30));
         plan.setStatus(PlanStatus.DRAFT);
         plan.setDepartmentId(UUID.randomUUID());
         plan.setCreatedById(UUID.randomUUID());
@@ -492,9 +492,9 @@ class RoleMatrixEndpointAccessSmokeTest {
         return """
                 {
                   "name": "June PPR",
-                  "year": 2026,
-                  "month": 6,
-                  "createdById": "%s"
+                  "createdById": "%s",
+                  "fromDate": "2026-06-01",
+                  "toDate": "2026-06-30"
                 }
                 """.formatted(UUID.randomUUID());
     }

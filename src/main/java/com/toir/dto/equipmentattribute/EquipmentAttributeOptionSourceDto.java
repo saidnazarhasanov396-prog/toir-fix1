@@ -10,16 +10,22 @@ public record EquipmentAttributeOptionSourceDto(
         String name,
         String nameRu,
         String nameUz,
-        String description
+        String description,
+        long optionCounts
 ) {
     public static EquipmentAttributeOptionSourceDto from(EquipmentAttributeOptionSource source) {
+        return from(source, 0);
+    }
+
+    public static EquipmentAttributeOptionSourceDto from(EquipmentAttributeOptionSource source, long optionCounts) {
         return new EquipmentAttributeOptionSourceDto(
                 source.getId(),
                 source.getCode(),
                 source.getName(),
                 source.getNameRu(),
                 source.getNameUz(),
-                source.getDescription()
+                source.getDescription(),
+                optionCounts
         );
     }
 }

@@ -72,7 +72,8 @@ class EquipmentAttributeControllerContractTest {
                 "Seal Types",
                 null,
                 null,
-                "Pump seal options"
+                "Pump seal options",
+                3
         )));
 
         mockMvc.perform(get("/api/v1/equipment-attribute-option-sources")
@@ -82,6 +83,7 @@ class EquipmentAttributeControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(sourceId.toString()))
                 .andExpect(jsonPath("$.content[0].code").value("seal_types"))
+                .andExpect(jsonPath("$.content[0].optionCounts").value(3))
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.size").value(10));
 
@@ -97,7 +99,8 @@ class EquipmentAttributeControllerContractTest {
                 "Seal Types",
                 null,
                 null,
-                "Pump seal options"
+                "Pump seal options",
+                0
         ));
         when(service.replaceOptions(eq(sourceId), any())).thenReturn(List.of(
                 new EquipmentAttributeOptionDto("mechanical_seal", "Mechanical seal", null, null, 10, true)

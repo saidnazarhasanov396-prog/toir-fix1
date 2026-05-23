@@ -39,6 +39,11 @@ public class MaintenanceAdvisor {
 
 
     public List<EquipmentAdvice> adviceAll() {
+        return advice(null, null);
+    }
+
+    public List<EquipmentAdvice> advice(UUID equipmentId, String urgencyFilter) {
+        String normalizedUrgency = normalizeUrgency(urgencyFilter);
         Map<UUID, EquipmentRiskScore> scoreByEq = rcmService.computeAll().stream()
                 .collect(Collectors.toMap(EquipmentRiskScore::equipmentId, s -> s));
         Map<UUID, Long> openDefectsByEq = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -47,6 +52,9 @@ public class MaintenanceAdvisor {
         LocalDate today = LocalDate.now();
         List<EquipmentAdvice> out = new ArrayList<>();
         for (Equipment eq : equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
+            if (equipmentId != null && !equipmentId.equals(eq.getId())) {
+                continue;
+            }
             EquipmentRiskScore score = scoreByEq.get(eq.getId());
             List<String> actions = new ArrayList<>();
             String urgency = "LOW";
@@ -98,6 +106,9 @@ public class MaintenanceAdvisor {
             }
 
             if (actions.isEmpty()) continue;
+            if (normalizedUrgency != null && !normalizedUrgency.equals(urgency)) {
+                continue;
+            }
             out.add(new EquipmentAdvice(
                     eq.getId(), eq.getCode(), eq.getName(),
                     score != null ? score.riskScore() : 0,
@@ -108,8 +119,30 @@ public class MaintenanceAdvisor {
         return out;
     }
 
+    public MaintenanceAdviceStats stats(UUID equipmentId, String urgency) {
+        List<EquipmentAdvice> advice = advice(equipmentId, urgency);
+        int total = advice.size();
+        long high = advice.stream().filter(a -> "HIGH".equals(a.urgency())).count();
+        long medium = advice.stream().filter(a -> "MEDIUM".equals(a.urgency())).count();
+        long low = advice.stream().filter(a -> "LOW".equals(a.urgency())).count();
+        long openDefects = advice.stream().mapToLong(EquipmentAdvice::openDefects).sum();
+        long recentAlarms = advice.stream().mapToLong(EquipmentAdvice::recentAlarms).sum();
+        double averageRiskScore = advice.stream()
+                .mapToInt(EquipmentAdvice::riskScore)
+                .average()
+                .orElse(0.0);
+        return new MaintenanceAdviceStats(total, high, medium, low, openDefects, recentAlarms, averageRiskScore);
+    }
+
     private String upgrade(String current, String candidate) {
         return urgencyRank(candidate) > urgencyRank(current) ? candidate : current;
+    }
+
+    private String normalizeUrgency(String urgency) {
+        if (urgency == null || urgency.isBlank()) {
+            return null;
+        }
+        return urgency.trim().toUpperCase();
     }
 
     private int urgencyRank(String u) {
@@ -130,5 +163,15 @@ public class MaintenanceAdvisor {
             int recentAlarms,
             String urgency,
             List<String> actions
+    ) {}
+
+    public record MaintenanceAdviceStats(
+            int totalAdvice,
+            long highUrgency,
+            long mediumUrgency,
+            long lowUrgency,
+            long openDefects,
+            long recentAlarms,
+            double averageRiskScore
     ) {}
 }

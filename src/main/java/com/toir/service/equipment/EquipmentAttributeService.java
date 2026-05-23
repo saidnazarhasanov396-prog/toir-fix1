@@ -74,9 +74,13 @@ public class EquipmentAttributeService {
     @Transactional(readOnly = true)
     public List<EquipmentAttributeOptionSourceDto> findOptionSources(String search) {
         String normalizedSearch = normalizeSearch(search);
-        return optionSourceRepository.findAllBySearch(normalizedSearch)
-                .stream()
-                .map(EquipmentAttributeOptionSourceDto::from)
+        List<EquipmentAttributeOptionSource> sources = optionSourceRepository.findAllBySearch(normalizedSearch);
+        Map<UUID, Long> optionCountsBySourceId = optionCountsBySourceId(sources);
+        return sources.stream()
+                .map(source -> EquipmentAttributeOptionSourceDto.from(
+                        source,
+                        optionCountsBySourceId.getOrDefault(source.getId(), 0L)
+                ))
                 .toList();
     }
 
@@ -93,6 +97,22 @@ public class EquipmentAttributeService {
         source.setNameUz(request.nameUz());
         source.setDescription(request.description());
         return EquipmentAttributeOptionSourceDto.from(optionSourceRepository.save(source));
+    }
+
+    private Map<UUID, Long> optionCountsBySourceId(List<EquipmentAttributeOptionSource> sources) {
+        if (sources.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> sourceIds = sources.stream()
+                .map(EquipmentAttributeOptionSource::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (sourceIds.isEmpty()) {
+            return Map.of();
+        }
+        return optionItemRepository.findAllBySourceIdInAndIsDeletedFalse(sourceIds)
+                .stream()
+                .collect(Collectors.groupingBy(EquipmentAttributeOptionItem::getOptionSourceId, Collectors.counting()));
     }
 
     @Transactional(readOnly = true)

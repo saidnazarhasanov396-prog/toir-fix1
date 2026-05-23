@@ -2,7 +2,7 @@ package com.toir.controller.maintenance;
 import com.toir.service.maintanance.MaintenanceAdvisor;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.util.List;
+import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -23,9 +23,19 @@ public class MaintenanceAdvisorController {
 
     @GetMapping("/maintenance")
     public ResponseEntity<Page<MaintenanceAdvisor.EquipmentAdvice>> list(
-            @RequestParam(required = false) String urgency, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        List<MaintenanceAdvisor.EquipmentAdvice> all = advisor.adviceAll();
-        if (urgency == null) return ResponseEntity.ok(PaginationUtils.page(all, page, size));
-        return ResponseEntity.ok(PaginationUtils.page(all.stream().filter(a -> urgency.equalsIgnoreCase(a.urgency())).toList(), page, size));
+            @RequestParam(required = false) String urgency,
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(PaginationUtils.page(advisor.advice(equipmentId, urgency), page, size));
+    }
+
+    @GetMapping("/maintenance/stats")
+    public ResponseEntity<MaintenanceAdvisor.MaintenanceAdviceStats> stats(
+            @RequestParam(required = false) String urgency,
+            @RequestParam(required = false) UUID equipmentId
+    ) {
+        return ResponseEntity.ok(advisor.stats(equipmentId, urgency));
     }
 }

@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -113,8 +114,8 @@ public class RcmAutoPlannerService {
             return planRepository.findByIdAndIsDeletedFalse(planId)
                     .orElseThrow(() -> RestException.notFound("PprPlan not found: " + planId));
         }
-        LocalDateTime now = LocalDateTime.now();
-        List<PprPlan> plans = planRepository.findAllByYearAndMonthAndIsDeletedFalse(now.getYear(), now.getMonthValue());
+        LocalDate today = LocalDate.now();
+        List<PprPlan> plans = planRepository.findAllActiveOnDate(today);
         if (plans.isEmpty()) {
             List<PprPlan> any = planRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
             if (any.isEmpty()) throw RestException.badRequest("No PprPlan exists — create one first");

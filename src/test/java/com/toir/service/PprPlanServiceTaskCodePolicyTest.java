@@ -389,11 +389,11 @@ class PprPlanServiceTaskCodePolicyTest {
     private PprPlanRequest planRequest() {
         return new PprPlanRequest(
                 "June plan",
-                2026,
-                6,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                "Planned maintenance"
+                "Planned maintenance",
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30)
         );
     }
 }

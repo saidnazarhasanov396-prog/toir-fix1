@@ -27,7 +27,7 @@ public class PprTask extends BaseEntity {
     @Column(name = "regulation_id", nullable = false)
     private UUID regulationId;
 
-    @Column(name = "equipment_id", nullable = false)
+    @Column(name = "equipment_id")
     private UUID equipmentId;
 
     @Column(nullable = false)

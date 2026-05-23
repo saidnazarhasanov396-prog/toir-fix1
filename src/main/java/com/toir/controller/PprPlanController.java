@@ -74,11 +74,12 @@ public class PprPlanController {
     public ResponseEntity<Page<PprPlanDto>> list(
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer day,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(service.findAll(year, month, scopedDepartment(departmentId), page, size));
+        return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartment(departmentId), page, size));
     }
 
     @GetMapping("/stats")
@@ -86,9 +87,10 @@ public class PprPlanController {
     public ResponseEntity<PprPlanStatsResponse> stats(
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer day,
             @RequestParam(required = false) UUID departmentId
     ) {
-        return ResponseEntity.ok(service.getStats(year, month, scopedDepartment(departmentId)));
+        return ResponseEntity.ok(service.getStats(year, month, day, scopedDepartment(departmentId)));
     }
 
     @GetMapping("/{id}")
