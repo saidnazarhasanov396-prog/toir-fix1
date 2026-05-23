@@ -8,6 +8,7 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.EquipmentNodeType;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.exception.GlobalExceptionHandler;
@@ -34,6 +35,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
@@ -104,6 +106,23 @@ class WorkOrderControllerContractTest {
     }
 
     @Test
+    void createWorkOrder_acceptsEquipmentNodeId() throws Exception {
+        UUID equipmentNodeId = UUID.randomUUID();
+        WorkOrderDto response = workOrderDtoWithNode(UUID.randomUUID(), equipmentNodeId);
+        when(service.create(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/work-orders")
+                        .contentType("application/json")
+                        .content(baseCreateRequestJson(null, null, equipmentNodeId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.equipmentNodeId").value(equipmentNodeId.toString()));
+
+        org.mockito.ArgumentCaptor<com.toir.dto.workorder.WorkOrderRequest> captor = forClass(com.toir.dto.workorder.WorkOrderRequest.class);
+        verify(service).create(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().equipmentNodeId()).isEqualTo(equipmentNodeId);
+    }
+
+    @Test
     void responseIncludesRepairRequestObject() throws Exception {
         UUID workOrderId = UUID.randomUUID();
         WorkOrderDto response = workOrderDto(workOrderId, repairRequestBrief(), defectBrief());
@@ -127,6 +146,21 @@ class WorkOrderControllerContractTest {
                 .andExpect(jsonPath("$.defect.id").value(response.defect().id().toString()))
                 .andExpect(jsonPath("$.defect.code").value(response.defect().code()))
                 .andExpect(jsonPath("$.defect.status").value(response.defect().status().name()));
+    }
+
+    @Test
+    void getWorkOrder_returnsEquipmentNodeReference() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        UUID equipmentNodeId = UUID.randomUUID();
+        WorkOrderDto response = workOrderDtoWithNode(workOrderId, equipmentNodeId);
+        when(service.findById(workOrderId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/work-orders/{id}", workOrderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.equipmentNodeId").value(equipmentNodeId.toString()))
+                .andExpect(jsonPath("$.equipmentNodeCode").value("BRG-01"))
+                .andExpect(jsonPath("$.equipmentNodeName").value("Bearing"))
+                .andExpect(jsonPath("$.equipmentNodeType").value("COMPONENT"));
     }
 
     @Test
@@ -440,6 +474,10 @@ class WorkOrderControllerContractTest {
     }
 
     private String baseCreateRequestJson(UUID repairRequestId, UUID defectId) {
+        return baseCreateRequestJson(repairRequestId, defectId, null);
+    }
+
+    private String baseCreateRequestJson(UUID repairRequestId, UUID defectId, UUID equipmentNodeId) {
         String repairRequestPart = repairRequestId == null
                 ? ""
                 : """
@@ -450,11 +488,17 @@ class WorkOrderControllerContractTest {
                 : """
                   "defectId": "%s",
                 """.formatted(defectId);
+        String equipmentNodePart = equipmentNodeId == null
+                ? ""
+                : """
+                  "equipmentNodeId": "%s",
+                """.formatted(equipmentNodeId);
         return """
                 {
                   "number": "WO-2026-1001",
                   "title": "Planned repair",
                   "equipmentId": "%s",
+                %s
                   "departmentId": "%s",
                 %s
                 %s
@@ -466,6 +510,7 @@ class WorkOrderControllerContractTest {
                 }
                 """.formatted(
                 UUID.randomUUID(),
+                equipmentNodePart,
                 UUID.randomUUID(),
                 repairRequestPart,
                 defectPart,
@@ -562,6 +607,47 @@ class WorkOrderControllerContractTest {
                 List.of(),
                 repairRequest,
                 defect,
+                0,
+                0
+        );
+    }
+
+    private WorkOrderDto workOrderDtoWithNode(UUID id, UUID equipmentNodeId) {
+        return new WorkOrderDto(
+                id,
+                "WO-2026-1001",
+                "Planned repair",
+                UUID.randomUUID(),
+                equipmentNodeId,
+                "BRG-01",
+                "Bearing",
+                EquipmentNodeType.COMPONENT,
+                UUID.randomUUID(),
+                "Pump #1",
+                "Maintenance",
+                null,
+                null,
+                null,
+                null,
+                WorkOrderStatus.PLANNED,
+                WorkOrderType.PLANNED,
+                WorkType.REPAIR,
+                PriorityLevel.MEDIUM,
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                null,
+                null,
+                "summary",
+                null,
+                null,
+                UUID.randomUUID(),
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null,
                 0,
                 0
         );

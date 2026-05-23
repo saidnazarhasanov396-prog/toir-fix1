@@ -11,6 +11,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,6 +29,31 @@ class UnitOfMeasurementServiceTest {
 
     @InjectMocks
     UnitOfMeasurementService service;
+
+    @Test
+    void normalizeRequiredUnitByIdReturnsCanonicalName() {
+        UUID unitId = UUID.randomUUID();
+        UnitOfMeasurement uom = new UnitOfMeasurement();
+        uom.setId(unitId);
+        uom.setCode("UOM-2026-0001");
+        uom.setName("bar");
+        when(repository.findByIdAndIsDeletedFalse(unitId)).thenReturn(Optional.of(uom));
+
+        String normalized = service.normalizeRequiredUnitOrThrow(unitId.toString(), "condition reading unit");
+
+        assertThat(normalized).isEqualTo("bar");
+    }
+
+    @Test
+    void normalizeRequiredUnknownUnitIdThrowsBadRequest() {
+        UUID unitId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(unitId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.normalizeRequiredUnitOrThrow(unitId.toString(), "condition reading unit"))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Unknown condition reading unit")
+                .hasMessageContaining(unitId.toString());
+    }
 
     @Test
     void normalizeOptionalUnitByCodeReturnsCanonicalName() {

@@ -53,11 +53,13 @@ PUT /api/v1/equipment/{equipmentId}/attributes
 Use these endpoints to manage shared dropdown dictionaries.
 
 ```http
-GET /api/v1/equipment-attribute-option-sources
+GET /api/v1/equipment-attribute-option-sources?search=seal&page=0&pageSize=20
 POST /api/v1/equipment-attribute-option-sources
 GET /api/v1/equipment-attribute-option-sources/{sourceId}/options
 PUT /api/v1/equipment-attribute-option-sources/{sourceId}/options
 ```
+
+The option source list supports `search`, `page`, and `pageSize` query parameters. `size` is also accepted as a `pageSize` alias.
 
 Example source:
 

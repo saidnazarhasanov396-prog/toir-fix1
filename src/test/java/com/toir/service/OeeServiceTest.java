@@ -36,6 +36,32 @@ class OeeServiceTest {
     OeeService service;
 
     @Test
+    void listShouldReturnAllActiveRecords() {
+        UUID equipmentId = UUID.randomUUID();
+        OeeRecord record = new OeeRecord();
+        record.setId(UUID.randomUUID());
+        record.setEquipmentId(equipmentId);
+        record.setShiftStart(Instant.parse("2026-01-02T08:00:00Z"));
+        record.setShiftEnd(Instant.parse("2026-01-02T16:00:00Z"));
+        record.setPlannedProductionMinutes(480);
+        record.setRunMinutes(420);
+        record.setIdealCycleSeconds(30);
+        record.setTotalCount(800);
+        record.setGoodCount(780);
+        record.setAvailability(0.875);
+        record.setPerformance(0.952);
+        record.setQuality(0.975);
+        record.setOee(0.812);
+        when(repository.findAllByIsDeletedFalseOrderByShiftStartDesc()).thenReturn(List.of(record));
+
+        var result = service.list();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().equipmentId()).isEqualTo(equipmentId);
+        verify(repository).findAllByIsDeletedFalseOrderByShiftStartDesc();
+    }
+
+    @Test
     void summaryWithBusinessSearchAndNoMatchingEquipmentShouldReturnZeroSummary() {
         Instant from = Instant.parse("2026-01-01T00:00:00Z");
         Instant to = Instant.parse("2026-01-31T23:59:59Z");

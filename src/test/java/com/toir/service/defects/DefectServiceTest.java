@@ -5,10 +5,12 @@ import com.toir.dto.defect.DefectResponse;
 import com.toir.dto.defect.DefectStatsResponse;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.EquipmentNodeType;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WorkOrderStatus;
@@ -18,6 +20,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.KnowledgeArticleRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
@@ -62,6 +65,9 @@ class DefectServiceTest {
 
     @Mock
     EquipmentRepository equipmentRepository;
+
+    @Mock
+    EquipmentNodeRepository equipmentNodeRepository;
 
     @Mock
     RepairRequestRepository repairRequestRepository;
@@ -235,6 +241,105 @@ class DefectServiceTest {
         assertThat(defectCaptor.getValue().getRepairRequestId()).isNull();
         assertThat(response.repairRequestId()).isNull();
         assertThat(response.requestId()).isNull();
+    }
+
+    @Test
+    void createDefect_withEquipmentNode_setsNodeTarget() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID nodeId = UUID.randomUUID();
+        EquipmentNode node = equipmentNode(nodeId, equipmentId, "BRG-01", "Bearing", EquipmentNodeType.COMPONENT);
+        when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        when(repository.existsByCode(anyString())).thenReturn(false);
+        when(equipmentNodeRepository.findByIdAndIsDeletedFalse(nodeId)).thenReturn(Optional.of(node));
+        when(repository.save(any(Defect.class))).thenAnswer(invocation -> {
+            Defect defect = invocation.getArgument(0);
+            ReflectionTestUtils.setField(defect, "id", UUID.randomUUID());
+            return defect;
+        });
+        stubCreateResponseDependencies(equipmentId, node);
+
+        DefectResponse response = service.create(request(equipmentId, null, nodeId));
+
+        ArgumentCaptor<Defect> defectCaptor = ArgumentCaptor.forClass(Defect.class);
+        verify(repository).save(defectCaptor.capture());
+        assertThat(defectCaptor.getValue().getEquipmentNodeId()).isEqualTo(nodeId);
+        assertThat(response.equipmentNodeId()).isEqualTo(nodeId);
+        assertThat(response.equipmentNodeCode()).isEqualTo("BRG-01");
+        assertThat(response.equipmentNodeName()).isEqualTo("Bearing");
+        assertThat(response.equipmentNodeType()).isEqualTo(EquipmentNodeType.COMPONENT);
+    }
+
+    @Test
+    void createDefect_withNodeFromDifferentEquipment_returnsBadRequest() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID otherEquipmentId = UUID.randomUUID();
+        UUID nodeId = UUID.randomUUID();
+        when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        when(repository.existsByCode(anyString())).thenReturn(false);
+        when(equipmentNodeRepository.findByIdAndIsDeletedFalse(nodeId))
+                .thenReturn(Optional.of(equipmentNode(nodeId, otherEquipmentId, "BRG-01", "Bearing", EquipmentNodeType.COMPONENT)));
+
+        assertThatThrownBy(() -> service.create(request(equipmentId, null, nodeId)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Equipment node belongs to a different equipment");
+                });
+        verify(repository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void createDefect_withoutNode_stillWorks() {
+        UUID equipmentId = UUID.randomUUID();
+        when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        when(repository.existsByCode(anyString())).thenReturn(false);
+        when(repository.save(any(Defect.class))).thenAnswer(invocation -> {
+            Defect defect = invocation.getArgument(0);
+            ReflectionTestUtils.setField(defect, "id", UUID.randomUUID());
+            return defect;
+        });
+        stubCreateResponseDependencies(equipmentId);
+
+        DefectResponse response = service.create(request(equipmentId, null, null));
+
+        ArgumentCaptor<Defect> defectCaptor = ArgumentCaptor.forClass(Defect.class);
+        verify(repository).save(defectCaptor.capture());
+        assertThat(defectCaptor.getValue().getEquipmentNodeId()).isNull();
+        assertThat(response.equipmentNodeId()).isNull();
+    }
+
+    @Test
+    void updateDefect_setsNodeTarget() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID nodeId = UUID.randomUUID();
+        Defect defect = defect(defectId, equipmentId);
+        EquipmentNode node = equipmentNode(nodeId, equipmentId, "BRG-01", "Bearing", EquipmentNodeType.COMPONENT);
+        when(repository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(equipmentNodeRepository.findByIdAndIsDeletedFalse(nodeId)).thenReturn(Optional.of(node));
+        when(repository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubCreateResponseDependencies(equipmentId, node);
+
+        DefectResponse response = service.update(defectId, request(equipmentId, null, nodeId));
+
+        assertThat(defect.getEquipmentNodeId()).isEqualTo(nodeId);
+        assertThat(response.equipmentNodeId()).isEqualTo(nodeId);
+    }
+
+    @Test
+    void updateDefect_clearsNodeTarget_ifSupported() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID nodeId = UUID.randomUUID();
+        Defect defect = defect(defectId, equipmentId);
+        defect.setEquipmentNodeId(nodeId);
+        when(repository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(repository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubCreateResponseDependencies(equipmentId);
+
+        DefectResponse response = service.update(defectId, request(equipmentId, null, null));
+
+        assertThat(defect.getEquipmentNodeId()).isNull();
+        assertThat(response.equipmentNodeId()).isNull();
     }
 
     @Test
@@ -714,11 +819,16 @@ class DefectServiceTest {
 
 
     private DefectRequest request(UUID equipmentId, UUID repairRequestId) {
+        return request(equipmentId, repairRequestId, null);
+    }
+
+    private DefectRequest request(UUID equipmentId, UUID repairRequestId, UUID equipmentNodeId) {
         return new DefectRequest(
                 null,
                 "Bearing overheating",
                 "Temperature threshold exceeded",
                 equipmentId,
+                equipmentNodeId,
                 repairRequestId,
                 "MECHANICAL",
                 "HIGH",
@@ -761,10 +871,40 @@ class DefectServiceTest {
     }
 
     private void stubCreateResponseDependencies(UUID equipmentId) {
+        stubCreateResponseDependencies(equipmentId, null);
+    }
+
+    private void stubCreateResponseDependencies(UUID equipmentId, EquipmentNode equipmentNode) {
         when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        if (equipmentNode != null) {
+            when(equipmentNodeRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentNode.getId())))
+                    .thenReturn(List.of(equipmentNode));
+        }
         when(workOrderRepository.findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(any()))
                 .thenReturn(List.of());
         when(knowledgeRepository.findDefectIdsWithLesson(any(), eq("LESSON_LEARNED")))
                 .thenReturn(List.of());
+    }
+
+    private Defect defect(UUID defectId, UUID equipmentId) {
+        Defect defect = Defect.builder()
+                .code("DEF-2026-0001")
+                .title("Existing defect")
+                .description("Existing description")
+                .equipmentId(equipmentId)
+                .status(DefectStatus.OPEN)
+                .build();
+        defect.setId(defectId);
+        return defect;
+    }
+
+    private EquipmentNode equipmentNode(UUID id, UUID equipmentId, String code, String name, EquipmentNodeType nodeType) {
+        EquipmentNode node = new EquipmentNode();
+        node.setId(id);
+        node.setEquipmentId(equipmentId);
+        node.setCode(code);
+        node.setName(name);
+        node.setNodeType(nodeType);
+        return node;
     }
 }

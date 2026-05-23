@@ -8,6 +8,8 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueHistoryDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
+import com.toir.dto.uom.UnitOfMeasurementDto;
+import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
 import com.toir.entity.equipment.EquipmentAttributeOptionItem;
@@ -19,6 +21,7 @@ import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentAttributeValueHistorySource;
 import com.toir.exception.RestException;
 import com.toir.repository.CriticalityClassRepository;
+import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeOptionItemRepository;
 import com.toir.repository.equipment.EquipmentAttributeOptionSourceRepository;
@@ -61,10 +64,17 @@ public class EquipmentAttributeService {
     private final EquipmentAttributeRequiredCriticalityRepository requiredCriticalityRepository;
     private final CriticalityClassRepository criticalityClassRepository;
     private final EquipmentAttributeValueHistoryRepository valueHistoryRepository;
+    private final UnitOfMeasurementRepository unitOfMeasurementRepository;
 
     @Transactional(readOnly = true)
     public List<EquipmentAttributeOptionSourceDto> findOptionSources() {
-        return optionSourceRepository.findAllByIsDeletedFalseOrderByCodeAsc()
+        return findOptionSources(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EquipmentAttributeOptionSourceDto> findOptionSources(String search) {
+        String normalizedSearch = normalizeSearch(search);
+        return optionSourceRepository.findAllBySearch(normalizedSearch)
                 .stream()
                 .map(EquipmentAttributeOptionSourceDto::from)
                 .toList();
@@ -123,6 +133,7 @@ public class EquipmentAttributeService {
         return definitions.stream()
                 .map(definition -> EquipmentAttributeDefinitionDto.from(
                         definition,
+                        resolveUnit(definition.getUnit()),
                         requiredByCriticality.getOrDefault(definition.getId(), List.of())
                 ))
                 .toList();
@@ -143,7 +154,7 @@ public class EquipmentAttributeService {
         validateRequiredCriticalityClassIds(requiredCriticalityClassIds);
         EquipmentAttributeDefinition saved = definitionRepository.save(definition);
         replaceRequiredCriticalities(saved.getId(), requiredCriticalityClassIds);
-        return EquipmentAttributeDefinitionDto.from(saved, requiredCriticalityClassIds);
+        return EquipmentAttributeDefinitionDto.from(saved, resolveUnit(saved.getUnit()), requiredCriticalityClassIds);
     }
 
     @Transactional
@@ -165,7 +176,7 @@ public class EquipmentAttributeService {
         validateRequiredCriticalityClassIds(requiredCriticalityClassIds);
         EquipmentAttributeDefinition saved = definitionRepository.save(definition);
         replaceRequiredCriticalities(saved.getId(), requiredCriticalityClassIds);
-        return EquipmentAttributeDefinitionDto.from(saved, requiredCriticalityClassIds);
+        return EquipmentAttributeDefinitionDto.from(saved, resolveUnit(saved.getUnit()), requiredCriticalityClassIds);
     }
 
     @Transactional
@@ -612,6 +623,30 @@ public class EquipmentAttributeService {
             throw RestException.badRequest("Attribute key is required");
         }
         return key.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeSearch(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+        return search.trim();
+    }
+
+    private UnitOfMeasurementDto resolveUnit(String unit) {
+        String token = normalizeSearch(unit);
+        if (token == null) {
+            return null;
+        }
+        return unitOfMeasurementRepository.findByTokenIgnoreCase(token).stream()
+                .findFirst()
+                .map(UnitOfMeasurementDto::from)
+                .orElseGet(() -> fallbackUnit(token));
+    }
+
+    private UnitOfMeasurementDto fallbackUnit(String unit) {
+        UnitOfMeasurement fallback = new UnitOfMeasurement();
+        fallback.setName(unit);
+        return UnitOfMeasurementDto.from(fallback);
     }
 
     private EquipmentAttributeDefinition getDefinitionOrThrow(UUID id) {

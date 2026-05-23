@@ -31,6 +31,9 @@ public class WorkOrder extends BaseEntity {
     @Column(name = "equipment_id", nullable = false)
     private UUID equipmentId;
 
+    @Column(name = "equipment_node_id")
+    private UUID equipmentNodeId;
+
     @Column(name = "department_id", nullable = false)
     private UUID departmentId;
 
