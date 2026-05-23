@@ -1,6 +1,7 @@
 # Equipment Lifecycle Main Sync - Backend
 
 Date: 2026-05-23
+Refresh check: 2026-05-23 after a second `git fetch --all --prune`.
 
 ## Branches
 
@@ -9,6 +10,7 @@ Date: 2026-05-23
 - Updated base branch: `main` at `fc3a328`
 - Preserved feature branch: `cadex-toir-p1-12` at `abe4ea0`
 - Sync merge commit: `f9a588a`
+- Report commit before refresh: `104eb98`
 
 ## Commands Executed
 
@@ -28,13 +30,19 @@ command -v mvn || true
 command -v ./mvnw || true
 command -v java || true
 java -version
+git fetch --all --prune
+git checkout main
+git pull --ff-only origin main
+git checkout codex/equipment-lifecycle-main-sync-backend
+git merge --no-ff main
+mvn test
 git diff --name-status main..HEAD
 git status --short --branch
 ```
 
 ## Conflicts Found
 
-None. The merge from `cadex-toir-p1-12` into the new branch completed with the `ort` strategy.
+None. The merge from `cadex-toir-p1-12` into the new branch completed with the `ort` strategy. The later refresh merge from updated `main` was a no-op because backend `main` was already current at `fc3a328`.
 
 ## Files Changed
 
