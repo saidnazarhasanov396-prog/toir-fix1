@@ -21,6 +21,8 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.NotificationService;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -73,6 +75,12 @@ class RepairRequestServiceTest {
 
     @Mock
     ScopeAccessService scopeAccessService;
+
+    @Mock
+    NotificationService notificationService;
+
+    @Mock
+    EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @InjectMocks
     RepairRequestService service;
@@ -279,6 +287,14 @@ class RepairRequestServiceTest {
 
         assertThat(result.status()).isEqualTo(RequestStatus.ASSIGNED);
         assertThat(result.assignedToId()).isEqualTo(assigneeId);
+        verify(notificationService).notifyUser(
+                eq(assigneeId),
+                org.mockito.ArgumentMatchers.contains("Repair request assigned"),
+                org.mockito.ArgumentMatchers.contains(entity.getNumber()),
+                eq(com.toir.enums.NotificationSeverity.INFO),
+                eq("RepairRequest"),
+                eq(id.toString())
+        );
     }
 
     @Test

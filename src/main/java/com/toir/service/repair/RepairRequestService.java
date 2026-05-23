@@ -12,6 +12,7 @@ import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.NotificationSeverity;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
@@ -24,7 +25,10 @@ import com.toir.repository.users.UserRepository;
 
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.NotificationService;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import com.toir.exception.RestException;
@@ -58,6 +62,8 @@ public class RepairRequestService {
     private final WorkOrderRepository workOrderRepository;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
+    private final NotificationService notificationService;
+    private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     private static final Set<RequestStatus> REVIEWABLE_STATUSES = EnumSet.of(
             RequestStatus.OPEN,
@@ -110,6 +116,7 @@ public class RepairRequestService {
         if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Request number already exists: " + request.number());
         }
+        equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create repair request");
         RepairRequest entity = new RepairRequest();
         entity.setNumber(request.number());
         entity.setTitle(request.title());
@@ -132,6 +139,15 @@ public class RepairRequestService {
                 "Создана заявка " + saved.getNumber(),
                 null,
                 saved
+        );
+        notificationService.notifyDepartmentByPermission(
+                saved.getDepartmentId(),
+                PermissionConstants.REPAIR_REQUEST_ASSIGN,
+                "Repair request created: " + saved.getNumber(),
+                "Repair request " + saved.getNumber() + " needs assignment.",
+                NotificationSeverity.INFO,
+                "RepairRequest",
+                saved.getId().toString()
         );
 
         return toDtoWithLinks(saved);
@@ -214,6 +230,14 @@ public class RepairRequestService {
                 "Заявка " + entity.getNumber() + " назначена исполнителю",
                 entity,
                 save
+        );
+        notificationService.notifyUser(
+                assigneeId,
+                "Repair request assigned: " + entity.getNumber(),
+                "Repair request " + entity.getNumber() + " was assigned to you.",
+                NotificationSeverity.INFO,
+                "RepairRequest",
+                entity.getId().toString()
         );
         return toDtoWithLinks(entity);
     }

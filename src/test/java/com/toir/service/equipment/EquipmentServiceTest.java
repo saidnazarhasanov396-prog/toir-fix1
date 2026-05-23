@@ -116,6 +116,9 @@ class EquipmentServiceTest {
     EquipmentAttributeService equipmentAttributeService;
 
     @Mock
+    EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+
+    @Mock
     AuditBuilderService auditBuilderService;
 
     @InjectMocks
@@ -469,6 +472,45 @@ class EquipmentServiceTest {
         assertThat(detail.attributes()).hasSize(1);
         assertThat(detail.attributes().getFirst().key()).isEqualTo("motor_power");
         assertThat(detail.attributes().getFirst().valueNumber()).isEqualTo(75.0);
+    }
+
+    @Test
+    void genericEquipmentUpdate_doesNotSilentlyOverwriteStatus() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-STATUS-UPDATE");
+        equipment.setId(equipmentId);
+        equipment.setStatus(EquipmentStatus.ACTIVE);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        EquipmentUpdateRequest request = new EquipmentUpdateRequest(
+                null,
+                "Equipment updated",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                EquipmentStatus.OUT_OF_SERVICE,
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThatThrownBy(() -> service.update(equipmentId, request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("dedicated status endpoint");
+                });
+
+        assertThat(equipment.getStatus()).isEqualTo(EquipmentStatus.ACTIVE);
+        verify(repository, never()).save(any(Equipment.class));
     }
 
     @Test

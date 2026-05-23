@@ -13,6 +13,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.ConditionReadingRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class ConditionReadingService {
     private final WebhookService webhookService;
     private final UnitOfMeasurementService unitOfMeasurementService;
     private final AuditBuilderService auditBuilderService;
+    private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
 
 
@@ -56,6 +58,7 @@ public class ConditionReadingService {
     public ConditionReadingDto record(UUID equipmentId, ConditionReadingRequest r, UUID userId) {
         Equipment eq = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
+        equipmentStatusLifecycleService.assertOperationallyAllowed(equipmentId, "add condition reading");
         ConditionReading cr = new ConditionReading();
         cr.setEquipmentId(eq.getId());
         cr.setParameter(r.parameter());

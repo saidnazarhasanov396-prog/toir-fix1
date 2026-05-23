@@ -7,6 +7,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.equipment.EquipmentService;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -14,6 +15,7 @@ import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -29,6 +31,7 @@ public class EquipmentController {
     private final EquipmentService service;
     private final EquipmentRepository repository;
     private final ScopeAccessService scopeAccessService;
+    private final EquipmentStatusLifecycleService statusLifecycleService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
@@ -116,6 +119,32 @@ public class EquipmentController {
             scopeAccessService.assertCanAccessDepartment(request.departmentId());
         }
         return ResponseEntity.ok(service.update(id, request));
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    public ResponseEntity<EquipmentStatusHistoryResponse> updateStatus(@PathVariable UUID id,
+                                                                       @Valid @RequestBody EquipmentStatusChangeRequest request) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.ok(statusLifecycleService.changeStatusManually(
+                id,
+                request,
+                scopeAccessService.currentUserIdOrNull()
+        ));
+    }
+
+    @GetMapping("/{id}/status-history")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Page<EquipmentStatusHistoryResponse>> statusHistory(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.ok(statusLifecycleService.getHistory(
+                id,
+                PageRequest.of(Math.max(0, page), Math.max(1, size))
+        ));
     }
 
     @PatchMapping("/{id}/placement")

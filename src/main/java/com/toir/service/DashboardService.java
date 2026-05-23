@@ -38,6 +38,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
@@ -77,6 +78,7 @@ public class DashboardService {
     public DashboardOverview overview(UUID requestedDepartmentId) {
         UUID departmentId = scopedDepartment(requestedDepartmentId);
         Instant monthAgo = Instant.now().minus(30, ChronoUnit.DAYS);
+        LocalDateTime now = LocalDateTime.now();
 
         // Pre-load mappings for filtering
         Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -101,7 +103,7 @@ public class DashboardService {
                 .count();
         
         long overduePpr = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> t.getStatus() == PprTaskStatus.OVERDUE)
+                .filter(t -> isPprTaskOverdue(t, now))
                 .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
                 .count();
 
@@ -256,7 +258,7 @@ public class DashboardService {
                 .count();
         long pprOver = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
-                .filter(t -> t.getStatus() == PprTaskStatus.OVERDUE)
+                .filter(t -> isPprTaskOverdue(t, now))
                 .count();
         double pprCompletionRate = pprTotal > 0 ? (double) pprDone / pprTotal * 100 : 0;
         double overdueWorkShare = pprTotal > 0 ? (double) pprOver / pprTotal * 100 : 0;
@@ -416,5 +418,15 @@ public class DashboardService {
             throw new AccessDeniedException("Access denied by data scope");
         }
         return currentDepartmentId;
+    }
+
+    private boolean isPprTaskOverdue(PprTask task, LocalDateTime now) {
+        if (task.getDueDate() == null) {
+            return false;
+        }
+        if (task.getStatus() == PprTaskStatus.COMPLETED || task.getStatus() == PprTaskStatus.CANCELLED) {
+            return false;
+        }
+        return task.getStatus() == PprTaskStatus.OVERDUE || task.getDueDate().isBefore(now);
     }
 }

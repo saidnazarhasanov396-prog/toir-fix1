@@ -6,6 +6,7 @@ import com.toir.entity.TechnicalDocument;
 import com.toir.enums.DocumentType;
 import com.toir.repository.FileAssetRepository;
 import com.toir.repository.TechnicalDocumentRepository;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +36,9 @@ class TechnicalDocumentServiceTest {
 
     @Mock
     AuditBuilderService auditBuilderService;
+
+    @Mock
+    EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @InjectMocks
     TechnicalDocumentService service;

@@ -2,7 +2,6 @@ package com.toir.dto.equipmentattribute;
 
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
 import com.toir.enums.EquipmentAttributeDataType;
-import com.toir.dto.uom.UnitOfMeasurementDto;
 
 import java.util.List;
 import java.util.UUID;
@@ -15,20 +14,43 @@ public record EquipmentAttributeDefinitionDto(
         String labelRu,
         String labelUz,
         EquipmentAttributeDataType dataType,
-        UnitOfMeasurementDto unit,
+        String unit,
         boolean required,
         Double minValue,
         Double maxValue,
         UUID optionSourceId,
         List<EquipmentAttributeOptionDto> options,
         String groupName,
-        Integer sortOrder
+        Integer sortOrder,
+        List<UUID> requiredForCriticalityClassIds
 ) {
-    public static EquipmentAttributeDefinitionDto from(EquipmentAttributeDefinition definition) {
-        return from(definition, null);
+    public EquipmentAttributeDefinitionDto(
+            UUID id,
+            UUID equipmentTypeId,
+            String key,
+            String label,
+            String labelRu,
+            String labelUz,
+            EquipmentAttributeDataType dataType,
+            String unit,
+            boolean required,
+            Double minValue,
+            Double maxValue,
+            UUID optionSourceId,
+            List<EquipmentAttributeOptionDto> options,
+            String groupName,
+            Integer sortOrder
+    ) {
+        this(id, equipmentTypeId, key, label, labelRu, labelUz, dataType, unit, required, minValue, maxValue,
+                optionSourceId, options, groupName, sortOrder, List.of());
     }
 
-    public static EquipmentAttributeDefinitionDto from(EquipmentAttributeDefinition definition, UnitOfMeasurementDto unit) {
+    public static EquipmentAttributeDefinitionDto from(EquipmentAttributeDefinition definition) {
+        return from(definition, List.of());
+    }
+
+    public static EquipmentAttributeDefinitionDto from(EquipmentAttributeDefinition definition,
+                                                       List<UUID> requiredForCriticalityClassIds) {
         return new EquipmentAttributeDefinitionDto(
                 definition.getId(),
                 definition.getEquipmentTypeId(),
@@ -37,14 +59,15 @@ public record EquipmentAttributeDefinitionDto(
                 definition.getLabelRu(),
                 definition.getLabelUz(),
                 definition.getDataType(),
-                unit,
+                definition.getUnit(),
                 definition.isRequired(),
                 definition.getMinValue(),
                 definition.getMaxValue(),
                 definition.getOptionSourceId(),
                 definition.getOptions() == null ? List.of() : definition.getOptions(),
                 definition.getGroupName(),
-                definition.getSortOrder()
+                definition.getSortOrder(),
+                requiredForCriticalityClassIds == null ? List.of() : requiredForCriticalityClassIds
         );
     }
 }

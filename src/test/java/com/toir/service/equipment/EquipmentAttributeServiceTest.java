@@ -4,21 +4,22 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeOptionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
-import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
-import com.toir.entity.equipment.EquipmentAttributeOptionSource;
+import com.toir.entity.equipment.EquipmentAttributeRequiredCriticality;
 import com.toir.entity.equipment.EquipmentAttributeValue;
+import com.toir.entity.equipment.EquipmentAttributeValueHistory;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
+import com.toir.repository.equipment.EquipmentAttributeRequiredCriticalityRepository;
+import com.toir.repository.equipment.EquipmentAttributeValueHistoryRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
-import com.toir.repository.UnitOfMeasurementRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -64,58 +65,22 @@ class EquipmentAttributeServiceTest {
     com.toir.repository.equipment.EquipmentAttributeOptionItemRepository optionItemRepository;
 
     @Mock
-    UnitOfMeasurementRepository unitOfMeasurementRepository;
+    EquipmentAttributeRequiredCriticalityRepository requiredCriticalityRepository;
+
+    @Mock
+    EquipmentAttributeValueHistoryRepository valueHistoryRepository;
+
+    @Mock
+    com.toir.repository.CriticalityClassRepository criticalityClassRepository;
 
     @InjectMocks
     EquipmentAttributeService service;
 
     @Test
-    void findOptionSourcesSearchesAndMapsResults() {
-        UUID sourceId = UUID.randomUUID();
-        EquipmentAttributeOptionSource source = new EquipmentAttributeOptionSource();
-        source.setId(sourceId);
-        source.setCode("seal_types");
-        source.setName("Seal Types");
-        source.setDescription("Pump seal options");
-        when(optionSourceRepository.findAllBySearch("seal")).thenReturn(List.of(source));
-
-        var result = service.findOptionSources(" seal ");
-
-        assertThat(result).hasSize(1);
-        assertThat(result.getFirst().id()).isEqualTo(sourceId);
-        assertThat(result.getFirst().code()).isEqualTo("seal_types");
-        verify(optionSourceRepository).findAllBySearch("seal");
-    }
-
-    @Test
-    void findDefinitionsReturnsFullUnitDictionaryObject() {
-        UUID equipmentTypeId = UUID.randomUUID();
-        EquipmentAttributeDefinition definition = definition(UUID.randomUUID(), equipmentTypeId, "motor_power",
-                EquipmentAttributeDataType.NUMBER, true);
-        definition.setUnit("kW");
-        UnitOfMeasurement unit = unit("UOM-2026-0001", "kW", "Kilowatt", "Kilovatt");
-        stubEquipmentType(equipmentTypeId);
-        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId))
-                .thenReturn(List.of(definition));
-        when(unitOfMeasurementRepository.findByTokenIgnoreCase("kW")).thenReturn(List.of(unit));
-
-        var result = service.findDefinitions(equipmentTypeId);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.getFirst().unit().id()).isEqualTo(unit.getId());
-        assertThat(result.getFirst().unit().code()).isEqualTo("UOM-2026-0001");
-        assertThat(result.getFirst().unit().name()).isEqualTo("kW");
-        assertThat(result.getFirst().unit().nameEn()).isEqualTo("Kilowatt");
-        assertThat(result.getFirst().unit().nameUz()).isEqualTo("Kilovatt");
-    }
-
-    @Test
     void createDefinitionPersistsPumpAttribute() {
         UUID equipmentTypeId = UUID.randomUUID();
         stubEquipmentType(equipmentTypeId);
-        UnitOfMeasurement unit = unit("UOM-2026-0001", "kW", "Kilowatt", "Kilovatt");
         when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "motor_power")).thenReturn(false);
-        when(unitOfMeasurementRepository.findByTokenIgnoreCase("kW")).thenReturn(List.of(unit));
         when(definitionRepository.save(any(EquipmentAttributeDefinition.class))).thenAnswer(invocation -> {
             EquipmentAttributeDefinition definition = invocation.getArgument(0);
             definition.setId(UUID.randomUUID());
@@ -141,10 +106,7 @@ class EquipmentAttributeServiceTest {
         assertThat(dto.key()).isEqualTo("motor_power");
         assertThat(dto.dataType()).isEqualTo(EquipmentAttributeDataType.NUMBER);
         assertThat(dto.required()).isTrue();
-        assertThat(dto.unit().code()).isEqualTo("UOM-2026-0001");
-        assertThat(dto.unit().name()).isEqualTo("kW");
-        assertThat(dto.unit().nameEn()).isEqualTo("Kilowatt");
-        assertThat(dto.unit().nameUz()).isEqualTo("Kilovatt");
+        assertThat(dto.unit()).isEqualTo("kW");
 
         ArgumentCaptor<EquipmentAttributeDefinition> captor =
                 ArgumentCaptor.forClass(EquipmentAttributeDefinition.class);
@@ -345,6 +307,182 @@ class EquipmentAttributeServiceTest {
     }
 
     @Test
+    void createDefinition_withRequiredCriticalityClasses_persistsPolicy() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID criticalityId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "vibration_limit")).thenReturn(false);
+        when(criticalityClassRepository.findAllByIdInAndIsDeletedFalse(List.of(criticalityId))).thenReturn(List.of(criticalityClass(criticalityId)));
+        when(definitionRepository.save(any(EquipmentAttributeDefinition.class))).thenAnswer(invocation -> {
+            EquipmentAttributeDefinition definition = invocation.getArgument(0);
+            definition.setId(UUID.randomUUID());
+            return definition;
+        });
+        var dto = service.createDefinition(equipmentTypeId, new EquipmentAttributeDefinitionRequest(
+                "vibration_limit",
+                "Vibration Limit",
+                null,
+                null,
+                EquipmentAttributeDataType.NUMBER,
+                "mm/s",
+                false,
+                null,
+                null,
+                null,
+                List.of(),
+                "Monitoring",
+                10,
+                List.of(criticalityId)
+        ));
+
+        assertThat(dto.requiredForCriticalityClassIds()).containsExactly(criticalityId);
+        ArgumentCaptor<Iterable<EquipmentAttributeRequiredCriticality>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(requiredCriticalityRepository).saveAll(captor.capture());
+        assertThat(toRequiredCriticalityList(captor.getValue()))
+                .extracting(EquipmentAttributeRequiredCriticality::getCriticalityClassId)
+                .containsExactly(criticalityId);
+    }
+
+    @Test
+    void updateDefinition_replacesRequiredCriticalityClasses() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID definitionId = UUID.randomUUID();
+        UUID oldCriticalityId = UUID.randomUUID();
+        UUID newCriticalityId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        EquipmentAttributeDefinition definition = definition(definitionId, equipmentTypeId, "vibration_limit",
+                EquipmentAttributeDataType.NUMBER, false);
+        EquipmentAttributeRequiredCriticality oldPolicy = requiredCriticality(definitionId, oldCriticalityId);
+        when(definitionRepository.findByIdAndIsDeletedFalse(definitionId)).thenReturn(Optional.of(definition));
+        when(criticalityClassRepository.findAllByIdInAndIsDeletedFalse(List.of(newCriticalityId))).thenReturn(List.of(criticalityClass(newCriticalityId)));
+        when(requiredCriticalityRepository.findAllByAttributeDefinitionIdAndIsDeletedFalse(definitionId)).thenReturn(List.of(oldPolicy));
+        when(definitionRepository.save(definition)).thenReturn(definition);
+        var dto = service.updateDefinition(equipmentTypeId, definitionId, new EquipmentAttributeDefinitionRequest(
+                "vibration_limit",
+                "Vibration Limit",
+                null,
+                null,
+                EquipmentAttributeDataType.NUMBER,
+                "mm/s",
+                false,
+                null,
+                null,
+                null,
+                List.of(),
+                "Monitoring",
+                10,
+                List.of(newCriticalityId)
+        ));
+
+        assertThat(oldPolicy.isDeleted()).isTrue();
+        verify(requiredCriticalityRepository).saveAll(List.of(oldPolicy));
+        assertThat(dto.requiredForCriticalityClassIds()).containsExactly(newCriticalityId);
+    }
+
+    @Test
+    void upsertValues_missingAlwaysRequiredAttribute_returnsBadRequest() {
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(UUID.randomUUID(), typeId);
+        EquipmentAttributeDefinition motorPower = definition(UUID.randomUUID(), typeId, "motor_power",
+                EquipmentAttributeDataType.NUMBER, true);
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(motorPower));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipment.getId())).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.upsertValues(equipment, List.of()))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("motor_power").contains("required by equipment type");
+                });
+    }
+
+    @Test
+    void upsertValues_missingCriticalityRequiredAttribute_returnsBadRequest() {
+        UUID typeId = UUID.randomUUID();
+        UUID criticalityId = UUID.randomUUID();
+        Equipment equipment = equipment(UUID.randomUUID(), typeId);
+        equipment.setCriticalityClassId(criticalityId);
+        EquipmentAttributeDefinition vibrationLimit = definition(UUID.randomUUID(), typeId, "vibration_limit",
+                EquipmentAttributeDataType.NUMBER, false);
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(vibrationLimit));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipment.getId())).thenReturn(List.of());
+        when(requiredCriticalityRepository.findAllByAttributeDefinitionIdInAndIsDeletedFalse(List.of(vibrationLimit.getId())))
+                .thenReturn(List.of(requiredCriticality(vibrationLimit.getId(), criticalityId)));
+
+        assertThatThrownBy(() -> service.upsertValues(equipment, List.of()))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("vibration_limit").contains("required by criticality");
+                });
+    }
+
+    @Test
+    void upsertValues_criticalityRequiredAttributePresent_passes() {
+        UUID typeId = UUID.randomUUID();
+        UUID criticalityId = UUID.randomUUID();
+        Equipment equipment = equipment(UUID.randomUUID(), typeId);
+        equipment.setCriticalityClassId(criticalityId);
+        EquipmentAttributeDefinition vibrationLimit = definition(UUID.randomUUID(), typeId, "vibration_limit",
+                EquipmentAttributeDataType.NUMBER, false);
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(vibrationLimit));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipment.getId())).thenReturn(List.of());
+        when(requiredCriticalityRepository.findAllByAttributeDefinitionIdInAndIsDeletedFalse(List.of(vibrationLimit.getId())))
+                .thenReturn(List.of(requiredCriticality(vibrationLimit.getId(), criticalityId)));
+
+        service.upsertValues(equipment, List.of(
+                new EquipmentAttributeValueRequest(null, "vibration_limit", null, 4.2, null, null, null, null)
+        ));
+
+        verify(valueRepository).saveAll(any());
+    }
+
+    @Test
+    void upsertValues_noEquipmentCriticality_ignoresCriticalityRequiredPolicy() {
+        UUID typeId = UUID.randomUUID();
+        UUID criticalityId = UUID.randomUUID();
+        Equipment equipment = equipment(UUID.randomUUID(), typeId);
+        EquipmentAttributeDefinition vibrationLimit = definition(UUID.randomUUID(), typeId, "vibration_limit",
+                EquipmentAttributeDataType.NUMBER, false);
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(vibrationLimit));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipment.getId())).thenReturn(List.of());
+        when(requiredCriticalityRepository.findAllByAttributeDefinitionIdInAndIsDeletedFalse(List.of(vibrationLimit.getId())))
+                .thenReturn(List.of(requiredCriticality(vibrationLimit.getId(), criticalityId)));
+
+        service.upsertValues(equipment, List.of());
+
+        verify(valueRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void createDefinition_unknownCriticalityClass_returnsNotFoundOrBadRequest() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID missingCriticalityId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "vibration_limit")).thenReturn(false);
+        when(criticalityClassRepository.findAllByIdInAndIsDeletedFalse(List.of(missingCriticalityId))).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.createDefinition(equipmentTypeId, new EquipmentAttributeDefinitionRequest(
+                "vibration_limit",
+                "Vibration Limit",
+                null,
+                null,
+                EquipmentAttributeDataType.NUMBER,
+                "mm/s",
+                false,
+                null,
+                null,
+                null,
+                List.of(),
+                "Monitoring",
+                10,
+                List.of(missingCriticalityId)
+        ))).isInstanceOfSatisfying(RestException.class, ex -> {
+            assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+            assertThat(ex.getMessage()).contains("Criticality class not found");
+        });
+        verify(definitionRepository, never()).save(any());
+    }
+
+    @Test
     void upsertValuesRejectsNumberOutsideMinMax() {
         UUID typeId = UUID.randomUUID();
         Equipment equipment = equipment(UUID.randomUUID(), typeId);
@@ -444,6 +582,130 @@ class EquipmentAttributeServiceTest {
         assertThat(result.getFirst().equipmentId()).isEqualTo(equipmentId);
         assertThat(result.getFirst().key()).isEqualTo("motor_power");
         assertThat(result.getFirst().valueNumber()).isEqualTo(90.0);
+    }
+
+    @Test
+    void upsertValues_createsHistoryForNewValue() {
+        UUID typeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        EquipmentAttributeDefinition motorPower = definition(UUID.randomUUID(), typeId, "motor_power",
+                EquipmentAttributeDataType.NUMBER, false);
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(motorPower));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
+
+        service.upsertValues(equipment, List.of(
+                new EquipmentAttributeValueRequest(null, "motor_power", null, 75.0, null, null, null, null)
+        ));
+
+        ArgumentCaptor<Iterable<EquipmentAttributeValueHistory>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(valueHistoryRepository).saveAll(captor.capture());
+        EquipmentAttributeValueHistory history = toHistoryList(captor.getValue()).getFirst();
+        assertThat(history.getEquipmentId()).isEqualTo(equipmentId);
+        assertThat(history.getAttributeDefinitionId()).isEqualTo(motorPower.getId());
+        assertThat(history.getAttributeKey()).isEqualTo("motor_power");
+        assertThat(history.getOldValue()).isNull();
+        assertThat(history.getNewValue()).isEqualTo("75");
+        assertThat(history.getSource().name()).isEqualTo("API");
+        assertThat(history.getChangedAt()).isNotNull();
+    }
+
+    @Test
+    void upsertValues_createsHistoryForChangedValue() {
+        UUID typeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        EquipmentAttributeDefinition motorPower = definition(UUID.randomUUID(), typeId, "motor_power",
+                EquipmentAttributeDataType.NUMBER, false);
+        EquipmentAttributeValue existing = value(equipmentId, motorPower.getId());
+        existing.setValueNumber(75.0);
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(motorPower));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of(existing));
+
+        service.upsertValues(equipment, List.of(
+                new EquipmentAttributeValueRequest(null, "motor_power", null, 90.0, null, null, null, null)
+        ));
+
+        ArgumentCaptor<Iterable<EquipmentAttributeValueHistory>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(valueHistoryRepository).saveAll(captor.capture());
+        EquipmentAttributeValueHistory history = toHistoryList(captor.getValue()).getFirst();
+        assertThat(history.getOldValue()).isEqualTo("75");
+        assertThat(history.getNewValue()).isEqualTo("90");
+    }
+
+    @Test
+    void upsertValues_doesNotCreateHistoryForUnchangedValue() {
+        UUID typeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        EquipmentAttributeDefinition motorPower = definition(UUID.randomUUID(), typeId, "motor_power",
+                EquipmentAttributeDataType.NUMBER, false);
+        EquipmentAttributeValue existing = value(equipmentId, motorPower.getId());
+        existing.setValueNumber(75.0);
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(motorPower));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of(existing));
+
+        service.upsertValues(equipment, List.of(
+                new EquipmentAttributeValueRequest(null, "motor_power", null, 75.0, null, null, null, null)
+        ));
+
+        verify(valueHistoryRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void upsertValues_multipleChangedValues_createMultipleHistoryRows() {
+        UUID typeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        EquipmentAttributeDefinition motorPower = definition(UUID.randomUUID(), typeId, "motor_power",
+                EquipmentAttributeDataType.NUMBER, false);
+        EquipmentAttributeDefinition sealType = definition(UUID.randomUUID(), typeId, "seal_type",
+                EquipmentAttributeDataType.SELECT, false);
+        sealType.setOptions(List.of(option("mechanical", "Mechanical"), option("packing", "Packing")));
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(motorPower, sealType));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
+
+        service.upsertValues(equipment, List.of(
+                new EquipmentAttributeValueRequest(null, "motor_power", null, 75.0, null, null, null, null),
+                new EquipmentAttributeValueRequest(null, "seal_type", null, null, null, null, "mechanical", null)
+        ));
+
+        ArgumentCaptor<Iterable<EquipmentAttributeValueHistory>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(valueHistoryRepository).saveAll(captor.capture());
+        assertThat(toHistoryList(captor.getValue())).hasSize(2);
+    }
+
+    @Test
+    void upsertValues_preservesRequiredPolicyValidation() {
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(UUID.randomUUID(), typeId);
+        EquipmentAttributeDefinition motorPower = definition(UUID.randomUUID(), typeId, "motor_power",
+                EquipmentAttributeDataType.NUMBER, true);
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(motorPower));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipment.getId())).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.upsertValues(equipment, List.of()))
+                .isInstanceOf(RestException.class);
+        verify(valueHistoryRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void upsertValues_numericEquivalentValue_doesNotCreateDuplicateHistory() {
+        UUID typeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        EquipmentAttributeDefinition motorPower = definition(UUID.randomUUID(), typeId, "motor_power",
+                EquipmentAttributeDataType.NUMBER, false);
+        EquipmentAttributeValue existing = value(equipmentId, motorPower.getId());
+        existing.setValueNumber(10.0);
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(motorPower));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of(existing));
+
+        service.upsertValues(equipment, List.of(
+                new EquipmentAttributeValueRequest(null, "motor_power", null, 10.00, null, null, null, null)
+        ));
+
+        verify(valueHistoryRepository, never()).saveAll(any());
     }
 
     private static Stream<Object[]> validValueFields() {
@@ -554,7 +816,33 @@ class EquipmentAttributeServiceTest {
         return value;
     }
 
+    private com.toir.entity.equipment.CriticalityClass criticalityClass(UUID id) {
+        com.toir.entity.equipment.CriticalityClass criticality = new com.toir.entity.equipment.CriticalityClass();
+        criticality.setId(id);
+        criticality.setCode("CRIT-HIGH");
+        criticality.setName("High");
+        return criticality;
+    }
+
+    private EquipmentAttributeRequiredCriticality requiredCriticality(UUID definitionId, UUID criticalityId) {
+        EquipmentAttributeRequiredCriticality policy = new EquipmentAttributeRequiredCriticality();
+        policy.setId(UUID.randomUUID());
+        policy.setAttributeDefinitionId(definitionId);
+        policy.setCriticalityClassId(criticalityId);
+        return policy;
+    }
+
     private List<EquipmentAttributeValue> toList(Iterable<EquipmentAttributeValue> values) {
         return ((List<EquipmentAttributeValue>) values);
+    }
+
+    private List<EquipmentAttributeRequiredCriticality> toRequiredCriticalityList(
+            Iterable<EquipmentAttributeRequiredCriticality> values
+    ) {
+        return ((List<EquipmentAttributeRequiredCriticality>) values);
+    }
+
+    private List<EquipmentAttributeValueHistory> toHistoryList(Iterable<EquipmentAttributeValueHistory> values) {
+        return ((List<EquipmentAttributeValueHistory>) values);
     }
 }
