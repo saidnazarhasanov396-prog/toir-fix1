@@ -1,5 +1,6 @@
 package com.toir.dto.equipmentnode;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.enums.EquipmentNodeType;
 import jakarta.validation.constraints.NotBlank;
@@ -10,6 +11,7 @@ import java.util.UUID;
 public record EquipmentNodeDto(
         UUID id,
         UUID equipmentId,
+        @JsonAlias("parentNodeId")
         UUID parentId,
         @NotBlank String code,
         @NotBlank String name,

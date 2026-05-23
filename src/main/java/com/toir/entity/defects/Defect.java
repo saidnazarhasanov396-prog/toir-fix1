@@ -29,6 +29,9 @@ public class Defect extends BaseEntity {
     @Column(name = "equipment_id", nullable = false)
     private UUID equipmentId;
 
+    @Column(name = "equipment_node_id")
+    private UUID equipmentNodeId;
+
     @Column(name = "repair_request_id")
     private UUID repairRequestId;
 
