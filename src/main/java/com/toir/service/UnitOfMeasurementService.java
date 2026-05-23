@@ -124,13 +124,29 @@ public class UnitOfMeasurementService {
     }
 
     private String normalizeKnownUnitOrThrow(String token, String fieldName) {
-        Optional<UnitOfMeasurement> match = repository.findByTokenIgnoreCase(token).stream().findFirst();
+        Optional<UnitOfMeasurement> match = findKnownUnit(token);
         if (match.isEmpty()) {
             throw RestException.badRequest(
                     "Unknown " + fieldName + ": " + token + ". Use dictionary values from /api/v1/units-of-measurement"
             );
         }
         return match.get().getName();
+    }
+
+    private Optional<UnitOfMeasurement> findKnownUnit(String token) {
+        Optional<UUID> unitId = parseUuid(token);
+        if (unitId.isPresent()) {
+            return repository.findByIdAndIsDeletedFalse(unitId.get());
+        }
+        return repository.findByTokenIgnoreCase(token).stream().findFirst();
+    }
+
+    private Optional<UUID> parseUuid(String token) {
+        try {
+            return Optional.of(UUID.fromString(token));
+        } catch (IllegalArgumentException ignored) {
+            return Optional.empty();
+        }
     }
 
     private String normalizeInput(String rawUnit) {
