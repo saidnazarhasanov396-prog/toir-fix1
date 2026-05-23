@@ -5,6 +5,7 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeOptionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
+import com.toir.dto.uom.UnitOfMeasurementDto;
 import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
@@ -57,8 +58,36 @@ class EquipmentAttributeControllerContractTest {
                 .andExpect(jsonPath("$[0].id").value(definitionId.toString()))
                 .andExpect(jsonPath("$[0].key").value("motor_power"))
                 .andExpect(jsonPath("$[0].dataType").value("NUMBER"))
-                .andExpect(jsonPath("$[0].unit").value("kW"))
+                .andExpect(jsonPath("$[0].unit.code").value("UOM-2026-0001"))
+                .andExpect(jsonPath("$[0].unit.name").value("kW"))
                 .andExpect(jsonPath("$[0].required").value(true));
+    }
+
+    @Test
+    void listOptionSourcesSupportsSearchAndPagination() throws Exception {
+        UUID sourceId = UUID.randomUUID();
+        when(service.findOptionSources("seal")).thenReturn(List.of(new EquipmentAttributeOptionSourceDto(
+                sourceId,
+                "seal_types",
+                "Seal Types",
+                null,
+                null,
+                "Pump seal options",
+                3
+        )));
+
+        mockMvc.perform(get("/api/v1/equipment-attribute-option-sources")
+                        .param("search", "seal")
+                        .param("page", "0")
+                        .param("pageSize", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(sourceId.toString()))
+                .andExpect(jsonPath("$.content[0].code").value("seal_types"))
+                .andExpect(jsonPath("$.content[0].optionCounts").value(3))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.size").value(10));
+
+        verify(service).findOptionSources("seal");
     }
 
     @Test
@@ -70,7 +99,8 @@ class EquipmentAttributeControllerContractTest {
                 "Seal Types",
                 null,
                 null,
-                "Pump seal options"
+                "Pump seal options",
+                0
         ));
         when(service.replaceOptions(eq(sourceId), any())).thenReturn(List.of(
                 new EquipmentAttributeOptionDto("mechanical_seal", "Mechanical seal", null, null, 10, true)
@@ -260,7 +290,7 @@ class EquipmentAttributeControllerContractTest {
                 "Мощность двигателя",
                 "Dvigatel quvvati",
                 EquipmentAttributeDataType.NUMBER,
-                "kW",
+                new UnitOfMeasurementDto(UUID.randomUUID(), "UOM-2026-0001", "kW", "Kilowatt", "Kilovatt"),
                 true,
                 0.0,
                 500.0,

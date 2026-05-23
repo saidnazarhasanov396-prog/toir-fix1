@@ -16,6 +16,19 @@ public interface EquipmentAttributeOptionSourceRepository extends JpaRepository<
     @Query(value = "SELECT * FROM equipment_attribute_option_sources WHERE is_deleted = false ORDER BY code ASC", nativeQuery = true)
     List<EquipmentAttributeOptionSource> findAllByIsDeletedFalseOrderByCodeAsc();
 
+    @Query("""
+            SELECT source FROM EquipmentAttributeOptionSource source
+            WHERE source.isDeleted = false
+                AND (cast(:search as string) IS NULL OR
+                     lower(source.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(source.name) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(source.nameRu) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(source.nameUz) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(source.description) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY source.code ASC
+            """)
+    List<EquipmentAttributeOptionSource> findAllBySearch(@Param("search") String search);
+
     @Query(value = "SELECT * FROM equipment_attribute_option_sources WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<EquipmentAttributeOptionSource> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 

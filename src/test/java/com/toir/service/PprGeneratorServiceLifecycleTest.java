@@ -18,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -94,8 +95,8 @@ class PprGeneratorServiceLifecycleTest {
         plan.setId(id);
         plan.setCode("PPR-2026-0001");
         plan.setName("Monthly PPR plan");
-        plan.setYear(2026);
-        plan.setMonth(6);
+        plan.setStartDate(LocalDate.of(2026, 6, 1));
+        plan.setEndDate(LocalDate.of(2026, 6, 30));
         plan.setStatus(status);
         return plan;
     }

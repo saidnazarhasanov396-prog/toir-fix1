@@ -90,6 +90,71 @@ class ConditionReadingServiceTest {
     }
 
     @Test
+    void recordWithKnownDictionaryUnitIdSucceeds() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID unitId = UUID.randomUUID();
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(unitOfMeasurementService.normalizeRequiredUnitOrThrow(unitId.toString(), "condition reading unit")).thenReturn("bar");
+        when(repo.save(any(ConditionReading.class))).thenAnswer(invocation -> {
+            ConditionReading reading = invocation.getArgument(0);
+            reading.setId(UUID.randomUUID());
+            return reading;
+        });
+
+        ConditionReadingDto dto = service.record(
+                equipmentId,
+                new ConditionReadingRequest(
+                        ConditionParameter.PRESSURE,
+                        10.0,
+                        unitId.toString(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                ),
+                null
+        );
+
+        assertThat(dto.unit()).isEqualTo("bar");
+        verify(repo).save(any(ConditionReading.class));
+    }
+
+    @Test
+    void recordWithUnknownDictionaryUnitIdReturnsBadRequest() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID unitId = UUID.randomUUID();
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(unitOfMeasurementService.normalizeRequiredUnitOrThrow(unitId.toString(), "condition reading unit"))
+                .thenThrow(RestException.badRequest("Unknown condition reading unit: " + unitId));
+
+        assertThatThrownBy(() -> service.record(
+                equipmentId,
+                new ConditionReadingRequest(
+                        ConditionParameter.PRESSURE,
+                        10.0,
+                        unitId.toString(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                ),
+                null
+        )).isInstanceOf(RestException.class)
+                .hasMessageContaining("Unknown condition reading unit")
+                .hasMessageContaining(unitId.toString());
+
+        verify(repo, never()).save(any(ConditionReading.class));
+    }
+
+    @Test
     void recordWithUnknownDictionaryUnitReturnsBadRequest() {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = new Equipment();

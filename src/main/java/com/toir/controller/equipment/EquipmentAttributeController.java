@@ -9,6 +9,7 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueHistoryDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.service.equipment.EquipmentAttributeService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -41,8 +42,13 @@ public class EquipmentAttributeController {
 
     @GetMapping("/equipment-attribute-option-sources")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TYPE_READ')")
-    public ResponseEntity<List<EquipmentAttributeOptionSourceDto>> listOptionSources() {
-        return ResponseEntity.ok(service.findOptionSources());
+    public ResponseEntity<Page<EquipmentAttributeOptionSourceDto>> listOptionSources(
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Integer pageSize) {
+        int effectiveSize = pageSize != null ? pageSize : size;
+        return ResponseEntity.ok(PaginationUtils.page(service.findOptionSources(search), page, effectiveSize));
     }
 
     @PostMapping("/equipment-attribute-option-sources")

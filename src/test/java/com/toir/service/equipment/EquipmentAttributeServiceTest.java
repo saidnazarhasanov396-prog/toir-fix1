@@ -4,8 +4,11 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeOptionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
+import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
+import com.toir.entity.equipment.EquipmentAttributeOptionItem;
+import com.toir.entity.equipment.EquipmentAttributeOptionSource;
 import com.toir.entity.equipment.EquipmentAttributeRequiredCriticality;
 import com.toir.entity.equipment.EquipmentAttributeValue;
 import com.toir.entity.equipment.EquipmentAttributeValueHistory;
@@ -14,6 +17,7 @@ import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeRequiredCriticalityRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueHistoryRepository;
@@ -73,14 +77,65 @@ class EquipmentAttributeServiceTest {
     @Mock
     com.toir.repository.CriticalityClassRepository criticalityClassRepository;
 
+    @Mock
+    UnitOfMeasurementRepository unitOfMeasurementRepository;
+
     @InjectMocks
     EquipmentAttributeService service;
+
+    @Test
+    void findOptionSourcesSearchesAndMapsResults() {
+        UUID sourceId = UUID.randomUUID();
+        EquipmentAttributeOptionSource source = new EquipmentAttributeOptionSource();
+        source.setId(sourceId);
+        source.setCode("seal_types");
+        source.setName("Seal Types");
+        source.setDescription("Pump seal options");
+        when(optionSourceRepository.findAllBySearch("seal")).thenReturn(List.of(source));
+        when(optionItemRepository.findAllBySourceIdInAndIsDeletedFalse(List.of(sourceId)))
+                .thenReturn(List.of(optionItem(sourceId, "mechanical"), optionItem(sourceId, "packing")));
+
+        var result = service.findOptionSources(" seal ");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().id()).isEqualTo(sourceId);
+        assertThat(result.getFirst().code()).isEqualTo("seal_types");
+        assertThat(result.getFirst().optionCounts()).isEqualTo(2);
+        verify(optionSourceRepository).findAllBySearch("seal");
+        verify(optionItemRepository).findAllBySourceIdInAndIsDeletedFalse(List.of(sourceId));
+    }
+
+    @Test
+    void findDefinitionsReturnsFullUnitDictionaryObject() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        EquipmentAttributeDefinition definition = definition(UUID.randomUUID(), equipmentTypeId, "motor_power",
+                EquipmentAttributeDataType.NUMBER, true);
+        definition.setUnit("kW");
+        UnitOfMeasurement unit = unit("UOM-2026-0001", "kW", "Kilowatt", "Kilovatt");
+        stubEquipmentType(equipmentTypeId);
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId))
+                .thenReturn(List.of(definition));
+        when(requiredCriticalityRepository.findAllByAttributeDefinitionIdInAndIsDeletedFalse(List.of(definition.getId())))
+                .thenReturn(List.of());
+        when(unitOfMeasurementRepository.findByTokenIgnoreCase("kW")).thenReturn(List.of(unit));
+
+        var result = service.findDefinitions(equipmentTypeId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().unit().id()).isEqualTo(unit.getId());
+        assertThat(result.getFirst().unit().code()).isEqualTo("UOM-2026-0001");
+        assertThat(result.getFirst().unit().name()).isEqualTo("kW");
+        assertThat(result.getFirst().unit().nameEn()).isEqualTo("Kilowatt");
+        assertThat(result.getFirst().unit().nameUz()).isEqualTo("Kilovatt");
+    }
 
     @Test
     void createDefinitionPersistsPumpAttribute() {
         UUID equipmentTypeId = UUID.randomUUID();
         stubEquipmentType(equipmentTypeId);
+        UnitOfMeasurement unit = unit("UOM-2026-0001", "kW", "Kilowatt", "Kilovatt");
         when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "motor_power")).thenReturn(false);
+        when(unitOfMeasurementRepository.findByTokenIgnoreCase("kW")).thenReturn(List.of(unit));
         when(definitionRepository.save(any(EquipmentAttributeDefinition.class))).thenAnswer(invocation -> {
             EquipmentAttributeDefinition definition = invocation.getArgument(0);
             definition.setId(UUID.randomUUID());
@@ -106,7 +161,10 @@ class EquipmentAttributeServiceTest {
         assertThat(dto.key()).isEqualTo("motor_power");
         assertThat(dto.dataType()).isEqualTo(EquipmentAttributeDataType.NUMBER);
         assertThat(dto.required()).isTrue();
-        assertThat(dto.unit()).isEqualTo("kW");
+        assertThat(dto.unit().code()).isEqualTo("UOM-2026-0001");
+        assertThat(dto.unit().name()).isEqualTo("kW");
+        assertThat(dto.unit().nameEn()).isEqualTo("Kilowatt");
+        assertThat(dto.unit().nameUz()).isEqualTo("Kilovatt");
 
         ArgumentCaptor<EquipmentAttributeDefinition> captor =
                 ArgumentCaptor.forClass(EquipmentAttributeDefinition.class);
@@ -777,6 +835,16 @@ class EquipmentAttributeServiceTest {
         return equipment;
     }
 
+    private UnitOfMeasurement unit(String code, String name, String nameEn, String nameUz) {
+        UnitOfMeasurement unit = new UnitOfMeasurement();
+        unit.setId(UUID.randomUUID());
+        unit.setCode(code);
+        unit.setName(name);
+        unit.setNameEn(nameEn);
+        unit.setNameUz(nameUz);
+        return unit;
+    }
+
     private EquipmentAttributeDefinition definition(UUID id,
                                                     UUID equipmentTypeId,
                                                     String key,
@@ -796,6 +864,17 @@ class EquipmentAttributeServiceTest {
 
     private EquipmentAttributeOptionDto option(String id, String label) {
         return new EquipmentAttributeOptionDto(id, label, null, null, null, true);
+    }
+
+    private EquipmentAttributeOptionItem optionItem(UUID sourceId, String optionId) {
+        EquipmentAttributeOptionItem item = new EquipmentAttributeOptionItem();
+        item.setId(UUID.randomUUID());
+        item.setOptionSourceId(sourceId);
+        item.setOptionId(optionId);
+        item.setLabel(optionId);
+        item.setSortOrder(0);
+        item.setActive(true);
+        return item;
     }
 
     private EquipmentAttributeValue value(UUID equipmentId, UUID definitionId) {
