@@ -40,4 +40,22 @@ class TriadSchemaModelContractTest {
         assertThat(Arrays.stream(DefectRequest.class.getDeclaredMethods()).map(m -> m.getName()))
                 .contains("repairRequestId");
     }
+
+    @Test
+    void defectMustExposeEquipmentNodeTarget() {
+        assertThat(Arrays.stream(Defect.class.getDeclaredFields()).map(f -> f.getName()))
+                .contains("equipmentNodeId");
+        assertThat(Arrays.stream(DefectRequest.class.getDeclaredMethods()).map(m -> m.getName()))
+                .contains("equipmentNodeId");
+    }
+
+    @Test
+    void workOrderMustExposeEquipmentNodeTarget() {
+        assertThat(Arrays.stream(WorkOrder.class.getDeclaredFields()).map(f -> f.getName()))
+                .contains("equipmentNodeId");
+        assertThat(Arrays.stream(WorkOrderRequest.class.getDeclaredMethods()).map(m -> m.getName()))
+                .contains("equipmentNodeId");
+        assertThat(Arrays.stream(WorkOrderDto.class.getDeclaredMethods()).map(m -> m.getName()))
+                .contains("equipmentNodeId");
+    }
 }

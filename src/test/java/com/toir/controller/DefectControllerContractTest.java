@@ -10,6 +10,7 @@ import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.entity.defects.Defect;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.EquipmentNodeType;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WorkOrderStatus;
@@ -227,6 +228,32 @@ class DefectControllerContractTest {
     }
 
     @Test
+    void createDefect_acceptsEquipmentNodeId() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentNodeId = UUID.randomUUID();
+        when(service.create(any())).thenReturn(defectResponse(equipmentId, null, equipmentNodeId));
+
+        mockMvc.perform(post("/api/v1/defects")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "title": "Bearing overheating",
+                                  "description": "Temperature is above normal",
+                                  "equipmentId": "%s",
+                                  "equipmentNodeId": "%s",
+                                  "category": "MECHANICAL",
+                                  "severity": "HIGH"
+                                }
+                                """.formatted(equipmentId, equipmentNodeId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.equipmentNodeId").value(equipmentNodeId.toString()));
+
+        ArgumentCaptor<DefectRequest> captor = ArgumentCaptor.forClass(DefectRequest.class);
+        verify(service).create(captor.capture());
+        assertEquals(equipmentNodeId, captor.getValue().equipmentNodeId());
+    }
+
+    @Test
     void createWithUnknownRepairRequestReturns404() throws Exception {
         when(service.create(any())).thenThrow(RestException.notFound("Repair request not found: " + UUID.randomUUID()));
 
@@ -259,6 +286,22 @@ class DefectControllerContractTest {
                 .andExpect(jsonPath("$.repairRequest.id").value(response.repairRequest().id().toString()))
                 .andExpect(jsonPath("$.repairRequest.number").value(response.repairRequest().number()))
                 .andExpect(jsonPath("$.repairRequest.status").value(response.repairRequest().status().name()));
+    }
+
+    @Test
+    void getDefect_returnsEquipmentNodeReference() throws Exception {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentNodeId = UUID.randomUUID();
+        DefectResponse response = defectResponse(equipmentId, null, equipmentNodeId);
+        when(service.findById(defectId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/defects/{id}", defectId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.equipmentNodeId").value(equipmentNodeId.toString()))
+                .andExpect(jsonPath("$.equipmentNodeCode").value("BRG-01"))
+                .andExpect(jsonPath("$.equipmentNodeName").value("Bearing"))
+                .andExpect(jsonPath("$.equipmentNodeType").value("COMPONENT"));
     }
 
     @Test
@@ -340,6 +383,10 @@ class DefectControllerContractTest {
     }
 
     private DefectResponse defectResponse(UUID equipmentId, UUID repairRequestId) {
+        return defectResponse(equipmentId, repairRequestId, null);
+    }
+
+    private DefectResponse defectResponse(UUID equipmentId, UUID repairRequestId, UUID equipmentNodeId) {
         return new DefectResponse(
                 UUID.randomUUID(),
                 "DEF-2026-0001",
@@ -347,6 +394,10 @@ class DefectControllerContractTest {
                 "Oil leak detected",
                 equipmentId,
                 null,
+                equipmentNodeId,
+                equipmentNodeId == null ? null : "BRG-01",
+                equipmentNodeId == null ? null : "Bearing",
+                equipmentNodeId == null ? null : EquipmentNodeType.COMPONENT,
                 repairRequestId,
                 repairRequestId,
                 "MECHANICAL",

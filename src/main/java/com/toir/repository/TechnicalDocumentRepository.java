@@ -30,4 +30,10 @@ public interface TechnicalDocumentRepository extends JpaRepository<TechnicalDocu
 
     @Query(value = "SELECT * FROM technical_documents WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<TechnicalDocument> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
+
+    @Query(value = "SELECT * FROM technical_documents WHERE equipment_node_id = cast(:equipmentNodeId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<TechnicalDocument> findAllByEquipmentNodeIdAndIsDeletedFalse(@Param("equipmentNodeId") UUID equipmentNodeId);
+
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM technical_documents WHERE equipment_node_id = cast(:equipmentNodeId as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByEquipmentNodeIdAndIsDeletedFalse(@Param("equipmentNodeId") UUID equipmentNodeId);
 }

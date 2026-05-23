@@ -19,6 +19,9 @@ public class TechnicalDocument extends BaseEntity {
     @Column(name = "equipment_id", nullable = false)
     private UUID equipmentId;
 
+    @Column(name = "equipment_node_id")
+    private UUID equipmentNodeId;
+
     @Column(name = "file_id")
     private UUID fileId;
 

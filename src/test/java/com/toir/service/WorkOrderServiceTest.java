@@ -11,11 +11,13 @@ import com.toir.entity.PprTask;
 import com.toir.entity.SafetyPermit;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
+import com.toir.enums.EquipmentNodeType;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.PprTaskStatus;
@@ -38,6 +40,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.WorkExecutionRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.WorkOrderCountProjection;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
@@ -78,6 +81,9 @@ class WorkOrderServiceTest {
 
     @Mock
     EquipmentRepository equipmentRepository;
+
+    @Mock
+    EquipmentNodeRepository equipmentNodeRepository;
 
     @Mock
     DepartmentRepository departmentRepository;
@@ -261,6 +267,91 @@ class WorkOrderServiceTest {
         assertThat(result.defect()).isNotNull();
         assertThat(result.defect().id()).isEqualTo(defectId);
         verify(defectRepository, atLeastOnce()).findByIdAndIsDeletedFalse(defectId);
+    }
+
+    @Test
+    void createWorkOrder_withEquipmentNode_setsNodeTarget() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID nodeId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithNode(equipmentId, nodeId);
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+        when(equipmentNodeRepository.findByIdAndIsDeletedFalse(nodeId))
+                .thenReturn(Optional.of(equipmentNode(nodeId, equipmentId, "BRG-01", "Bearing")));
+
+        WorkOrderDto result = service.create(request);
+
+        ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getEquipmentNodeId()).isEqualTo(nodeId);
+        assertThat(result.equipmentNodeId()).isEqualTo(nodeId);
+        assertThat(result.equipmentNodeCode()).isEqualTo("BRG-01");
+        assertThat(result.equipmentNodeName()).isEqualTo("Bearing");
+        assertThat(result.equipmentNodeType()).isEqualTo(EquipmentNodeType.COMPONENT);
+    }
+
+    @Test
+    void createWorkOrder_withNodeFromDifferentEquipment_returnsBadRequest() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID nodeId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithNode(equipmentId, nodeId);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(equipmentNodeRepository.findByIdAndIsDeletedFalse(nodeId))
+                .thenReturn(Optional.of(equipmentNode(nodeId, UUID.randomUUID(), "BRG-01", "Bearing")));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("different equipment");
+                });
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createWorkOrder_withoutNode_stillWorks() {
+        WorkOrderRequest request = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.equipmentNodeId()).isNull();
+        verifyNoInteractions(equipmentNodeRepository);
+    }
+
+    @Test
+    void createWorkOrder_fromDefectWithNode_inheritsNodeIfImplemented() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        UUID nodeId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(null, defectId, equipmentId);
+        Defect defect = defect(defectId, null, equipmentId);
+        defect.setEquipmentNodeId(nodeId);
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(equipmentNodeRepository.findByIdAndIsDeletedFalse(nodeId))
+                .thenReturn(Optional.of(equipmentNode(nodeId, equipmentId, "BRG-01", "Bearing")));
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.equipmentNodeId()).isEqualTo(nodeId);
+        assertThat(result.equipmentNodeCode()).isEqualTo("BRG-01");
     }
 
     @Test
@@ -1834,6 +1925,30 @@ class WorkOrderServiceTest {
         );
     }
 
+    private WorkOrderRequest requestWithNode(UUID equipmentId, UUID equipmentNodeId) {
+        WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        return new WorkOrderRequest(
+                base.number(),
+                base.title(),
+                equipmentId,
+                equipmentNodeId,
+                base.departmentId(),
+                base.repairRequestId(),
+                base.defectId(),
+                base.pprTaskId(),
+                base.contractorId(),
+                base.type(),
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                base.startPlannedAt(),
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary()
+        );
+    }
+
     private RepairRequest repairRequest(UUID id, RequestStatus status) {
         return repairRequest(id, status, null);
     }
@@ -1869,6 +1984,16 @@ class WorkOrderServiceTest {
         defect.setSeverity("HIGH");
         defect.setRepairRequestId(repairRequestId);
         return defect;
+    }
+
+    private EquipmentNode equipmentNode(UUID id, UUID equipmentId, String code, String name) {
+        EquipmentNode node = new EquipmentNode();
+        node.setId(id);
+        node.setEquipmentId(equipmentId);
+        node.setCode(code);
+        node.setName(name);
+        node.setNodeType(EquipmentNodeType.COMPONENT);
+        return node;
     }
 
     private void mockSuccessfulCreateDependencies(WorkOrderRequest request) {

@@ -3,11 +3,13 @@ package com.toir.service;
 import com.toir.dto.technicaldocument.TechnicalDocumentDto;
 import com.toir.entity.FileAsset;
 import com.toir.entity.TechnicalDocument;
+import com.toir.entity.equipment.EquipmentNode;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.FileAssetRepository;
 import com.toir.repository.TechnicalDocumentRepository;
+import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,12 +33,24 @@ public class TechnicalDocumentService {
 
     private final TechnicalDocumentRepository repository;
     private final FileAssetRepository fileAssetRepository;
+    private final EquipmentNodeRepository equipmentNodeRepository;
     private final AuditBuilderService auditBuilderService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @Transactional(readOnly = true)
     public List<TechnicalDocumentDto> findByEquipment(UUID equipmentId) {
         List<TechnicalDocument> documents = repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
+        return toDtos(documents);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TechnicalDocumentDto> findByEquipmentNode(UUID equipmentNodeId) {
+        getEquipmentNodeOrThrow(equipmentNodeId);
+        List<TechnicalDocument> documents = repository.findAllByEquipmentNodeIdAndIsDeletedFalse(equipmentNodeId);
+        return toDtos(documents);
+    }
+
+    private List<TechnicalDocumentDto> toDtos(List<TechnicalDocument> documents) {
         if (documents.isEmpty()) {
             return List.of();
         }
@@ -46,17 +61,31 @@ public class TechnicalDocumentService {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         Map<UUID, TechnicalDocumentDto.FileRef> fileRefById = buildFileRefs(fileIds);
+        Map<UUID, EquipmentNode> equipmentNodeById = buildEquipmentNodeRefs(documents);
 
         return documents.stream()
-                .map(document -> TechnicalDocumentDto.from(document, fileRefById.get(document.getFileId())))
+                .map(document -> {
+                    EquipmentNode node = document.getEquipmentNodeId() == null
+                            ? null
+                            : equipmentNodeById.get(document.getEquipmentNodeId());
+                    return TechnicalDocumentDto.from(
+                            document,
+                            fileRefById.get(document.getFileId()),
+                            node == null ? null : node.getCode(),
+                            node == null ? null : node.getName(),
+                            node == null ? null : node.getNodeType()
+                    );
+                })
                 .toList();
     }
 
     @Transactional
     public TechnicalDocumentDto create(UUID equipmentId, TechnicalDocumentDto r) {
         equipmentStatusLifecycleService.assertOperationallyAllowed(equipmentId, "attach technical document");
+        EquipmentNode node = validateEquipmentNodeLink(r.equipmentNodeId(), equipmentId);
         TechnicalDocument d = new TechnicalDocument();
         d.setEquipmentId(equipmentId);
+        d.setEquipmentNodeId(r.equipmentNodeId());
         d.setFileId(r.fileId());
         d.setTitle(r.title());
         d.setRevision(r.revision());
@@ -75,7 +104,13 @@ public class TechnicalDocumentService {
                 saved
         );
 
-        return TechnicalDocumentDto.from(saved);
+        return TechnicalDocumentDto.from(
+                saved,
+                null,
+                node == null ? null : node.getCode(),
+                node == null ? null : node.getName(),
+                node == null ? null : node.getNodeType()
+        );
     }
 
     @Transactional
@@ -115,5 +150,34 @@ public class TechnicalDocumentService {
                 fileAsset.getSizeBytes(),
                 downloadUrl
         );
+    }
+
+    private Map<UUID, EquipmentNode> buildEquipmentNodeRefs(List<TechnicalDocument> documents) {
+        Set<UUID> nodeIds = documents.stream()
+                .map(TechnicalDocument::getEquipmentNodeId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (nodeIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return equipmentNodeRepository.findAllByIdInAndIsDeletedFalse(nodeIds)
+                .stream()
+                .collect(Collectors.toMap(EquipmentNode::getId, Function.identity(), (a, b) -> a));
+    }
+
+    private EquipmentNode validateEquipmentNodeLink(UUID equipmentNodeId, UUID equipmentId) {
+        if (equipmentNodeId == null) {
+            return null;
+        }
+        EquipmentNode node = getEquipmentNodeOrThrow(equipmentNodeId);
+        if (!Objects.equals(node.getEquipmentId(), equipmentId)) {
+            throw RestException.badRequest("Equipment node belongs to a different equipment");
+        }
+        return node;
+    }
+
+    private EquipmentNode getEquipmentNodeOrThrow(UUID equipmentNodeId) {
+        return equipmentNodeRepository.findByIdAndIsDeletedFalse(equipmentNodeId)
+                .orElseThrow(() -> RestException.notFound("Equipment node not found: " + equipmentNodeId));
     }
 }
