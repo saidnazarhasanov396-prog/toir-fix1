@@ -13,6 +13,7 @@ import com.toir.enums.AuditModule;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.InspectionRoundStatus;
+import com.toir.enums.NotificationSeverity;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
 import com.toir.exception.RestException;
@@ -22,6 +23,7 @@ import com.toir.repository.inspection.InspectionCheckpointRepository;
 import com.toir.repository.inspection.InspectionRoundRepository;
 import com.toir.repository.inspection.InspectionRouteRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +51,7 @@ public class InspectionService {
     private final UnitOfMeasurementService unitOfMeasurementService;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
+    private final NotificationService notificationService;
     private static final String INSPECTION_DEFECT_CODE_PREFIX = "INS-DEF-";
     private static final String INSPECTION_REPAIR_REQUEST_PREFIX = "INS-RR-";
     private static final Set<DefectStatus> OPEN_TRIAGE_DEFECT_STATUSES = EnumSet.of(
@@ -322,7 +325,32 @@ public class InspectionService {
                 null,
                 saved
         );
+        notifyFailureTriage(round, checkpoint, saved);
         return saved;
+    }
+
+    private void notifyFailureTriage(InspectionRound round, InspectionCheckpoint checkpoint, Defect defect) {
+        UUID departmentId = inspectionDepartmentId(round, checkpoint.getEquipmentId());
+        List<?> recipients = notificationService.notifyDepartmentByPermission(
+                departmentId,
+                PermissionConstants.DEFECT_READ,
+                "Inspection FAIL triage created",
+                "Inspection failure " + defect.getCode() + " requires defect triage.",
+                NotificationSeverity.WARNING,
+                "Defect",
+                defect.getId().toString()
+        );
+        if (recipients.isEmpty()) {
+            notificationService.notifyDepartmentByPermission(
+                    departmentId,
+                    PermissionConstants.INSPECTION_READ,
+                    "Inspection FAIL triage created",
+                    "Inspection failure " + defect.getCode() + " requires maintenance triage.",
+                    NotificationSeverity.WARNING,
+                    "Defect",
+                    defect.getId().toString()
+            );
+        }
     }
 
     private Defect buildInspectionDefect(InspectionRound round,

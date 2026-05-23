@@ -14,6 +14,7 @@ import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.security.PermissionConstants;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +31,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -60,6 +63,9 @@ class ActualCostServiceTest {
 
     @Mock
     FinanceScopeService financeScopeService;
+
+    @Mock
+    NotificationService notificationService;
 
     @InjectMocks
     ActualCostService service;
@@ -222,6 +228,33 @@ class ActualCostServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().workOrderId()).isEqualTo(workOrderId);
         verify(repository).findAllByFiltersOrderByUpdatedAtDesc(workOrderId, "WO-2026-1");
+    }
+
+    @Test
+    void createPendingActualCostNotifiesFinanceApproverWhenDepartmentResolvedFromBudget() {
+        UUID budgetLineId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        BudgetLine line = budgetLine(budgetLineId, 500, 0, BudgetStatus.APPROVED);
+        line.getBudget().setDepartmentId(departmentId);
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
+        when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> {
+            ActualCost saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        ActualCostDto result = service.create(dto(null, null, null, budgetLineId, 120));
+
+        assertThat(result.status()).isEqualTo(ActualCostStatus.PENDING);
+        verify(notificationService).notifyDepartmentByPermission(
+                eq(departmentId),
+                eq(PermissionConstants.ACTUAL_COST_APPROVE),
+                contains("Actual cost pending review"),
+                contains(result.id().toString()),
+                eq(com.toir.enums.NotificationSeverity.INFO),
+                eq("ActualCost"),
+                eq(result.id().toString())
+        );
     }
 
     private ActualCostDto dto(UUID workOrderId,
