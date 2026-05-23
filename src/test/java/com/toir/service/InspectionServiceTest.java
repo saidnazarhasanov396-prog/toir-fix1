@@ -23,6 +23,7 @@ import com.toir.repository.inspection.InspectionCheckpointRepository;
 import com.toir.repository.inspection.InspectionRoundRepository;
 import com.toir.repository.inspection.InspectionRouteRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,6 +80,9 @@ class InspectionServiceTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    NotificationService notificationService;
+
     @InjectMocks
     InspectionService service;
 
@@ -89,6 +93,15 @@ class InspectionServiceTest {
             UUID checkpointId = invocation.getArgument(0);
             return Optional.of(checkpoint(checkpointId, null, null, "Checkpoint"));
         });
+        lenient().when(notificationService.notifyDepartmentByPermission(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        )).thenReturn(List.of());
     }
 
     @Test
@@ -238,6 +251,15 @@ class InspectionServiceTest {
         assertThat(defect.getStatus()).isEqualTo(DefectStatus.OPEN);
         assertThat(defect.getRepairRequestId()).isEqualTo(repairRequest.getId());
         assertThat(defect.getDescription()).contains(roundId.toString(), checkpointId.toString(), "bearing noise");
+        verify(notificationService).notifyDepartmentByPermission(
+                eq(departmentId),
+                eq(PermissionConstants.DEFECT_READ),
+                org.mockito.ArgumentMatchers.contains("Inspection FAIL triage"),
+                org.mockito.ArgumentMatchers.contains(defect.getCode()),
+                eq(com.toir.enums.NotificationSeverity.WARNING),
+                eq("Defect"),
+                eq(defect.getId().toString())
+        );
     }
 
     @Test

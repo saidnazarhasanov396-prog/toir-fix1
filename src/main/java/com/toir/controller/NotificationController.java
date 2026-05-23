@@ -8,6 +8,7 @@ import com.toir.dto.notification.NotificationSummaryDto;
 import com.toir.dto.sla.SlaRuleDto;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
+import com.toir.security.PermissionConstants;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.NotificationFacadeService;
 import com.toir.service.NotificationService;
@@ -19,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -34,8 +36,7 @@ public class NotificationController {
     @GetMapping
     public ResponseEntity<Page<NotificationDto>> list(@RequestParam(required = false) UUID recipientId,
                                       @CurrentUser AuthenticatedUser user, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        UUID target = recipientId != null ? recipientId
-                : (user != null ? UUID.fromString(user.id()) : null);
+        UUID target = resolveRecipient(recipientId, user);
         return ResponseEntity.ok(notificationFacadeService.list(target, page, size));
     }
 
@@ -48,8 +49,7 @@ public class NotificationController {
     @GetMapping("/unread-count")
     public ResponseEntity<Long> unreadCount(@RequestParam(required = false) UUID recipientId,
                             @CurrentUser AuthenticatedUser user) {
-        UUID target = recipientId != null ? recipientId
-                : (user != null ? UUID.fromString(user.id()) : null);
+        UUID target = resolveRecipient(recipientId, user);
         return ResponseEntity.ok(notificationFacadeService.unreadCount(target));
     }
 
@@ -59,7 +59,10 @@ public class NotificationController {
     }
 
     @PostMapping("/{id}/read")
-    public ResponseEntity<NotificationDto> markRead(@PathVariable UUID id) { return ResponseEntity.ok(service.markRead(id)); }
+    public ResponseEntity<NotificationDto> markRead(@PathVariable UUID id, @CurrentUser AuthenticatedUser user) {
+        UUID currentUserId = user != null ? UUID.fromString(user.id()) : null;
+        return ResponseEntity.ok(service.markRead(id, currentUserId, isNotificationScopeAdmin(user)));
+    }
 
     @GetMapping("/financial-review-inbox")
     @RequiresSensitiveAccess
@@ -88,5 +91,26 @@ public class NotificationController {
     @PostMapping("/dispatch-pending")
     public ResponseEntity<NotificationDispatchResponse> dispatch() {
         return ResponseEntity.ok(notificationFacadeService.dispatch());
+    }
+
+    private UUID resolveRecipient(UUID requestedRecipientId, AuthenticatedUser user) {
+        if (user == null) {
+            return requestedRecipientId;
+        }
+        UUID currentUserId = UUID.fromString(user.id());
+        if (requestedRecipientId == null || requestedRecipientId.equals(currentUserId) || isNotificationScopeAdmin(user)) {
+            return requestedRecipientId != null ? requestedRecipientId : currentUserId;
+        }
+        throw new AccessDeniedException("Access denied by notification recipient scope");
+    }
+
+    private boolean isNotificationScopeAdmin(AuthenticatedUser user) {
+        if (user == null) {
+            return false;
+        }
+        if ("SYSTEM_ADMIN".equals(user.primaryRoleCode())) {
+            return true;
+        }
+        return user.permissions() != null && user.permissions().contains(PermissionConstants.WILDCARD);
     }
 }

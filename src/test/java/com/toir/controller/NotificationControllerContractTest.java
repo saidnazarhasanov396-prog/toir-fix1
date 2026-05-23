@@ -8,9 +8,11 @@ import com.toir.enums.NotificationStatus;
 import com.toir.enums.SlaEntityType;
 import com.toir.enums.SlaTriggerType;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUserArgumentResolver;
 import com.toir.service.NotificationFacadeService;
 import com.toir.service.NotificationService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +20,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -25,8 +29,10 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -48,6 +54,11 @@ class NotificationControllerContractTest {
                 .setCustomArgumentResolvers(new CurrentUserArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -161,5 +172,60 @@ class NotificationControllerContractTest {
                         .param("recipientId", "not-a-uuid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    void nonAdminCannotListAnotherUsersNotifications() throws Exception {
+        UUID currentUserId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+        authenticate(currentUserId, "MAINTENANCE_FOREMAN", List.of("NOTIFICATION_READ"));
+
+        mockMvc.perform(get("/api/v1/notifications")
+                        .param("recipientId", otherUserId.toString()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(notificationFacadeService);
+    }
+
+    @Test
+    void markReadPassesCurrentRecipientScopeToService() throws Exception {
+        UUID currentUserId = UUID.randomUUID();
+        UUID notificationId = UUID.randomUUID();
+        authenticate(currentUserId, "MAINTENANCE_FOREMAN", List.of("NOTIFICATION_MARK_READ"));
+        NotificationDto dto = new NotificationDto(
+                notificationId,
+                currentUserId,
+                "Title",
+                "Message",
+                null,
+                NotificationStatus.READ,
+                null,
+                "RepairRequest",
+                UUID.randomUUID().toString(),
+                null
+        );
+        when(service.markRead(notificationId, currentUserId, false)).thenReturn(dto);
+
+        mockMvc.perform(post("/api/v1/notifications/{id}/read", notificationId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(NotificationStatus.READ.name()));
+    }
+
+    private void authenticate(UUID userId, String primaryRoleCode, List<String> permissions) {
+        AuthenticatedUser user = new AuthenticatedUser(
+                userId.toString(),
+                "user",
+                "user@example.test",
+                "User",
+                UUID.randomUUID().toString(),
+                primaryRoleCode,
+                permissions
+        );
+        TestingAuthenticationToken authentication = new TestingAuthenticationToken(
+                user,
+                "n/a",
+                permissions.toArray(String[]::new)
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 }
