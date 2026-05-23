@@ -1,5 +1,6 @@
 package com.toir.controller;
 
+import com.toir.dto.oee.OeeRecordDto;
 import com.toir.dto.oee.OeeSummary;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.OeeService;
@@ -13,6 +14,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -34,6 +36,36 @@ class OeeControllerContractTest {
         mockMvc = MockMvcBuilders.standaloneSetup(new OeeController(service))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void listWithoutFiltersShouldReturnRecords() throws Exception {
+        UUID recordId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        when(service.list()).thenReturn(List.of(new OeeRecordDto(
+                recordId,
+                equipmentId,
+                Instant.parse("2026-01-02T08:00:00Z"),
+                Instant.parse("2026-01-02T16:00:00Z"),
+                480,
+                420,
+                30,
+                800,
+                780,
+                0.875,
+                0.952,
+                0.975,
+                0.812,
+                "day shift"
+        )));
+
+        mockMvc.perform(get("/api/v1/oee"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(recordId.toString()))
+                .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.totalElements").value(1));
+
+        verify(service).list();
     }
 
     @Test
