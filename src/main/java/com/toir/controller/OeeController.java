@@ -7,7 +7,6 @@ import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -36,7 +35,7 @@ public class OeeController {
         if (from != null && to != null) return ResponseEntity.ok(PaginationUtils.page(service.listBetween(equipmentId, equipmentSearch, from, to), page, size));
         if (equipmentId != null) return ResponseEntity.ok(PaginationUtils.page(service.listByEquipment(equipmentId), page, size));
         if (equipmentSearch != null && !equipmentSearch.isBlank()) return ResponseEntity.ok(PaginationUtils.page(service.list(equipmentSearch), page, size));
-        return ResponseEntity.ok(PaginationUtils.page(List.of(), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(service.list(), page, size));
     }
 
     @GetMapping("/{id}")

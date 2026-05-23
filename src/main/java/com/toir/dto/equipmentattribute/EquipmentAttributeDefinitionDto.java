@@ -2,6 +2,7 @@ package com.toir.dto.equipmentattribute;
 
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
 import com.toir.enums.EquipmentAttributeDataType;
+import com.toir.dto.uom.UnitOfMeasurementDto;
 
 import java.util.List;
 import java.util.UUID;
@@ -14,7 +15,7 @@ public record EquipmentAttributeDefinitionDto(
         String labelRu,
         String labelUz,
         EquipmentAttributeDataType dataType,
-        String unit,
+        UnitOfMeasurementDto unit,
         boolean required,
         Double minValue,
         Double maxValue,
@@ -24,6 +25,10 @@ public record EquipmentAttributeDefinitionDto(
         Integer sortOrder
 ) {
     public static EquipmentAttributeDefinitionDto from(EquipmentAttributeDefinition definition) {
+        return from(definition, null);
+    }
+
+    public static EquipmentAttributeDefinitionDto from(EquipmentAttributeDefinition definition, UnitOfMeasurementDto unit) {
         return new EquipmentAttributeDefinitionDto(
                 definition.getId(),
                 definition.getEquipmentTypeId(),
@@ -32,7 +37,7 @@ public record EquipmentAttributeDefinitionDto(
                 definition.getLabelRu(),
                 definition.getLabelUz(),
                 definition.getDataType(),
-                definition.getUnit(),
+                unit,
                 definition.isRequired(),
                 definition.getMinValue(),
                 definition.getMaxValue(),

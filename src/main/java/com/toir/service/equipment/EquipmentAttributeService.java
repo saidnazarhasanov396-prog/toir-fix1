@@ -7,6 +7,8 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
+import com.toir.dto.uom.UnitOfMeasurementDto;
+import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
 import com.toir.entity.equipment.EquipmentAttributeOptionItem;
@@ -20,6 +22,7 @@ import com.toir.repository.equipment.EquipmentAttributeOptionSourceRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.UnitOfMeasurementRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,10 +49,17 @@ public class EquipmentAttributeService {
     private final EquipmentRepository equipmentRepository;
     private final EquipmentAttributeOptionSourceRepository optionSourceRepository;
     private final EquipmentAttributeOptionItemRepository optionItemRepository;
+    private final UnitOfMeasurementRepository unitOfMeasurementRepository;
 
     @Transactional(readOnly = true)
     public List<EquipmentAttributeOptionSourceDto> findOptionSources() {
-        return optionSourceRepository.findAllByIsDeletedFalseOrderByCodeAsc()
+        return findOptionSources(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EquipmentAttributeOptionSourceDto> findOptionSources(String search) {
+        String normalizedSearch = normalizeSearch(search);
+        return optionSourceRepository.findAllBySearch(normalizedSearch)
                 .stream()
                 .map(EquipmentAttributeOptionSourceDto::from)
                 .toList();
@@ -102,9 +112,10 @@ public class EquipmentAttributeService {
     @Transactional(readOnly = true)
     public List<EquipmentAttributeDefinitionDto> findDefinitions(UUID equipmentTypeId) {
         ensureEquipmentTypeExists(equipmentTypeId);
-        return definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId)
-                .stream()
-                .map(EquipmentAttributeDefinitionDto::from)
+        List<EquipmentAttributeDefinition> definitions =
+                definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId);
+        return definitions.stream()
+                .map(definition -> EquipmentAttributeDefinitionDto.from(definition, resolveUnit(definition.getUnit())))
                 .toList();
     }
 
@@ -119,7 +130,8 @@ public class EquipmentAttributeService {
         EquipmentAttributeDefinition definition = new EquipmentAttributeDefinition();
         definition.setEquipmentTypeId(equipmentTypeId);
         applyDefinition(definition, request, key);
-        return EquipmentAttributeDefinitionDto.from(definitionRepository.save(definition));
+        EquipmentAttributeDefinition saved = definitionRepository.save(definition);
+        return EquipmentAttributeDefinitionDto.from(saved, resolveUnit(saved.getUnit()));
     }
 
     @Transactional
@@ -137,7 +149,8 @@ public class EquipmentAttributeService {
             throw RestException.conflict("Equipment attribute definition already exists: " + key);
         }
         applyDefinition(definition, request, key);
-        return EquipmentAttributeDefinitionDto.from(definitionRepository.save(definition));
+        EquipmentAttributeDefinition saved = definitionRepository.save(definition);
+        return EquipmentAttributeDefinitionDto.from(saved, resolveUnit(saved.getUnit()));
     }
 
     @Transactional
@@ -414,6 +427,30 @@ public class EquipmentAttributeService {
             throw RestException.badRequest("Attribute key is required");
         }
         return key.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeSearch(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+        return search.trim();
+    }
+
+    private UnitOfMeasurementDto resolveUnit(String unit) {
+        String token = normalizeSearch(unit);
+        if (token == null) {
+            return null;
+        }
+        return unitOfMeasurementRepository.findByTokenIgnoreCase(token).stream()
+                .findFirst()
+                .map(UnitOfMeasurementDto::from)
+                .orElseGet(() -> fallbackUnit(token));
+    }
+
+    private UnitOfMeasurementDto fallbackUnit(String unit) {
+        UnitOfMeasurement fallback = new UnitOfMeasurement();
+        fallback.setName(unit);
+        return UnitOfMeasurementDto.from(fallback);
     }
 
     private EquipmentAttributeDefinition getDefinitionOrThrow(UUID id) {

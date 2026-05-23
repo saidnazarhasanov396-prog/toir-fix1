@@ -28,6 +28,13 @@ public class OeeService {
 
 
     @Transactional(readOnly = true)
+    public List<OeeRecordDto> list() {
+        return repository.findAllByIsDeletedFalseOrderByShiftStartDesc().stream()
+                .map(OeeRecordDto::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<OeeRecordDto> listByEquipment(UUID equipmentId) {
         return repository.findAllByEquipmentIdAndIsDeletedFalseOrderByShiftStartDesc(equipmentId).stream()
                 .map(OeeRecordDto::from).toList();
