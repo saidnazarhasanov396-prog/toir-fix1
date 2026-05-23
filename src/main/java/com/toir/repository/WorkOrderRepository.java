@@ -55,6 +55,9 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM work_orders WHERE equipment_node_id = cast(:equipmentNodeId as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByEquipmentNodeIdAndIsDeletedFalse(@Param("equipmentNodeId") UUID equipmentNodeId);
 
+    @Query(value = "SELECT * FROM work_orders WHERE equipment_node_id = cast(:equipmentNodeId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<WorkOrder> findAllByEquipmentNodeIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("equipmentNodeId") UUID equipmentNodeId);
+
     @Query("SELECT w FROM WorkOrder w WHERE w.isDeleted = false " +
             "AND (:status IS NULL OR w.status = :status) " +
             "AND (:departmentId IS NULL OR w.departmentId = :departmentId) " +
