@@ -22,6 +22,7 @@ import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.NotificationService;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -77,6 +78,9 @@ class RepairRequestServiceTest {
 
     @Mock
     NotificationService notificationService;
+
+    @Mock
+    EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @InjectMocks
     RepairRequestService service;

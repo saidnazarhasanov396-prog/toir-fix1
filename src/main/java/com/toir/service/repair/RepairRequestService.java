@@ -28,6 +28,7 @@ import com.toir.enums.AuditModule;
 import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.NotificationService;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import com.toir.exception.RestException;
@@ -62,6 +63,7 @@ public class RepairRequestService {
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
     private final NotificationService notificationService;
+    private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     private static final Set<RequestStatus> REVIEWABLE_STATUSES = EnumSet.of(
             RequestStatus.OPEN,
@@ -114,6 +116,7 @@ public class RepairRequestService {
         if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Request number already exists: " + request.number());
         }
+        equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create repair request");
         RepairRequest entity = new RepairRequest();
         entity.setNumber(request.number());
         entity.setTitle(request.title());

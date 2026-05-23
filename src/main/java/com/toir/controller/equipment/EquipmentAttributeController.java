@@ -6,11 +6,14 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeOptionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
+import com.toir.dto.equipmentattribute.EquipmentAttributeValueHistoryDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.service.equipment.EquipmentAttributeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,6 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -98,6 +102,20 @@ public class EquipmentAttributeController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<List<EquipmentAttributeValueDto>> listValues(@PathVariable UUID equipmentId) {
         return ResponseEntity.ok(service.findValues(equipmentId));
+    }
+
+    @GetMapping("/equipment/{equipmentId}/attributes/history")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Page<EquipmentAttributeValueHistoryDto>> valueHistory(
+            @PathVariable UUID equipmentId,
+            @RequestParam(required = false) UUID attributeDefinitionId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(service.findValueHistory(
+                equipmentId,
+                attributeDefinitionId,
+                PageRequest.of(Math.max(0, page), Math.max(1, size))
+        ));
     }
 
     @PutMapping("/equipment/{equipmentId}/attributes")

@@ -15,6 +15,7 @@ import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,6 +57,9 @@ class RepairMaterialUsageServiceTest {
 
     @Mock
     ScopeAccessService scopeAccessService;
+
+    @Mock
+    EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @InjectMocks
     RepairMaterialUsageService service;

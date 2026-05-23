@@ -6,6 +6,7 @@ import com.toir.repository.MeterReadingRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.MeterStatsProjection;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +35,8 @@ class MeterServiceStatsTest {
     EquipmentRepository equipmentRepository;
     @Mock
     AuditBuilderService auditBuilderService;
+    @Mock
+    EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @InjectMocks
     MeterService service;
