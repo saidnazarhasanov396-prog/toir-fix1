@@ -6,27 +6,39 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
+import com.toir.dto.equipmentattribute.EquipmentAttributeValueHistoryDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
 import com.toir.entity.equipment.EquipmentAttributeOptionItem;
 import com.toir.entity.equipment.EquipmentAttributeOptionSource;
+import com.toir.entity.equipment.EquipmentAttributeRequiredCriticality;
 import com.toir.entity.equipment.EquipmentAttributeValue;
+import com.toir.entity.equipment.EquipmentAttributeValueHistory;
 import com.toir.enums.EquipmentAttributeDataType;
+import com.toir.enums.EquipmentAttributeValueHistorySource;
 import com.toir.exception.RestException;
+import com.toir.repository.CriticalityClassRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeOptionItemRepository;
 import com.toir.repository.equipment.EquipmentAttributeOptionSourceRepository;
+import com.toir.repository.equipment.EquipmentAttributeRequiredCriticalityRepository;
+import com.toir.repository.equipment.EquipmentAttributeValueHistoryRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -46,6 +58,9 @@ public class EquipmentAttributeService {
     private final EquipmentRepository equipmentRepository;
     private final EquipmentAttributeOptionSourceRepository optionSourceRepository;
     private final EquipmentAttributeOptionItemRepository optionItemRepository;
+    private final EquipmentAttributeRequiredCriticalityRepository requiredCriticalityRepository;
+    private final CriticalityClassRepository criticalityClassRepository;
+    private final EquipmentAttributeValueHistoryRepository valueHistoryRepository;
 
     @Transactional(readOnly = true)
     public List<EquipmentAttributeOptionSourceDto> findOptionSources() {
@@ -102,9 +117,14 @@ public class EquipmentAttributeService {
     @Transactional(readOnly = true)
     public List<EquipmentAttributeDefinitionDto> findDefinitions(UUID equipmentTypeId) {
         ensureEquipmentTypeExists(equipmentTypeId);
-        return definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId)
-                .stream()
-                .map(EquipmentAttributeDefinitionDto::from)
+        List<EquipmentAttributeDefinition> definitions =
+                definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId);
+        Map<UUID, List<UUID>> requiredByCriticality = requiredCriticalityByDefinitionId(definitions);
+        return definitions.stream()
+                .map(definition -> EquipmentAttributeDefinitionDto.from(
+                        definition,
+                        requiredByCriticality.getOrDefault(definition.getId(), List.of())
+                ))
                 .toList();
     }
 
@@ -119,7 +139,11 @@ public class EquipmentAttributeService {
         EquipmentAttributeDefinition definition = new EquipmentAttributeDefinition();
         definition.setEquipmentTypeId(equipmentTypeId);
         applyDefinition(definition, request, key);
-        return EquipmentAttributeDefinitionDto.from(definitionRepository.save(definition));
+        List<UUID> requiredCriticalityClassIds = uniqueIds(request.normalizedRequiredForCriticalityClassIds());
+        validateRequiredCriticalityClassIds(requiredCriticalityClassIds);
+        EquipmentAttributeDefinition saved = definitionRepository.save(definition);
+        replaceRequiredCriticalities(saved.getId(), requiredCriticalityClassIds);
+        return EquipmentAttributeDefinitionDto.from(saved, requiredCriticalityClassIds);
     }
 
     @Transactional
@@ -137,7 +161,11 @@ public class EquipmentAttributeService {
             throw RestException.conflict("Equipment attribute definition already exists: " + key);
         }
         applyDefinition(definition, request, key);
-        return EquipmentAttributeDefinitionDto.from(definitionRepository.save(definition));
+        List<UUID> requiredCriticalityClassIds = uniqueIds(request.normalizedRequiredForCriticalityClassIds());
+        validateRequiredCriticalityClassIds(requiredCriticalityClassIds);
+        EquipmentAttributeDefinition saved = definitionRepository.save(definition);
+        replaceRequiredCriticalities(saved.getId(), requiredCriticalityClassIds);
+        return EquipmentAttributeDefinitionDto.from(saved, requiredCriticalityClassIds);
     }
 
     @Transactional
@@ -148,6 +176,7 @@ public class EquipmentAttributeService {
             throw RestException.badRequest("Attribute definition does not belong to equipment type: " + equipmentTypeId);
         }
         definition.setDeleted(true);
+        requiredCriticalityRepository.softDeleteByAttributeDefinitionId(definitionId);
         definitionRepository.save(definition);
     }
 
@@ -155,6 +184,21 @@ public class EquipmentAttributeService {
     public List<EquipmentAttributeValueDto> findValues(UUID equipmentId) {
         Equipment equipment = getEquipmentOrThrow(equipmentId);
         return buildValueDtos(equipment, valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EquipmentAttributeValueHistoryDto> findValueHistory(UUID equipmentId,
+                                                                    UUID attributeDefinitionId,
+                                                                    Pageable pageable) {
+        getEquipmentOrThrow(equipmentId);
+        Page<EquipmentAttributeValueHistory> history = attributeDefinitionId == null
+                ? valueHistoryRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByChangedAtDesc(equipmentId, pageable)
+                : valueHistoryRepository.findAllByEquipmentIdAndAttributeDefinitionIdAndIsDeletedFalseOrderByChangedAtDesc(
+                        equipmentId,
+                        attributeDefinitionId,
+                        pageable
+                );
+        return history.map(EquipmentAttributeValueHistoryDto::from);
     }
 
     @Transactional
@@ -189,19 +233,85 @@ public class EquipmentAttributeService {
                 throw RestException.badRequest("Duplicate equipment attribute value: " + definition.getKey());
             }
         }
-        validateRequired(definitions, existing, requestByDefinitionId);
+        validateRequired(equipment, definitions, existing, requestByDefinitionId);
 
         List<EquipmentAttributeValue> toSave = new ArrayList<>();
+        List<EquipmentAttributeValueHistory> historyToSave = new ArrayList<>();
         for (Map.Entry<UUID, EquipmentAttributeValueRequest> entry : requestByDefinitionId.entrySet()) {
+            EquipmentAttributeDefinition definition = byId.get(entry.getKey());
+            EquipmentAttributeValue currentValue = existing.get(entry.getKey());
+            String oldValue = serializeValue(definition, currentValue);
+            String newValue = serializeRequestValue(definition, entry.getValue());
             EquipmentAttributeValue value = existing.getOrDefault(entry.getKey(), new EquipmentAttributeValue());
             value.setEquipmentId(equipment.getId());
             value.setAttributeDefinitionId(entry.getKey());
             applyValue(value, entry.getValue());
             toSave.add(value);
+            if (!Objects.equals(oldValue, newValue)) {
+                historyToSave.add(historyEntry(equipment, definition, oldValue, newValue));
+            }
         }
         if (!toSave.isEmpty()) {
             valueRepository.saveAll(toSave);
         }
+        if (!historyToSave.isEmpty()) {
+            valueHistoryRepository.saveAll(historyToSave);
+        }
+    }
+
+    private EquipmentAttributeValueHistory historyEntry(Equipment equipment,
+                                                       EquipmentAttributeDefinition definition,
+                                                       String oldValue,
+                                                       String newValue) {
+        EquipmentAttributeValueHistory history = new EquipmentAttributeValueHistory();
+        history.setEquipmentId(equipment.getId());
+        history.setAttributeDefinitionId(definition.getId());
+        history.setAttributeKey(definition.getKey());
+        history.setAttributeLabel(definition.getLabel());
+        history.setOldValue(oldValue);
+        history.setNewValue(newValue);
+        history.setChangedAt(Instant.now());
+        history.setSource(EquipmentAttributeValueHistorySource.API);
+        return history;
+    }
+
+    private String serializeValue(EquipmentAttributeDefinition definition, EquipmentAttributeValue value) {
+        if (value == null) {
+            return null;
+        }
+        return switch (definition.getDataType()) {
+            case TEXT, FILE, REFERENCE -> normalizeStringValue(value.getValueText());
+            case NUMBER, RANGE -> normalizeNumberValue(value.getValueNumber());
+            case DATE -> value.getValueDate() == null ? null : value.getValueDate().toString();
+            case BOOLEAN -> value.getValueBoolean() == null ? null : value.getValueBoolean().toString();
+            case SELECT -> normalizeStringValue(value.getValueOption());
+            case MULTI_SELECT, JSON -> normalizeStringValue(value.getValueJson());
+        };
+    }
+
+    private String serializeRequestValue(EquipmentAttributeDefinition definition, EquipmentAttributeValueRequest request) {
+        return switch (definition.getDataType()) {
+            case TEXT, FILE, REFERENCE -> normalizeStringValue(request.valueText());
+            case NUMBER, RANGE -> normalizeNumberValue(request.valueNumber());
+            case DATE -> request.valueDate() == null ? null : request.valueDate().toString();
+            case BOOLEAN -> request.valueBoolean() == null ? null : request.valueBoolean().toString();
+            case SELECT -> normalizeStringValue(request.valueOption());
+            case MULTI_SELECT, JSON -> normalizeStringValue(request.valueJson());
+        };
+    }
+
+    private String normalizeNumberValue(Double value) {
+        if (value == null) {
+            return null;
+        }
+        return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+    }
+
+    private String normalizeStringValue(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private List<EquipmentAttributeValueDto> buildValueDtos(Equipment equipment,
@@ -264,29 +374,50 @@ public class EquipmentAttributeService {
         return definition;
     }
 
-    private void validateRequired(List<EquipmentAttributeDefinition> definitions,
+    private void validateRequired(Equipment equipment,
+                                  List<EquipmentAttributeDefinition> definitions,
                                   Map<UUID, EquipmentAttributeValue> existing,
                                   Map<UUID, EquipmentAttributeValueRequest> requestByDefinitionId) {
         Set<String> missing = new HashSet<>();
+        Map<UUID, List<UUID>> requiredByCriticality = requiredCriticalityByDefinitionId(definitions);
         for (EquipmentAttributeDefinition definition : definitions) {
-            if (!definition.isRequired()) {
+            String reason = requiredReason(equipment, definition, requiredByCriticality);
+            if (reason == null) {
                 continue;
             }
             EquipmentAttributeValueRequest request = requestByDefinitionId.get(definition.getId());
             if (request != null) {
                 if (isBlankForType(definition.getDataType(), request)) {
-                    missing.add(definition.getKey());
+                    missing.add(missingLabel(definition, reason));
                 }
                 continue;
             }
             EquipmentAttributeValue current = existing.get(definition.getId());
             if (current == null || isBlankValue(current)) {
-                missing.add(definition.getKey());
+                missing.add(missingLabel(definition, reason));
             }
         }
         if (!missing.isEmpty()) {
             throw RestException.badRequest("Missing required equipment attributes: " + String.join(", ", missing));
         }
+    }
+
+    private String requiredReason(Equipment equipment,
+                                  EquipmentAttributeDefinition definition,
+                                  Map<UUID, List<UUID>> requiredByCriticality) {
+        if (definition.isRequired()) {
+            return "required by equipment type";
+        }
+        UUID criticalityClassId = equipment.getCriticalityClassId();
+        if (criticalityClassId == null) {
+            return null;
+        }
+        List<UUID> requiredCriticalityIds = requiredByCriticality.getOrDefault(definition.getId(), List.of());
+        return requiredCriticalityIds.contains(criticalityClassId) ? "required by criticality" : null;
+    }
+
+    private String missingLabel(EquipmentAttributeDefinition definition, String reason) {
+        return definition.getKey() + " (" + reason + ")";
     }
 
     private void validateValue(EquipmentAttributeDefinition definition, EquipmentAttributeValueRequest request) {
@@ -398,6 +529,73 @@ public class EquipmentAttributeService {
                 && value.getValueBoolean() == null
                 && value.getValueOption() == null
                 && value.getValueJson() == null;
+    }
+
+    private void validateRequiredCriticalityClassIds(List<UUID> criticalityClassIds) {
+        List<UUID> uniqueIds = uniqueIds(criticalityClassIds);
+        if (uniqueIds.isEmpty()) {
+            return;
+        }
+        Set<UUID> existingIds = criticalityClassRepository.findAllByIdInAndIsDeletedFalse(uniqueIds)
+                .stream()
+                .map(com.toir.entity.equipment.CriticalityClass::getId)
+                .collect(Collectors.toSet());
+        List<UUID> missing = uniqueIds.stream()
+                .filter(id -> !existingIds.contains(id))
+                .toList();
+        if (!missing.isEmpty()) {
+            throw RestException.notFound("Criticality class not found: " + missing.getFirst());
+        }
+    }
+
+    private void replaceRequiredCriticalities(UUID definitionId, List<UUID> criticalityClassIds) {
+        List<EquipmentAttributeRequiredCriticality> existing =
+                requiredCriticalityRepository.findAllByAttributeDefinitionIdAndIsDeletedFalse(definitionId);
+        if (!existing.isEmpty()) {
+            for (EquipmentAttributeRequiredCriticality policy : existing) {
+                policy.setDeleted(true);
+            }
+            requiredCriticalityRepository.saveAll(existing);
+        }
+        List<EquipmentAttributeRequiredCriticality> policies = uniqueIds(criticalityClassIds).stream()
+                .map(criticalityClassId -> {
+                    EquipmentAttributeRequiredCriticality policy = new EquipmentAttributeRequiredCriticality();
+                    policy.setAttributeDefinitionId(definitionId);
+                    policy.setCriticalityClassId(criticalityClassId);
+                    return policy;
+                })
+                .toList();
+        if (!policies.isEmpty()) {
+            requiredCriticalityRepository.saveAll(policies);
+        }
+    }
+
+    private Map<UUID, List<UUID>> requiredCriticalityByDefinitionId(List<EquipmentAttributeDefinition> definitions) {
+        List<UUID> definitionIds = definitions.stream()
+                .map(EquipmentAttributeDefinition::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (definitionIds.isEmpty()) {
+            return Map.of();
+        }
+        return requiredCriticalityRepository.findAllByAttributeDefinitionIdInAndIsDeletedFalse(definitionIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        EquipmentAttributeRequiredCriticality::getAttributeDefinitionId,
+                        Collectors.mapping(EquipmentAttributeRequiredCriticality::getCriticalityClassId, Collectors.toList())
+                ));
+    }
+
+    private List<UUID> uniqueIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return ids.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toCollection(LinkedHashSet::new),
+                        List::copyOf
+                ));
     }
 
     private void applyValue(EquipmentAttributeValue value, EquipmentAttributeValueRequest request) {

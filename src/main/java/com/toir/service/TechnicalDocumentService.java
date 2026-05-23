@@ -8,6 +8,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.FileAssetRepository;
 import com.toir.repository.TechnicalDocumentRepository;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class TechnicalDocumentService {
     private final TechnicalDocumentRepository repository;
     private final FileAssetRepository fileAssetRepository;
     private final AuditBuilderService auditBuilderService;
+    private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @Transactional(readOnly = true)
     public List<TechnicalDocumentDto> findByEquipment(UUID equipmentId) {
@@ -52,6 +54,7 @@ public class TechnicalDocumentService {
 
     @Transactional
     public TechnicalDocumentDto create(UUID equipmentId, TechnicalDocumentDto r) {
+        equipmentStatusLifecycleService.assertOperationallyAllowed(equipmentId, "attach technical document");
         TechnicalDocument d = new TechnicalDocument();
         d.setEquipmentId(equipmentId);
         d.setFileId(r.fileId());

@@ -9,6 +9,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.ConditionReadingRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +47,9 @@ class ConditionReadingServiceTest {
 
     @Mock
     AuditBuilderService auditBuilderService;
+
+    @Mock
+    EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @InjectMocks
     ConditionReadingService service;

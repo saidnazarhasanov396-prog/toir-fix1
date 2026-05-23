@@ -64,6 +64,7 @@ public class EquipmentService {
     private final DowntimeEventRepository downtimeEventRepository;
     private final EquipmentAttributeService equipmentAttributeService;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
+    private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final AuditBuilderService auditBuilderService;
     private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
@@ -242,6 +243,7 @@ public class EquipmentService {
     public EquipmentDto update(UUID id, EquipmentUpdateRequest request) {
         Equipment entity = getOrThrow(id);
         validateClientProvidedCode(request.code());
+        validateNoDirectStatusChange(entity, request.status());
         validateDepartmentExists(request.departmentId());
 
 
@@ -628,11 +630,17 @@ public class EquipmentService {
         entity.setCriticalityClassId(request.criticalityClassId()  != null ? request.criticalityClassId() : entity.getCriticalityClassId());
         entity.setResponsibleId(request.responsibleId() != null ? request.responsibleId() : entity.getResponsibleId());
         entity.setManufacturer(request.manufacturer() != null ? request.manufacturer() : entity.getManufacturer());
-        if (request.status() != null) entity.setStatus(request.status());
         entity.setCategory(request.category() != null ? request.category() : entity.getCategory());
         entity.setCommissionedAt(request.commissionedAt() != null ? request.commissionedAt() : entity.getCommissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil() != null ? request.warrantyUntil() : entity.getWarrantyUntil());
         entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
+    }
+
+    private void validateNoDirectStatusChange(Equipment entity, EquipmentStatus requestedStatus) {
+        if (requestedStatus == null || requestedStatus == entity.getStatus()) {
+            return;
+        }
+        throw RestException.badRequest("Equipment status changes must use the dedicated status endpoint");
     }
 
     private void validateParent(UUID equipmentId, UUID parentId) {

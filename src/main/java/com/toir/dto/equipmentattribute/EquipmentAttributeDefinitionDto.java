@@ -21,9 +21,36 @@ public record EquipmentAttributeDefinitionDto(
         UUID optionSourceId,
         List<EquipmentAttributeOptionDto> options,
         String groupName,
-        Integer sortOrder
+        Integer sortOrder,
+        List<UUID> requiredForCriticalityClassIds
 ) {
+    public EquipmentAttributeDefinitionDto(
+            UUID id,
+            UUID equipmentTypeId,
+            String key,
+            String label,
+            String labelRu,
+            String labelUz,
+            EquipmentAttributeDataType dataType,
+            String unit,
+            boolean required,
+            Double minValue,
+            Double maxValue,
+            UUID optionSourceId,
+            List<EquipmentAttributeOptionDto> options,
+            String groupName,
+            Integer sortOrder
+    ) {
+        this(id, equipmentTypeId, key, label, labelRu, labelUz, dataType, unit, required, minValue, maxValue,
+                optionSourceId, options, groupName, sortOrder, List.of());
+    }
+
     public static EquipmentAttributeDefinitionDto from(EquipmentAttributeDefinition definition) {
+        return from(definition, List.of());
+    }
+
+    public static EquipmentAttributeDefinitionDto from(EquipmentAttributeDefinition definition,
+                                                       List<UUID> requiredForCriticalityClassIds) {
         return new EquipmentAttributeDefinitionDto(
                 definition.getId(),
                 definition.getEquipmentTypeId(),
@@ -39,7 +66,8 @@ public record EquipmentAttributeDefinitionDto(
                 definition.getOptionSourceId(),
                 definition.getOptions() == null ? List.of() : definition.getOptions(),
                 definition.getGroupName(),
-                definition.getSortOrder()
+                definition.getSortOrder(),
+                requiredForCriticalityClassIds == null ? List.of() : requiredForCriticalityClassIds
         );
     }
 }

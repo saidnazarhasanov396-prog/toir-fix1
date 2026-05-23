@@ -42,6 +42,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.WorkOrderCountProjection;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -116,6 +117,9 @@ class WorkOrderServiceTest {
 
     @Mock
     CompletionActRepository completionActRepository;
+
+    @Mock
+    EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @InjectMocks
     WorkOrderService service;

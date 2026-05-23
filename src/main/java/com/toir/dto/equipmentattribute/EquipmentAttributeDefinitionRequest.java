@@ -20,5 +20,29 @@ public record EquipmentAttributeDefinitionRequest(
         UUID optionSourceId,
         List<EquipmentAttributeOptionDto> options,
         String groupName,
-        Integer sortOrder
-) {}
+        Integer sortOrder,
+        List<UUID> requiredForCriticalityClassIds
+) {
+    public EquipmentAttributeDefinitionRequest(
+            @NotBlank String key,
+            @NotBlank String label,
+            String labelRu,
+            String labelUz,
+            @NotNull EquipmentAttributeDataType dataType,
+            String unit,
+            boolean required,
+            Double minValue,
+            Double maxValue,
+            UUID optionSourceId,
+            List<EquipmentAttributeOptionDto> options,
+            String groupName,
+            Integer sortOrder
+    ) {
+        this(key, label, labelRu, labelUz, dataType, unit, required, minValue, maxValue,
+                optionSourceId, options, groupName, sortOrder, List.of());
+    }
+
+    public List<UUID> normalizedRequiredForCriticalityClassIds() {
+        return requiredForCriticalityClassIds == null ? List.of() : requiredForCriticalityClassIds;
+    }
+}
