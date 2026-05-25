@@ -994,7 +994,7 @@ class EquipmentServiceTest {
     void createWithRequiredDynamicAttributeAndAttributesOmittedReturnsBadRequest() {
         UUID departmentId = UUID.randomUUID();
         EquipmentCreateRequest request = createRequest(null, "INV-REQ-OMITTED", departmentId, null);
-        stubCreateFlow("INV-REQ-OMITTED");
+        stubCreateFlowWithoutEnrichment("INV-REQ-OMITTED");
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
         doThrow(RestException.badRequest("Missing required equipment attributes: motor_power (required by equipment type)"))
@@ -1016,7 +1016,7 @@ class EquipmentServiceTest {
                 10_000L,
                 List.of()
         );
-        stubCreateFlow("INV-REQ-EMPTY");
+        stubCreateFlowWithoutEnrichment("INV-REQ-EMPTY");
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
         doThrow(RestException.badRequest("Missing required equipment attributes: motor_power (required by equipment type)"))
