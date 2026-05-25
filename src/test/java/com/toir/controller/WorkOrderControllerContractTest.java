@@ -143,7 +143,7 @@ class WorkOrderControllerContractTest {
 
         mockMvc.perform(post("/api/v1/work-orders")
                         .contentType("application/json")
-                        .content(baseCreateRequestJson(null, null, equipmentNodeId)))
+                        .content(baseCreateRequestJson(UUID.randomUUID(), null, equipmentNodeId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.equipmentNodeId").value(equipmentNodeId.toString()));
 
