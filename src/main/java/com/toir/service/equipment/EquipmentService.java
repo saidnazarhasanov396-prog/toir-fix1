@@ -219,7 +219,10 @@ public class EquipmentService {
         apply(entity, request);
         Equipment saved = repository.save(entity);
         if (equipmentAttributeService != null) {
-            equipmentAttributeService.upsertValues(saved, request.attributes());
+            equipmentAttributeService.upsertValues(
+                    saved,
+                    request.attributes() == null ? List.of() : request.attributes()
+            );
         }
         if (request.warehouseId() != null) {
             warehouseEquipmentItemService.assign(

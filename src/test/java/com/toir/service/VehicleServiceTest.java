@@ -3,6 +3,7 @@ package com.toir.service;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.file.UploadFileResponse;
+import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleStatsResponse;
@@ -22,6 +23,7 @@ import com.toir.repository.projection.VehicleStatsProjection;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentService;
+import com.toir.service.equipment.EquipmentAttributeService;
 import com.toir.service.file_management.FileService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -59,6 +61,9 @@ class VehicleServiceTest {
 
     @Mock
     EquipmentService equipmentService;
+
+    @Mock
+    EquipmentAttributeService equipmentAttributeService;
 
     @InjectMocks
     VehicleService service;
@@ -140,6 +145,49 @@ class VehicleServiceTest {
 
         assertThat(result.equipment().category()).isEqualTo(EquipmentCategory.VEHICLE);
         assertThat(result.vehicleDetails().plateNumber()).isEqualTo("01A123AA");
+    }
+
+    @Test
+    void createVehicleAcceptsDynamicMetricAttribute() {
+        VehicleRequest request = fullRequest("VH-ATTR-001", "Truck Attr", "INV-VH-ATTR-001", "01A101AA", null)
+                .withAttributes(List.of(new EquipmentAttributeValueRequest(null, "payload_capacity", null, 12000.0, null, null, null, null)));
+
+        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-ATTR-001")).thenReturn(false);
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-ATTR-001")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A101AA")).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(any(UUID.class))).thenAnswer(invocation ->
+                EquipmentDto.from(equipment(invocation.getArgument(0), "VH-ATTR-001", "Truck Attr", "INV-VH-ATTR-001")));
+
+        service.create(request);
+
+        verify(equipmentAttributeService).upsertValues(any(Equipment.class), eq(request.attributes()));
+    }
+
+    @Test
+    void createVehicleWithMissingRequiredDynamicMetricFails() {
+        VehicleRequest request = fullRequest("VH-ATTR-002", "Truck Attr Missing", "INV-VH-ATTR-002", "01A102AA", null);
+
+        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-ATTR-002")).thenReturn(false);
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-ATTR-002")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A102AA")).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(RestException.badRequest("Missing required equipment attributes: payload_capacity (required by equipment type)"))
+                .when(equipmentAttributeService).upsertValues(any(Equipment.class), eq(List.of()));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Missing required equipment attributes"));
     }
 
     @Test
@@ -364,6 +412,26 @@ class VehicleServiceTest {
         verify(equipmentRepository, never()).findByInventoryNumberAndIsDeletedFalse("INV-VH-020");
         verify(vehicleDetailsRepository, never()).findByPlateNumberAndIsDeletedFalse("01A020AA");
         verify(vehicleDetailsRepository, never()).findByVinAndIsDeletedFalse("VIN-020");
+    }
+
+    @Test
+    void updateVehicleChangesDynamicMetricAttribute() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-ATTR-003", "Truck Attr Update", "INV-VH-ATTR-003");
+        equipment.setCategory(EquipmentCategory.VEHICLE);
+        VehicleDetails details = details(equipmentId, "01A103AA", null);
+        VehicleRequest request = fullRequest("VH-ATTR-003", "Truck Attr Update", "INV-VH-ATTR-003", "01A103AA", null)
+                .withAttributes(List.of(new EquipmentAttributeValueRequest(null, "payload_capacity", null, 14000.0, null, null, null, null)));
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(equipment));
+
+        service.update(equipmentId, request);
+
+        verify(equipmentAttributeService).upsertValues(eq(equipment), eq(request.attributes()));
     }
 
     @Test

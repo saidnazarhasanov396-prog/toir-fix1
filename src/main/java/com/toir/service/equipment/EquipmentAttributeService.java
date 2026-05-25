@@ -55,6 +55,43 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EquipmentAttributeService {
 
+    private static final Set<String> RESERVED_ATTRIBUTE_KEYS = Set.of(
+            "id",
+            "code",
+            "name",
+            "inventoryNumber",
+            "inventory_number",
+            "technicalNumber",
+            "technical_number",
+            "serialNumber",
+            "serial_number",
+            "manufacturer",
+            "model",
+            "description",
+            "equipmentTypeId",
+            "equipment_type_id",
+            "departmentId",
+            "department_id",
+            "warehouseId",
+            "warehouse_id",
+            "locationId",
+            "location_id",
+            "parentId",
+            "parent_id",
+            "criticalityClassId",
+            "criticality_class_id",
+            "responsibleId",
+            "responsible_id",
+            "status",
+            "category",
+            "commissionedAt",
+            "commissioned_at",
+            "warrantyUntil",
+            "warranty_until",
+            "averageOperatingLifeHours",
+            "average_operating_life_hours"
+    ).stream().map(EquipmentAttributeService::normalizeReservedKey).collect(Collectors.toUnmodifiableSet());
+
     private final EquipmentAttributeDefinitionRepository definitionRepository;
     private final EquipmentAttributeValueRepository valueRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
@@ -165,6 +202,7 @@ public class EquipmentAttributeService {
         ensureEquipmentTypeExists(equipmentTypeId);
         validateDefinitionRequestBasics(request);
         String key = normalizeKey(request.key());
+        validateNotReservedKey(request.key());
         if (definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, key)) {
             throw RestException.conflict("Equipment attribute definition already exists: " + key);
         }
@@ -196,6 +234,7 @@ public class EquipmentAttributeService {
         for (EquipmentAttributeDefinitionRequest request : requests) {
             validateDefinitionRequestBasics(request);
             String key = normalizeKey(request.key());
+            validateNotReservedKey(request.key());
             if (!batchKeys.add(key)) {
                 throw RestException.badRequest("Duplicate equipment attribute definition key in batch: " + key);
             }
@@ -242,6 +281,7 @@ public class EquipmentAttributeService {
             throw RestException.badRequest("Attribute definition does not belong to equipment type: " + equipmentTypeId);
         }
         String key = normalizeKey(request.key());
+        validateNotReservedKey(request.key());
         if (!key.equals(definition.getKey())
                 && definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, key)) {
             throw RestException.conflict("Equipment attribute definition already exists: " + key);
@@ -717,6 +757,19 @@ public class EquipmentAttributeService {
             throw RestException.badRequest("Attribute key is required");
         }
         return key.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void validateNotReservedKey(String key) {
+        if (RESERVED_ATTRIBUTE_KEYS.contains(normalizeReservedKey(key))) {
+            throw RestException.badRequest("Equipment attribute definition uses reserved key: " + key);
+        }
+    }
+
+    private static String normalizeReservedKey(String key) {
+        return String.valueOf(key)
+                .trim()
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[_\\-\\s]+", "");
     }
 
     private String normalizeSearch(String search) {

@@ -174,6 +174,20 @@ class EquipmentAttributeServiceTest {
         assertThat(captor.getValue().getMaxValue()).isEqualTo(500.0);
     }
 
+    @ParameterizedTest
+    @MethodSource("reservedDefinitionKeys")
+    void createDefinitionRejectsReservedCoreKeys(String key) {
+        UUID equipmentTypeId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+
+        assertThatThrownBy(() -> service.createDefinition(equipmentTypeId, definitionRequest(key)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("reserved key").contains(key);
+                });
+        verify(definitionRepository, never()).save(any());
+    }
+
     @Test
     void createDefinitionsBatchPersistsMultipleAttributes() {
         UUID equipmentTypeId = UUID.randomUUID();
@@ -322,6 +336,21 @@ class EquipmentAttributeServiceTest {
     }
 
     @Test
+    void createDefinitionsBatchRejectsReservedCoreKey() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+
+        assertThatThrownBy(() -> service.createDefinitionsBatch(equipmentTypeId, List.of(
+                definitionRequest("motor_power"),
+                definitionRequest("average_operating_life_hours")
+        ))).isInstanceOfSatisfying(RestException.class, ex -> {
+            assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(ex.getMessage()).contains("reserved key").contains("average_operating_life_hours");
+        });
+        verify(definitionRepository, never()).saveAll(any());
+    }
+
+    @Test
     void createDefinitionsBatchRejectsMinValueGreaterThanMaxValue() {
         UUID equipmentTypeId = UUID.randomUUID();
         stubEquipmentType(equipmentTypeId);
@@ -460,6 +489,23 @@ class EquipmentAttributeServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("does not belong");
                 });
+    }
+
+    @Test
+    void updateDefinitionRejectsReservedCoreKey() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID definitionId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        EquipmentAttributeDefinition definition = definition(definitionId, equipmentTypeId, "motor_power",
+                EquipmentAttributeDataType.NUMBER, false);
+        when(definitionRepository.findByIdAndIsDeletedFalse(definitionId)).thenReturn(Optional.of(definition));
+
+        assertThatThrownBy(() -> service.updateDefinition(equipmentTypeId, definitionId, definitionRequest("model")))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("reserved key").contains("model");
+                });
+        verify(definitionRepository, never()).save(any());
     }
 
     @Test
@@ -1065,6 +1111,10 @@ class EquipmentAttributeServiceTest {
                 new Object[]{EquipmentAttributeDataType.FILE, new EquipmentAttributeValueRequest(null, "file_attr", null, 1.0, null, null, null, null), "file_attr", "valueText"},
                 new Object[]{EquipmentAttributeDataType.REFERENCE, new EquipmentAttributeValueRequest(null, "reference_attr", null, 1.0, null, null, null, null), "reference_attr", "valueText"}
         );
+    }
+
+    private static Stream<String> reservedDefinitionKeys() {
+        return Stream.of("model", "averageOperatingLifeHours", "average_operating_life_hours");
     }
 
     private void stubEquipmentType(UUID id) {

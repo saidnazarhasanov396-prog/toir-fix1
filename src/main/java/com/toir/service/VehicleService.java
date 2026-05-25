@@ -22,6 +22,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.VehicleStatsProjection;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
+import com.toir.service.equipment.EquipmentAttributeService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.file_management.FileService;
 import com.toir.util.AuditBuilderService;
@@ -50,6 +51,7 @@ public class VehicleService {
     private final FileService fileService;
     private final UploadedFileRepository uploadedFileRepository;
     private final SecurityScope securityScope;
+    private final EquipmentAttributeService equipmentAttributeService;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, String search, int page, int pageSize) {
@@ -121,6 +123,12 @@ public class VehicleService {
         details.setEquipmentId(savedEquipment.getId());
         applyDetails(details, request);
         VehicleDetails savedDetails = vehicleDetailsRepository.save(details);
+        if (equipmentAttributeService != null) {
+            equipmentAttributeService.upsertValues(
+                    savedEquipment,
+                    request.attributes() == null ? List.of() : request.attributes()
+            );
+        }
 
         auditBuilderService.log(
                 "vehicle",
@@ -151,6 +159,9 @@ public class VehicleService {
 
         Equipment newEquipment = equipmentRepository.save(equipment);
         VehicleDetails newDetails = vehicleDetailsRepository.save(details);
+        if (equipmentAttributeService != null && request.attributes() != null) {
+            equipmentAttributeService.upsertValues(newEquipment, request.attributes());
+        }
 
         auditBuilderService.log(
                 "vehicle",
