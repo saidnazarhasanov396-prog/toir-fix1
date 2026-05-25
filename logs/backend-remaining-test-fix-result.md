@@ -64,6 +64,8 @@
 - `rg ...` / file inspections (`Get-Content`)
 - `git diff --check`
 - `git status --short` (pre-commit)
+- `git commit -m "fix: handle invalid equipment attribute batch requests"`
+- `git push -u origin behzod`
 
 ## Explicit environment note
 - Tests were **not run** in this Codex task by instruction (`no mvn test`, `no Docker/Testcontainers`, no test execution).
@@ -75,5 +77,5 @@
 
 ## Push status
 - Branch: `behzod`
-- Commit: _to be filled after commit/push_
-- Push: _to be filled after push_
+- Commit: `c329f86`
+- Push: successful (`origin/behzod`)
