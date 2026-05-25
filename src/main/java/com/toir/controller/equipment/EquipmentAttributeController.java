@@ -86,6 +86,14 @@ public class EquipmentAttributeController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.createDefinition(equipmentTypeId, request));
     }
 
+    @PostMapping("/equipment-types/{equipmentTypeId}/attributes/batch")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TYPE_UPDATE')")
+    public ResponseEntity<List<EquipmentAttributeDefinitionDto>> createDefinitionsBatch(
+            @PathVariable UUID equipmentTypeId,
+            @Valid @RequestBody List<@Valid EquipmentAttributeDefinitionRequest> request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createDefinitionsBatch(equipmentTypeId, request));
+    }
+
     @PutMapping("/equipment-types/{equipmentTypeId}/attributes/{attributeId}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TYPE_UPDATE')")
     public ResponseEntity<EquipmentAttributeDefinitionDto> updateDefinition(

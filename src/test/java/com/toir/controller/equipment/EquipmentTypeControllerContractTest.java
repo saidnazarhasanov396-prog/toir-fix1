@@ -1,5 +1,6 @@
 package com.toir.controller.equipment;
 
+import com.toir.dto.equipmenttype.EquipmentTypeDto;
 import com.toir.dto.equipmenttype.EquipmentTypeStatsResponse;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.equipment.EquipmentTypeService;
@@ -10,6 +11,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.util.List;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
@@ -46,5 +50,25 @@ class EquipmentTypeControllerContractTest {
                 .andExpect(jsonPath("$.recentlyAdded").value(2));
 
         verify(service).getStats(null, null);
+    }
+
+    @Test
+    void listKeepsCategoryAsJsonString() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        when(service.findAll(null, null)).thenReturn(List.of(new EquipmentTypeDto(
+                equipmentTypeId,
+                "ET-2026-0001",
+                "Pump",
+                "Pump",
+                "Nasos",
+                "MECHANICAL",
+                null
+        )));
+
+        mockMvc.perform(get("/api/v1/equipment-types"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(equipmentTypeId.toString()))
+                .andExpect(jsonPath("$.content[0].category").value("MECHANICAL"))
+                .andExpect(jsonPath("$.content[0].category.id").doesNotExist());
     }
 }
