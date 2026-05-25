@@ -12,7 +12,7 @@ class EquipmentAverageOperatingLifeMigrationContractTest {
     @Test
     void migrationAddsNullableAverageOperatingLifeHoursColumn() throws Exception {
         Path migration = Path.of(
-                "src/main/resources/db/migration/V20260525_5__equipment_average_operating_life_hours.sql"
+                "src/main/resources/db/migration/V20260525_6__equipment_average_operating_life_hours.sql"
         );
 
         assertThat(Files.exists(migration)).isTrue();

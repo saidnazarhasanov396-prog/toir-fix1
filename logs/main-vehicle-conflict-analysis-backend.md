@@ -100,3 +100,17 @@ Files expected to edit during merge:
 - related tests
 
 Actual conflict files will be appended after `git merge origin/main`.
+
+## 7. Actual Conflict Files After Merge
+
+`git merge origin/main` produced one textual conflict:
+
+- `src/main/java/com/toir/service/VehicleService.java`
+
+Other Vehicle/document, department, demo seed, and test files merged automatically.
+
+Manual resolution required:
+
+- Keep `VehicleDocumentRepository` from `origin/main`.
+- Keep `EquipmentAttributeService` from Phase 2.
+- Ensure both constructor dependencies exist and create/update still call `equipmentAttributeService.upsertValues(...)`.

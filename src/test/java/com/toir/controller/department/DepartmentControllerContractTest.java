@@ -41,14 +41,13 @@ class DepartmentControllerContractTest {
 
     @Test
     void createReturnsCreatedDepartment() throws Exception {
-        DepartmentDto created = departmentDto("UI-E2E-20260516052136", "Workshop");
+        DepartmentDto created = departmentDto("WS-001", "Workshop");
         when(service.create(org.mockito.ArgumentMatchers.any())).thenReturn(created);
 
         mockMvc.perform(post("/api/v1/departments")
                         .contentType("application/json")
                         .content("""
                                 {
-                                  "code": "UI-E2E-20260516052136",
                                   "name": "Workshop",
                                   "type": "WORKSHOP",
                                   "description": "UI created"
@@ -56,9 +55,28 @@ class DepartmentControllerContractTest {
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(created.id().toString()))
-                .andExpect(jsonPath("$.code").value("UI-E2E-20260516052136"))
+                .andExpect(jsonPath("$.code").value("WS-001"))
                 .andExpect(jsonPath("$.name").value("Workshop"))
                 .andExpect(jsonPath("$.type").value("WORKSHOP"));
+    }
+
+    @Test
+    void createIgnoresClientSentCode() throws Exception {
+        DepartmentDto created = departmentDto("WS-001", "Workshop");
+        when(service.create(org.mockito.ArgumentMatchers.any())).thenReturn(created);
+
+        mockMvc.perform(post("/api/v1/departments")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "code": "CLIENT-CODE",
+                                  "name": "Workshop",
+                                  "type": "WORKSHOP",
+                                  "description": "UI created"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("WS-001"));
     }
 
     @Test

@@ -32,6 +32,13 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID> {
     @Query(value = "SELECT COUNT(*) > 0 FROM departments WHERE code = :code AND is_deleted = false", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
+    @Query("""
+            select d.code
+            from Department d
+            where d.code like concat(:prefix, '-%')
+            """)
+    List<String> findCodesByPrefix(@Param("prefix") String prefix);
+
     @Query(value = "SELECT * FROM departments WHERE parent_id = :parentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Department> findAllByParentIdAndIsDeletedFalse(@Param("parentId") UUID parentId);
 

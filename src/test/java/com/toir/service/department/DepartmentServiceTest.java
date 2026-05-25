@@ -17,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -49,16 +50,15 @@ class DepartmentServiceTest {
     DepartmentService service;
 
     @Test
-    void createPersistsNonDeletedDepartment() {
+    void createPersistsNonDeletedDepartmentWithGeneratedCode() {
         DepartmentRequest request = new DepartmentRequest(
-                "UI-E2E-20260516052136",
                 "Workshop",
                 DepartmentType.WORKSHOP,
                 null,
                 "UI created"
         );
-        when(repository.existsByCodeAndIsDeletedFalse(request.code())).thenReturn(false);
-        when(repository.save(any(Department.class))).thenAnswer(invocation -> {
+        when(repository.findCodesByPrefix("WS")).thenReturn(List.of());
+        when(repository.saveAndFlush(any(Department.class))).thenAnswer(invocation -> {
             Department saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
             return saved;
@@ -67,13 +67,81 @@ class DepartmentServiceTest {
         DepartmentDto created = service.create(request);
 
         ArgumentCaptor<Department> captor = ArgumentCaptor.forClass(Department.class);
-        verify(repository).save(captor.capture());
+        verify(repository).saveAndFlush(captor.capture());
         Department persisted = captor.getValue();
         assertThat(persisted.isDeleted()).isFalse();
-        assertThat(persisted.getCode()).isEqualTo(request.code());
+        assertThat(persisted.getCode()).isEqualTo("WS-001");
         assertThat(persisted.getName()).isEqualTo(request.name());
-        assertThat(created.code()).isEqualTo(request.code());
+        assertThat(created.code()).isEqualTo("WS-001");
         assertThat(created.name()).isEqualTo(request.name());
+    }
+
+    @Test
+    void createUsesNextUniqueGeneratedCodeForDepartmentType() {
+        DepartmentRequest request = new DepartmentRequest(
+                "Assembly",
+                DepartmentType.WORKSHOP,
+                null,
+                null
+        );
+        when(repository.findCodesByPrefix("WS")).thenReturn(List.of("WS-001", "WS-003", "WS-ABC"));
+        when(repository.saveAndFlush(any(Department.class))).thenAnswer(invocation -> {
+            Department saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            return saved;
+        });
+
+        DepartmentDto created = service.create(request);
+
+        assertThat(created.code()).isEqualTo("WS-004");
+    }
+
+    @Test
+    void createRetriesGeneratedCodeWhenDatabaseReportsDuplicate() {
+        DepartmentRequest request = new DepartmentRequest(
+                "Administration",
+                DepartmentType.ADMINISTRATION,
+                null,
+                null
+        );
+        when(repository.findCodesByPrefix("ADM")).thenReturn(List.of());
+        when(repository.saveAndFlush(any(Department.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "duplicate key value violates unique constraint \"departments_code_key\""))
+                .thenAnswer(invocation -> {
+                    Department saved = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+                    return saved;
+                });
+
+        DepartmentDto created = service.create(request);
+
+        assertThat(created.code()).isEqualTo("ADM-002");
+        ArgumentCaptor<Department> captor = ArgumentCaptor.forClass(Department.class);
+        verify(repository, org.mockito.Mockito.times(2)).saveAndFlush(captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(Department::getCode)
+                .containsExactly("ADM-001", "ADM-002");
+    }
+
+    @Test
+    void updateDoesNotChangeExistingCode() {
+        UUID id = UUID.randomUUID();
+        Department existing = department("WS-001", "Workshop");
+        DepartmentRequest request = new DepartmentRequest(
+                "Updated Workshop",
+                DepartmentType.SECTION,
+                null,
+                "Updated"
+        );
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+
+        DepartmentDto updated = service.update(id, request);
+
+        assertThat(existing.getCode()).isEqualTo("WS-001");
+        assertThat(updated.code()).isEqualTo("WS-001");
+        assertThat(updated.name()).isEqualTo("Updated Workshop");
     }
 
     @Test

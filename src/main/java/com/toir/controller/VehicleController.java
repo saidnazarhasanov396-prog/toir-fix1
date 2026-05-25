@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.vehicle.VehicleDetailDto;
+import com.toir.dto.vehicle.VehicleDocumentDto;
 import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.dto.vehicle.VehicleSummaryDto;
@@ -13,6 +14,7 @@ import com.toir.security.SecurityScope;
 import com.toir.service.VehicleService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -93,8 +95,55 @@ public class VehicleController {
         return ResponseEntity.ok(service.attachDocument(equipmentId, document, currentUserId(user)));
     }
 
+    @PostMapping(value = "/{equipmentId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<List<VehicleDocumentDto>> attachDocuments(
+            @PathVariable UUID equipmentId,
+            @RequestParam("files") List<MultipartFile> files,
+            @RequestParam(required = false) String documentType,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.attachDocuments(equipmentId, files, documentType, user));
+    }
+
+    @GetMapping("/{equipmentId}/documents")
+    public ResponseEntity<List<VehicleDocumentDto>> getDocuments(
+            @PathVariable UUID equipmentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        return ResponseEntity.ok(service.getDocuments(equipmentId, user));
+    }
+
+    @GetMapping("/{equipmentId}/documents/{documentId}")
+    public ResponseEntity<VehicleDocumentDto> getDocument(
+            @PathVariable UUID equipmentId,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        return ResponseEntity.ok(service.getDocument(equipmentId, documentId, user));
+    }
+
+    @GetMapping("/{equipmentId}/documents/{documentId}/presigned-url")
+    public ResponseEntity<PresignedUrlResponse> getDocumentPresignedUrl(
+            @PathVariable UUID equipmentId,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        return ResponseEntity.ok(service.getDocumentPresignedUrl(equipmentId, documentId, user));
+    }
+
+    @DeleteMapping("/{equipmentId}/documents/{documentId}")
+    public ResponseEntity<Void> deleteDocument(
+            @PathVariable UUID equipmentId,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        service.deleteDocument(equipmentId, documentId, user);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/{equipmentId}/document")
-    public ResponseEntity<VehicleDetailDto.DocumentRef> getDocument(
+    public ResponseEntity<VehicleDocumentDto> getDocument(
             @PathVariable UUID equipmentId,
             @CurrentUser AuthenticatedUser user
     ) {
