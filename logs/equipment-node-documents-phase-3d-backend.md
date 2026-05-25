@@ -20,7 +20,7 @@
 - `logs/equipment-node-documents-phase-3d-frontend-impact.md`
 
 ## Migration Added
-- `src/main/resources/db/migration/V20260523_5__technical_documents_equipment_node_target.sql`
+- `src/main/resources/db/migration/V20260523_6__technical_documents_equipment_node_target.sql`
   - Adds nullable `technical_documents.equipment_node_id`.
   - Adds an index for `equipment_node_id`.
   - Adds FK `technical_documents.equipment_node_id -> equipment_nodes.id`.
