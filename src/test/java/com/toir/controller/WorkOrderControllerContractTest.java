@@ -106,6 +106,36 @@ class WorkOrderControllerContractTest {
     }
 
     @Test
+    void createEmergencyWorkOrderWithoutRepairRequestReturns400() throws Exception {
+        when(service.create(any())).thenThrow(RestException.badRequest(
+                "repairRequestId is required when work order type is EMERGENCY"));
+
+        mockMvc.perform(post("/api/v1/work-orders")
+                        .contentType("application/json")
+                        .content(baseCreateRequestJson(WorkOrderType.EMERGENCY, null, null)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.path").value("/api/v1/work-orders"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(
+                        "repairRequestId is required")));
+    }
+
+    @Test
+    void createDefectWorkOrderWithoutDefectReturns400() throws Exception {
+        when(service.create(any())).thenThrow(RestException.badRequest(
+                "defectId is required when work order type is DEFECT"));
+
+        mockMvc.perform(post("/api/v1/work-orders")
+                        .contentType("application/json")
+                        .content(baseCreateRequestJson(WorkOrderType.DEFECT, UUID.randomUUID(), null)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.path").value("/api/v1/work-orders"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(
+                        "defectId is required")));
+    }
+
+    @Test
     void createWorkOrder_acceptsEquipmentNodeId() throws Exception {
         UUID equipmentNodeId = UUID.randomUUID();
         WorkOrderDto response = workOrderDtoWithNode(UUID.randomUUID(), equipmentNodeId);
@@ -477,7 +507,20 @@ class WorkOrderControllerContractTest {
         return baseCreateRequestJson(repairRequestId, defectId, null);
     }
 
+    private String baseCreateRequestJson(WorkOrderType type, UUID repairRequestId, UUID defectId) {
+        return baseCreateRequestJson(type, repairRequestId, defectId, null);
+    }
+
     private String baseCreateRequestJson(UUID repairRequestId, UUID defectId, UUID equipmentNodeId) {
+        return baseCreateRequestJson(WorkOrderType.PLANNED, repairRequestId, defectId, equipmentNodeId);
+    }
+
+    private String baseCreateRequestJson(
+            WorkOrderType type,
+            UUID repairRequestId,
+            UUID defectId,
+            UUID equipmentNodeId
+    ) {
         String repairRequestPart = repairRequestId == null
                 ? ""
                 : """
@@ -502,7 +545,7 @@ class WorkOrderControllerContractTest {
                   "departmentId": "%s",
                 %s
                 %s
-                  "type": "PLANNED",
+                  "type": "%s",
                   "workType": "REPAIR",
                   "priority": "MEDIUM",
                   "createdById": "%s",
@@ -514,6 +557,7 @@ class WorkOrderControllerContractTest {
                 UUID.randomUUID(),
                 repairRequestPart,
                 defectPart,
+                type.name(),
                 UUID.randomUUID()
         );
     }
