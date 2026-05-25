@@ -104,7 +104,7 @@ Flyway version/order resolution:
 - Kept main migration as `V20260523_4__ppr_plan_date_range_and_optional_task_equipment.sql`.
 - Renamed branch migration `V20260523_4__defects_equipment_node_target.sql` to `V20260523_5__defects_equipment_node_target.sql`.
 - Renamed branch migration `V20260523_5__technical_documents_equipment_node_target.sql` to `V20260523_6__technical_documents_equipment_node_target.sql`.
-- Renamed branch migration `V20260523_6__work_orders_equipment_node_target.sql` to `V20260523_7__work_orders_equipment_node_target.sql`.
+- Renamed branch migration `V20260523_6__work_orders_equipment_node_target.sql` to `V20260523_8__work_orders_equipment_node_target.sql`.
 - Migration contents were not changed or removed.
 
 Final relevant Flyway order:
@@ -116,7 +116,7 @@ V20260523_3__equipment_attribute_value_history.sql
 V20260523_4__ppr_plan_date_range_and_optional_task_equipment.sql
 V20260523_5__defects_equipment_node_target.sql
 V20260523_6__technical_documents_equipment_node_target.sql
-V20260523_7__work_orders_equipment_node_target.sql
+V20260523_8__work_orders_equipment_node_target.sql
 ```
 
 ## Impact matrix
@@ -142,7 +142,7 @@ The merge brought in the incoming main files listed above. Additional conflict-r
 ```text
 R100 src/main/resources/db/migration/V20260523_4__defects_equipment_node_target.sql -> src/main/resources/db/migration/V20260523_5__defects_equipment_node_target.sql
 R100 src/main/resources/db/migration/V20260523_5__technical_documents_equipment_node_target.sql -> src/main/resources/db/migration/V20260523_6__technical_documents_equipment_node_target.sql
-R100 src/main/resources/db/migration/V20260523_6__work_orders_equipment_node_target.sql -> src/main/resources/db/migration/V20260523_7__work_orders_equipment_node_target.sql
+R100 src/main/resources/db/migration/V20260523_6__work_orders_equipment_node_target.sql -> src/main/resources/db/migration/V20260523_8__work_orders_equipment_node_target.sql
 ```
 
 Audit/report files added by this sync:
