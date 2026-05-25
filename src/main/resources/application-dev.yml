@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/toir_demo
+    url: jdbc:postgresql://localhost:5432/toir
     username: postgres
-    password: root123
+    password: Sardorbek.01
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
