@@ -4,6 +4,7 @@ import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.exception.RestException;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.security.SecurityScope;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.MethodParameter;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -124,6 +126,30 @@ class VehicleControllerContractTest {
                 .andExpect(jsonPath("$.vehicleDetails.document.downloadUrl").value("/api/files/" + fileId + "/download"));
 
         verify(service).attachDocument(eq(equipmentId), any(), eq(currentUserId));
+    }
+
+    @Test
+    void attachDocumentUnauthorizedReturnsForbidden() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        when(service.attachDocument(eq(equipmentId), any(), eq(currentUserId)))
+                .thenThrow(RestException.forbidden("Vehicle access denied"));
+
+        mockMvc.perform(multipart("/api/v1/vehicles/{equipmentId}/document", equipmentId)
+                        .file(new MockMultipartFile("document", "vehicle-passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Vehicle access denied"));
+    }
+
+    @Test
+    void attachDocumentInvalidFilePropagatesValidationError() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        when(service.attachDocument(eq(equipmentId), any(), eq(currentUserId)))
+                .thenThrow(new RestException("File type is not allowed", HttpStatus.UNSUPPORTED_MEDIA_TYPE));
+
+        mockMvc.perform(multipart("/api/v1/vehicles/{equipmentId}/document", equipmentId)
+                        .file(new MockMultipartFile("document", "bad.exe", "application/octet-stream", "MZ".getBytes())))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.message").value("File type is not allowed"));
     }
 
     @Test

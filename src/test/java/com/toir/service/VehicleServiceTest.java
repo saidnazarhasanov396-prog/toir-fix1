@@ -19,6 +19,8 @@ import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.projection.VehicleStatsProjection;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.file_management.FileService;
 import org.junit.jupiter.api.Test;
@@ -69,6 +71,9 @@ class VehicleServiceTest {
 
     @Mock
     UploadedFileRepository uploadedFileRepository;
+
+    @Mock
+    SecurityScope securityScope;
 
     @BeforeEach
     void setUp() {
@@ -533,6 +538,38 @@ class VehicleServiceTest {
     }
 
     @Test
+    void attachDocumentToMissingVehicleReturnsNotFound() {
+        UUID equipmentId = UUID.randomUUID();
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.attachDocument(equipmentId, document(), UUID.randomUUID()))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Equipment not found");
+
+        verify(fileService, never()).upload(any(), any(), any());
+    }
+
+    @Test
+    void attachDocumentRejectsUnauthorizedVehicleDepartment() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID userDepartmentId = UUID.randomUUID();
+        UUID vehicleDepartmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
+        equipment.setDepartmentId(vehicleDepartmentId);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(securityScope.isAdmin()).thenReturn(false);
+        when(securityScope.currentUser()).thenReturn(authenticatedUser(UUID.randomUUID(), userDepartmentId));
+
+        assertThatThrownBy(() -> service.attachDocument(equipmentId, document(), UUID.randomUUID()))
+                .isInstanceOf(RestException.class)
+                .hasMessage("Vehicle access denied");
+
+        verify(fileService, never()).upload(any(), any(), any());
+    }
+
+    @Test
     void attachDocumentRollsBackUploadedFileIfVehicleSaveFails() {
         UUID equipmentId = UUID.randomUUID();
         UUID currentUserId = UUID.randomUUID();
@@ -550,6 +587,27 @@ class VehicleServiceTest {
         assertThatThrownBy(() -> service.attachDocument(equipmentId, document, currentUserId))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("db");
+
+        verify(fileService).delete(fileId, currentUserId);
+    }
+
+    @Test
+    void attachDocumentRollsBackUploadedFileIfMetadataLookupFails() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
+        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
+        MockMultipartFile document = document();
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(fileService.upload(document, FileCategory.VEHICLE_DOCUMENT, currentUserId)).thenReturn(uploadResponse(fileId));
+        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.attachDocument(equipmentId, document, currentUserId))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Uploaded file not found");
 
         verify(fileService).delete(fileId, currentUserId);
     }
@@ -580,6 +638,65 @@ class VehicleServiceTest {
     }
 
     @Test
+    void attachDocumentReplacementFailureKeepsOldDocumentAndDeletesNewFile() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        UUID oldFileId = UUID.randomUUID();
+        UUID newFileId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
+        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
+        UploadedFile oldFile = uploadedFile(oldFileId, currentUserId);
+        details.setDocumentFile(oldFile);
+        MockMultipartFile document = document();
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(fileService.upload(document, FileCategory.VEHICLE_DOCUMENT, currentUserId)).thenReturn(uploadResponse(newFileId));
+        when(uploadedFileRepository.findByIdAndDeletedFalse(newFileId)).thenReturn(Optional.of(uploadedFile(newFileId, currentUserId)));
+        when(vehicleDetailsRepository.save(details)).thenThrow(new RuntimeException("db"));
+
+        assertThatThrownBy(() -> service.attachDocument(equipmentId, document, currentUserId))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("db");
+
+        assertThat(details.getDocumentFile()).isEqualTo(oldFile);
+        verify(fileService).delete(newFileId, currentUserId);
+        verify(fileService, never()).delete(oldFileId, currentUserId);
+    }
+
+    @Test
+    void getDocumentReturnsMetadataWhenAttached() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
+        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
+        details.setDocumentFile(uploadedFile(fileId, currentUserId));
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+
+        VehicleDetailDto.DocumentRef result = service.getDocument(equipmentId, currentUserId);
+
+        assertThat(result.id()).isEqualTo(fileId);
+        verify(fileService).getMetadata(fileId, currentUserId);
+    }
+
+    @Test
+    void getDocumentWithoutAttachedFileReturnsNotFound() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
+        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+
+        assertThatThrownBy(() -> service.getDocument(equipmentId, UUID.randomUUID()))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Vehicle document not found");
+    }
+
+    @Test
     void getDocumentRejectsNonOwnerThroughFileService() {
         UUID equipmentId = UUID.randomUUID();
         UUID currentUserId = UUID.randomUUID();
@@ -593,6 +710,24 @@ class VehicleServiceTest {
         when(fileService.getMetadata(fileId, currentUserId)).thenThrow(RestException.forbidden("File access denied"));
 
         assertThatThrownBy(() -> service.getDocument(equipmentId, currentUserId))
+                .isInstanceOf(RestException.class)
+                .hasMessage("File access denied");
+    }
+
+    @Test
+    void getDocumentPresignedUrlUnauthorizedPropagatesForbidden() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
+        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
+        details.setDocumentFile(uploadedFile(fileId, UUID.randomUUID()));
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(fileService.getPresignedUrl(fileId, currentUserId)).thenThrow(RestException.forbidden("File access denied"));
+
+        assertThatThrownBy(() -> service.getDocumentPresignedUrl(equipmentId, currentUserId))
                 .isInstanceOf(RestException.class)
                 .hasMessage("File access denied");
     }
@@ -614,6 +749,20 @@ class VehicleServiceTest {
 
         assertThat(details.getDocumentFile()).isNull();
         verify(fileService).delete(fileId, currentUserId);
+    }
+
+    @Test
+    void deleteDocumentWithoutAttachedFileReturnsNotFound() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
+        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+
+        assertThatThrownBy(() -> service.deleteDocument(equipmentId, UUID.randomUUID()))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Vehicle document not found");
     }
 
     @Test
@@ -756,6 +905,18 @@ class VehicleServiceTest {
 
     private static MockMultipartFile document() {
         return new MockMultipartFile("document", "vehicle-passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes());
+    }
+
+    private static AuthenticatedUser authenticatedUser(UUID userId, UUID departmentId) {
+        return new AuthenticatedUser(
+                userId.toString(),
+                "user",
+                "user@example.com",
+                "User",
+                departmentId.toString(),
+                "USER",
+                List.of()
+        );
     }
     private static Equipment updatedEquipment(UUID id, VehicleRequest request) {
         Equipment equipment = new Equipment();
