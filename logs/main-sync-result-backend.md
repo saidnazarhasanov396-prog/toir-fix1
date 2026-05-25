@@ -11,6 +11,7 @@ Date: 2026-05-25
 
 - `f276e4b140796174034ec3cf37c102fde7dd192a` - `chore: save backend work before main sync`
 - `2d041f36eaf84a79b8e54dba2d7b26cdefa87bf0` - merge `origin/main` into `codex/equipment-lifecycle-main-sync-backend`
+- `207b35a` - `chore: document backend main sync result`
 
 ## Origin Main Merge
 
@@ -44,5 +45,5 @@ Date: 2026-05-25
 
 ## Push Status
 
-- Report created before final push.
-- Intended push command: `git push origin codex/equipment-lifecycle-main-sync-backend`.
+- `git push origin codex/equipment-lifecycle-main-sync-backend`: succeeded.
+- Remote branch updated from `e54bd6e` to `207b35a` in the first push, then this report-only push status update was committed and pushed afterward.
