@@ -8,6 +8,7 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueHistoryDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
+import com.toir.exception.RestException;
 import com.toir.service.equipment.EquipmentAttributeService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,7 +30,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -91,6 +95,7 @@ public class EquipmentAttributeController {
     public ResponseEntity<List<EquipmentAttributeDefinitionDto>> createDefinitionsBatch(
             @PathVariable UUID equipmentTypeId,
             @Valid @RequestBody List<@Valid EquipmentAttributeDefinitionRequest> request) {
+        validateBatchRequest(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(service.createDefinitionsBatch(equipmentTypeId, request));
     }
 
@@ -146,5 +151,38 @@ public class EquipmentAttributeController {
             @PathVariable UUID equipmentId,
             @RequestBody List<EquipmentAttributeValueRequest> request) {
         return ResponseEntity.ok(service.replaceValues(equipmentId, request));
+    }
+
+    private void validateBatchRequest(List<EquipmentAttributeDefinitionRequest> request) {
+        if (request == null) {
+            throw RestException.badRequest("Equipment attribute definition batch is required");
+        }
+        if (request.isEmpty()) {
+            throw RestException.badRequest("Equipment attribute definition batch must not be empty");
+        }
+
+        Set<String> normalizedKeys = new HashSet<>();
+        for (EquipmentAttributeDefinitionRequest item : request) {
+            if (item == null) {
+                throw RestException.badRequest("Equipment attribute definition request is required");
+            }
+            if (item.key() == null || item.key().isBlank()) {
+                throw RestException.badRequest("Attribute key is required");
+            }
+            if (item.label() == null || item.label().isBlank()) {
+                throw RestException.badRequest("Attribute label is required");
+            }
+            if (item.dataType() == null) {
+                throw RestException.badRequest("Attribute dataType is required");
+            }
+            if (item.minValue() != null && item.maxValue() != null && item.minValue() > item.maxValue()) {
+                throw RestException.badRequest("minValue cannot be greater than maxValue");
+            }
+
+            String normalizedKey = item.key().trim().toLowerCase(Locale.ROOT);
+            if (!normalizedKeys.add(normalizedKey)) {
+                throw RestException.badRequest("Duplicate equipment attribute definition key in batch: " + normalizedKey);
+            }
+        }
     }
 }

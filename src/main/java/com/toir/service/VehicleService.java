@@ -1,28 +1,38 @@
 package com.toir.service;
 
 import com.toir.dto.equipment.EquipmentDto;
+import com.toir.dto.file.PresignedUrlResponse;
+import com.toir.dto.file.UploadFileResponse;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.dto.vehicle.VehicleSummaryDto;
+import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.FileCategory;
 import com.toir.exception.RestException;
+import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.VehicleStatsProjection;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentService;
+import com.toir.service.file_management.FileService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
 import java.util.function.Function;
@@ -30,12 +40,16 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class VehicleService {
 
     private final EquipmentRepository equipmentRepository;
     private final VehicleDetailsRepository vehicleDetailsRepository;
     private final EquipmentService equipmentService;
     private final AuditBuilderService auditBuilderService;
+    private final FileService fileService;
+    private final UploadedFileRepository uploadedFileRepository;
+    private final SecurityScope securityScope;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, String search, int page, int pageSize) {
@@ -148,10 +162,98 @@ public class VehicleService {
                 Map.of(newEquipment, newDetails)
         );
 
-
-
-
         return VehicleDetailDto.from(equipmentService.findById(equipmentId), details);
+    }
+
+    @Transactional
+    public VehicleDetailDto attachDocument(UUID equipmentId, MultipartFile document, UUID currentUserId) {
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
+        VehicleDetails details = vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
+
+        UploadedFile oldDocument = details.getDocumentFile();
+        UploadFileResponse uploaded = fileService.upload(document, FileCategory.VEHICLE_DOCUMENT, currentUserId);
+        try {
+            UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
+                    .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
+            details.setDocumentFile(uploadedFile);
+            VehicleDetails savedDetails = vehicleDetailsRepository.save(details);
+            if (oldDocument != null && !Objects.equals(oldDocument.getId(), uploaded.id())) {
+                deleteDocumentQuietly(oldDocument.getId(), currentUserId);
+            }
+            return VehicleDetailDto.from(equipmentService.findById(equipment.getId()), savedDetails);
+        } catch (RuntimeException e) {
+            details.setDocumentFile(oldDocument);
+            deleteDocumentQuietly(uploaded.id(), currentUserId);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public VehicleDetailDto.DocumentRef getDocument(UUID equipmentId, UUID currentUserId) {
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
+        VehicleDetails details = findVehicleDetails(equipmentId);
+        UploadedFile documentFile = details.getDocumentFile();
+        if (documentFile == null || Boolean.TRUE.equals(documentFile.getDeleted())) {
+            throw RestException.notFound("Vehicle document not found: " + equipmentId);
+        }
+        fileService.getMetadata(documentFile.getId(), currentUserId);
+        return VehicleDetailDto.DocumentRef.from(documentFile);
+    }
+
+    @Transactional(readOnly = true)
+    public PresignedUrlResponse getDocumentPresignedUrl(UUID equipmentId, UUID currentUserId) {
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
+        VehicleDetails details = findVehicleDetails(equipmentId);
+        UploadedFile documentFile = details.getDocumentFile();
+        if (documentFile == null || Boolean.TRUE.equals(documentFile.getDeleted())) {
+            throw RestException.notFound("Vehicle document not found: " + equipmentId);
+        }
+        return fileService.getPresignedUrl(documentFile.getId(), currentUserId);
+    }
+
+    @Transactional
+    public void deleteDocument(UUID equipmentId, UUID currentUserId) {
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
+        VehicleDetails details = findVehicleDetails(equipmentId);
+        UploadedFile documentFile = details.getDocumentFile();
+        if (documentFile == null || Boolean.TRUE.equals(documentFile.getDeleted())) {
+            throw RestException.notFound("Vehicle document not found: " + equipmentId);
+        }
+        details.setDocumentFile(null);
+        vehicleDetailsRepository.save(details);
+        fileService.delete(documentFile.getId(), currentUserId);
+    }
+
+    private void deleteDocumentQuietly(UUID fileId, UUID currentUserId) {
+        try {
+            fileService.delete(fileId, currentUserId);
+        } catch (RuntimeException e) {
+            log.warn("Failed to cleanup vehicle document file '{}': {}", fileId, e.getMessage());
+        }
+    }
+
+    private void enforceVehicleAccess(Equipment equipment) {
+        if (securityScope == null || securityScope.isAdmin()) {
+            return;
+        }
+        AuthenticatedUser user = securityScope.currentUser();
+        if (user == null || user.departmentId() == null || user.departmentId().isBlank()) {
+            return;
+        }
+        UUID userDepartmentId;
+        try {
+            userDepartmentId = UUID.fromString(user.departmentId());
+        } catch (IllegalArgumentException e) {
+            throw RestException.forbidden("Vehicle access denied");
+        }
+        if (!Objects.equals(equipment.getDepartmentId(), userDepartmentId)) {
+            throw RestException.forbidden("Vehicle access denied");
+        }
     }
 
     @Transactional
@@ -174,6 +276,20 @@ public class VehicleService {
                 Map.of(saved, details),
                 null
         );
+    }
+
+    private Equipment findVehicleEquipment(UUID equipmentId) {
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
+        if (equipment.getCategory() != EquipmentCategory.VEHICLE) {
+            throw RestException.badRequest("Equipment is not a vehicle: " + equipmentId);
+        }
+        return equipment;
+    }
+
+    private VehicleDetails findVehicleDetails(UUID equipmentId) {
+        return vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
     }
 
     private void validateUniqueCreate(VehicleRequest request) {

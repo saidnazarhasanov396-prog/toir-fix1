@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 8081
 
 spring:
   datasource:
@@ -20,8 +20,8 @@ spring:
     show-sql: false
   servlet:
     multipart:
-      max-file-size: 50MB
-      max-request-size: 50MB
+      max-file-size: 150MB
+      max-request-size: 150MB
 
 springdoc:
   cache:
@@ -56,7 +56,6 @@ app:
     admin-password: Root123456
     admin-email: admin@toir.local
     admin-full-name: System Administrator
-    seed-demo-data: true
 
 logging:
   level:
