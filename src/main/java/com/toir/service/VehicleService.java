@@ -4,11 +4,13 @@ import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.file.UploadFileResponse;
 import com.toir.dto.vehicle.VehicleDetailDto;
+import com.toir.dto.vehicle.VehicleDocumentDto;
 import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.dto.vehicle.VehicleSummaryDto;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.VehicleDocument;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -17,6 +19,7 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
 import com.toir.exception.RestException;
 import com.toir.repository.UploadedFileRepository;
+import com.toir.repository.VehicleDocumentRepository;
 import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.VehicleStatsProjection;
@@ -50,6 +53,7 @@ public class VehicleService {
     private final FileService fileService;
     private final UploadedFileRepository uploadedFileRepository;
     private final SecurityScope securityScope;
+    private final VehicleDocumentRepository vehicleDocumentRepository;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, String search, int page, int pageSize) {
@@ -107,7 +111,7 @@ public class VehicleService {
         }
         VehicleDetails details = vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
-        return VehicleDetailDto.from(equipment, details);
+        return VehicleDetailDto.from(equipment, details, vehicleDocumentRepository.findAllByEquipmentId(equipmentId));
     }
 
     @Transactional
@@ -167,46 +171,112 @@ public class VehicleService {
 
     @Transactional
     public VehicleDetailDto attachDocument(UUID equipmentId, MultipartFile document, UUID currentUserId) {
+        attachDocuments(equipmentId, List.of(document), null, authenticatedUser(currentUserId));
+        return findByEquipmentId(equipmentId);
+    }
+
+    @Transactional
+    public List<VehicleDocumentDto> attachDocuments(
+            UUID equipmentId,
+            List<MultipartFile> files,
+            String documentType,
+            AuthenticatedUser user
+    ) {
+        UUID currentUserId = currentUserId(user);
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
-        VehicleDetails details = vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)
-                .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
+        if (files == null || files.isEmpty()) {
+            throw RestException.badRequest("At least one vehicle document file is required");
+        }
+        VehicleDetails details = findVehicleDetails(equipmentId);
+        String normalizedDocumentType = normalizeDocumentType(documentType);
 
-        UploadedFile oldDocument = details.getDocumentFile();
-        UploadFileResponse uploaded = fileService.upload(document, FileCategory.VEHICLE_DOCUMENT, currentUserId);
+        List<UUID> uploadedFileIds = new ArrayList<>();
         try {
-            UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
-                    .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
-            details.setDocumentFile(uploadedFile);
-            VehicleDetails savedDetails = vehicleDetailsRepository.save(details);
-            if (oldDocument != null && !Objects.equals(oldDocument.getId(), uploaded.id())) {
-                deleteDocumentQuietly(oldDocument.getId(), currentUserId);
+            List<VehicleDocument> documents = new ArrayList<>(files.size());
+            for (MultipartFile file : files) {
+                UploadFileResponse uploaded = fileService.upload(file, FileCategory.VEHICLE_DOCUMENT, currentUserId);
+                uploadedFileIds.add(uploaded.id());
+                UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
+                        .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
+                documents.add(VehicleDocument.builder()
+                        .vehicleDetails(details)
+                        .file(uploadedFile)
+                        .documentType(normalizedDocumentType)
+                        .build());
             }
-            return VehicleDetailDto.from(equipmentService.findById(equipment.getId()), savedDetails);
+
+            return vehicleDocumentRepository.saveAllAndFlush(documents).stream()
+                    .map(document -> VehicleDocumentDto.from(equipmentId, document))
+                    .filter(Objects::nonNull)
+                    .toList();
         } catch (RuntimeException e) {
-            details.setDocumentFile(oldDocument);
-            deleteDocumentQuietly(uploaded.id(), currentUserId);
-            throw e;
+            cleanupUploadedFiles(uploadedFileIds, currentUserId);
+            if (e instanceof RestException restException) {
+                throw restException;
+            }
+            throw RestException.conflict("Could not attach vehicle documents");
         }
     }
 
     @Transactional(readOnly = true)
-    public VehicleDetailDto.DocumentRef getDocument(UUID equipmentId, UUID currentUserId) {
+    public List<VehicleDocumentDto> getDocuments(UUID equipmentId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
+        return vehicleDocumentRepository.findAllByEquipmentId(equipmentId)
+                .stream()
+                .map(document -> toDocumentDtoWithMetadata(equipmentId, document, currentUserId))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public VehicleDocumentDto getDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
+        VehicleDocument document = findVehicleDocument(equipmentId, documentId);
+        return toDocumentDtoWithMetadata(equipmentId, document, currentUserId);
+    }
+
+    @Transactional(readOnly = true)
+    public VehicleDocumentDto getDocument(UUID equipmentId, UUID currentUserId) {
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
+        Optional<VehicleDocument> latestDocument = vehicleDocumentRepository.findAllByEquipmentId(equipmentId)
+                .stream()
+                .findFirst();
+        if (latestDocument.isPresent()) {
+            return toDocumentDtoWithMetadata(equipmentId, latestDocument.get(), currentUserId);
+        }
         VehicleDetails details = findVehicleDetails(equipmentId);
         UploadedFile documentFile = details.getDocumentFile();
         if (documentFile == null || Boolean.TRUE.equals(documentFile.getDeleted())) {
             throw RestException.notFound("Vehicle document not found: " + equipmentId);
         }
         fileService.getMetadata(documentFile.getId(), currentUserId);
-        return VehicleDetailDto.DocumentRef.from(documentFile);
+        return legacyDocumentDto(equipmentId, documentFile);
+    }
+
+    @Transactional(readOnly = true)
+    public PresignedUrlResponse getDocumentPresignedUrl(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
+        VehicleDocument document = findVehicleDocument(equipmentId, documentId);
+        return fileService.getPresignedUrl(document.getFile().getId(), currentUserId);
     }
 
     @Transactional(readOnly = true)
     public PresignedUrlResponse getDocumentPresignedUrl(UUID equipmentId, UUID currentUserId) {
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
+        Optional<VehicleDocument> latestDocument = vehicleDocumentRepository.findAllByEquipmentId(equipmentId)
+                .stream()
+                .findFirst();
+        if (latestDocument.isPresent()) {
+            return fileService.getPresignedUrl(latestDocument.get().getFile().getId(), currentUserId);
+        }
         VehicleDetails details = findVehicleDetails(equipmentId);
         UploadedFile documentFile = details.getDocumentFile();
         if (documentFile == null || Boolean.TRUE.equals(documentFile.getDeleted())) {
@@ -216,9 +286,28 @@ public class VehicleService {
     }
 
     @Transactional
+    public void deleteDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
+        VehicleDocument document = findVehicleDocument(equipmentId, documentId);
+        vehicleDocumentRepository.delete(document);
+        fileService.delete(document.getFile().getId(), currentUserId);
+    }
+
+    @Transactional
     public void deleteDocument(UUID equipmentId, UUID currentUserId) {
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
+        Optional<VehicleDocument> latestDocument = vehicleDocumentRepository.findAllByEquipmentId(equipmentId)
+                .stream()
+                .findFirst();
+        if (latestDocument.isPresent()) {
+            VehicleDocument document = latestDocument.get();
+            vehicleDocumentRepository.delete(document);
+            fileService.delete(document.getFile().getId(), currentUserId);
+            return;
+        }
         VehicleDetails details = findVehicleDetails(equipmentId);
         UploadedFile documentFile = details.getDocumentFile();
         if (documentFile == null || Boolean.TRUE.equals(documentFile.getDeleted())) {
@@ -227,6 +316,12 @@ public class VehicleService {
         details.setDocumentFile(null);
         vehicleDetailsRepository.save(details);
         fileService.delete(documentFile.getId(), currentUserId);
+    }
+
+    private void cleanupUploadedFiles(List<UUID> fileIds, UUID currentUserId) {
+        for (UUID fileId : fileIds) {
+            deleteDocumentQuietly(fileId, currentUserId);
+        }
     }
 
     private void deleteDocumentQuietly(UUID fileId, UUID currentUserId) {
@@ -290,6 +385,52 @@ public class VehicleService {
     private VehicleDetails findVehicleDetails(UUID equipmentId) {
         return vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
+    }
+
+    private VehicleDocument findVehicleDocument(UUID equipmentId, UUID documentId) {
+        return vehicleDocumentRepository.findByIdAndEquipmentId(documentId, equipmentId)
+                .orElseThrow(() -> RestException.notFound("Vehicle document not found: " + documentId));
+    }
+
+    private VehicleDocumentDto toDocumentDtoWithMetadata(UUID equipmentId, VehicleDocument document, UUID currentUserId) {
+        fileService.getMetadata(document.getFile().getId(), currentUserId);
+        return VehicleDocumentDto.from(equipmentId, document);
+    }
+
+    private VehicleDocumentDto legacyDocumentDto(UUID equipmentId, UploadedFile file) {
+        return new VehicleDocumentDto(
+                file.getId(),
+                file.getId(),
+                null,
+                file.getOriginalName(),
+                file.getContentType(),
+                file.getSize(),
+                "/api/files/" + file.getId() + "/download",
+                "/api/v1/vehicles/" + equipmentId + "/document/presigned-url",
+                file.getCreatedAt()
+        );
+    }
+
+    private UUID currentUserId(AuthenticatedUser user) {
+        if (user == null || user.id() == null || user.id().isBlank()) {
+            throw RestException.unauthorized("Authenticated user is required");
+        }
+        return UUID.fromString(user.id());
+    }
+
+    private AuthenticatedUser authenticatedUser(UUID currentUserId) {
+        return new AuthenticatedUser(currentUserId.toString(), null, null, null, null, null, List.of());
+    }
+
+    private String normalizeDocumentType(String documentType) {
+        if (documentType == null || documentType.isBlank()) {
+            return null;
+        }
+        String trimmed = documentType.trim();
+        if (trimmed.length() > 64) {
+            throw RestException.badRequest("documentType must be 64 characters or fewer");
+        }
+        return trimmed;
     }
 
     private void validateUniqueCreate(VehicleRequest request) {

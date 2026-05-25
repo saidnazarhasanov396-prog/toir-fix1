@@ -2,10 +2,12 @@ package com.toir.dto.vehicle;
 
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.entity.UploadedFile;
+import com.toir.entity.equipment.VehicleDocument;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.VehicleType;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public record VehicleDetailDto(
@@ -35,7 +37,8 @@ public record VehicleDetailDto(
             LocalDate insuranceExpiryDate,
             LocalDate technicalInspectionExpiryDate,
             String gpsDeviceId,
-            DocumentRef document
+            DocumentRef document,
+            List<VehicleDocumentDto> documents
     ) {
     }
 
@@ -63,6 +66,17 @@ public record VehicleDetailDto(
     }
 
     public static VehicleDetailDto from(EquipmentDto equipment, VehicleDetails details) {
+        return from(equipment, details, List.of());
+    }
+
+    public static VehicleDetailDto from(EquipmentDto equipment, VehicleDetails details, List<VehicleDocument> documents) {
+        List<VehicleDocumentDto> documentDtos = documents == null ? List.of() : documents.stream()
+                .map(document -> VehicleDocumentDto.from(details.getEquipmentId(), document))
+                .filter(dto -> dto != null)
+                .toList();
+        DocumentRef legacyDocument = documentDtos.isEmpty()
+                ? DocumentRef.from(details.getDocumentFile())
+                : toDocumentRef(documentDtos.getFirst());
         return new VehicleDetailDto(
                 equipment,
                 new Details(
@@ -88,8 +102,23 @@ public record VehicleDetailDto(
                         details.getInsuranceExpiryDate(),
                         details.getTechnicalInspectionExpiryDate(),
                         details.getGpsDeviceId(),
-                        DocumentRef.from(details.getDocumentFile())
+                        legacyDocument,
+                        documentDtos
                 )
+        );
+    }
+
+    private static DocumentRef toDocumentRef(VehicleDocumentDto document) {
+        if (document == null) {
+            return null;
+        }
+        return new DocumentRef(
+                document.id(),
+                document.originalName(),
+                document.contentType(),
+                document.size(),
+                document.downloadUrl(),
+                document.presignedUrlEndpoint()
         );
     }
 }
