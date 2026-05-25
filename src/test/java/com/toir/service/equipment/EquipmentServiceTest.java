@@ -974,6 +974,22 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void createPersistsAverageOperatingLifeHours() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequest(null, "INV-AVG-1", departmentId, null, 10_000L);
+        stubCreateFlow("INV-AVG-1");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+
+        EquipmentDto created = service.create(request);
+
+        assertThat(created.averageOperatingLifeHours()).isEqualTo(10_000L);
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getAverageOperatingLifeHours()).isEqualTo(10_000L);
+    }
+
+    @Test
     void createWithWarehouseIdOnlyCreatesEquipmentAndAssignsAvailableWarehouseItem() {
         UUID warehouseId = UUID.randomUUID();
         EquipmentCreateRequest request = createRequest(null, "INV-NEW-2", null, warehouseId);
@@ -1193,6 +1209,45 @@ class EquipmentServiceTest {
         verify(repository).save(entityCaptor.capture());
         assertThat(entityCaptor.getValue().getDepartmentId()).isEqualTo(departmentId);
         verify(departmentRepository).findByIdAndIsDeletedFalse(departmentId);
+    }
+
+    @Test
+    void updateChangesAverageOperatingLifeHoursWhenProvided() {
+        UUID id = UUID.randomUUID();
+        Equipment existing = equipment("EQ-AVG-UPDATE");
+        existing.setId(id);
+        existing.setAverageOperatingLifeHours(8_000L);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+        EquipmentUpdateRequest request = new EquipmentUpdateRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                12_000L
+        );
+
+        EquipmentDto updated = service.update(id, request);
+
+        assertThat(updated.averageOperatingLifeHours()).isEqualTo(12_000L);
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getAverageOperatingLifeHours()).isEqualTo(12_000L);
     }
 
     @Test
@@ -1544,6 +1599,7 @@ class EquipmentServiceTest {
                 null,
                 null,
                 "Pump",
+                10_000L,
                 List.of(new EquipmentAttributeValueRequest(null, "motor_power", null, 75.0, null, null, null, null))
         );
         stubCreateFlow("INV-P-101");
@@ -1775,6 +1831,16 @@ class EquipmentServiceTest {
     }
 
     private EquipmentCreateRequest createRequest(String code, String inventoryNumber, UUID departmentId, UUID warehouseId) {
+        return createRequest(code, inventoryNumber, departmentId, warehouseId, 10_000L);
+    }
+
+    private EquipmentCreateRequest createRequest(
+            String code,
+            String inventoryNumber,
+            UUID departmentId,
+            UUID warehouseId,
+            Long averageOperatingLifeHours
+    ) {
         return new EquipmentCreateRequest(
                 code,
                 "Compressor",
@@ -1794,7 +1860,8 @@ class EquipmentServiceTest {
                 EquipmentCategory.PRODUCTION_EQUIPMENT,
                 null,
                 null,
-                "test"
+                "test",
+                averageOperatingLifeHours
         );
     }
 

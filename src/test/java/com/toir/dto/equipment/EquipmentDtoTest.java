@@ -17,4 +17,14 @@ class EquipmentDtoTest {
 
         assertThat(dto.category()).isEqualTo(EquipmentCategory.VEHICLE);
     }
+
+    @Test
+    void fromIncludesAverageOperatingLifeHours() {
+        Equipment equipment = new Equipment();
+        equipment.setAverageOperatingLifeHours(10_000L);
+
+        EquipmentDto dto = EquipmentDto.from(equipment);
+
+        assertThat(dto.averageOperatingLifeHours()).isEqualTo(10_000L);
+    }
 }

@@ -5,6 +5,7 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -30,8 +31,64 @@ public record EquipmentCreateRequest(
         LocalDate commissionedAt,
         LocalDate warrantyUntil,
         String description,
+        @NotNull @Positive Long averageOperatingLifeHours,
         List<EquipmentAttributeValueRequest> attributes
 ) {
+        public EquipmentCreateRequest(
+                String code,
+                String name,
+                String inventoryNumber,
+                String technicalNumber,
+                String serialNumber,
+                String model,
+                UUID equipmentTypeId,
+                UUID departmentId,
+                UUID warehouseId,
+                UUID locationId,
+                UUID parentId,
+                UUID criticalityClassId,
+                UUID responsibleId,
+                String manufacturer,
+                EquipmentStatus status,
+                EquipmentCategory category,
+                LocalDate commissionedAt,
+                LocalDate warrantyUntil,
+                String description,
+                List<EquipmentAttributeValueRequest> attributes
+        ) {
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                        departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
+                        manufacturer, status, category, commissionedAt, warrantyUntil, description, null, attributes);
+        }
+
+        public EquipmentCreateRequest(
+                String code,
+                String name,
+                String inventoryNumber,
+                String technicalNumber,
+                String serialNumber,
+                String model,
+                UUID equipmentTypeId,
+                UUID departmentId,
+                UUID warehouseId,
+                UUID locationId,
+                UUID parentId,
+                UUID criticalityClassId,
+                UUID responsibleId,
+                String manufacturer,
+                EquipmentStatus status,
+                EquipmentCategory category,
+                LocalDate commissionedAt,
+                LocalDate warrantyUntil,
+                String description,
+                Long averageOperatingLifeHours
+        ) {
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                        departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
+                        manufacturer, status, category, commissionedAt, warrantyUntil, description,
+                        averageOperatingLifeHours, null);
+        }
+
         public EquipmentCreateRequest(
                 String code,
                 String name,
@@ -55,6 +112,6 @@ public record EquipmentCreateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
-                        manufacturer, status, category, commissionedAt, warrantyUntil, description, null);
+                        manufacturer, status, category, commissionedAt, warrantyUntil, description, null, null);
         }
 }
