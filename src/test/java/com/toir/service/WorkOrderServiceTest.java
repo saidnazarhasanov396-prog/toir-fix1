@@ -196,6 +196,32 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void createEmergencyWorkOrderWithoutRepairRequestReturns400() {
+        WorkOrderRequest request = request(WorkOrderType.EMERGENCY, WorkType.REPAIR, null, null);
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("repairRequestId is required");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createDefectWorkOrderWithoutDefectReturns400() {
+        WorkOrderRequest request = request(WorkOrderType.DEFECT, WorkType.REPAIR, null, null);
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("defectId is required");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
     void createWithValidRepairRequestSucceeds() {
         when(repository.save(any(WorkOrder.class)))
                 .thenAnswer(invocation -> {
