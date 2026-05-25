@@ -78,5 +78,4 @@
 ## Push status
 - Branch: `behzod`
 - Fix commit: `c329f86`
-- Additional report commits: `51c04cd`, `3afb75a`
 - Push: successful (`origin/behzod`)
