@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/toir_demo
+    url: jdbc:postgresql://localhost:5432/toir_demo
     username: postgres
     password: root123
     driver-class-name: org.postgresql.Driver
@@ -20,8 +20,8 @@ spring:
     show-sql: false
   servlet:
     multipart:
-      max-file-size: 50MB
-      max-request-size: 50MB
+      max-file-size: 150MB
+      max-request-size: 150MB
 
 springdoc:
   cache:

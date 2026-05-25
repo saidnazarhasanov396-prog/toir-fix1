@@ -1,6 +1,7 @@
 package com.toir.dto.vehicle;
 
 import com.toir.dto.equipment.EquipmentDto;
+import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.VehicleType;
 
@@ -33,8 +34,32 @@ public record VehicleDetailDto(
             String insurancePolicyNumber,
             LocalDate insuranceExpiryDate,
             LocalDate technicalInspectionExpiryDate,
-            String gpsDeviceId
+            String gpsDeviceId,
+            DocumentRef document
     ) {
+    }
+
+    public record DocumentRef(
+            UUID id,
+            String originalName,
+            String contentType,
+            Long size,
+            String downloadUrl,
+            String presignedUrlEndpoint
+    ) {
+        public static DocumentRef from(UploadedFile file) {
+            if (file == null || Boolean.TRUE.equals(file.getDeleted())) {
+                return null;
+            }
+            return new DocumentRef(
+                    file.getId(),
+                    file.getOriginalName(),
+                    file.getContentType(),
+                    file.getSize(),
+                    "/api/files/" + file.getId() + "/download",
+                    "/api/files/" + file.getId() + "/presigned-url"
+            );
+        }
     }
 
     public static VehicleDetailDto from(EquipmentDto equipment, VehicleDetails details) {
@@ -62,7 +87,8 @@ public record VehicleDetailDto(
                         details.getInsurancePolicyNumber(),
                         details.getInsuranceExpiryDate(),
                         details.getTechnicalInspectionExpiryDate(),
-                        details.getGpsDeviceId()
+                        details.getGpsDeviceId(),
+                        DocumentRef.from(details.getDocumentFile())
                 )
         );
     }

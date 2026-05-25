@@ -1,12 +1,16 @@
 package com.toir.entity.equipment;
 
 import com.toir.entity.BaseEntity;
+import com.toir.entity.UploadedFile;
 import com.toir.enums.VehicleType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -93,4 +97,8 @@ public class VehicleDetails extends BaseEntity {
 
     @Column(name = "gps_device_id")
     private String gpsDeviceId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "document_file_id")
+    private UploadedFile documentFile;
 }

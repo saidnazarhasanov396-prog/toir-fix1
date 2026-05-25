@@ -175,6 +175,277 @@ class EquipmentAttributeServiceTest {
     }
 
     @Test
+    void createDefinitionsBatchPersistsMultipleAttributes() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID criticalityId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        UnitOfMeasurement unit = unit("UOM-2026-0001", "kW", "Kilowatt", "Kilovatt");
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "motor_power")).thenReturn(false);
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "seal_type")).thenReturn(false);
+        when(criticalityClassRepository.findAllByIdInAndIsDeletedFalse(List.of(criticalityId)))
+                .thenReturn(List.of(criticalityClass(criticalityId)));
+        when(unitOfMeasurementRepository.findByTokenIgnoreCase("kW")).thenReturn(List.of(unit));
+        when(definitionRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<EquipmentAttributeDefinition> definitions = toDefinitionList(invocation.getArgument(0));
+            definitions.forEach(definition -> definition.setId(UUID.randomUUID()));
+            return definitions;
+        });
+
+        var result = service.createDefinitionsBatch(equipmentTypeId, List.of(
+                new EquipmentAttributeDefinitionRequest(
+                        "Motor_Power",
+                        "Motor Power",
+                        "Мощность двигателя",
+                        "Dvigatel quvvati",
+                        EquipmentAttributeDataType.NUMBER,
+                        "kW",
+                        true,
+                        0.0,
+                        500.0,
+                        null,
+                        List.of(),
+                        "Motor",
+                        10,
+                        List.of(criticalityId)
+                ),
+                new EquipmentAttributeDefinitionRequest(
+                        "seal_type",
+                        "Seal Type",
+                        null,
+                        null,
+                        EquipmentAttributeDataType.TEXT,
+                        null,
+                        false,
+                        null,
+                        null,
+                        null,
+                        List.of(),
+                        "Pump",
+                        20,
+                        List.of()
+                )
+        ));
+
+        assertThat(result).hasSize(2);
+        assertThat(result.getFirst().equipmentTypeId()).isEqualTo(equipmentTypeId);
+        assertThat(result.getFirst().key()).isEqualTo("motor_power");
+        assertThat(result.getFirst().label()).isEqualTo("Motor Power");
+        assertThat(result.getFirst().dataType()).isEqualTo(EquipmentAttributeDataType.NUMBER);
+        assertThat(result.getFirst().unit().code()).isEqualTo("UOM-2026-0001");
+        assertThat(result.getFirst().required()).isTrue();
+        assertThat(result.getFirst().sortOrder()).isEqualTo(10);
+        assertThat(result.getFirst().requiredForCriticalityClassIds()).containsExactly(criticalityId);
+        assertThat(result.getLast().key()).isEqualTo("seal_type");
+        assertThat(result.getLast().unit()).isNull();
+
+        ArgumentCaptor<Iterable<EquipmentAttributeDefinition>> definitionCaptor = ArgumentCaptor.forClass(Iterable.class);
+        verify(definitionRepository).saveAll(definitionCaptor.capture());
+        assertThat(toDefinitionList(definitionCaptor.getValue()))
+                .extracting(EquipmentAttributeDefinition::getKey)
+                .containsExactly("motor_power", "seal_type");
+
+        ArgumentCaptor<Iterable<EquipmentAttributeRequiredCriticality>> policyCaptor = ArgumentCaptor.forClass(Iterable.class);
+        verify(requiredCriticalityRepository).saveAll(policyCaptor.capture());
+        assertThat(toRequiredCriticalityList(policyCaptor.getValue()))
+                .extracting(EquipmentAttributeRequiredCriticality::getCriticalityClassId)
+                .containsExactly(criticalityId);
+    }
+
+    @Test
+    void createDefinitionsBatchRejectsEmptyBatch() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+
+        assertThatThrownBy(() -> service.createDefinitionsBatch(equipmentTypeId, List.of()))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("must not be empty");
+                });
+        verify(definitionRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void createDefinitionsBatchRejectsNullBatch() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+
+        assertThatThrownBy(() -> service.createDefinitionsBatch(equipmentTypeId, null))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("batch is required");
+                });
+        verify(definitionRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void createDefinitionsBatchRejectsDuplicateKeyInsideBatch() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+
+        assertThatThrownBy(() -> service.createDefinitionsBatch(equipmentTypeId, List.of(
+                definitionRequest("power"),
+                definitionRequest("power")
+        ))).isInstanceOfSatisfying(RestException.class, ex -> {
+            assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(ex.getMessage()).contains("Duplicate equipment attribute definition key in batch").contains("power");
+        });
+        verify(definitionRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void createDefinitionsBatchRejectsDuplicateKeyInsideBatchAfterNormalization() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+
+        assertThatThrownBy(() -> service.createDefinitionsBatch(equipmentTypeId, List.of(
+                definitionRequest("power"),
+                definitionRequest(" POWER ")
+        ))).isInstanceOfSatisfying(RestException.class, ex -> {
+            assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(ex.getMessage()).contains("power");
+        });
+        verify(definitionRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void createDefinitionsBatchRejectsExistingActiveDbKey() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "motor_power")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.createDefinitionsBatch(equipmentTypeId, List.of(definitionRequest("motor_power"))))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).contains("already exists").contains("motor_power");
+                });
+        verify(definitionRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void createDefinitionsBatchRejectsMinValueGreaterThanMaxValue() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "motor_power")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createDefinitionsBatch(equipmentTypeId, List.of(
+                new EquipmentAttributeDefinitionRequest(
+                        "motor_power",
+                        "Motor Power",
+                        null,
+                        null,
+                        EquipmentAttributeDataType.NUMBER,
+                        "kW",
+                        true,
+                        10.0,
+                        1.0,
+                        null,
+                        List.of(),
+                        "Motor",
+                        10
+                )
+        ))).isInstanceOfSatisfying(RestException.class, ex -> {
+            assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(ex.getMessage()).contains("minValue cannot be greater than maxValue");
+        });
+        verify(definitionRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void createDefinitionsBatchRejectsInvalidOptionSourceId() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID optionSourceId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "seal_type")).thenReturn(false);
+        when(optionSourceRepository.findByIdAndIsDeletedFalse(optionSourceId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.createDefinitionsBatch(equipmentTypeId, List.of(
+                new EquipmentAttributeDefinitionRequest(
+                        "seal_type",
+                        "Seal Type",
+                        null,
+                        null,
+                        EquipmentAttributeDataType.SELECT,
+                        null,
+                        false,
+                        null,
+                        null,
+                        optionSourceId,
+                        List.of(),
+                        "Pump",
+                        20
+                )
+        ))).isInstanceOfSatisfying(RestException.class, ex -> {
+            assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+            assertThat(ex.getMessage()).contains("option source not found");
+        });
+        verify(definitionRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void createDefinitionsBatchRejectsInvalidRequiredCriticalityClassIds() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID criticalityId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "vibration_limit")).thenReturn(false);
+        when(criticalityClassRepository.findAllByIdInAndIsDeletedFalse(List.of(criticalityId))).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.createDefinitionsBatch(equipmentTypeId, List.of(
+                new EquipmentAttributeDefinitionRequest(
+                        "vibration_limit",
+                        "Vibration Limit",
+                        null,
+                        null,
+                        EquipmentAttributeDataType.NUMBER,
+                        "mm/s",
+                        false,
+                        null,
+                        null,
+                        null,
+                        List.of(),
+                        "Monitoring",
+                        10,
+                        List.of(criticalityId)
+                )
+        ))).isInstanceOfSatisfying(RestException.class, ex -> {
+            assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+            assertThat(ex.getMessage()).contains("Criticality class not found");
+        });
+        verify(definitionRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void createDefinitionsBatchDoesNotPersistAnyAttributeWhenOneItemFailsValidation() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "motor_power")).thenReturn(false);
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "invalid_range")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createDefinitionsBatch(equipmentTypeId, List.of(
+                definitionRequest("motor_power"),
+                new EquipmentAttributeDefinitionRequest(
+                        "invalid_range",
+                        "Invalid Range",
+                        null,
+                        null,
+                        EquipmentAttributeDataType.NUMBER,
+                        "kW",
+                        false,
+                        10.0,
+                        1.0,
+                        null,
+                        List.of(),
+                        "Motor",
+                        20
+                )
+        ))).isInstanceOfSatisfying(RestException.class, ex -> {
+            assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(ex.getMessage()).contains("minValue");
+        });
+        verify(definitionRepository, never()).saveAll(any());
+        verify(requiredCriticalityRepository, never()).saveAll(any());
+    }
+
+    @Test
     void updateDefinitionRequiresAttributeToBelongToType() {
         UUID equipmentTypeId = UUID.randomUUID();
         UUID otherTypeId = UUID.randomUUID();
@@ -909,6 +1180,12 @@ class EquipmentAttributeServiceTest {
             Iterable<EquipmentAttributeRequiredCriticality> values
     ) {
         return ((List<EquipmentAttributeRequiredCriticality>) values);
+    }
+
+    private List<EquipmentAttributeDefinition> toDefinitionList(Iterable<EquipmentAttributeDefinition> values) {
+        List<EquipmentAttributeDefinition> definitions = new java.util.ArrayList<>();
+        values.forEach(definitions::add);
+        return definitions;
     }
 
     private List<EquipmentAttributeValueHistory> toHistoryList(Iterable<EquipmentAttributeValueHistory> values) {

@@ -163,6 +163,7 @@ public class EquipmentAttributeService {
     public EquipmentAttributeDefinitionDto createDefinition(UUID equipmentTypeId,
                                                            EquipmentAttributeDefinitionRequest request) {
         ensureEquipmentTypeExists(equipmentTypeId);
+        validateDefinitionRequestBasics(request);
         String key = normalizeKey(request.key());
         if (definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, key)) {
             throw RestException.conflict("Equipment attribute definition already exists: " + key);
@@ -178,10 +179,64 @@ public class EquipmentAttributeService {
     }
 
     @Transactional
+    public List<EquipmentAttributeDefinitionDto> createDefinitionsBatch(
+            UUID equipmentTypeId,
+            List<EquipmentAttributeDefinitionRequest> requests
+    ) {
+        ensureEquipmentTypeExists(equipmentTypeId);
+        if (requests == null) {
+            throw RestException.badRequest("Equipment attribute definition batch is required");
+        }
+        if (requests.isEmpty()) {
+            throw RestException.badRequest("Equipment attribute definition batch must not be empty");
+        }
+
+        List<PreparedDefinition> preparedDefinitions = new ArrayList<>();
+        Set<String> batchKeys = new HashSet<>();
+        for (EquipmentAttributeDefinitionRequest request : requests) {
+            validateDefinitionRequestBasics(request);
+            String key = normalizeKey(request.key());
+            if (!batchKeys.add(key)) {
+                throw RestException.badRequest("Duplicate equipment attribute definition key in batch: " + key);
+            }
+            if (definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, key)) {
+                throw RestException.conflict("Equipment attribute definition already exists: " + key);
+            }
+
+            EquipmentAttributeDefinition definition = new EquipmentAttributeDefinition();
+            definition.setEquipmentTypeId(equipmentTypeId);
+            applyDefinition(definition, request, key);
+            List<UUID> requiredCriticalityClassIds = uniqueIds(request.normalizedRequiredForCriticalityClassIds());
+            validateRequiredCriticalityClassIds(requiredCriticalityClassIds);
+            preparedDefinitions.add(new PreparedDefinition(definition, requiredCriticalityClassIds));
+        }
+
+        List<EquipmentAttributeDefinition> savedDefinitions =
+                toDefinitionList(definitionRepository.saveAll(
+                        preparedDefinitions.stream().map(PreparedDefinition::definition).toList()
+                ));
+        for (int i = 0; i < savedDefinitions.size(); i++) {
+            saveRequiredCriticalities(savedDefinitions.get(i).getId(), preparedDefinitions.get(i).requiredCriticalityClassIds());
+        }
+
+        List<EquipmentAttributeDefinitionDto> result = new ArrayList<>();
+        for (int i = 0; i < savedDefinitions.size(); i++) {
+            EquipmentAttributeDefinition saved = savedDefinitions.get(i);
+            result.add(EquipmentAttributeDefinitionDto.from(
+                    saved,
+                    resolveUnit(saved.getUnit()),
+                    preparedDefinitions.get(i).requiredCriticalityClassIds()
+            ));
+        }
+        return result;
+    }
+
+    @Transactional
     public EquipmentAttributeDefinitionDto updateDefinition(UUID equipmentTypeId,
                                                            UUID definitionId,
                                                            EquipmentAttributeDefinitionRequest request) {
         ensureEquipmentTypeExists(equipmentTypeId);
+        validateDefinitionRequestBasics(request);
         EquipmentAttributeDefinition definition = getDefinitionOrThrow(definitionId);
         if (!Objects.equals(definition.getEquipmentTypeId(), equipmentTypeId)) {
             throw RestException.badRequest("Attribute definition does not belong to equipment type: " + equipmentTypeId);
@@ -588,6 +643,10 @@ public class EquipmentAttributeService {
             }
             requiredCriticalityRepository.saveAll(existing);
         }
+        saveRequiredCriticalities(definitionId, criticalityClassIds);
+    }
+
+    private void saveRequiredCriticalities(UUID definitionId, List<UUID> criticalityClassIds) {
         List<EquipmentAttributeRequiredCriticality> policies = uniqueIds(criticalityClassIds).stream()
                 .map(criticalityClassId -> {
                     EquipmentAttributeRequiredCriticality policy = new EquipmentAttributeRequiredCriticality();
@@ -636,6 +695,21 @@ public class EquipmentAttributeService {
         value.setValueBoolean(request.valueBoolean());
         value.setValueOption(request.valueOption());
         value.setValueJson(request.valueJson());
+    }
+
+    private void validateDefinitionRequestBasics(EquipmentAttributeDefinitionRequest request) {
+        if (request == null) {
+            throw RestException.badRequest("Equipment attribute definition request is required");
+        }
+        if (request.key() == null || request.key().isBlank()) {
+            throw RestException.badRequest("Attribute key is required");
+        }
+        if (request.label() == null || request.label().isBlank()) {
+            throw RestException.badRequest("Attribute label is required");
+        }
+        if (request.dataType() == null) {
+            throw RestException.badRequest("Attribute dataType is required");
+        }
     }
 
     private String normalizeKey(String key) {
@@ -722,5 +796,17 @@ public class EquipmentAttributeService {
                 item.getSortOrder(),
                 item.isActive()
         );
+    }
+
+    private List<EquipmentAttributeDefinition> toDefinitionList(Iterable<EquipmentAttributeDefinition> definitions) {
+        List<EquipmentAttributeDefinition> result = new ArrayList<>();
+        definitions.forEach(result::add);
+        return result;
+    }
+
+    private record PreparedDefinition(
+            EquipmentAttributeDefinition definition,
+            List<UUID> requiredCriticalityClassIds
+    ) {
     }
 }

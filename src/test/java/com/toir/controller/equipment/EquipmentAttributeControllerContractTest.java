@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -145,6 +146,168 @@ class EquipmentAttributeControllerContractTest {
         assertThat(captor.getValue().optionSourceId()).isEqualTo(optionSourceId);
         assertThat(captor.getValue().options()).extracting(EquipmentAttributeOptionDto::id)
                 .containsExactly("mechanical");
+    }
+
+    @Test
+    void createsDefinitionsBatch() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID firstAttributeId = UUID.randomUUID();
+        UUID secondAttributeId = UUID.randomUUID();
+        when(service.createDefinitionsBatch(eq(equipmentTypeId), any())).thenReturn(List.of(
+                new EquipmentAttributeDefinitionDto(
+                        firstAttributeId,
+                        equipmentTypeId,
+                        "motor_power",
+                        "Motor Power",
+                        null,
+                        null,
+                        EquipmentAttributeDataType.NUMBER,
+                        new UnitOfMeasurementDto(UUID.randomUUID(), "UOM-2026-0001", "kW", "Kilowatt", "Kilovatt"),
+                        true,
+                        0.0,
+                        500.0,
+                        null,
+                        List.of(),
+                        "Motor",
+                        10,
+                        List.of()
+                ),
+                new EquipmentAttributeDefinitionDto(
+                        secondAttributeId,
+                        equipmentTypeId,
+                        "seal_type",
+                        "Seal Type",
+                        null,
+                        null,
+                        EquipmentAttributeDataType.TEXT,
+                        null,
+                        false,
+                        null,
+                        null,
+                        null,
+                        List.of(),
+                        "Pump",
+                        20,
+                        List.of()
+                )
+        ));
+
+        mockMvc.perform(post("/api/v1/equipment-types/{equipmentTypeId}/attributes/batch", equipmentTypeId)
+                        .contentType("application/json")
+                        .content("""
+                                [
+                                  {
+                                    "key": "Motor_Power",
+                                    "label": "Motor Power",
+                                    "dataType": "NUMBER",
+                                    "unit": "kW",
+                                    "required": true,
+                                    "minValue": 0,
+                                    "maxValue": 500,
+                                    "groupName": "Motor",
+                                    "sortOrder": 10
+                                  },
+                                  {
+                                    "key": "seal_type",
+                                    "label": "Seal Type",
+                                    "dataType": "TEXT",
+                                    "required": false,
+                                    "groupName": "Pump",
+                                    "sortOrder": 20
+                                  }
+                                ]
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].id").value(firstAttributeId.toString()))
+                .andExpect(jsonPath("$[0].key").value("motor_power"))
+                .andExpect(jsonPath("$[0].unit.code").value("UOM-2026-0001"))
+                .andExpect(jsonPath("$[1].id").value(secondAttributeId.toString()))
+                .andExpect(jsonPath("$[1].key").value("seal_type"))
+                .andExpect(jsonPath("$[1].unit").doesNotExist());
+
+        ArgumentCaptor<List<com.toir.dto.equipmentattribute.EquipmentAttributeDefinitionRequest>> captor =
+                ArgumentCaptor.forClass(List.class);
+        verify(service).createDefinitionsBatch(eq(equipmentTypeId), captor.capture());
+        assertThat(captor.getValue()).hasSize(2);
+        assertThat(captor.getValue().getFirst().key()).isEqualTo("Motor_Power");
+        assertThat(captor.getValue().getLast().key()).isEqualTo("seal_type");
+    }
+
+    @Test
+    void batchCreateRejectsInvalidBody() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/equipment-types/{equipmentTypeId}/attributes/batch", equipmentTypeId)
+                        .contentType("application/json")
+                        .content("""
+                                [
+                                  {
+                                    "key": "",
+                                    "label": "Motor Power",
+                                    "dataType": "NUMBER"
+                                  }
+                                ]
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void batchCreateRejectsNullBody() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/equipment-types/{equipmentTypeId}/attributes/batch", equipmentTypeId)
+                        .contentType("application/json")
+                        .content("null"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void batchCreateRejectsEmptyList() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/equipment-types/{equipmentTypeId}/attributes/batch", equipmentTypeId)
+                        .contentType("application/json")
+                        .content("[]"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void batchCreateRejectsNullItemInsideList() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/equipment-types/{equipmentTypeId}/attributes/batch", equipmentTypeId)
+                        .contentType("application/json")
+                        .content("[null]"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void batchCreateUnknownEquipmentTypeReturnsNotFound() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        when(service.createDefinitionsBatch(eq(equipmentTypeId), any()))
+                .thenThrow(RestException.notFound("Equipment type not found: " + equipmentTypeId));
+
+        mockMvc.perform(post("/api/v1/equipment-types/{equipmentTypeId}/attributes/batch", equipmentTypeId)
+                        .contentType("application/json")
+                        .content("""
+                                [
+                                  {
+                                    "key": "motor_power",
+                                    "label": "Motor Power",
+                                    "dataType": "NUMBER"
+                                  }
+                                ]
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Equipment type not found: " + equipmentTypeId));
     }
 
     @Test

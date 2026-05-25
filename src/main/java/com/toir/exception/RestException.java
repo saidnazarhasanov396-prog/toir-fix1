@@ -1,5 +1,6 @@
 package com.toir.exception;
 
+import com.toir.enums.ErrorType;
 import org.springframework.http.HttpStatus;
 
 public class RestException extends RuntimeException {
@@ -33,5 +34,9 @@ public class RestException extends RuntimeException {
 
     public static RestException conflict(String message) {
         return new RestException(message, HttpStatus.CONFLICT);
+    }
+
+    public static RestException restThrow(ErrorType errorType) {
+        return new RestException(errorType.getMessage(), errorType.getStatus());
     }
 }
