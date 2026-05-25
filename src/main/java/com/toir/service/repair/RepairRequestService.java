@@ -117,6 +117,8 @@ public class RepairRequestService {
             throw RestException.conflict("Request number already exists: " + request.number());
         }
         equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create repair request");
+        Defect defect = getDefectForCreate(request);
+
         RepairRequest entity = new RepairRequest();
         entity.setNumber(request.number());
         entity.setTitle(request.title());
@@ -130,6 +132,9 @@ public class RepairRequestService {
         if (request.source() != null) entity.setSource(request.source());
         entity.setTargetCompletionAt(request.targetCompletionAt());
         RepairRequest saved = repository.save(entity);
+
+        defect.setRepairRequestId(saved.getId());
+        defectRepository.save(defect);
 
         auditBuilderService.log(
                 "repair_request",
@@ -151,6 +156,21 @@ public class RepairRequestService {
         );
 
         return toDtoWithLinks(saved);
+    }
+
+    private Defect getDefectForCreate(RepairRequestRequest request) {
+        Defect defect = defectRepository.findByIdAndIsDeletedFalse(request.defectId())
+                .orElseThrow(() -> RestException.notFound("Defect not found: " + request.defectId()));
+        if (isDefectTerminal(defect)) {
+            throw RestException.badRequest("Cannot create repair request for terminal defect: " + defect.getStatus());
+        }
+        if (defect.getRepairRequestId() != null) {
+            throw RestException.badRequest("Defect already belongs to a repair request");
+        }
+        if (!request.equipmentId().equals(defect.getEquipmentId())) {
+            throw RestException.badRequest("Defect belongs to a different equipment");
+        }
+        return defect;
     }
 
     @Transactional
