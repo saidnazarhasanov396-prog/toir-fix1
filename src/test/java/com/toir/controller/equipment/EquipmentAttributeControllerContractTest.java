@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -248,6 +249,44 @@ class EquipmentAttributeControllerContractTest {
                                 ]
                                 """))
                 .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void batchCreateRejectsNullBody() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/equipment-types/{equipmentTypeId}/attributes/batch", equipmentTypeId)
+                        .contentType("application/json")
+                        .content("null"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void batchCreateRejectsEmptyList() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/equipment-types/{equipmentTypeId}/attributes/batch", equipmentTypeId)
+                        .contentType("application/json")
+                        .content("[]"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void batchCreateRejectsNullItemInsideList() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/equipment-types/{equipmentTypeId}/attributes/batch", equipmentTypeId)
+                        .contentType("application/json")
+                        .content("[null]"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
     }
 
     @Test
