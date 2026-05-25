@@ -32,6 +32,7 @@ import com.toir.enums.SafetyPermitStatus;
 import com.toir.enums.TaskExecutionStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 
 import com.toir.enums.AuditAction;
@@ -154,6 +155,7 @@ public class WorkOrderService {
         equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create work order");
         WorkType effectiveWorkType = request.workType() != null ? request.workType() : WorkType.REPAIR;
         validateReplacementFields(request, effectiveWorkType);
+        validateTypeRequiredRelations(request);
         if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Work order number already exists: " + request.number());
         }
@@ -804,6 +806,15 @@ public class WorkOrderService {
                 workOrder.getReplacementEquipmentId())
                 .orElseThrow(
                         () -> RestException.badRequest("Replacement equipment item not found in selected warehouse"));
+    }
+
+    private void validateTypeRequiredRelations(WorkOrderRequest request) {
+        if (request.type() == WorkOrderType.EMERGENCY && request.repairRequestId() == null) {
+            throw RestException.badRequest("repairRequestId is required when work order type is EMERGENCY");
+        }
+        if (request.type() == WorkOrderType.DEFECT && request.defectId() == null) {
+            throw RestException.badRequest("defectId is required when work order type is DEFECT");
+        }
     }
 
     private void validateReplacementFields(WorkOrderRequest request, WorkType effectiveWorkType) {
