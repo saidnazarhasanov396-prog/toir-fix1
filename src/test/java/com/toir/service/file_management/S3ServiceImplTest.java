@@ -1,6 +1,7 @@
 package com.toir.service.file_management;
 
 import com.toir.config.MinioProperties;
+import com.toir.enums.ErrorType;
 import com.toir.exception.RestException;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
@@ -67,5 +68,19 @@ class S3ServiceImplTest {
         assertThatThrownBy(() -> service.store(file, "documents/2026/05/a.txt"))
                 .isInstanceOf(RestException.class)
                 .hasMessage("File upload failed");
+    }
+
+    @Test
+    void mapsAccessDeniedStorageErrorToClearConfigurationMessage() {
+        ErrorType result = S3ServiceImpl.mapStorageErrorCode("AccessDenied", ErrorType.FILE_UPLOAD_FAILED);
+
+        assertThat(result).isEqualTo(ErrorType.FILE_STORAGE_ACCESS_DENIED);
+    }
+
+    @Test
+    void mapsMissingBucketStorageErrorToClearConfigurationMessage() {
+        ErrorType result = S3ServiceImpl.mapStorageErrorCode("NoSuchBucket", ErrorType.FILE_UPLOAD_FAILED);
+
+        assertThat(result).isEqualTo(ErrorType.FILE_STORAGE_CONFIGURATION_FAILED);
     }
 }

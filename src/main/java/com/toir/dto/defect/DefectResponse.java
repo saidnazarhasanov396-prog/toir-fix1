@@ -20,6 +20,7 @@ public record DefectResponse(
         String equipmentNodeCode,
         String equipmentNodeName,
         EquipmentNodeType equipmentNodeType,
+        UUID defectListId,
         UUID repairRequestId,
         UUID requestId,
         String category,
@@ -54,7 +55,7 @@ public record DefectResponse(
                           List<WorkOrderBriefDto> linkedWorkOrders,
                           boolean hasLesson) {
         this(id, code, title, description, equipmentId, equipmentName, null, null, null, null,
-                repairRequestId, requestId, category, severity, failureReason, rootCause, status, detectedAt,
+                null, repairRequestId, requestId, category, severity, failureReason, rootCause, status, detectedAt,
                 resolvedAt, recurrenceCount, repairRequest, linkedWorkOrders, hasLesson);
     }
 
@@ -85,6 +86,19 @@ public record DefectResponse(
                                       RepairRequestBriefDto repairRequest,
                                       List<WorkOrderBriefDto> linkedWorkOrders,
                                       boolean hasLesson) {
+        return from(dto, equipmentName, equipmentNodeCode, equipmentNodeName, equipmentNodeType,
+                null, repairRequest, linkedWorkOrders, hasLesson);
+    }
+
+    public static DefectResponse from(DefectDto dto,
+                                      String equipmentName,
+                                      String equipmentNodeCode,
+                                      String equipmentNodeName,
+                                      EquipmentNodeType equipmentNodeType,
+                                      UUID defectListId,
+                                      RepairRequestBriefDto repairRequest,
+                                      List<WorkOrderBriefDto> linkedWorkOrders,
+                                      boolean hasLesson) {
         return new DefectResponse(
                 dto.id(),
                 dto.code(),
@@ -96,6 +110,7 @@ public record DefectResponse(
                 equipmentNodeCode,
                 equipmentNodeName,
                 equipmentNodeType,
+                defectListId,
                 dto.repairRequestId(),
                 dto.repairRequestId(),
                 dto.category(),

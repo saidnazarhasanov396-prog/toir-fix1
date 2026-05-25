@@ -18,8 +18,8 @@ springdoc:
     disabled: true
 
 minio:
-  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
-  access-key: ${MINIO_ACCESS_KEY:minioadmin}
-  secret-key: ${MINIO_SECRET_KEY:minioadmin}
-  bucket-name: ${MINIO_BUCKET_NAME:toir-files}
-  public-url: ${MINIO_PUBLIC_URL:}
+  endpoint: ${MINIO_ENDPOINT:https://s3.tenzorsoft.uz}
+  access-key: ${MINIO_ACCESS_KEY:s3_tenzorsoft_minio_user}
+  secret-key: ${MINIO_SECRET_KEY:b7Qbuf8DpyAdZmlok2X3PSlD6n9jilSuhctZRd2b}
+  bucket-name: ${MINIO_BUCKET_NAME:s3-tenzorsoft}
+  public-url: ${MINIO_PUBLIC_URL:https://s3.tenzorsoft.uz}

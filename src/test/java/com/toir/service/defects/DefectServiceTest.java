@@ -8,6 +8,9 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.defects.Defect;
+import com.toir.entity.defects.DefectList;
+import com.toir.entity.defects.DefectListLine;
+import com.toir.enums.DefectListStatus;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.EquipmentNodeType;
@@ -19,6 +22,8 @@ import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
 import com.toir.repository.KnowledgeArticleRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectListLineRepository;
+import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -64,6 +69,12 @@ class DefectServiceTest {
     DefectRepository repository;
 
     @Mock
+    DefectListRepository defectListRepository;
+
+    @Mock
+    DefectListLineRepository defectListLineRepository;
+
+    @Mock
     EquipmentRepository equipmentRepository;
 
     @Mock
@@ -93,6 +104,8 @@ class DefectServiceTest {
     @BeforeEach
     void setUpScopeAdminBypass() {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        lenient().when(defectListLineRepository.findAllByDefectIdInAndIsDeletedFalse(any()))
+                .thenReturn(List.of());
     }
 
     @Test
@@ -163,8 +176,37 @@ class DefectServiceTest {
         ArgumentCaptor<Defect> defectCaptor = ArgumentCaptor.forClass(Defect.class);
         verify(repository).save(defectCaptor.capture());
         assertThat(defectCaptor.getValue().getRepairRequestId()).isEqualTo(repairRequestId);
+        ArgumentCaptor<DefectListLine> lineCaptor = ArgumentCaptor.forClass(DefectListLine.class);
+        verify(defectListLineRepository).save(lineCaptor.capture());
+        assertThat(lineCaptor.getValue().getDefectId()).isEqualTo(defectCaptor.getValue().getId());
+        assertThat(lineCaptor.getValue().getDescription()).isEqualTo("Temperature threshold exceeded");
         assertThat(response.repairRequestId()).isEqualTo(repairRequestId);
         assertThat(response.requestId()).isEqualTo(repairRequestId);
+    }
+
+    @Test
+    void createWithoutDefectListReturns400() {
+        UUID equipmentId = UUID.randomUUID();
+        DefectRequest request = new DefectRequest(
+                null,
+                "Bearing overheating",
+                "Temperature threshold exceeded",
+                equipmentId,
+                null,
+                null,
+                null,
+                "MECHANICAL",
+                "HIGH",
+                "Wear",
+                "Insufficient lubrication"
+        );
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Defect list is required");
+                });
+        verify(repository, never()).save(any(Defect.class));
     }
 
     @Test
@@ -823,18 +865,34 @@ class DefectServiceTest {
     }
 
     private DefectRequest request(UUID equipmentId, UUID repairRequestId, UUID equipmentNodeId) {
+        UUID defectListId = UUID.randomUUID();
+        lenient().when(defectListRepository.findByIdAndIsDeletedFalse(defectListId))
+                .thenReturn(Optional.of(defectList(defectListId, equipmentId, repairRequestId)));
         return new DefectRequest(
                 null,
                 "Bearing overheating",
                 "Temperature threshold exceeded",
                 equipmentId,
                 equipmentNodeId,
+                defectListId,
                 repairRequestId,
                 "MECHANICAL",
                 "HIGH",
                 "Wear",
                 "Insufficient lubrication"
         );
+    }
+
+    private DefectList defectList(UUID id, UUID equipmentId, UUID repairRequestId) {
+        DefectList defectList = new DefectList();
+        defectList.setId(id);
+        defectList.setCode("DL-2026-0001");
+        defectList.setTitle("Defect list");
+        defectList.setEquipmentId(equipmentId);
+        defectList.setRepairRequestId(repairRequestId);
+        defectList.setCreatedById(UUID.randomUUID());
+        defectList.setStatus(DefectListStatus.DRAFT);
+        return defectList;
     }
 
     private RepairRequest repairRequest(UUID id, RequestStatus status) {

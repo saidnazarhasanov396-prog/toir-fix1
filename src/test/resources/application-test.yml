@@ -22,7 +22,7 @@ spring:
       replace: none
 
 minio:
-  endpoint: http://localhost:9000
+  endpoint: http://minio.test:9000
   access-key: test-access
   secret-key: test-secret
   bucket-name: test-bucket

@@ -173,6 +173,7 @@ class DefectControllerContractTest {
     void createWithRepairRequestIdAccepted() throws Exception {
         UUID repairRequestId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
         when(service.create(any())).thenReturn(defectResponse(equipmentId, repairRequestId));
 
         mockMvc.perform(post("/api/v1/defects")
@@ -182,13 +183,14 @@ class DefectControllerContractTest {
                                   "title": "Leak",
                                   "description": "Oil leak detected",
                                   "equipmentId": "%s",
+                                  "defectListId": "%s",
                                   "repairRequestId": "%s",
                                   "category": "MECHANICAL",
                                   "severity": "MEDIUM",
                                   "failureReason": "Seal damage",
                                   "rootCause": "Aging"
                                 }
-                                """.formatted(equipmentId, repairRequestId)))
+                                """.formatted(equipmentId, defectListId, repairRequestId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.repairRequestId").value(repairRequestId.toString()))
                 .andExpect(jsonPath("$.requestId").value(repairRequestId.toString()));
@@ -196,12 +198,14 @@ class DefectControllerContractTest {
         ArgumentCaptor<DefectRequest> captor = ArgumentCaptor.forClass(DefectRequest.class);
         verify(service).create(captor.capture());
         assertEquals(repairRequestId, captor.getValue().repairRequestId());
+        assertEquals(defectListId, captor.getValue().defectListId());
     }
 
     @Test
     void createWithLegacyRequestIdAliasAccepted() throws Exception {
         UUID repairRequestId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
         when(service.create(any())).thenReturn(defectResponse(equipmentId, repairRequestId));
 
         mockMvc.perform(post("/api/v1/defects")
@@ -211,13 +215,14 @@ class DefectControllerContractTest {
                                   "title": "Leak",
                                   "description": "Oil leak detected",
                                   "equipmentId": "%s",
+                                  "defectListId": "%s",
                                   "requestId": "%s",
                                   "category": "MECHANICAL",
                                   "severity": "MEDIUM",
                                   "failureReason": "Seal damage",
                                   "rootCause": "Aging"
                                 }
-                                """.formatted(equipmentId, repairRequestId)))
+                                """.formatted(equipmentId, defectListId, repairRequestId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.repairRequestId").value(repairRequestId.toString()))
                 .andExpect(jsonPath("$.requestId").value(repairRequestId.toString()));
@@ -225,12 +230,14 @@ class DefectControllerContractTest {
         ArgumentCaptor<DefectRequest> captor = ArgumentCaptor.forClass(DefectRequest.class);
         verify(service).create(captor.capture());
         assertEquals(repairRequestId, captor.getValue().repairRequestId());
+        assertEquals(defectListId, captor.getValue().defectListId());
     }
 
     @Test
     void createDefect_acceptsEquipmentNodeId() throws Exception {
         UUID equipmentId = UUID.randomUUID();
         UUID equipmentNodeId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
         when(service.create(any())).thenReturn(defectResponse(equipmentId, null, equipmentNodeId));
 
         mockMvc.perform(post("/api/v1/defects")
@@ -240,17 +247,19 @@ class DefectControllerContractTest {
                                   "title": "Bearing overheating",
                                   "description": "Temperature is above normal",
                                   "equipmentId": "%s",
+                                  "defectListId": "%s",
                                   "equipmentNodeId": "%s",
                                   "category": "MECHANICAL",
                                   "severity": "HIGH"
                                 }
-                                """.formatted(equipmentId, equipmentNodeId)))
+                                """.formatted(equipmentId, defectListId, equipmentNodeId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.equipmentNodeId").value(equipmentNodeId.toString()));
 
         ArgumentCaptor<DefectRequest> captor = ArgumentCaptor.forClass(DefectRequest.class);
         verify(service).create(captor.capture());
         assertEquals(equipmentNodeId, captor.getValue().equipmentNodeId());
+        assertEquals(defectListId, captor.getValue().defectListId());
     }
 
     @Test
@@ -264,13 +273,14 @@ class DefectControllerContractTest {
                                   "title": "Leak",
                                   "description": "Oil leak detected",
                                   "equipmentId": "%s",
+                                  "defectListId": "%s",
                                   "repairRequestId": "%s",
                                   "category": "MECHANICAL",
                                   "severity": "MEDIUM",
                                   "failureReason": "Seal damage",
                                   "rootCause": "Aging"
                                 }
-                                """.formatted(UUID.randomUUID(), UUID.randomUUID())))
+                                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value(containsString("Repair request not found")));
     }
@@ -398,6 +408,7 @@ class DefectControllerContractTest {
                 equipmentNodeId == null ? null : "BRG-01",
                 equipmentNodeId == null ? null : "Bearing",
                 equipmentNodeId == null ? null : EquipmentNodeType.COMPONENT,
+                null,
                 repairRequestId,
                 repairRequestId,
                 "MECHANICAL",
