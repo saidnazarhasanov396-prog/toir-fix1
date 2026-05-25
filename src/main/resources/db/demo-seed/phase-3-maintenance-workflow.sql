@@ -1,26 +1,26 @@
 -- 08. PPR plans and tasks.
 INSERT INTO ppr_plans (id, created_at, updated_at, is_deleted, code, name, start_date, end_date, status, department_id, created_by_id, approved_by_id, notes)
-VALUES ('00000000-0000-0000-0000-000000060001', now(), now(), false, 'DEMO-PPR-2026-05-AMM', 'Demo May 2026 PPR plan for ammonia workshop', DATE '2026-05-01', DATE '2026-05-31', 'APPROVED', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a005', '00000000-0000-0000-0000-00000000a002', 'Demo approved monthly PPR plan')
+VALUES ('00000000-0000-0000-0000-000000060001', now(), now(), false, 'NAV-PPR-2026-05-AMM', 'Navoiyazot May 2026 PPR plan for ammonia workshop', DATE '2026-05-01', DATE '2026-05-31', 'APPROVED', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a005', '00000000-0000-0000-0000-00000000a002', 'Navoiyazot approved monthly PPR plan')
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO ppr_tasks (id, created_at, updated_at, is_deleted, code, plan_id, regulation_id, equipment_id, title, scheduled_start, scheduled_end, due_date, status, priority, planned_labor_hours, actual_labor_hours, postpone_reason)
 VALUES
-('00000000-0000-0000-0000-000000060101', now(), now(), false, 'DEMO-PPR-TASK-001', '00000000-0000-0000-0000-000000060001', '00000000-0000-0000-0000-000000020002', '00000000-0000-0000-0000-000000010001', 'Quarterly compressor vibration and oil system check', TIMESTAMP '2026-05-21 08:00:00', TIMESTAMP '2026-05-21 16:00:00', TIMESTAMP '2026-05-21 16:00:00', 'APPROVED', 'HIGH', 16.0, NULL, NULL),
-('00000000-0000-0000-0000-000000060102', now(), now(), false, 'DEMO-PPR-TASK-002', '00000000-0000-0000-0000-000000060001', '00000000-0000-0000-0000-000000020001', '00000000-0000-0000-0000-000000010002', 'Monthly condensate pump lubrication', TIMESTAMP '2026-05-22 09:00:00', TIMESTAMP '2026-05-22 13:00:00', TIMESTAMP '2026-05-22 13:00:00', 'PLANNED', 'MEDIUM', 4.0, NULL, NULL)
+('00000000-0000-0000-0000-000000060101', now(), now(), false, 'NAV-PPR-TASK-001', '00000000-0000-0000-0000-000000060001', '00000000-0000-0000-0000-000000020002', '00000000-0000-0000-0000-000000010001', 'Quarterly compressor vibration and oil system check', TIMESTAMP '2026-05-21 08:00:00', TIMESTAMP '2026-05-21 16:00:00', TIMESTAMP '2026-05-21 16:00:00', 'APPROVED', 'HIGH', 16.0, NULL, NULL),
+('00000000-0000-0000-0000-000000060102', now(), now(), false, 'NAV-PPR-TASK-002', '00000000-0000-0000-0000-000000060001', '00000000-0000-0000-0000-000000020001', '00000000-0000-0000-0000-000000010002', 'Monthly condensate pump lubrication', TIMESTAMP '2026-05-22 09:00:00', TIMESTAMP '2026-05-22 13:00:00', TIMESTAMP '2026-05-22 13:00:00', 'PLANNED', 'MEDIUM', 4.0, NULL, NULL)
 ON CONFLICT (code) DO NOTHING;
 
 -- 09. Repair requests.
 INSERT INTO repair_requests (id, created_at, updated_at, is_deleted, number, title, description, equipment_id, department_id, location_id, reporter_id, assigned_to_id, priority, criticality, status, source, detected_at, target_completion_at, actual_completion_at, reacted_at, rejection_reason, clarification_reason, close_result)
 VALUES
-('00000000-0000-0000-0000-000000070001', now(), now(), false, 'DEMO-RR-2026-0001', 'Seal leak on condensate pump P-101', 'Operator reported visible leakage at mechanical seal and rising bearing temperature.', '00000000-0000-0000-0000-000000010002', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a102', '00000000-0000-0000-0000-00000000a003', '00000000-0000-0000-0000-00000000a004', 'HIGH', 'HIGH', 'ASSIGNED', 'MANUAL', now() - interval '2 days', now() + interval '1 day', NULL, now() - interval '1 day', NULL, NULL, NULL),
-('00000000-0000-0000-0000-000000070002', now(), now(), false, 'DEMO-RR-2026-0002', 'Compressor K-1 vibration warning', 'Vibration trend reached warning level on drive-end bearing.', '00000000-0000-0000-0000-000000010001', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a102', '00000000-0000-0000-0000-00000000a009', '00000000-0000-0000-0000-00000000a004', 'CRITICAL', 'CRITICAL', 'IN_PROGRESS', 'INSPECTION', now() - interval '1 day', now() + interval '8 hours', NULL, now() - interval '20 hours', NULL, NULL, NULL)
+('00000000-0000-0000-0000-000000070001', now(), now(), false, 'RR-2026-001', 'Seal leak on condensate pump P-101', 'Operator reported visible leakage at mechanical seal and rising bearing temperature.', '00000000-0000-0000-0000-000000010002', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a102', '00000000-0000-0000-0000-00000000a003', '00000000-0000-0000-0000-00000000a004', 'HIGH', 'HIGH', 'ASSIGNED', 'MANUAL', now() - interval '2 days', now() + interval '1 day', NULL, now() - interval '1 day', NULL, NULL, NULL),
+('00000000-0000-0000-0000-000000070002', now(), now(), false, 'RR-2026-002', 'Compressor K-1 vibration warning', 'Vibration trend reached warning level on drive-end bearing.', '00000000-0000-0000-0000-000000010001', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a102', '00000000-0000-0000-0000-00000000a009', '00000000-0000-0000-0000-00000000a004', 'CRITICAL', 'CRITICAL', 'IN_PROGRESS', 'INSPECTION', now() - interval '1 day', now() + interval '8 hours', NULL, now() - interval '20 hours', NULL, NULL, NULL)
 ON CONFLICT (number) DO NOTHING;
 
 -- 10. Work orders.
 INSERT INTO work_orders (id, created_at, updated_at, is_deleted, number, title, equipment_id, department_id, repair_request_id, defect_id, ppr_task_id, contractor_id, warehouse_id, replacement_equipment_id, status, type, work_type, priority, start_planned_at, end_planned_at, started_at, completed_at, summary, result, closure_notes, created_by_id, approved_by_id)
 VALUES
-('00000000-0000-0000-0000-000000080001', now(), now(), false, 'DEMO-WO-2026-0001', 'Replace mechanical seal on P-101', '00000000-0000-0000-0000-000000010002', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-000000070001', NULL, NULL, NULL, '00000000-0000-0000-0000-000000030001', NULL, 'IN_PROGRESS', 'DEFECT', 'REPAIR', 'HIGH', now() - interval '1 day', now() + interval '8 hours', now() - interval '4 hours', NULL, 'Seal replacement in progress', NULL, NULL, '00000000-0000-0000-0000-00000000a003', '00000000-0000-0000-0000-00000000a002'),
-('00000000-0000-0000-0000-000000080002', now(), now(), false, 'DEMO-WO-2026-0002', 'Quarterly maintenance on K-1', '00000000-0000-0000-0000-000000010001', '00000000-0000-0000-0000-00000000d002', NULL, NULL, '00000000-0000-0000-0000-000000060101', NULL, NULL, NULL, 'APPROVED', 'PLANNED', 'DIAGNOSTICS', 'HIGH', now() + interval '1 day', now() + interval '2 days', NULL, NULL, 'Approved PPR work order', NULL, NULL, '00000000-0000-0000-0000-00000000a005', '00000000-0000-0000-0000-00000000a002')
+('00000000-0000-0000-0000-000000080001', now(), now(), false, 'WO-2026-001', 'Replace mechanical seal on P-101', '00000000-0000-0000-0000-000000010002', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-000000070001', NULL, NULL, NULL, '00000000-0000-0000-0000-000000030001', NULL, 'IN_PROGRESS', 'DEFECT', 'REPAIR', 'HIGH', now() - interval '1 day', now() + interval '8 hours', now() - interval '4 hours', NULL, 'Seal replacement in progress', NULL, NULL, '00000000-0000-0000-0000-00000000a003', '00000000-0000-0000-0000-00000000a002'),
+('00000000-0000-0000-0000-000000080002', now(), now(), false, 'WO-2026-002', 'Quarterly maintenance on K-1', '00000000-0000-0000-0000-000000010001', '00000000-0000-0000-0000-00000000d002', NULL, NULL, '00000000-0000-0000-0000-000000060101', NULL, NULL, NULL, 'APPROVED', 'PLANNED', 'DIAGNOSTICS', 'HIGH', now() + interval '1 day', now() + interval '2 days', NULL, NULL, 'Approved PPR work order', NULL, NULL, '00000000-0000-0000-0000-00000000a005', '00000000-0000-0000-0000-00000000a002')
 ON CONFLICT (number) DO NOTHING;
 
 INSERT INTO work_order_tasks (id, created_at, updated_at, is_deleted, work_order_id, title, description, status, assigned_to_id, planned_hours, actual_hours, started_at, completed_at)
@@ -30,16 +30,16 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO stock_movements (id, created_at, updated_at, is_deleted, warehouse_id, spare_part_id, work_order_id, type, quantity, unit_cost, document_number, created_by_id, occurred_at, notes)
-VALUES ('00000000-0000-0000-0000-000000080201', now(), now(), false, '00000000-0000-0000-0000-000000030001', '00000000-0000-0000-0000-000000040002', '00000000-0000-0000-0000-000000080001', 'ISSUE', 1, 245000.00, 'DEMO-SM-2026-0001', '00000000-0000-0000-0000-00000000a006', now() - interval '2 hours', 'Issued mechanical seal for demo work order')
+VALUES ('00000000-0000-0000-0000-000000080201', now(), now(), false, '00000000-0000-0000-0000-000000030001', '00000000-0000-0000-0000-000000040002', '00000000-0000-0000-0000-000000080001', 'ISSUE', 1, 245000.00, 'NAV-SM-2026-0001', '00000000-0000-0000-0000-00000000a006', now() - interval '2 hours', 'Issued mechanical seal for industrial work order')
 ON CONFLICT (id) DO NOTHING;
 
 -- 11. Defects and defect lists.
 INSERT INTO defects (id, created_at, updated_at, is_deleted, code, title, description, equipment_id, repair_request_id, category, severity, failure_reason, root_cause, status, detected_at, resolved_at, recurrence_count)
-VALUES ('00000000-0000-0000-0000-000000090001', now(), now(), false, 'DEMO-DEF-2026-0001', 'Bearing wear trend on compressor K-1', 'Drive-end bearing vibration growth requires inspection during next PPR window.', '00000000-0000-0000-0000-000000010001', '00000000-0000-0000-0000-000000070002', 'DEMO-BEARING_WEAR', 'DEMO-MAJOR', 'DEMO-MECH_WEAR', 'DEMO-LUBRICATION', 'IN_ANALYSIS', now() - interval '1 day', NULL, 1)
+VALUES ('00000000-0000-0000-0000-000000090001', now(), now(), false, 'DEF-2026-001', 'Bearing wear trend on compressor K-1', 'Drive-end bearing vibration growth requires inspection during next PPR window.', '00000000-0000-0000-0000-000000010001', '00000000-0000-0000-0000-000000070002', 'NAV-BEARING-WEAR', 'NAV-MAJOR', 'NAV-MECH-WEAR', 'NAV-LUBRICATION', 'IN_ANALYSIS', now() - interval '1 day', NULL, 1)
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO defect_lists (id, created_at, updated_at, is_deleted, code, title, equipment_id, repair_request_id, work_order_id, created_by_id, approved_by_id, status, total_labor_hours, total_estimated_cost, notes)
-VALUES ('00000000-0000-0000-0000-000000090101', now(), now(), false, 'DEMO-DL-2026-0001', 'Compressor K-1 bearing inspection scope', '00000000-0000-0000-0000-000000010001', '00000000-0000-0000-0000-000000070002', '00000000-0000-0000-0000-000000080002', '00000000-0000-0000-0000-00000000a009', '00000000-0000-0000-0000-00000000a002', 'APPROVED', 8.0, 1250000.00, 'Demo defect list for PPR-linked work')
+VALUES ('00000000-0000-0000-0000-000000090101', now(), now(), false, 'NAV-DL-2026-0001', 'Compressor K-1 bearing inspection scope', '00000000-0000-0000-0000-000000010001', '00000000-0000-0000-0000-000000070002', '00000000-0000-0000-0000-000000080002', '00000000-0000-0000-0000-00000000a009', '00000000-0000-0000-0000-00000000a002', 'APPROVED', 8.0, 1250000.00, 'Navoiyazot defect list for PPR-linked work')
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO defect_list_lines (id, created_at, updated_at, is_deleted, defect_list_id, defect_id, description, work_scope, material_specification, spare_part_id, required_quantity, estimated_labor_hours, estimated_cost)
@@ -50,7 +50,7 @@ ON CONFLICT (id) DO NOTHING;
 -- 17.03. Repair requests, defects, work orders, material usage, labor, and executions.
 INSERT INTO repair_requests (id, created_at, updated_at, is_deleted, number, title, description, equipment_id, department_id, location_id, reporter_id, assigned_to_id, priority, criticality, status, source, detected_at, target_completion_at, actual_completion_at, reacted_at, rejection_reason, clarification_reason, close_result)
 SELECT ('00000000-0000-0000-0000-' || '00000007' || lpad(gs::text, 4, '0'))::uuid, now(), now(), false,
-       'DEMO-RR-2026-' || lpad(gs::text, 4, '0'),
+       'RR-2026-' || lpad(gs::text, 3, '0'),
        req.title || ' ' || lpad(gs::text, 3, '0'), req.description,
        eq.id, eq.department_id, eq.location_id,
        (ARRAY['00000000-0000-0000-0000-00000000a003','00000000-0000-0000-0000-00000000a009','00000000-0000-0000-0000-00000000a011'])[1 + ((gs - 1) % 3)]::uuid,
@@ -80,12 +80,12 @@ ON CONFLICT (number) DO NOTHING;
 
 INSERT INTO defects (id, created_at, updated_at, is_deleted, code, title, description, equipment_id, repair_request_id, category, severity, failure_reason, root_cause, status, detected_at, resolved_at, recurrence_count)
 SELECT ('00000000-0000-0000-0000-' || '00000009' || lpad(gs::text, 4, '0'))::uuid, now(), now(), false,
-       'DEMO-DEF-2026-' || lpad(gs::text, 4, '0'),
+       'DEF-2026-' || lpad(gs::text, 3, '0'),
        (ARRAY['Bearing wear','Seal face damage','Tube fouling','Valve seat erosion','Cable insulation defect','Sensor drift'])[1 + ((gs - 1) % 6)] || ' ' || lpad(gs::text, 3, '0'),
        'Production-like defect captured from inspection, repair request, or maintenance analysis.',
        ('00000000-0000-0000-0000-' || '00000001' || lpad((1 + ((gs - 1) % 60))::text, 4, '0'))::uuid,
        CASE WHEN gs <= 30 THEN ('00000000-0000-0000-0000-' || '00000007' || lpad((1 + ((gs - 1) % 40))::text, 4, '0'))::uuid ELSE NULL END,
-       'DEMO-BEARING_WEAR', 'DEMO-MAJOR', 'DEMO-MECH_WEAR', 'DEMO-LUBRICATION',
+       'NAV-BEARING-WEAR', 'NAV-MAJOR', 'NAV-MECH-WEAR', 'NAV-LUBRICATION',
        (ARRAY['OPEN','IN_ANALYSIS','IN_PROGRESS','RESOLVED','CLOSED'])[1 + ((gs - 1) % 5)],
        now() - ((gs % 30) || ' days')::interval,
        CASE WHEN gs % 5 IN (3, 4) THEN now() - ((gs % 10) || ' days')::interval ELSE NULL END,
@@ -95,7 +95,7 @@ ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO work_orders (id, created_at, updated_at, is_deleted, number, title, equipment_id, department_id, repair_request_id, defect_id, ppr_task_id, contractor_id, warehouse_id, replacement_equipment_id, status, type, work_type, priority, start_planned_at, end_planned_at, started_at, completed_at, summary, result, closure_notes, created_by_id, approved_by_id)
 SELECT ('00000000-0000-0000-0000-' || '00000008' || lpad(gs::text, 4, '0'))::uuid, now(), now(), false,
-       'DEMO-WO-2026-' || lpad(gs::text, 4, '0'),
+       'WO-2026-' || lpad(gs::text, 3, '0'),
        wo.title || ' ' || lpad(gs::text, 3, '0'),
        eq.id, eq.department_id,
        CASE WHEN gs BETWEEN 3 AND 24 THEN ('00000000-0000-0000-0000-' || '00000007' || lpad((1 + ((gs - 1) % 40))::text, 4, '0'))::uuid ELSE NULL END,
@@ -112,7 +112,7 @@ SELECT ('00000000-0000-0000-0000-' || '00000008' || lpad(gs::text, 4, '0'))::uui
        now() + ((1 + (gs % 8)) || ' days')::interval,
        CASE WHEN gs % 4 IN (1, 2, 3) THEN now() - ((gs % 5) || ' days')::interval ELSE NULL END,
        CASE WHEN gs % 4 IN (2, 3) THEN now() - ((gs % 3) || ' days')::interval ELSE NULL END,
-       'Demo production-like work order generated from repair, defect, or PPR flow',
+       'Navoiyazot production-like work order generated from repair, defect, or PPR flow',
        CASE WHEN gs % 4 IN (2, 3) THEN 'Work completed and test run accepted' ELSE NULL END,
        CASE WHEN gs % 4 = 3 THEN 'Closed by workshop head after acceptance' ELSE NULL END,
        '00000000-0000-0000-0000-00000000a003'::uuid,
@@ -132,7 +132,7 @@ INSERT INTO work_order_tasks (id, created_at, updated_at, is_deleted, work_order
 SELECT ('00000000-0000-0000-0000-' || '000000081' || lpad(gs::text, 3, '0'))::uuid, now(), now(), false,
        ('00000000-0000-0000-0000-' || '00000008' || lpad((1 + ((gs - 1) % 50))::text, 4, '0'))::uuid,
        (ARRAY['Isolate equipment','Inspect assembly','Replace parts','Test run','Close work area'])[1 + ((gs - 1) % 5)],
-       'Demo work order task for maintenance execution',
+       'Navoiyazot work order task for maintenance execution',
        (ARRAY['TODO','IN_PROGRESS','DONE','DONE'])[1 + ((gs - 1) % 4)],
        '00000000-0000-0000-0000-00000000a004'::uuid,
        (ARRAY[1.0,2.0,3.0,4.0])[1 + ((gs - 1) % 4)],
@@ -155,14 +155,14 @@ INSERT INTO labor_entries (id, created_at, updated_at, is_deleted, work_order_id
 SELECT ('00000000-0000-0000-0000-' || '000000084' || lpad(gs::text, 3, '0'))::uuid, now(), now(), false,
        ('00000000-0000-0000-0000-' || '00000008' || lpad((1 + ((gs - 1) % 50))::text, 4, '0'))::uuid,
        '00000000-0000-0000-0000-00000000a004'::uuid, NULL, DATE '2026-05-01' + (gs % 25),
-       2 + (gs % 7), 85000, 'Demo labor entry for work execution'
+       2 + (gs % 7), 85000, 'Navoiyazot labor entry for work execution'
 FROM generate_series(1, 50) AS gs
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO work_executions (id, created_at, updated_at, is_deleted, work_order_id, performer_id, notes, started_at, ended_at, result)
 SELECT ('00000000-0000-0000-0000-' || '000000085' || lpad(gs::text, 3, '0'))::uuid, now(), now(), false,
        ('00000000-0000-0000-0000-' || '00000008' || lpad((1 + ((gs - 1) % 50))::text, 4, '0'))::uuid,
-       '00000000-0000-0000-0000-00000000a004'::uuid, 'Demo execution log',
+       '00000000-0000-0000-0000-00000000a004'::uuid, 'Navoiyazot execution log',
        now() - ((gs % 10) || ' days')::interval,
        CASE WHEN gs % 3 <> 0 THEN now() - ((gs % 9) || ' days')::interval ELSE NULL END,
        CASE WHEN gs % 3 <> 0 THEN 'Accepted after test run' ELSE NULL END
@@ -187,7 +187,7 @@ WHERE r.id = map.reservation_id
 -- 17.04. Defect lists and defect list lines.
 INSERT INTO defect_lists (id, created_at, updated_at, is_deleted, code, title, equipment_id, repair_request_id, work_order_id, created_by_id, approved_by_id, status, total_labor_hours, total_estimated_cost, notes)
 SELECT ('00000000-0000-0000-0000-' || '00000009' || lpad((100 + gs)::text, 4, '0'))::uuid, now(), now(), false,
-       'DEMO-DL-2026-' || lpad(gs::text, 4, '0'),
+       'NAV-DL-2026-' || lpad(gs::text, 4, '0'),
        (ARRAY['Rotating equipment defect scope','Static equipment repair scope','Instrumentation correction scope','Electrical reliability scope'])[1 + ((gs - 1) % 4)] || ' ' || lpad(gs::text, 3, '0'),
        ('00000000-0000-0000-0000-' || '00000001' || lpad((1 + ((gs - 1) % 60))::text, 4, '0'))::uuid,
        ('00000000-0000-0000-0000-' || '00000007' || lpad((1 + ((gs - 1) % 40))::text, 4, '0'))::uuid,
@@ -196,7 +196,7 @@ SELECT ('00000000-0000-0000-0000-' || '00000009' || lpad((100 + gs)::text, 4, '0
        CASE WHEN gs % 3 <> 0 THEN '00000000-0000-0000-0000-00000000a002'::uuid ELSE NULL END,
        (ARRAY['DRAFT','APPROVED','APPROVED','CLOSED'])[1 + ((gs - 1) % 4)],
        4 + (gs % 12), 750000 + (gs * 185000),
-       'Production-like demo defect list for workshop planning'
+       'Production-like industrial defect list for workshop planning'
 FROM generate_series(2, 10) AS gs
 ON CONFLICT (code) DO NOTHING;
 
@@ -216,12 +216,12 @@ ON CONFLICT (id) DO NOTHING;
 -- 17.07. Inspection routes, checkpoints, rounds, and results.
 INSERT INTO inspection_routes (id, created_at, updated_at, is_deleted, code, name, department_id, frequency, target_duration_min, description, is_active)
 SELECT ('00000000-0000-0000-0000-' || '0000000d' || lpad(gs::text, 4, '0'))::uuid, now(), now(), false,
-       'DEMO-IR-' || (ARRAY['UREA-SHIFT','HNO3-SHIFT','MECH-DAILY','AMM-WEEKLY','UTIL-DAILY'])[gs],
-       (ARRAY['Demo urea shift inspection','Demo nitric acid shift inspection','Demo mechanical daily inspection','Demo ammonia weekly reliability route','Demo utilities daily inspection'])[gs],
+       'NAV-IR-' || (ARRAY['UREA-SHIFT','HNO3-SHIFT','MECH-DAILY','AMM-WEEKLY','UTIL-DAILY'])[gs],
+       (ARRAY['Navoiyazot urea shift inspection','Navoiyazot nitric acid shift inspection','Navoiyazot mechanical daily inspection','Navoiyazot ammonia weekly reliability route','Navoiyazot utilities daily inspection'])[gs],
        ('00000000-0000-0000-0000-' || '00000000d00' || (1 + ((gs - 1) % 5))::text)::uuid,
        (ARRAY['SHIFT','SHIFT','DAILY','WEEKLY','DAILY'])[gs],
        (ARRAY[45,50,60,90,40])[gs],
-       'Production-like demo inspection route',
+       'Production-like industrial inspection route',
        true
 FROM generate_series(1, 5) AS gs
 ON CONFLICT (code) DO NOTHING;
@@ -251,7 +251,7 @@ SELECT ('00000000-0000-0000-0000-' || '0000000d' || lpad((200 + gs)::text, 4, '0
        CASE WHEN gs % 5 = 0 THEN 'IN_PROGRESS' ELSE 'COMPLETED' END,
        CASE WHEN gs % 4 = 0 THEN 2 ELSE gs % 2 END,
        CASE WHEN gs % 7 = 0 THEN 1 ELSE 0 END,
-       'Production-like inspection round for demo route'
+       'Production-like inspection round for industrial route'
 FROM generate_series(1, 24) AS gs
 ON CONFLICT (id) DO NOTHING;
 
@@ -299,7 +299,7 @@ SELECT ('10000000-0000-0000-0000-' || '00000032' || lpad((row_number() OVER (ORD
        CASE WHEN gs IN (2,4) THEN 'bearing,seals,gaskets' ELSE NULL END,
        CASE WHEN gs IN (2,4) THEN 'oil,cleaner' ELSE NULL END,
        'Follow safety permit and PPE instructions',
-       'https://demo-maintenance.local/op/' || gs
+       'https://NAV-maintenance.local/op/' || gs
 FROM maintenance_templates t
 CROSS JOIN generate_series(1, 5) AS gs
 WHERE t.code LIKE 'MNT-TPL-%'
@@ -337,7 +337,7 @@ SELECT ('10000000-0000-0000-0000-' || '00000035' || lpad(gs::text, 4, '0'))::uui
        'RCM-CAMP-' || lpad(gs::text, 3, '0'),
        'Repair campaign ' || lpad(gs::text, 3, '0'),
        'Rotating and static equipment reliability campaign',
-       'Demo campaign for annual maintenance planning',
+       'Navoiyazot campaign for annual maintenance planning',
        (ARRAY['DRAFT','APPROVED','IN_PROGRESS','COMPLETED','CLOSED'])[1 + ((gs - 1) % 5)],
        2026, 1 + (gs % 4),
        ('00000000-0000-0000-0000-' || '00000000d00' || (1 + ((gs - 1) % 5))::text)::uuid,
@@ -368,8 +368,8 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO sla_rules (id, created_at, updated_at, is_deleted, code, name, entity_type, trigger_type, threshold_hours, department_id, is_active)
 SELECT ('10000000-0000-0000-0000-' || '00000037' || lpad(gs::text, 4, '0'))::uuid,
        now(), now(), false,
-       'SLA-DEMO-' || lpad(gs::text, 3, '0'),
-       'Demo SLA rule ' || lpad(gs::text, 3, '0'),
+       'SLA-NAV-' || lpad(gs::text, 3, '0'),
+       'Navoiyazot SLA rule ' || lpad(gs::text, 3, '0'),
        (ARRAY['REPAIR_REQUEST','PPR_TASK','WORK_ORDER','DEFECT'])[1 + ((gs - 1) % 4)],
        (ARRAY['REQUEST_EMERGENCY','REQUEST_OVERDUE','PPR_OVERDUE','WORK_ORDER_OVERDUE','DEFECT_REPEAT'])[1 + ((gs - 1) % 5)],
        4 + (gs % 24),
@@ -387,7 +387,7 @@ SELECT ('10000000-0000-0000-0000-' || '00000038' || lpad(gs::text, 4, '0'))::uui
        '00000000-0000-0000-0000-00000000a003'::uuid,
        now() - ((gs % 10) || ' days')::interval,
        now() + ((1 + (gs % 3)) || ' days')::interval,
-       'Safety permit generated for demo work execution'
+       'Safety permit generated for industrial work execution'
 FROM generate_series(1, 24) AS gs
 ON CONFLICT (id) DO NOTHING;
 
@@ -462,7 +462,7 @@ FROM (
     SELECT id, code, name, row_number() OVER (ORDER BY code) AS rn
     FROM equipment
     WHERE is_deleted = false
-      AND code LIKE 'DEMO-%'
+      AND code LIKE 'NAV-%'
 ) eq
 JOIN generate_series(1, 20) gs ON gs = eq.rn
 ON CONFLICT (id) DO NOTHING;
@@ -471,7 +471,7 @@ INSERT INTO escalation_events (id, created_at, updated_at, is_deleted, entity_ty
 SELECT ('10000000-0000-0000-0000-' || '0000003e' || lpad(gs::text, 4, '0'))::uuid,
        now(), now(), false,
        (ARRAY['REPAIR_REQUEST','PPR_TASK','WORK_ORDER','DEFECT'])[1 + ((gs - 1) % 4)],
-       (ARRAY['DEMO-RR-2026-0001','DEMO-PPR-TASK-001','DEMO-WO-2026-0001','DEMO-DEF-2026-0001'])[1 + ((gs - 1) % 4)],
+       (ARRAY['RR-2026-001','NAV-PPR-TASK-001','WO-2026-001','DEF-2026-001'])[1 + ((gs - 1) % 4)],
        (ARRAY['REQUEST_OVERDUE','PPR_OVERDUE','WORK_ORDER_OVERDUE','DEFECT_REPEAT'])[1 + ((gs - 1) % 4)],
        (ARRAY['OPEN','ACKNOWLEDGED','RESOLVED'])[1 + ((gs - 1) % 3)],
        ('10000000-0000-0000-0000-' || '00000037' || lpad((1 + ((gs - 1) % 15))::text, 4, '0'))::uuid,
@@ -480,7 +480,7 @@ SELECT ('10000000-0000-0000-0000-' || '0000003e' || lpad(gs::text, 4, '0'))::uui
        CASE WHEN gs % 3 IN (2, 0) THEN now() - ((gs % 12) || ' hours')::interval ELSE NULL END,
        CASE WHEN gs % 3 = 0 THEN '00000000-0000-0000-0000-00000000a001'::uuid ELSE NULL END,
        CASE WHEN gs % 3 = 0 THEN now() - ((gs % 6) || ' hours')::interval ELSE NULL END,
-       'Escalation event generated from demo SLA logic'
+       'Escalation event generated from industrial SLA logic'
 FROM generate_series(1, 24) AS gs
 ON CONFLICT (id) DO NOTHING;
 
