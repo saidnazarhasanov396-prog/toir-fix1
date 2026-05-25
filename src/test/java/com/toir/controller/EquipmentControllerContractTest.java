@@ -94,12 +94,14 @@ class EquipmentControllerContractTest {
                                   "name": "Compressor A",
                                   "inventoryNumber": "INV-1",
                                   "equipmentTypeId": "%s",
-                                  "departmentId": "%s"
+                                  "departmentId": "%s",
+                                  "averageOperatingLifeHours": 10000
                                 }
                                 """.formatted(equipmentTypeId, departmentId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(id.toString()))
-                .andExpect(jsonPath("$.code").value("EQ-2026-0020"));
+                .andExpect(jsonPath("$.code").value("EQ-2026-0020"))
+                .andExpect(jsonPath("$.averageOperatingLifeHours").value(10000));
     }
 
     @Test
@@ -118,6 +120,7 @@ class EquipmentControllerContractTest {
                                   "inventoryNumber": "INV-P-101",
                                   "equipmentTypeId": "%s",
                                   "departmentId": "%s",
+                                  "averageOperatingLifeHours": 10000,
                                   "attributes": [
                                     {
                                       "key": "motor_power",
@@ -138,6 +141,35 @@ class EquipmentControllerContractTest {
     }
 
     @Test
+    void createWithoutAverageOperatingLifeHoursReturnsBadRequest() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/equipment")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Compressor A",
+                                  "inventoryNumber": "INV-AVG-MISSING",
+                                  "equipmentTypeId": "%s",
+                                  "departmentId": "%s"
+                                }
+                                """.formatted(equipmentTypeId, departmentId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("averageOperatingLifeHours")));
+    }
+
+    @Test
+    void createWithZeroAverageOperatingLifeHoursReturnsBadRequest() throws Exception {
+        assertCreateAverageOperatingLifeValidation(0);
+    }
+
+    @Test
+    void createWithNegativeAverageOperatingLifeHoursReturnsBadRequest() throws Exception {
+        assertCreateAverageOperatingLifeValidation(-1);
+    }
+
+    @Test
     void createWithWarehouseIdOnlyReturnsCreated() throws Exception {
         UUID id = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
@@ -152,7 +184,8 @@ class EquipmentControllerContractTest {
                                   "name": "Compressor A",
                                   "inventoryNumber": "INV-2",
                                   "equipmentTypeId": "%s",
-                                  "warehouseId": "%s"
+                                  "warehouseId": "%s",
+                                  "averageOperatingLifeHours": 10000
                                 }
                                 """.formatted(equipmentTypeId, warehouseId)))
                 .andExpect(status().isCreated())
@@ -176,7 +209,8 @@ class EquipmentControllerContractTest {
                                   "inventoryNumber": "INV-3",
                                   "equipmentTypeId": "%s",
                                   "departmentId": "%s",
-                                  "warehouseId": "%s"
+                                  "warehouseId": "%s",
+                                  "averageOperatingLifeHours": 10000
                                 }
                                 """.formatted(equipmentTypeId, departmentId, warehouseId)))
                 .andExpect(status().isCreated())
@@ -195,7 +229,8 @@ class EquipmentControllerContractTest {
                                 {
                                   "name": "Compressor A",
                                   "inventoryNumber": "INV-4",
-                                  "equipmentTypeId": "%s"
+                                  "equipmentTypeId": "%s",
+                                  "averageOperatingLifeHours": 10000
                                 }
                                 """.formatted(equipmentTypeId)))
                 .andExpect(status().isBadRequest())
@@ -215,7 +250,8 @@ class EquipmentControllerContractTest {
                                   "name": "Compressor A",
                                   "inventoryNumber": "INV-5",
                                   "equipmentTypeId": "%s",
-                                  "warehouseId": "%s"
+                                  "warehouseId": "%s",
+                                  "averageOperatingLifeHours": 10000
                                 }
                                 """.formatted(equipmentTypeId, warehouseId)))
                 .andExpect(status().isNotFound())
@@ -235,7 +271,8 @@ class EquipmentControllerContractTest {
                                   "name": "Compressor A",
                                   "inventoryNumber": "INV-6",
                                   "equipmentTypeId": "%s",
-                                  "departmentId": "%s"
+                                  "departmentId": "%s",
+                                  "averageOperatingLifeHours": 10000
                                 }
                                 """.formatted(equipmentTypeId, departmentId)))
                 .andExpect(status().isNotFound())
@@ -256,7 +293,8 @@ class EquipmentControllerContractTest {
                                   "name": "Compressor A",
                                   "inventoryNumber": "INV-7",
                                   "equipmentTypeId": "%s",
-                                  "departmentId": "%s"
+                                  "departmentId": "%s",
+                                  "averageOperatingLifeHours": 10000
                                 }
                                 """.formatted(equipmentTypeId, departmentId)))
                 .andExpect(status().isBadRequest())
@@ -1019,6 +1057,7 @@ class EquipmentControllerContractTest {
                 null,
                 null,
                 null,
+                10_000L,
                 departmentRef,
                 location,
                 null,
@@ -1026,6 +1065,25 @@ class EquipmentControllerContractTest {
                 null,
                 placement
         );
+    }
+
+    private void assertCreateAverageOperatingLifeValidation(long value) throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/equipment")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Compressor A",
+                                  "inventoryNumber": "INV-AVG-%s",
+                                  "equipmentTypeId": "%s",
+                                  "departmentId": "%s",
+                                  "averageOperatingLifeHours": %d
+                                }
+                                """.formatted(value, equipmentTypeId, departmentId, value)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("averageOperatingLifeHours")));
     }
 
     private void assertNoResolvedException(MvcResult result) {

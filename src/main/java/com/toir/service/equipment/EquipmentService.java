@@ -206,6 +206,7 @@ public class EquipmentService {
     @Transactional
     public EquipmentDto create(EquipmentCreateRequest request) {
         validateClientProvidedCode(request.code());
+        validateAverageOperatingLifeForCreate(request.averageOperatingLifeHours());
         validateCreatePlacement(request.departmentId(), request.warehouseId());
         validateDepartmentExists(request.departmentId());
         validateWarehouseExists(request.warehouseId());
@@ -218,7 +219,10 @@ public class EquipmentService {
         apply(entity, request);
         Equipment saved = repository.save(entity);
         if (equipmentAttributeService != null) {
-            equipmentAttributeService.upsertValues(saved, request.attributes());
+            equipmentAttributeService.upsertValues(
+                    saved,
+                    request.attributes() == null ? List.of() : request.attributes()
+            );
         }
         if (request.warehouseId() != null) {
             warehouseEquipmentItemService.assign(
@@ -244,6 +248,7 @@ public class EquipmentService {
         Equipment entity = getOrThrow(id);
         validateClientProvidedCode(request.code());
         validateNoDirectStatusChange(entity, request.status());
+        validateAverageOperatingLifeForUpdate(request.averageOperatingLifeHours());
         validateDepartmentExists(request.departmentId());
 
 
@@ -490,6 +495,7 @@ public class EquipmentService {
         entity.setCategory(request.category() != null ? request.category() : EquipmentCategory.PRODUCTION_EQUIPMENT);
         entity.setCommissionedAt(request.commissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil());
+        entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours());
         entity.setDescription(request.description());
     }
 
@@ -585,6 +591,19 @@ public class EquipmentService {
         }
     }
 
+    private void validateAverageOperatingLifeForCreate(Long averageOperatingLifeHours) {
+        if (averageOperatingLifeHours == null) {
+            throw RestException.badRequest("averageOperatingLifeHours is required");
+        }
+        validateAverageOperatingLifeForUpdate(averageOperatingLifeHours);
+    }
+
+    private void validateAverageOperatingLifeForUpdate(Long averageOperatingLifeHours) {
+        if (averageOperatingLifeHours != null && averageOperatingLifeHours <= 0) {
+            throw RestException.badRequest("averageOperatingLifeHours must be positive");
+        }
+    }
+
     private void validateDepartmentExists(UUID departmentId) {
         if (departmentId == null) {
             return;
@@ -633,6 +652,9 @@ public class EquipmentService {
         entity.setCategory(request.category() != null ? request.category() : entity.getCategory());
         entity.setCommissionedAt(request.commissionedAt() != null ? request.commissionedAt() : entity.getCommissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil() != null ? request.warrantyUntil() : entity.getWarrantyUntil());
+        entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours() != null
+                ? request.averageOperatingLifeHours()
+                : entity.getAverageOperatingLifeHours());
         entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
     }
 

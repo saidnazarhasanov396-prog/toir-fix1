@@ -70,6 +70,9 @@ public class Equipment extends BaseEntity {
     @Column(name = "warranty_until")
     private LocalDate warrantyUntil;
 
+    @Column(name = "average_operating_life_hours")
+    private Long averageOperatingLifeHours;
+
     private String description;
 
 }

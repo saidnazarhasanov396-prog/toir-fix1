@@ -29,6 +29,7 @@ public record EquipmentDto(
         LocalDate commissionedAt,
         LocalDate warrantyUntil,
         String description,
+        Long averageOperatingLifeHours,
         Ref department,
         Ref location,
         Ref equipmentType,
@@ -36,6 +37,39 @@ public record EquipmentDto(
         PassportRef passport,
         PlacementRef placement
 ) {
+    public EquipmentDto(
+            UUID id,
+            String code,
+            String name,
+            String inventoryNumber,
+            String technicalNumber,
+            String serialNumber,
+            String model,
+            UUID equipmentTypeId,
+            UUID departmentId,
+            UUID locationId,
+            UUID parentId,
+            UUID criticalityClassId,
+            UUID responsibleId,
+            String manufacturer,
+            EquipmentStatus status,
+            EquipmentCategory category,
+            LocalDate commissionedAt,
+            LocalDate warrantyUntil,
+            String description,
+            Ref department,
+            Ref location,
+            Ref equipmentType,
+            Ref parent,
+            PassportRef passport,
+            PlacementRef placement
+    ) {
+        this(id, code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
+                status, category, commissionedAt, warrantyUntil, description, null, department, location,
+                equipmentType, parent, passport, placement);
+    }
+
     public record Ref(UUID id, String code, String name) {}
 
     public record PassportRef(
@@ -78,7 +112,7 @@ public record EquipmentDto(
                 e.getSerialNumber(), e.getModel(), e.getEquipmentTypeId(), e.getDepartmentId(),
                 e.getLocationId(), e.getParentId(), e.getCriticalityClassId(), e.getResponsibleId(),
                 e.getManufacturer(), e.getStatus(), e.getCategory(),
-                e.getCommissionedAt(), e.getWarrantyUntil(), e.getDescription(),
+                e.getCommissionedAt(), e.getWarrantyUntil(), e.getDescription(), e.getAverageOperatingLifeHours(),
                 department, location, equipmentType, parent, passport, placement
         );
     }
