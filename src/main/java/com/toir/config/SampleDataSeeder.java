@@ -72,7 +72,6 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -88,8 +87,7 @@ import java.util.UUID;
 @Component
 @Order(20)
 @Transactional
-@Profile("dev")
-@ConditionalOnProperty(name = "app.bootstrap.seed-demo-data", havingValue = "true")
+@Profile("dev & demo-seed")
 @RequiredArgsConstructor
 public class SampleDataSeeder implements CommandLineRunner {
 

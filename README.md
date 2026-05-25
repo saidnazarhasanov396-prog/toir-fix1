@@ -46,9 +46,43 @@ Config is split by profile:
 - `application-dev.yml`: development
 - `application-prod.yml`: production overrides
 
-Use `dev` or `prod` Spring profile. The current default profile is `prod`. Demo seeders run only in `dev`.
+Use `dev` or `prod` Spring profile. The current default profile is `prod`.
 
-DB schema handling currently combines Hibernate `ddl-auto: update`, Flyway migrations under `db/migration`, and manual SQL initialization from `db/manual`.
+DB schema source of truth is Flyway migrations under `db/migration`.
+- `spring.flyway.enabled=true`
+- `spring.flyway.validate-on-migrate=true`
+- `spring.jpa.hibernate.ddl-auto=validate`
+
+Demo/business seed data is **not automatic** in `dev` or `prod`.
+- Demo seeders are gated by `demo-seed` profile.
+- Run demo seed manually with `dev,demo-seed`.
+- Production profile must not include `demo-seed`.
+
+## Production-Safe Reset And Seed
+
+1. Backup database (required before any reset):
+   ```bash
+   pg_dump -Fc -h <host> -U <user> -d <db> -f toir-backup.dump
+   ```
+2. Local/demo reset only (never production):
+   ```bash
+   dropdb -h <host> -U <user> toir_demo
+   createdb -h <host> -U <user> toir_demo
+   ```
+3. Start backend with schema migration only (no demo data):
+   ```bash
+   mvn spring-boot:run "-Dspring-boot.run.profiles=dev"
+   ```
+4. Run demo seed manually:
+   ```bash
+   mvn spring-boot:run "-Dspring-boot.run.profiles=dev,demo-seed"
+   ```
+5. Smoke-test critical endpoints after startup:
+   - auth login
+   - departments/equipment list
+   - work orders and ppr plan list
+
+Warning: universal `truncate`/`drop` operations are for local/demo reset only and are not allowed in production migrations.
 
 ## Feature modules
 

@@ -58,7 +58,6 @@ app:
     admin-password: Root123456
     admin-email: admin@toir.local
     admin-full-name: System Administrator
-    seed-demo-data: false
 
 logging:
   level:
