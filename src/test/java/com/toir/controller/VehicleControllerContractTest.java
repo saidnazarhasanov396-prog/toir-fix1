@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleStatsResponse;
+import com.toir.enums.ErrorType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.security.AuthenticatedUser;
@@ -150,6 +151,18 @@ class VehicleControllerContractTest {
                         .file(new MockMultipartFile("document", "bad.exe", "application/octet-stream", "MZ".getBytes())))
                 .andExpect(status().isUnsupportedMediaType())
                 .andExpect(jsonPath("$.message").value("File type is not allowed"));
+    }
+
+    @Test
+    void attachDocumentStorageAccessFailureReturnsClearServerError() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        when(service.attachDocument(eq(equipmentId), any(), eq(currentUserId)))
+                .thenThrow(RestException.restThrow(ErrorType.FILE_STORAGE_ACCESS_DENIED));
+
+        mockMvc.perform(multipart("/api/v1/vehicles/{equipmentId}/document", equipmentId)
+                        .file(new MockMultipartFile("document", "vehicle-passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes())))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("File storage access denied or misconfigured"));
     }
 
     @Test
