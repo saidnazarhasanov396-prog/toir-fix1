@@ -261,9 +261,10 @@ class RbacDefectSecurityTest {
                   "title": "Leak",
                   "description": "Oil leak",
                   "equipmentId": "%s",
+                  "defectListId": "%s",
                   "category": "MECHANICAL",
                   "severity": "MEDIUM"
                 }
-                """.formatted(UUID.randomUUID());
+                """.formatted(UUID.randomUUID(), UUID.randomUUID());
     }
 }

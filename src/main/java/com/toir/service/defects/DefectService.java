@@ -9,17 +9,22 @@ import com.toir.dto.triad.TriadLinkMapper;
 import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.entity.defects.Defect;
+import com.toir.entity.defects.DefectList;
+import com.toir.entity.defects.DefectListLine;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.DefectListStatus;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.RequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.KnowledgeArticleRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectListLineRepository;
+import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -49,6 +54,8 @@ import java.util.stream.Collectors;
 public class DefectService {
 
     private final DefectRepository repository;
+    private final DefectListRepository defectListRepository;
+    private final DefectListLineRepository defectListLineRepository;
     private final EquipmentRepository equipmentRepository;
     private final EquipmentNodeRepository equipmentNodeRepository;
     private final RepairRequestRepository repairRequestRepository;
@@ -134,9 +141,11 @@ public class DefectService {
 
     @Transactional
     public DefectResponse create(DefectRequest request) {
+        DefectList defectList = validateDefectListForCreate(request);
         assertCanAccessDefectRequest(request);
         equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create defect");
         Defect saved = saveWithGeneratedCode(request);
+        createDefectListLine(defectList, saved);
 
         auditBuilderService.log(
                 "defect",
@@ -229,6 +238,42 @@ public class DefectService {
         entity.setSeverity(request.severity());
         entity.setFailureReason(request.failureReason());
         entity.setRootCause(request.rootCause());
+    }
+
+    private DefectList validateDefectListForCreate(DefectRequest request) {
+        if (request.defectListId() == null) {
+            throw RestException.badRequest("Defect list is required");
+        }
+        DefectList defectList = defectListRepository.findByIdAndIsDeletedFalse(request.defectListId())
+                .orElseThrow(() -> RestException.notFound("Defect list not found: " + request.defectListId()));
+        if (!canAccessDefectList(defectList)) {
+            throw new AccessDeniedException("Access denied by defect list department scope");
+        }
+        if (defectList.getStatus() == DefectListStatus.CLOSED || defectList.getStatus() == DefectListStatus.CANCELLED) {
+            throw RestException.badRequest("Cannot add defect to closed/cancelled defect list");
+        }
+        if (!Objects.equals(defectList.getEquipmentId(), request.equipmentId())) {
+            throw RestException.badRequest("Defect list belongs to a different equipment");
+        }
+        if (request.repairRequestId() != null
+                && defectList.getRepairRequestId() != null
+                && !Objects.equals(defectList.getRepairRequestId(), request.repairRequestId())) {
+            throw RestException.badRequest("Defect list belongs to a different repair request");
+        }
+        return defectList;
+    }
+
+    private void createDefectListLine(DefectList defectList, Defect defect) {
+        DefectListLine line = new DefectListLine();
+        line.setDefectList(defectList);
+        line.setDefectId(defect.getId());
+        line.setDescription(defect.getDescription());
+        line.setRequiredQuantity(0);
+        line.setEstimatedLaborHours(0);
+        line.setEstimatedCost(0);
+        defectList.getLines().add(line);
+        defectListLineRepository.save(line);
+        defectListRepository.save(defectList);
     }
 
     private String formatCode(String prefix, int year, long sequence) {
@@ -368,6 +413,16 @@ public class DefectService {
                 .stream()
                 .collect(Collectors.groupingBy(WorkOrder::getDefectId));
 
+        Map<UUID, UUID> defectListIdByDefectId = defectListLineRepository
+                .findAllByDefectIdInAndIsDeletedFalse(defectIds)
+                .stream()
+                .filter(line -> line.getDefectId() != null && line.getDefectList() != null)
+                .collect(Collectors.toMap(
+                        DefectListLine::getDefectId,
+                        line -> line.getDefectList().getId(),
+                        (first, second) -> first
+                ));
+
         return defects.stream()
                 .map(defect -> toResponse(
                         defect,
@@ -375,6 +430,7 @@ public class DefectService {
                         equipmentNodeById,
                         repairRequestById,
                         workOrdersByDefectId,
+                        defectListIdByDefectId,
                         defectIdsWithLesson))
                 .toList();
     }
@@ -434,6 +490,15 @@ public class DefectService {
                 .orElse(false);
     }
 
+    private boolean canAccessDefectList(DefectList defectList) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        return resolveDefectListDepartmentId(defectList)
+                .map(scopeAccessService::canAccessDepartment)
+                .orElse(false);
+    }
+
     private void assertCanAccessDefectRequest(DefectRequest request) {
         if (scopeAccessService.isScopeAdmin()) {
             return;
@@ -463,6 +528,10 @@ public class DefectService {
                     .ifPresent(departments::add);
         }
         return departments.size() == 1 ? Optional.of(departments.iterator().next()) : Optional.empty();
+    }
+
+    private Optional<UUID> resolveDefectListDepartmentId(DefectList defectList) {
+        return resolveDefectDepartmentId(defectList.getEquipmentId(), defectList.getRepairRequestId());
     }
 
     private boolean matchesStatsFilter(Defect defect, UUID equipmentId, UUID repairRequestId, String search) {
@@ -501,6 +570,7 @@ public class DefectService {
                                       Map<UUID, EquipmentNode> equipmentNodeById,
                                       Map<UUID, RepairRequest> repairRequestById,
                                       Map<UUID, List<WorkOrder>> workOrdersByDefectId,
+                                      Map<UUID, UUID> defectListIdByDefectId,
                                       Set<UUID> defectIdsWithLesson) {
         DefectDto dto = DefectDto.from(defect);
 
@@ -514,6 +584,7 @@ public class DefectService {
                 equipmentNode == null ? null : equipmentNode.getCode(),
                 equipmentNode == null ? null : equipmentNode.getName(),
                 equipmentNode == null ? null : equipmentNode.getNodeType(),
+                defectListIdByDefectId.get(dto.id()),
                 repairRequest,
                 linkedWorkOrders,
                 defectIdsWithLesson.contains(dto.id())

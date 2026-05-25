@@ -32,6 +32,7 @@ class FlywayEmptyDbSmokeTest {
                 .load();
 
         MigrateResult result = flyway.migrate();
+
         assertThat(result.success).isTrue();
 
         try (Connection connection = DriverManager.getConnection(
@@ -46,8 +47,8 @@ class FlywayEmptyDbSmokeTest {
              );
              ResultSet rs = statement.executeQuery()) {
             assertThat(rs.next()).isTrue();
-            assertThat(rs.getString("version")).isEqualTo("20260525.2");
-            assertThat(rs.getString("script")).isEqualTo("V20260525_2__vehicle_document_file.sql");
+            assertThat(rs.getString("version")).isEqualTo("20260523.7");
+            assertThat(rs.getString("script")).isEqualTo("B20260523_7__schema_baseline.sql");
             assertThat(rs.getBoolean("success")).isTrue();
         }
     }

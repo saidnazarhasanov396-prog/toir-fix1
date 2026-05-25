@@ -33,8 +33,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -318,6 +320,61 @@ class RepairRequestControllerContractTest {
         verify(service).changeStatus(requestId, RequestStatus.CANCELLED, "duplicate cleanup");
     }
 
+    @Test
+    void createEndpointRequiresDefectId() throws Exception {
+        mockMvc.perform(post("/api/v1/repair-requests")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "number": "RR-2026-0001",
+                                  "title": "Pump vibration",
+                                  "description": "Excess vibration on pump",
+                                  "equipmentId": "%s",
+                                  "departmentId": "%s",
+                                  "reporterId": "%s"
+                                }
+                                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())))
+                .andExpect(status().isBadRequest());
+
+        verify(service, never()).create(any());
+    }
+
+    @Test
+    void createEndpointReturnsNotFoundForUnknownDefect() throws Exception {
+        UUID defectId = UUID.randomUUID();
+        when(service.create(any())).thenThrow(com.toir.exception.RestException.notFound("Defect not found: " + defectId));
+
+        mockMvc.perform(post("/api/v1/repair-requests")
+                        .contentType("application/json")
+                        .content(createPayload(defectId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void createEndpointReturnsBadRequestForDefectEquipmentMismatch() throws Exception {
+        when(service.create(any())).thenThrow(com.toir.exception.RestException.badRequest("Defect belongs to a different equipment"));
+
+        mockMvc.perform(post("/api/v1/repair-requests")
+                        .contentType("application/json")
+                        .content(createPayload(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createEndpointAcceptsDefectIdAndReturnsLinkedDefect() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithLinkedDefect(requestId, defectId);
+        when(service.create(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/repair-requests")
+                        .contentType("application/json")
+                        .content(createPayload(defectId, response.equipmentId(), response.departmentId(), response.reporterId())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(requestId.toString()))
+                .andExpect(jsonPath("$.linkedDefects[0].id").value(defectId.toString()));
+    }
+
     private RepairRequest entityFromDto(RepairRequestDto dto) {
         RepairRequest entity = new RepairRequest();
         entity.setId(dto.id());
@@ -378,6 +435,60 @@ class RepairRequestControllerContractTest {
                         Instant.now().plusSeconds(3600)
                 ))
         );
+    }
+
+    private RepairRequestDto dtoWithLinkedDefect(UUID requestId, UUID defectId) {
+        return new RepairRequestDto(
+                requestId,
+                "RR-2026-1001",
+                "Repair request",
+                "Description",
+                UUID.randomUUID(),
+                "Pump #1",
+                UUID.randomUUID(),
+                "Maintenance",
+                null,
+                UUID.randomUUID(),
+                "Reporter",
+                null,
+                PriorityLevel.MEDIUM,
+                CriticalityLevel.MEDIUM,
+                RequestStatus.OPEN,
+                RequestSource.MANUAL,
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(new DefectBriefDto(
+                        defectId,
+                        "DEF-2026-1001",
+                        "Leak",
+                        DefectStatus.OPEN,
+                        "HIGH",
+                        Instant.now()
+                )),
+                List.of()
+        );
+    }
+
+    private String createPayload(UUID defectId, UUID equipmentId, UUID departmentId, UUID reporterId) {
+        return """
+                {
+                  "number": "RR-2026-0001",
+                  "title": "Pump vibration",
+                  "description": "Excess vibration on pump",
+                  "defectId": "%s",
+                  "equipmentId": "%s",
+                  "departmentId": "%s",
+                  "reporterId": "%s",
+                  "priority": "HIGH",
+                  "criticality": "HIGH",
+                  "source": "MANUAL"
+                }
+                """.formatted(defectId, equipmentId, departmentId, reporterId);
     }
 
     private RepairRequestDto dtoWithoutLinks(UUID requestId) {

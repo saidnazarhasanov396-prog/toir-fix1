@@ -12,6 +12,7 @@ public record DefectRequest(
         @NotBlank String description,
         @NotNull UUID equipmentId,
         UUID equipmentNodeId,
+        UUID defectListId,
         @JsonAlias("requestId") UUID repairRequestId,
         String category,
         String severity,
@@ -27,6 +28,19 @@ public record DefectRequest(
                          String severity,
                          String failureReason,
                          String rootCause) {
-        this(code, title, description, equipmentId, null, repairRequestId, category, severity, failureReason, rootCause);
+        this(code, title, description, equipmentId, null, null, repairRequestId, category, severity, failureReason, rootCause);
+    }
+
+    public DefectRequest(String code,
+                         String title,
+                         String description,
+                         UUID equipmentId,
+                         UUID equipmentNodeId,
+                         UUID repairRequestId,
+                         String category,
+                         String severity,
+                         String failureReason,
+                         String rootCause) {
+        this(code, title, description, equipmentId, equipmentNodeId, null, repairRequestId, category, severity, failureReason, rootCause);
     }
 }

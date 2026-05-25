@@ -22,6 +22,9 @@ public interface DefectListLineRepository extends JpaRepository<DefectListLine, 
     @Query(value = "SELECT * FROM defect_list_lines WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<DefectListLine> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
+    @Query(value = "SELECT * FROM defect_list_lines WHERE defect_id IN (:defectIds) AND is_deleted = false", nativeQuery = true)
+    List<DefectListLine> findAllByDefectIdInAndIsDeletedFalse(@Param("defectIds") Collection<UUID> defectIds);
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM defect_list_lines WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 

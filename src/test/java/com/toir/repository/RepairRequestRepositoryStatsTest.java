@@ -1,8 +1,10 @@
 package com.toir.repository;
 
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.defects.Defect;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.*;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,9 @@ class RepairRequestRepositoryStatsTest {
 
     @Autowired
     WorkOrderRepository workOrderRepository;
+
+    @Autowired
+    DefectRepository defectRepository;
 
     @Test
     void getRepairRequestStatsWithoutFiltersCountsAllNonDeletedRequests() {
@@ -162,6 +167,28 @@ class RepairRequestRepositoryStatsTest {
         assertThat(stats.getWithWorkOrder()).isEqualTo(1);
     }
 
+    @Test
+    void persistedRepairRequestCanBeLinkedFromDefect() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        RepairRequest request = saveRepairRequest(
+                "RR-DEF-001",
+                "Pump vibration",
+                "Excess vibration on pump",
+                departmentId,
+                equipmentId,
+                RequestStatus.OPEN,
+                PriorityLevel.HIGH
+        );
+        Defect linkedDefect = saveDefect(equipmentId, request.getId());
+        Defect otherDefect = saveDefect(equipmentId, null);
+
+        assertThat(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .extracting(Defect::getId)
+                .containsExactly(linkedDefect.getId())
+                .doesNotContain(otherDefect.getId());
+    }
+
     private RepairRequest saveRepairRequest(
             String number,
             String title,
@@ -184,6 +211,20 @@ class RepairRequestRepositoryStatsTest {
         request.setDeleted(false);
 
         return repository.save(request);
+    }
+
+    private Defect saveDefect(UUID equipmentId, UUID repairRequestId) {
+        Defect defect = new Defect();
+        defect.setId(UUID.randomUUID());
+        defect.setCode("DEF-" + UUID.randomUUID());
+        defect.setTitle("Pump vibration defect");
+        defect.setDescription("Vibration detected during inspection");
+        defect.setEquipmentId(equipmentId);
+        defect.setRepairRequestId(repairRequestId);
+        defect.setStatus(DefectStatus.OPEN);
+        defect.setDeleted(false);
+
+        return defectRepository.saveAndFlush(defect);
     }
 
     private WorkOrder saveWorkOrder(

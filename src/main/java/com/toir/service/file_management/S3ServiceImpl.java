@@ -11,6 +11,7 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.StatObjectArgs;
+import io.minio.errors.ErrorResponseException;
 import io.minio.http.Method;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -52,7 +53,7 @@ public class S3ServiceImpl implements S3Service {
             }
             log.info("MinIO bucket '{}' is ready.", properties.getBucketName());
         } catch (Exception e) {
-            log.error("MinIO initialization failed: {}", e.getMessage());
+            log.error("MinIO initialization failed for bucket={}: {}", properties.getBucketName(), e.toString(), e);
         }
     }
 
@@ -69,8 +70,9 @@ public class S3ServiceImpl implements S3Service {
             );
             log.info("Stored file object '{}'", objectName);
         } catch (Exception e) {
-            log.error("MinIO upload failed for object '{}': {}", objectName, e.getMessage());
-            throw RestException.restThrow(ErrorType.FILE_UPLOAD_FAILED);
+            log.error("MinIO upload failed for bucket={}, object={}: {}",
+                    properties.getBucketName(), objectName, e.toString(), e);
+            throw mapStorageException(e, ErrorType.FILE_UPLOAD_FAILED);
         }
     }
 
@@ -88,8 +90,9 @@ public class S3ServiceImpl implements S3Service {
             );
             log.info("Deleted file object '{}'", objectName);
         } catch (Exception e) {
-            log.error("MinIO delete failed for object '{}': {}", objectName, e.getMessage());
-            throw RestException.restThrow(ErrorType.FILE_DELETE_FAILED);
+            log.error("MinIO delete failed for bucket={}, object={}: {}",
+                    properties.getBucketName(), objectName, e.toString(), e);
+            throw mapStorageException(e, ErrorType.FILE_DELETE_FAILED);
         }
     }
 
@@ -107,8 +110,9 @@ public class S3ServiceImpl implements S3Service {
                             .build()
             ));
         } catch (Exception e) {
-            log.error("MinIO download failed for object '{}': {}", objectName, e.getMessage());
-            throw RestException.restThrow(ErrorType.FILE_DOWNLOAD_FAILED);
+            log.error("MinIO download failed for bucket={}, object={}: {}",
+                    properties.getBucketName(), objectName, e.toString(), e);
+            throw mapStorageException(e, ErrorType.FILE_DOWNLOAD_FAILED);
         }
     }
 
@@ -125,9 +129,34 @@ public class S3ServiceImpl implements S3Service {
                             .build()
             );
         } catch (Exception e) {
-            log.error("Presigned URL generation failed for object '{}': {}", objectName, e.getMessage());
-            throw RestException.restThrow(ErrorType.PRESIGNED_URL_FAILED);
+            log.error("Presigned URL generation failed for bucket={}, object={}: {}",
+                    properties.getBucketName(), objectName, e.toString(), e);
+            throw mapStorageException(e, ErrorType.PRESIGNED_URL_FAILED);
         }
+    }
+
+    private RestException mapStorageException(Exception e, ErrorType fallback) {
+        if (e instanceof ErrorResponseException errorResponseException
+                && errorResponseException.errorResponse() != null) {
+            return RestException.restThrow(mapStorageErrorCode(errorResponseException.errorResponse().code(), fallback));
+        }
+        return RestException.restThrow(fallback);
+    }
+
+    static ErrorType mapStorageErrorCode(String code, ErrorType fallback) {
+        if ("AccessDenied".equals(code)
+                || "InvalidAccessKeyId".equals(code)
+                || "SignatureDoesNotMatch".equals(code)
+                || "InvalidToken".equals(code)
+                || "ExpiredToken".equals(code)) {
+            return ErrorType.FILE_STORAGE_ACCESS_DENIED;
+        }
+        if ("NoSuchBucket".equals(code)
+                || "InvalidBucketName".equals(code)
+                || "NoSuchKey".equals(code)) {
+            return ErrorType.FILE_STORAGE_CONFIGURATION_FAILED;
+        }
+        return fallback;
     }
 
     @Deprecated
