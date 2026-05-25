@@ -20,10 +20,13 @@ import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.VehicleStatsProjection;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.file_management.FileService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -37,6 +40,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class VehicleService {
 
     private final EquipmentRepository equipmentRepository;
@@ -45,6 +49,7 @@ public class VehicleService {
     private final AuditBuilderService auditBuilderService;
     private final FileService fileService;
     private final UploadedFileRepository uploadedFileRepository;
+    private final SecurityScope securityScope;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, String search, int page, int pageSize) {
@@ -157,23 +162,21 @@ public class VehicleService {
                 Map.of(newEquipment, newDetails)
         );
 
-
-
-
         return VehicleDetailDto.from(equipmentService.findById(equipmentId), details);
     }
 
     @Transactional
     public VehicleDetailDto attachDocument(UUID equipmentId, MultipartFile document, UUID currentUserId) {
         Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
         VehicleDetails details = vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
 
         UploadedFile oldDocument = details.getDocumentFile();
         UploadFileResponse uploaded = fileService.upload(document, FileCategory.VEHICLE_DOCUMENT, currentUserId);
-        UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
-                .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
         try {
+            UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
+                    .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
             details.setDocumentFile(uploadedFile);
             VehicleDetails savedDetails = vehicleDetailsRepository.save(details);
             if (oldDocument != null && !Objects.equals(oldDocument.getId(), uploaded.id())) {
@@ -181,6 +184,7 @@ public class VehicleService {
             }
             return VehicleDetailDto.from(equipmentService.findById(equipment.getId()), savedDetails);
         } catch (RuntimeException e) {
+            details.setDocumentFile(oldDocument);
             deleteDocumentQuietly(uploaded.id(), currentUserId);
             throw e;
         }
@@ -188,6 +192,8 @@ public class VehicleService {
 
     @Transactional(readOnly = true)
     public VehicleDetailDto.DocumentRef getDocument(UUID equipmentId, UUID currentUserId) {
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
         VehicleDetails details = findVehicleDetails(equipmentId);
         UploadedFile documentFile = details.getDocumentFile();
         if (documentFile == null || Boolean.TRUE.equals(documentFile.getDeleted())) {
@@ -199,6 +205,8 @@ public class VehicleService {
 
     @Transactional(readOnly = true)
     public PresignedUrlResponse getDocumentPresignedUrl(UUID equipmentId, UUID currentUserId) {
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
         VehicleDetails details = findVehicleDetails(equipmentId);
         UploadedFile documentFile = details.getDocumentFile();
         if (documentFile == null || Boolean.TRUE.equals(documentFile.getDeleted())) {
@@ -209,6 +217,8 @@ public class VehicleService {
 
     @Transactional
     public void deleteDocument(UUID equipmentId, UUID currentUserId) {
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
         VehicleDetails details = findVehicleDetails(equipmentId);
         UploadedFile documentFile = details.getDocumentFile();
         if (documentFile == null || Boolean.TRUE.equals(documentFile.getDeleted())) {
@@ -222,7 +232,27 @@ public class VehicleService {
     private void deleteDocumentQuietly(UUID fileId, UUID currentUserId) {
         try {
             fileService.delete(fileId, currentUserId);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException e) {
+            log.warn("Failed to cleanup vehicle document file '{}': {}", fileId, e.getMessage());
+        }
+    }
+
+    private void enforceVehicleAccess(Equipment equipment) {
+        if (securityScope == null || securityScope.isAdmin()) {
+            return;
+        }
+        AuthenticatedUser user = securityScope.currentUser();
+        if (user == null || user.departmentId() == null || user.departmentId().isBlank()) {
+            return;
+        }
+        UUID userDepartmentId;
+        try {
+            userDepartmentId = UUID.fromString(user.departmentId());
+        } catch (IllegalArgumentException e) {
+            throw RestException.forbidden("Vehicle access denied");
+        }
+        if (!Objects.equals(equipment.getDepartmentId(), userDepartmentId)) {
+            throw RestException.forbidden("Vehicle access denied");
         }
     }
 
@@ -258,7 +288,6 @@ public class VehicleService {
     }
 
     private VehicleDetails findVehicleDetails(UUID equipmentId) {
-        findVehicleEquipment(equipmentId);
         return vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
     }
