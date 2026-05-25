@@ -1,0 +1,97 @@
+actual_cost_review_route_overrides: is_active, is_deleted(default), threshold_hours, created_at, updated_at, actual_cost_id, id, approval_role_code, comment
+actual_costs: amount, is_deleted(default), cost_date, created_at, updated_at, cost_category_id, id, status
+approval_requests: current_step, is_deleted(default), created_at, updated_at, document_id, id, requester_id, document_type, status, title
+approval_steps: is_deleted(default), step_number, created_at, updated_at, approver_id, id, request_id, decision
+audit_logs: is_deleted(default), created_at, id, action, module
+brigade_members: is_active, is_deleted(default), created_at, updated_at, brigade_id, id, user_id, role_code
+brigades: is_active, is_deleted(default), created_at, updated_at, id, code, name
+budget_lines: actual_amount, is_deleted(default), planned_amount, created_at, updated_at, budget_id, cost_category_id, id
+calibration_records: is_deleted(default), performed_at, created_at, updated_at, equipment_id, id, result
+certification_types: is_deleted(default), created_at, updated_at, id, category, code, name
+completion_acts: is_deleted(default), created_at, updated_at, id, work_order_id, act_number
+condition_readings: is_deleted(default), value, created_at, recorded_at, updated_at, equipment_id, id, parameter, severity, unit
+contractor_contracts: is_deleted(default), start_date, created_at, updated_at, contractor_id, id, number, status, subject
+contractor_works: is_deleted(default), created_at, updated_at, contractor_id, id, description, status
+contractors: is_deleted(default), created_at, updated_at, id, code, name, status
+cost_categories: is_deleted(default), created_at, updated_at, id, code, name
+criticality_classes: is_deleted(default), created_at, updated_at, id, code, level, name
+defect_categories: is_deleted(default), created_at, updated_at, id, code, name
+defect_list_lines: estimated_cost, estimated_labor_hours, is_deleted(default), required_quantity, created_at, updated_at, defect_list_id, id, description
+defect_lists: is_deleted(default), total_estimated_cost, total_labor_hours, created_at, updated_at, created_by_id, equipment_id, id, code, status, title
+defect_severities: is_deleted(default), weight, created_at, updated_at, id, code, name
+defects: is_deleted(default), recurrence_count, created_at, detected_at, updated_at, equipment_id, id, code, description, status, title
+departments: is_deleted(default), created_at, updated_at, id, code, name, type
+downtime_events: is_deleted(default), created_at, start_at, updated_at, department_id, equipment_id, id, type
+equipment: is_deleted(default), created_at, updated_at, equipment_type_id, id, category, code, inventory_number, name, status
+equipment_attribute_definitions: is_deleted(default), is_required, sort_order, created_at, updated_at, equipment_type_id, id, attribute_key, data_type, label
+equipment_attribute_option_items: active, is_deleted(default), sort_order, created_at, updated_at, id, option_source_id, label, option_id
+equipment_attribute_option_sources: is_deleted(default), created_at, updated_at, id, code, name
+equipment_attribute_required_criticality: is_deleted(default), created_at, updated_at, attribute_definition_id, criticality_class_id, id
+equipment_attribute_value_history: is_deleted(default), changed_at, created_at, updated_at, attribute_definition_id, equipment_id, id, attribute_key, attribute_label, source
+equipment_attribute_values: is_deleted(default), created_at, updated_at, attribute_definition_id, equipment_id, id
+equipment_kpis: is_deleted(default), period_end, period_start, created_at, updated_at, equipment_id, id
+equipment_meters: current_value, is_active, is_deleted(default), created_at, updated_at, equipment_id, id, meter_type, name, unit
+equipment_nodes: is_deleted(default), created_at, updated_at, equipment_id, id, code, name, node_type
+equipment_passports: is_deleted(default), created_at, updated_at, equipment_id, id
+equipment_spare_parts: is_deleted(default), quantity_per_unit, created_at, updated_at, equipment_id, id, spare_part_id
+equipment_status_history: is_deleted(default), changed_at, created_at, updated_at, equipment_id, id, reason, from_status, source, to_status
+equipment_types: is_deleted(default), created_at, updated_at, id, category, code, name
+escalation_events: is_deleted(default), created_at, raised_at, updated_at, id, entity_id, entity_type, status, trigger_type
+failure_reasons: is_deleted(default), created_at, updated_at, id, code, name
+file_assets: is_deleted(default), created_at, size_bytes, id, file_name, mime_type, original_name, storage_path
+financial_approval_rules: is_active, is_deleted(default), priority, created_at, updated_at, id, code, name, required_role_code
+hr_employees: hire_date, is_active, is_deleted(default), created_at, updated_at, id, first_name, last_name, personnel_number
+hr_timesheet_entries: hours_holiday, hours_night, hours_overtime, hours_regular, is_deleted(default), work_date, created_at, updated_at, employee_id, id, status
+inspection_checkpoints: is_deleted(default), is_mandatory, order_index, created_at, updated_at, id, route_id, check_type, title
+inspection_round_results: is_deleted(default), created_at, updated_at, checkpoint_id, id, round_id, status
+inspection_rounds: alarm_count, findings_count, is_deleted(default), created_at, started_at, updated_at, id, performed_by, route_id, status
+inspection_routes: is_active, is_deleted(default), created_at, updated_at, id, code, frequency, name
+integration_endpoints: is_active, is_deleted(default), sync_defects(default), sync_downtimes(default), sync_production(default), sync_scada(default), sync_work_orders(default), created_at, updated_at, id, url, code, name, system
+integration_sync_logs: is_deleted(default), created_at, started_at, updated_at, endpoint_id, id, direction, module, status
+knowledge_articles: is_deleted(default), view_count, created_at, updated_at, id, code, kind, problem, root_cause, solution, title
+labor_entries: hours, is_deleted(default), work_date, created_at, updated_at, id, work_order_id
+locations: is_deleted(default), created_at, updated_at, id, code, name, type
+maintenance_budgets: is_deleted(default), total_actual, total_planned, year, created_at, updated_at, id, status
+maintenance_kpis: is_deleted(default), period_end, period_start, created_at, updated_at, department_id, id
+maintenance_operations: duration_hours, is_deleted(default), sequence, created_at, updated_at, id, template_id, name
+maintenance_regulation_attribute_conditions: is_deleted(default), created_at, updated_at, id, regulation_id, attribute_key, operator
+maintenance_regulations: is_active, is_deleted(default), normative_labor_hours, periodicity_value, requires_shutdown, created_at, updated_at, equipment_type_id, id, code, maintenance_kind, name, periodicity_unit
+maintenance_templates: is_active, is_deleted(default), normative_labor_hours, created_at, updated_at, equipment_type_id, id, code, maintenance_kind, name
+manufacturers: is_deleted(default), created_at, updated_at, id, code, name
+materials: is_deleted(default), min_stock, created_at, updated_at, id, code, kind, name, unit
+meter_readings: is_deleted(default), value, created_at, read_at, updated_at, equipment_id, id, meter_id, source
+notifications: is_deleted(default), created_at, updated_at, id, recipient_id, channel, message, severity, status, title
+oee_records: availability, good_count, ideal_cycle_seconds, is_deleted(default), oee, performance, planned_production_minutes, quality, run_minutes, total_count, created_at, shift_end, shift_start, updated_at, equipment_id, id
+planned_shutdowns: is_deleted(default), created_at, end_at, start_at, updated_at, department_id, id, name, reason, status
+ppr_plans: end_date, is_deleted(default), start_date, created_at, updated_at, created_by_id, id, code, name, status
+ppr_tasks: is_deleted(default), planned_labor_hours, created_at, due_date, scheduled_end, scheduled_start, updated_at, id, plan_id, regulation_id, code, priority, status, title
+procurement_request_lines: estimated_cost, is_deleted(default), quantity, created_at, updated_at, id, request_id, spare_part_id, unit
+procurement_requests: is_deleted(default), total_estimated_cost, created_at, updated_at, id, number, source, status, title
+rcm_snapshots: consequence, is_deleted(default), mtbf_hours, mttr_hours, probability, risk_score, captured_at, created_at, open_defects, updated_at, equipment_id, id, equipment_code, equipment_name
+reliability_metrics: is_deleted(default), metric_date, created_at, updated_at, equipment_id, id
+repair_campaign_stages: actual_cost, end_date, is_deleted(default), planned_cost, sequence, start_date, created_at, updated_at, campaign_id, id, name, status
+repair_campaigns: end_date, is_deleted(default), start_date, total_actual, total_budget, year, created_at, updated_at, id, code, name, status
+repair_material_usages: is_deleted(default), quantity, created_at, updated_at, id, spare_part_id, warehouse_id, work_order_id
+repair_requests: is_deleted(default), created_at, detected_at, updated_at, department_id, equipment_id, id, reporter_id, criticality, description, number, priority, source, status, title
+reservations: is_deleted(default), quantity, created_at, updated_at, id, warehouse_stock_id, status
+roles: is_deleted(default), is_system, created_at, updated_at, id, code, name
+root_causes: is_deleted(default), created_at, updated_at, id, code, name
+safety_permits: is_deleted(default), created_at, updated_at, id, work_order_id, permit_number, status
+service_classes: is_deleted(default), created_at, updated_at, id, code, name
+sla_rules: is_active, is_deleted(default), threshold_hours, created_at, updated_at, id, code, entity_type, name, trigger_type
+spare_parts: is_deleted(default), min_stock, created_at, updated_at, id, code, kind, name, unit
+stock_movements: is_deleted(default), quantity, created_at, occurred_at, updated_at, id, spare_part_id, warehouse_id, type
+technical_documents: is_deleted(default), created_at, updated_at, equipment_id, id, title, type
+units_of_measurement: is_deleted(default), created_at, updated_at, id, code, name
+user_certifications: is_deleted(default), issued_at, created_at, updated_at, id, user_id, status, type_code
+user_roles: role_id, user_id
+users: is_deleted(default), created_at, updated_at, id, email, full_name, password_hash, status, username
+vehicle_details: current_engine_hours, current_odometer_km, is_deleted(default), created_at, updated_at, equipment_id, id, plate_number, vehicle_type
+warehouse_equipment_items: active, is_deleted(default), created_at, updated_at, equipment_id, id, warehouse_id, status
+warehouse_stocks: is_deleted(default), min_qty, quantity, reserved_qty, created_at, updated_at, id, spare_part_id, warehouse_id
+warehouses: is_active, is_deleted(default), created_at, updated_at, id, code, name
+webhook_event_log: is_deleted(default), created_at, fired_at, updated_at, id, subscription_id, event_code
+webhook_subscriptions: failure_count, is_active, is_deleted(default), created_at, updated_at, id, code, name, target_url, events
+work_executions: is_deleted(default), created_at, started_at, updated_at, id, work_order_id
+work_order_tasks: is_deleted(default), created_at, updated_at, id, work_order_id, status, title
+work_orders: is_deleted(default), created_at, updated_at, created_by_id, department_id, equipment_id, id, number, priority, status, title, type, work_type

@@ -18,6 +18,10 @@ import java.util.Set;
 @Component
 @Order(10)
 @EnableConfigurationProperties(BootstrapProperties.class)
+/**
+ * Production-safe bootstrap: system roles and optional default admin only.
+ * Demo/business scenario data is handled by dedicated demo-seed profile seeders.
+ */
 public class DataBootstrap implements CommandLineRunner {
 
     private static final String ADMIN_ROLE_CODE = "SYSTEM_ADMIN";

@@ -1,9 +1,10 @@
 package com.toir.entity.users;
 
 import com.toir.entity.BaseEntity;
-import com.toir.persistence.StringListJsonConverter;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.List;
 import java.util.UUID;
@@ -37,8 +38,8 @@ public class BrigadeMember extends BaseEntity {
     private Integer grade;
 
     /** Free-form list of skill codes (e.g. ["WELDING", "NDT", "HIGH_ALTITUDE"]). */
-    @Convert(converter = StringListJsonConverter.class)
-    @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "qualifications", columnDefinition = "jsonb")
     private List<String> qualifications;
 
     @Column(name = "is_active", nullable = false)
