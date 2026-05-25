@@ -16,6 +16,7 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.service.users.HrService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,7 @@ public class DepartmentService {
     private final AuditBuilderService auditBuilderService;
     private final EmployeeRepository employeeRepository;
     private final BrigadeRepository brigadeRepository;
+    private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
 
     @Transactional(readOnly = true)
     public List<DepartmentDto> findAll(DepartmentType type, String search) {
@@ -81,13 +83,7 @@ public class DepartmentService {
 
     @Transactional
     public DepartmentDto create(DepartmentRequest request) {
-        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Department code already exists: " + request.code());
-        }
-        Department entity = new Department();
-        apply(entity, request);
-        entity.setDeleted(false);
-        Department created = repository.save(entity);
+        Department created = saveWithGeneratedCode(request);
 
         auditBuilderService.log(
                 "department",
@@ -148,11 +144,91 @@ public class DepartmentService {
     }
 
     private void apply(Department entity, DepartmentRequest request) {
-        entity.setCode(request.code());
         entity.setName(request.name());
         entity.setType(request.type());
         entity.setParentId(request.parentId());
         entity.setDescription(request.description());
+    }
+
+    private Department saveWithGeneratedCode(DepartmentRequest request) {
+        String prefix = codePrefix(request.type());
+        long sequence = nextSequence(prefix);
+
+        for (int attempt = 0; attempt < MAX_CODE_GENERATION_ATTEMPTS; attempt++) {
+            Department entity = new Department();
+            entity.setCode(formatCode(prefix, sequence + attempt));
+            apply(entity, request);
+            entity.setDeleted(false);
+
+            try {
+                return repository.saveAndFlush(entity);
+            } catch (DataIntegrityViolationException ex) {
+                if (isCodeConflict(ex)) {
+                    continue;
+                }
+                throw ex;
+            }
+        }
+
+        throw RestException.conflict("Could not generate unique department code");
+    }
+
+    private long nextSequence(String prefix) {
+        String codeStart = prefix + "-";
+        return repository.findCodesByPrefix(prefix).stream()
+                .filter(Objects::nonNull)
+                .filter(code -> code.startsWith(codeStart))
+                .map(code -> code.substring(codeStart.length()))
+                .filter(this::isNumeric)
+                .mapToLong(Long::parseLong)
+                .max()
+                .orElse(0L) + 1;
+    }
+
+    private boolean isNumeric(String value) {
+        if (value.isBlank()) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            if (!Character.isDigit(value.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String formatCode(String prefix, long sequence) {
+        return "%s-%03d".formatted(prefix, sequence);
+    }
+
+    private String codePrefix(DepartmentType type) {
+        if (type == null) {
+            return "DEP";
+        }
+        return switch (type) {
+            case ENTERPRISE -> "ENT";
+            case SITE -> "SITE";
+            case WORKSHOP -> "WS";
+            case SECTION -> "SEC";
+            case AREA -> "AREA";
+            case LINE -> "LINE";
+            case SERVICE -> "SVC";
+            case ADMINISTRATION -> "ADM";
+        };
+    }
+
+    private boolean isCodeConflict(DataIntegrityViolationException ex) {
+        Throwable root = ex.getMostSpecificCause();
+        String message = root != null ? root.getMessage() : ex.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("departments_code_key")
+                || normalized.contains("ukl7tivi5261wxdnvo6cct9gg6t")
+                || (normalized.contains("departments")
+                && normalized.contains("duplicate")
+                && normalized.contains("code"));
     }
 
     private String normalizeSearch(String search) {

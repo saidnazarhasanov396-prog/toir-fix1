@@ -489,7 +489,6 @@ class RbacReferenceDataSecurityTest {
     private String departmentPayload() {
         return """
                 {
-                  "code": "DEP-001",
                   "name": "Mechanical",
                   "type": "WORKSHOP"
                 }
