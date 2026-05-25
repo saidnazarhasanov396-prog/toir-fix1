@@ -321,6 +321,7 @@ class RbacRepairRequestSecurityTest {
                   "number": "RR-2026-0001",
                   "title": "Pump vibration",
                   "description": "Excess vibration on pump",
+                  "defectId": "%s",
                   "equipmentId": "%s",
                   "departmentId": "%s",
                   "reporterId": "%s",
@@ -328,7 +329,7 @@ class RbacRepairRequestSecurityTest {
                   "criticality": "HIGH",
                   "source": "MANUAL"
                 }
-                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
     }
 
     private static RepairRequestDto repairRequestDto(UUID requestId) {

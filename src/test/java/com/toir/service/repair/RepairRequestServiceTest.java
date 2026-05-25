@@ -3,11 +3,15 @@ package com.toir.service.repair;
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.repairrequest.CloseRequestRequest;
+import com.toir.dto.repairrequest.RepairRequestRequest;
+import com.toir.dto.triad.DefectBriefDto;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.enums.CriticalityLevel;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.PriorityLevel;
+import com.toir.enums.RequestSource;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -84,6 +88,132 @@ class RepairRequestServiceTest {
 
     @InjectMocks
     RepairRequestService service;
+
+    @Test
+    void createLinksRepairRequestToDefect() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequest(defectId, equipmentId);
+        Defect defect = defect(defectId, equipmentId);
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        when(defectRepository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubNameLookups(repairRequestForCreate(savedRequestId, request));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of(defect));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        RepairRequestDto result = service.create(request);
+
+        assertThat(result.id()).isEqualTo(savedRequestId);
+        assertThat(result.linkedDefects()).hasSize(1);
+        assertThat(result.linkedDefects().getFirst().id()).isEqualTo(defectId);
+        assertThat(defect.getRepairRequestId()).isEqualTo(savedRequestId);
+        verify(defectRepository).save(defect);
+    }
+
+    @Test
+    void createWithDefectIdDoesNotLinkAnotherDefect() {
+        UUID requestedDefectId = UUID.randomUUID();
+        UUID otherDefectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequest(requestedDefectId, equipmentId);
+        Defect requestedDefect = defect(requestedDefectId, equipmentId);
+        Defect otherDefect = defect(otherDefectId, equipmentId);
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(defectRepository.findByIdAndIsDeletedFalse(requestedDefectId)).thenReturn(Optional.of(requestedDefect));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        when(defectRepository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubNameLookups(repairRequestForCreate(savedRequestId, request));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of(requestedDefect));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        RepairRequestDto result = service.create(request);
+
+        assertThat(result.linkedDefects())
+                .extracting(DefectBriefDto::id)
+                .containsExactly(requestedDefectId)
+                .doesNotContain(otherDefectId);
+        assertThat(requestedDefect.getRepairRequestId()).isEqualTo(savedRequestId);
+        assertThat(otherDefect.getRepairRequestId()).isNull();
+        verify(defectRepository).findByIdAndIsDeletedFalse(requestedDefectId);
+        verify(defectRepository, never()).findByIdAndIsDeletedFalse(otherDefectId);
+    }
+
+    @Test
+    void createRejectsUnknownDefect() {
+        UUID defectId = UUID.randomUUID();
+        RepairRequestRequest request = createRequest(defectId, UUID.randomUUID());
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(request))
+                .hasMessageContaining("Defect not found");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsDefectForDifferentEquipment() {
+        UUID defectId = UUID.randomUUID();
+        RepairRequestRequest request = createRequest(defectId, UUID.randomUUID());
+        Defect defect = defect(defectId, UUID.randomUUID());
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+
+        assertThatThrownBy(() -> service.create(request))
+                .hasMessageContaining("different equipment");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsTerminalDefect() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        RepairRequestRequest request = createRequest(defectId, equipmentId);
+        Defect defect = defect(defectId, equipmentId);
+        defect.setStatus(DefectStatus.CLOSED);
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+
+        assertThatThrownBy(() -> service.create(request))
+                .hasMessageContaining("terminal defect");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsAlreadyLinkedDefect() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        RepairRequestRequest request = createRequest(defectId, equipmentId);
+        Defect defect = defect(defectId, equipmentId);
+        defect.setRepairRequestId(UUID.randomUUID());
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+
+        assertThatThrownBy(() -> service.create(request))
+                .hasMessageContaining("already belongs to a repair request");
+        verify(repository, never()).save(any());
+    }
 
     @Test
     void findAllFiltersByEquipmentId() {
@@ -751,6 +881,44 @@ class RepairRequestServiceTest {
         entity.setReporterId(UUID.randomUUID());
         entity.setStatus(RequestStatus.OPEN);
         return entity;
+    }
+
+    private RepairRequest repairRequestForCreate(UUID id, RepairRequestRequest request) {
+        RepairRequest entity = new RepairRequest();
+        entity.setId(id);
+        entity.setEquipmentId(request.equipmentId());
+        entity.setDepartmentId(request.departmentId());
+        entity.setReporterId(request.reporterId());
+        return entity;
+    }
+
+    private RepairRequestRequest createRequest(UUID defectId, UUID equipmentId) {
+        return new RepairRequestRequest(
+                "RR-2026-0001",
+                "Pump vibration",
+                "Excess vibration on pump",
+                defectId,
+                equipmentId,
+                UUID.randomUUID(),
+                null,
+                UUID.randomUUID(),
+                PriorityLevel.HIGH,
+                CriticalityLevel.HIGH,
+                RequestSource.MANUAL,
+                null
+        );
+    }
+
+    private Defect defect(UUID defectId, UUID equipmentId) {
+        Defect defect = new Defect();
+        defect.setId(defectId);
+        defect.setCode("DEF-2026-1001");
+        defect.setTitle("Leak");
+        defect.setDescription("Pump leak");
+        defect.setEquipmentId(equipmentId);
+        defect.setStatus(DefectStatus.OPEN);
+        defect.setSeverity("HIGH");
+        return defect;
     }
 
     private Defect defect(UUID repairRequestId) {

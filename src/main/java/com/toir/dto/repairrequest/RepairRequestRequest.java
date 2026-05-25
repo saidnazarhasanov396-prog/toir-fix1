@@ -13,6 +13,7 @@ public record RepairRequestRequest(
         @NotBlank String number,
         @NotBlank String title,
         @NotBlank String description,
+        @NotNull UUID defectId,
         @NotNull UUID equipmentId,
         @NotNull UUID departmentId,
         UUID locationId,
