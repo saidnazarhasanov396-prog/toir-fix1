@@ -56,6 +56,7 @@ public class EquipmentManualAttributeController {
             @PathVariable UUID equipmentId,
             @Valid @RequestBody EquipmentManualAttributeRequest request
     ) {
+        service.assertWriteEnabled();
         assertCanAccessEquipment(equipmentOrThrow(equipmentId));
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(equipmentId, request));
     }
@@ -66,6 +67,7 @@ public class EquipmentManualAttributeController {
             @PathVariable UUID equipmentId,
             @Valid @RequestBody BulkEquipmentManualAttributeRequest request
     ) {
+        service.assertWriteEnabled();
         assertCanAccessEquipment(equipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.replaceAll(equipmentId, request));
     }
@@ -76,6 +78,7 @@ public class EquipmentManualAttributeController {
             @PathVariable UUID attributeId,
             @Valid @RequestBody EquipmentManualAttributeRequest request
     ) {
+        service.assertWriteEnabled();
         EquipmentManualAttribute attribute = service.findActiveAttribute(attributeId);
         assertCanAccessEquipment(equipmentOrThrow(attribute.getEquipmentId()));
         return ResponseEntity.ok(service.update(attributeId, request));
@@ -85,6 +88,7 @@ public class EquipmentManualAttributeController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<Void> deleteEquipmentAttribute(@PathVariable UUID attributeId) {
+        service.assertWriteEnabled();
         EquipmentManualAttribute attribute = service.findActiveAttribute(attributeId);
         assertCanAccessEquipment(equipmentOrThrow(attribute.getEquipmentId()));
         service.delete(attributeId);
@@ -104,6 +108,7 @@ public class EquipmentManualAttributeController {
             @PathVariable UUID equipmentId,
             @Valid @RequestBody EquipmentManualAttributeRequest request
     ) {
+        service.assertWriteEnabled();
         assertVehicle(equipmentId);
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(equipmentId, request));
     }
@@ -114,6 +119,7 @@ public class EquipmentManualAttributeController {
             @PathVariable UUID equipmentId,
             @Valid @RequestBody BulkEquipmentManualAttributeRequest request
     ) {
+        service.assertWriteEnabled();
         assertVehicle(equipmentId);
         return ResponseEntity.ok(service.replaceAll(equipmentId, request));
     }
@@ -124,6 +130,7 @@ public class EquipmentManualAttributeController {
             @PathVariable UUID attributeId,
             @Valid @RequestBody EquipmentManualAttributeRequest request
     ) {
+        service.assertWriteEnabled();
         EquipmentManualAttribute attribute = service.findActiveAttribute(attributeId);
         assertVehicle(attribute.getEquipmentId());
         return ResponseEntity.ok(service.update(attributeId, request));
@@ -133,6 +140,7 @@ public class EquipmentManualAttributeController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<Void> deleteVehicleAttribute(@PathVariable UUID attributeId) {
+        service.assertWriteEnabled();
         EquipmentManualAttribute attribute = service.findActiveAttribute(attributeId);
         assertVehicle(attribute.getEquipmentId());
         service.delete(attributeId);

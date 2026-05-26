@@ -7,6 +7,7 @@ import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.equipment.EquipmentUpdateRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
+import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
 import com.toir.entity.Department;
@@ -1653,6 +1654,39 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void equipmentCreateStillAcceptsOfficialAttributes() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequest(
+                null,
+                "INV-OFFICIAL-ATTR",
+                departmentId,
+                null,
+                10_000L,
+                List.of(new EquipmentAttributeValueRequest(null, "motor_power", null, 75.0, null, null, null, null))
+        );
+        stubCreateFlow("INV-OFFICIAL-ATTR");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
+
+        service.create(request);
+
+        verify(equipmentAttributeService).upsertValues(any(Equipment.class), eq(request.attributes()));
+        verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
+    }
+
+    @Test
+    void equipmentCreateRejectsTemporarilyDisabledManualAttributes() {
+        EquipmentCreateRequest request = createRequestWithManualAttributes(List.of(
+                new EquipmentManualAttributeRequest("legacy_key", "legacy value")
+        ));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Manual attributes are temporarily disabled. Use official equipment attributes."));
+        verify(repository, never()).save(any());
+        verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
+    }
+
+    @Test
     void updateWithAttributesPersistsDynamicAttributeChanges() {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment("EQ-UPDATE-ATTR");
@@ -1686,6 +1720,57 @@ class EquipmentServiceTest {
         service.update(equipmentId, request);
 
         verify(equipmentAttributeService).upsertValues(any(Equipment.class), eq(request.attributes()));
+    }
+
+    @Test
+    void equipmentUpdateStillAcceptsOfficialAttributes() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-UPDATE-OFFICIAL-ATTR");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+
+        EquipmentUpdateRequest request = new EquipmentUpdateRequest(
+                null,
+                "Pump P-101 Updated",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(new EquipmentAttributeValueRequest(null, "motor_power", null, 90.0, null, null, null, null))
+        );
+
+        service.update(equipmentId, request);
+
+        verify(equipmentAttributeService).upsertValues(any(Equipment.class), eq(request.attributes()));
+        verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
+    }
+
+    @Test
+    void equipmentUpdateRejectsTemporarilyDisabledManualAttributes() {
+        UUID equipmentId = UUID.randomUUID();
+        EquipmentUpdateRequest request = updateRequestWithManualAttributes(List.of(
+                new EquipmentManualAttributeRequest("legacy_key", "legacy value")
+        ));
+
+        assertThatThrownBy(() -> service.update(equipmentId, request))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Manual attributes are temporarily disabled. Use official equipment attributes."));
+        verify(repository, never()).save(any());
+        verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
     }
 
     @Test
@@ -1918,6 +2003,33 @@ class EquipmentServiceTest {
         );
     }
 
+    private EquipmentCreateRequest createRequestWithManualAttributes(List<EquipmentManualAttributeRequest> manualAttributes) {
+        return new EquipmentCreateRequest(
+                null,
+                "Compressor",
+                "INV-MANUAL-DISABLED",
+                "TN-1",
+                "SN-1",
+                "Model X",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                "ACME",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                "test",
+                10_000L,
+                null,
+                manualAttributes
+        );
+    }
+
     private String stubCreateFlow(String inventoryNumber) {
         int year = Year.now().getValue();
         String expectedCode = "EQ-" + year + "-0020";
@@ -1984,6 +2096,32 @@ class EquipmentServiceTest {
                 null,
                 null,
                 null
+        );
+    }
+
+    private EquipmentUpdateRequest updateRequestWithManualAttributes(List<EquipmentManualAttributeRequest> manualAttributes) {
+        return new EquipmentUpdateRequest(
+                null,
+                "Compressor Updated",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                manualAttributes
         );
     }
 
