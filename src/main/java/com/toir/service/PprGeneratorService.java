@@ -26,6 +26,7 @@ import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,10 +68,16 @@ public class PprGeneratorService {
         if (planStart == null || planEnd == null) {
             throw RestException.badRequest("PPR plan date range is required before generating tasks");
         }
+        if (plan.getScheduleType() == PprScheduleType.OPERATING_HOURS) {
+            throw RestException.badRequest("Operating-hours PPR generation is not implemented yet");
+        }
         YearMonth planMonth = YearMonth.from(planStart);
+        TargetContext targetContext = targetContext(plan);
 
         List<MaintenanceRegulation> regulations = regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(MaintenanceRegulation::isActive)
+                .filter(regulation -> isAllowedForPprType(plan, regulation))
+                .filter(regulation -> isAllowedForSchedule(plan, regulation, planMonth))
                 .toList();
         Map<UUID, List<MaintenanceRegulationAttributeCondition>> conditionsByRegulationId =
                 loadConditionsByRegulationId(regulations);
@@ -80,9 +87,14 @@ public class PprGeneratorService {
                 .toList();
         AttributeIndex attributeIndex = loadAttributeIndex(allEquipment);
 
-        java.util.Set<String> existingCodes = taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+        List<PprTask> existingTasks = taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        Set<String> existingCodes = existingTasks.stream()
                 .map(PprTask::getCode)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
+        Set<TaskSignature> existingSignatures = existingTasks.stream()
+                .map(PprGeneratorService::taskSignature)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(HashSet::new));
 
         int created = 0;
         int skipped = 0;
@@ -90,7 +102,7 @@ public class PprGeneratorService {
         for (MaintenanceRegulation reg : regulations) {
             // only generate if this plan's month aligns with periodicity:
             // DAY — always, WEEK/MONTH — always, QUARTER — if month ∈ {1,4,7,10}, YEAR/HALF — if month == 1
-            if (!shouldGenerate(reg, planMonth)) {
+            if (!shouldGenerate(plan, reg, planMonth)) {
                 continue;
             }
 
@@ -105,6 +117,9 @@ public class PprGeneratorService {
                             && !plan.getDepartmentId().equals(eq.getDepartmentId())) {
                         continue;
                     }
+                    if (!targetContext.matches(eq)) {
+                        continue;
+                    }
                     if (!matchesConditions(eq, conditions, attributeIndex)) {
                         continue;
                     }
@@ -115,7 +130,8 @@ public class PprGeneratorService {
             int seq = 1;
             for (Equipment eq : matching) {
                 String code = String.format("PT-%s-%02d-%s-%d", reg.getCode(), planMonth.getMonthValue(), eq.getCode(), seq++);
-                if (existingCodes.contains(code)) {
+                TaskSignature signature = new TaskSignature(plan.getId(), reg.getId(), eq.getId());
+                if (existingCodes.contains(code) || existingSignatures.contains(signature)) {
                     skipped++;
                     continue;
                 }
@@ -127,8 +143,7 @@ public class PprGeneratorService {
                 task.setEquipmentId(eq.getId());
                 task.setTitle(reg.getName() + " — " + eq.getCode());
                 task.setScheduledStart(planStart.atTime(LocalTime.of(9, 0)));
-                task.setScheduledEnd(planStart.plusDays(Math.max(1, (int) Math.ceil(reg.getNormativeLaborHours() / 8)))
-                        .atTime(LocalTime.of(18, 0)));
+                task.setScheduledEnd(resolveScheduledEnd(plan, reg, planStart, planEnd));
                 task.setDueDate(planEnd.atTime(LocalTime.of(18, 0)));
                 task.setPlannedLaborHours(reg.getNormativeLaborHours());
                 task.setPriority(PriorityLevel.MEDIUM);
@@ -148,6 +163,8 @@ public class PprGeneratorService {
                 );
 
                 created++;
+                existingCodes.add(code);
+                existingSignatures.add(signature);
             }
         }
 
@@ -170,7 +187,10 @@ public class PprGeneratorService {
         return new GenerationResult(plan.getId(), created, skipped);
     }
 
-    private boolean shouldGenerate(MaintenanceRegulation reg, YearMonth planMonth) {
+    private boolean shouldGenerate(PprPlan plan, MaintenanceRegulation reg, YearMonth planMonth) {
+        if (plan.getScheduleType() == PprScheduleType.ONE_TIME) {
+            return true;
+        }
         PeriodicityUnit unit = reg.getPeriodicityUnit();
         int value = reg.getPeriodicityValue();
         int month = planMonth.getMonthValue();
@@ -180,6 +200,90 @@ public class PprGeneratorService {
             case YEAR -> month == 1;
             case HOUR -> true; // hour-based — run every month, operator decides
         };
+    }
+
+    private boolean isAllowedForPprType(PprPlan plan, MaintenanceRegulation regulation) {
+        if (plan.getPprType() == null) {
+            return true;
+        }
+        MaintenanceKind kind = regulation.getMaintenanceKind();
+        return switch (plan.getPprType()) {
+            case PREVENTIVE_MAINTENANCE -> EnumSet.of(
+                    MaintenanceKind.PREVENTIVE,
+                    MaintenanceKind.INSPECTION,
+                    MaintenanceKind.DIAGNOSTIC,
+                    MaintenanceKind.CONDITION_BASED,
+                    MaintenanceKind.SEASONAL,
+                    MaintenanceKind.METROLOGICAL,
+                    MaintenanceKind.ELECTRICAL,
+                    MaintenanceKind.INSTRUMENTATION
+            ).contains(kind);
+            case PLANNED_REPAIR -> EnumSet.of(
+                    MaintenanceKind.CURRENT_REPAIR,
+                    MaintenanceKind.MEDIUM_REPAIR
+            ).contains(kind);
+            case CAPITAL_REPAIR -> kind == MaintenanceKind.OVERHAUL;
+        };
+    }
+
+    private boolean isAllowedForSchedule(PprPlan plan,
+                                         MaintenanceRegulation regulation,
+                                         YearMonth planMonth) {
+        PprScheduleType scheduleType = plan.getScheduleType();
+        if (scheduleType == null) {
+            return true;
+        }
+        if (scheduleType == PprScheduleType.ONE_TIME) {
+            return true;
+        }
+        if (scheduleType == PprScheduleType.CALENDAR && plan.getFrequency() != null) {
+            return regulation.getPeriodicityUnit() == periodicityUnit(plan.getFrequency());
+        }
+        return shouldGenerate(plan, regulation, planMonth);
+    }
+
+    private PeriodicityUnit periodicityUnit(PprFrequency frequency) {
+        return switch (frequency) {
+            case WEEKLY -> PeriodicityUnit.WEEK;
+            case MONTHLY -> PeriodicityUnit.MONTH;
+            case QUARTERLY -> PeriodicityUnit.QUARTER;
+            case YEARLY -> PeriodicityUnit.YEAR;
+        };
+    }
+
+    private LocalTime scheduledEndTime() {
+        return LocalTime.of(18, 0);
+    }
+
+    private java.time.LocalDateTime resolveScheduledEnd(PprPlan plan,
+                                                        MaintenanceRegulation regulation,
+                                                        LocalDate planStart,
+                                                        LocalDate planEnd) {
+        if (plan.getScheduleType() == PprScheduleType.ONE_TIME) {
+            return planEnd.atTime(scheduledEndTime());
+        }
+        return planStart.plusDays(Math.max(1, (int) Math.ceil(regulation.getNormativeLaborHours() / 8)))
+                .atTime(scheduledEndTime());
+    }
+
+    private TargetContext targetContext(PprPlan plan) {
+        if (plan.getTargets() == null || plan.getTargets().isEmpty()) {
+            return TargetContext.empty();
+        }
+        Set<UUID> equipmentIds = new HashSet<>();
+        Set<UUID> equipmentTypeIds = new HashSet<>();
+        plan.getTargets().stream()
+                .filter(Objects::nonNull)
+                .filter(target -> !target.isDeleted())
+                .forEach(target -> {
+                    if (target.getTargetType() == PprTargetType.EQUIPMENT && target.getEquipmentId() != null) {
+                        equipmentIds.add(target.getEquipmentId());
+                    }
+                    if (target.getTargetType() == PprTargetType.EQUIPMENT_TYPE && target.getEquipmentTypeId() != null) {
+                        equipmentTypeIds.add(target.getEquipmentTypeId());
+                    }
+                });
+        return new TargetContext(equipmentIds, equipmentTypeIds);
     }
 
     private Map<UUID, List<MaintenanceRegulationAttributeCondition>> loadConditionsByRegulationId(
@@ -339,6 +443,33 @@ public class PprGeneratorService {
             Map<UUID, Map<String, EquipmentAttributeDefinition>> definitionsByTypeId,
             Map<UUID, Map<UUID, EquipmentAttributeValue>> valuesByEquipmentId
     ) {}
+
+    private record TargetContext(Set<UUID> equipmentIds, Set<UUID> equipmentTypeIds) {
+        static TargetContext empty() {
+            return new TargetContext(Set.of(), Set.of());
+        }
+
+        boolean hasTargets() {
+            return !equipmentIds.isEmpty() || !equipmentTypeIds.isEmpty();
+        }
+
+        boolean matches(Equipment equipment) {
+            if (!hasTargets()) {
+                return true;
+            }
+            return equipmentIds.contains(equipment.getId())
+                    || equipmentTypeIds.contains(equipment.getEquipmentTypeId());
+        }
+    }
+
+    private record TaskSignature(UUID planId, UUID regulationId, UUID equipmentId) {}
+
+    private static TaskSignature taskSignature(PprTask task) {
+        if (task == null || task.getPlan() == null || task.getPlan().getId() == null || task.getRegulationId() == null) {
+            return null;
+        }
+        return new TaskSignature(task.getPlan().getId(), task.getRegulationId(), task.getEquipmentId());
+    }
 
     public record GenerationResult(UUID planId, int created, int skipped) {}
 }
