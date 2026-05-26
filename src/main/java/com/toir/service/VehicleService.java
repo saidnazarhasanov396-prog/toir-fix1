@@ -26,6 +26,7 @@ import com.toir.repository.projection.VehicleStatsProjection;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentAttributeService;
+import com.toir.service.equipment.EquipmentManualAttributeService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.file_management.FileService;
 import com.toir.util.AuditBuilderService;
@@ -55,6 +56,7 @@ public class VehicleService {
     private final UploadedFileRepository uploadedFileRepository;
     private final SecurityScope securityScope;
     private final EquipmentAttributeService equipmentAttributeService;
+    private final EquipmentManualAttributeService equipmentManualAttributeService;
     private final VehicleDocumentRepository vehicleDocumentRepository;
 
     @Transactional(readOnly = true)
@@ -113,7 +115,12 @@ public class VehicleService {
         }
         VehicleDetails details = vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
-        return VehicleDetailDto.from(equipment, details, vehicleDocumentRepository.findAllByEquipmentId(equipmentId));
+        return VehicleDetailDto.from(
+                equipment,
+                details,
+                vehicleDocumentRepository.findAllByEquipmentId(equipmentId),
+                equipmentManualAttributeService == null ? List.of() : equipmentManualAttributeService.list(equipmentId)
+        );
     }
 
     @Transactional
@@ -133,6 +140,12 @@ public class VehicleService {
                     request.attributes() == null ? List.of() : request.attributes()
             );
         }
+        if (equipmentManualAttributeService != null && request.manualAttributes() != null) {
+            equipmentManualAttributeService.replaceAll(
+                    savedEquipment.getId(),
+                    new com.toir.dto.equipmentmanualattribute.BulkEquipmentManualAttributeRequest(request.manualAttributes())
+            );
+        }
 
         auditBuilderService.log(
                 "vehicle",
@@ -144,7 +157,12 @@ public class VehicleService {
                 Map.of(equipment, savedDetails)
         );
 
-        return VehicleDetailDto.from(equipmentService.findById(savedEquipment.getId()), savedDetails);
+        return VehicleDetailDto.from(
+                equipmentService.findById(savedEquipment.getId()),
+                savedDetails,
+                List.of(),
+                equipmentManualAttributeService == null ? List.of() : equipmentManualAttributeService.list(savedEquipment.getId())
+        );
     }
 
     @Transactional
@@ -166,6 +184,12 @@ public class VehicleService {
         if (equipmentAttributeService != null && request.attributes() != null) {
             equipmentAttributeService.upsertValues(newEquipment, request.attributes());
         }
+        if (equipmentManualAttributeService != null && request.manualAttributes() != null) {
+            equipmentManualAttributeService.replaceAll(
+                    newEquipment.getId(),
+                    new com.toir.dto.equipmentmanualattribute.BulkEquipmentManualAttributeRequest(request.manualAttributes())
+            );
+        }
 
         auditBuilderService.log(
                 "vehicle",
@@ -177,7 +201,12 @@ public class VehicleService {
                 Map.of(newEquipment, newDetails)
         );
 
-        return VehicleDetailDto.from(equipmentService.findById(equipmentId), details);
+        return VehicleDetailDto.from(
+                equipmentService.findById(equipmentId),
+                details,
+                vehicleDocumentRepository.findAllByEquipmentId(equipmentId),
+                equipmentManualAttributeService == null ? List.of() : equipmentManualAttributeService.list(equipmentId)
+        );
     }
 
     @Transactional

@@ -3,6 +3,7 @@ package com.toir.dto.equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
+import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeRequest;
 import jakarta.validation.constraints.Positive;
 
 import java.time.LocalDate;
@@ -29,7 +30,8 @@ public record EquipmentUpdateRequest(
         LocalDate warrantyUntil,
         String description,
         @Positive Long averageOperatingLifeHours,
-        List<EquipmentAttributeValueRequest> attributes
+        List<EquipmentAttributeValueRequest> attributes,
+        List<EquipmentManualAttributeRequest> manualAttributes
 ) {
         public EquipmentUpdateRequest(
                 String code,
@@ -54,7 +56,7 @@ public record EquipmentUpdateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
-                        status, category, commissionedAt, warrantyUntil, description, null, attributes);
+                        status, category, commissionedAt, warrantyUntil, description, null, attributes, null);
         }
 
         public EquipmentUpdateRequest(
@@ -80,7 +82,7 @@ public record EquipmentUpdateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
-                        status, category, commissionedAt, warrantyUntil, description, averageOperatingLifeHours, null);
+                        status, category, commissionedAt, warrantyUntil, description, averageOperatingLifeHours, null, null);
         }
 
         public EquipmentUpdateRequest(
@@ -105,6 +107,6 @@ public record EquipmentUpdateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
-                        status, category, commissionedAt, warrantyUntil, description, null, null);
+                        status, category, commissionedAt, warrantyUntil, description, null, null, null);
         }
 }

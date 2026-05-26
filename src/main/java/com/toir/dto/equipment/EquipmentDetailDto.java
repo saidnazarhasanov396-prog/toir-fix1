@@ -5,6 +5,7 @@ import com.toir.enums.DowntimeType;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
+import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeDto;
 
 import java.time.Instant;
 import java.util.List;
@@ -17,8 +18,20 @@ public record EquipmentDetailDto(
         List<DefectShortDto> defects,
         List<WorkOrderShortDto> workOrders,
         List<DowntimeEventShortDto> downtimeEvents,
-        List<EquipmentAttributeValueDto> attributes
+        List<EquipmentAttributeValueDto> attributes,
+        List<EquipmentManualAttributeDto> manualAttributes
 ) {
+    public EquipmentDetailDto(
+            EquipmentDto equipment,
+            List<RepairRequestShortDto> repairRequests,
+            List<DefectShortDto> defects,
+            List<WorkOrderShortDto> workOrders,
+            List<DowntimeEventShortDto> downtimeEvents,
+            List<EquipmentAttributeValueDto> attributes
+    ) {
+        this(equipment, repairRequests, defects, workOrders, downtimeEvents, attributes, List.of());
+    }
+
     public EquipmentDetailDto(
             EquipmentDto equipment,
             List<RepairRequestShortDto> repairRequests,
@@ -26,7 +39,7 @@ public record EquipmentDetailDto(
             List<WorkOrderShortDto> workOrders,
             List<DowntimeEventShortDto> downtimeEvents
     ) {
-        this(equipment, repairRequests, defects, workOrders, downtimeEvents, List.of());
+        this(equipment, repairRequests, defects, workOrders, downtimeEvents, List.of(), List.of());
     }
 
     public EquipmentDetailDto {
@@ -36,6 +49,7 @@ public record EquipmentDetailDto(
         workOrders = workOrders == null ? List.of() : List.copyOf(workOrders);
         downtimeEvents = downtimeEvents == null ? List.of() : List.copyOf(downtimeEvents);
         attributes = attributes == null ? List.of() : List.copyOf(attributes);
+        manualAttributes = manualAttributes == null ? List.of() : List.copyOf(manualAttributes);
     }
 
     public record RepairRequestShortDto(

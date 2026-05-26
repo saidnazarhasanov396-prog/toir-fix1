@@ -1,6 +1,7 @@
 package com.toir.dto.vehicle;
 
 import com.toir.dto.equipment.EquipmentDto;
+import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeDto;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.VehicleDocument;
 import com.toir.entity.equipment.VehicleDetails;
@@ -12,8 +13,13 @@ import java.util.UUID;
 
 public record VehicleDetailDto(
         EquipmentDto equipment,
-        Details vehicleDetails
+        Details vehicleDetails,
+        List<EquipmentManualAttributeDto> manualAttributes
 ) {
+    public VehicleDetailDto(EquipmentDto equipment, Details vehicleDetails) {
+        this(equipment, vehicleDetails, List.of());
+    }
+
     public record Details(
             UUID id,
             String plateNumber,
@@ -66,10 +72,19 @@ public record VehicleDetailDto(
     }
 
     public static VehicleDetailDto from(EquipmentDto equipment, VehicleDetails details) {
-        return from(equipment, details, List.of());
+        return from(equipment, details, List.of(), List.of());
     }
 
     public static VehicleDetailDto from(EquipmentDto equipment, VehicleDetails details, List<VehicleDocument> documents) {
+        return from(equipment, details, documents, List.of());
+    }
+
+    public static VehicleDetailDto from(
+            EquipmentDto equipment,
+            VehicleDetails details,
+            List<VehicleDocument> documents,
+            List<EquipmentManualAttributeDto> manualAttributes
+    ) {
         List<VehicleDocumentDto> documentDtos = documents == null ? List.of() : documents.stream()
                 .map(document -> VehicleDocumentDto.from(details.getEquipmentId(), document))
                 .filter(dto -> dto != null)
@@ -104,7 +119,8 @@ public record VehicleDetailDto(
                         details.getGpsDeviceId(),
                         legacyDocument,
                         documentDtos
-                )
+                ),
+                manualAttributes == null ? List.of() : List.copyOf(manualAttributes)
         );
     }
 
