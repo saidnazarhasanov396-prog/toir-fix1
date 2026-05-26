@@ -29,6 +29,9 @@ public class MaintenanceRegulation extends BaseEntity {
     @Column(name = "equipment_type_id", nullable = false)
     private UUID equipmentTypeId;
 
+    @Column(name = "template_id")
+    private UUID templateId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "maintenance_kind", nullable = false)
     private MaintenanceKind maintenanceKind;

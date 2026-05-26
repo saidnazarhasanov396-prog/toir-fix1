@@ -6,6 +6,7 @@ import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditio
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.MaintenanceRegulationConditionOperator;
@@ -15,6 +16,7 @@ import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +42,7 @@ public class MaintenanceRegulationService {
     private final MaintenanceRegulationAttributeConditionRepository conditionRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
+    private final MaintenanceTemplateRepository templateRepository;
     private final AuditBuilderService auditBuilderService;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
     private static final String CLIENT_CODE_REJECT_MESSAGE =
@@ -137,6 +140,7 @@ public class MaintenanceRegulationService {
         entity.setDescription(request.description());
         entity.setEquipmentTypeId(request.equipmentTypeId());
         entity.setMaintenanceKind(request.maintenanceKind());
+        entity.setTemplateId(validatedTemplateId(request));
         entity.setNormativeLaborHours(request.normativeLaborHours());
         if (request.active() != null) entity.setActive(request.active());
         entity.setPeriodicityUnit(request.periodicityUnit());
@@ -276,13 +280,38 @@ public class MaintenanceRegulationService {
     private MaintenanceRegulationDto toDto(MaintenanceRegulation r) {
         if (r == null) return null;
         List<MaintenanceRegulationAttributeConditionDto> conditions = conditionDtos(r.getId());
-        if (r.getEquipmentTypeId() == null) {
-            return MaintenanceRegulationDto.from(r, null, conditions);
-        }
-        String equipmentTypeName = equipmentTypeRepository.findByIdAndIsDeletedFalse(r.getEquipmentTypeId())
+        String equipmentTypeName = r.getEquipmentTypeId() == null ? null : equipmentTypeRepository.findByIdAndIsDeletedFalse(r.getEquipmentTypeId())
                 .map(EquipmentType::getName)
                 .orElse(null);
-        return MaintenanceRegulationDto.from(r, equipmentTypeName, conditions);
+        MaintenanceTemplate template = r.getTemplateId() == null ? null : templateRepository.findByIdAndIsDeletedFalse(r.getTemplateId())
+                .orElse(null);
+        return MaintenanceRegulationDto.from(
+                r,
+                equipmentTypeName,
+                template == null ? null : template.getCode(),
+                template == null ? null : template.getName(),
+                conditions
+        );
+    }
+
+    private UUID validatedTemplateId(MaintenanceRegulationRequest request) {
+        UUID templateId = request.templateId();
+        if (templateId == null) {
+            return null;
+        }
+
+        MaintenanceTemplate template = templateRepository.findByIdAndIsDeletedFalse(templateId)
+                .orElseThrow(() -> RestException.notFound("Maintenance template not found: " + templateId));
+        if (!Objects.equals(template.getEquipmentTypeId(), request.equipmentTypeId())) {
+            throw RestException.badRequest("Maintenance template equipment type must match regulation equipment type");
+        }
+        if (template.getMaintenanceKind() != request.maintenanceKind()) {
+            throw RestException.badRequest("Maintenance template kind must match regulation maintenance kind");
+        }
+        if (!template.isActive()) {
+            throw RestException.badRequest("Maintenance template must be active");
+        }
+        return templateId;
     }
 
     private List<MaintenanceRegulationDto> toDtoList(List<MaintenanceRegulation> regulations) {
@@ -293,15 +322,28 @@ public class MaintenanceRegulationService {
                 .collect(Collectors.toSet());
         Map<UUID, String> eqTypeNames = equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(eqTypeIds).stream()
                 .collect(Collectors.toMap(EquipmentType::getId, EquipmentType::getName));
+        Set<UUID> templateIds = regulations.stream()
+                .map(MaintenanceRegulation::getTemplateId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, MaintenanceTemplate> templates = templateIds.isEmpty()
+                ? Map.of()
+                : templateRepository.findAllByIdInAndIsDeletedFalse(templateIds).stream()
+                .collect(Collectors.toMap(MaintenanceTemplate::getId, template -> template));
         Set<UUID> regulationIds = regulations.stream().map(MaintenanceRegulation::getId).collect(Collectors.toSet());
         Map<UUID, List<MaintenanceRegulationAttributeConditionDto>> conditionsByRegulationId =
                 conditionDtosByRegulationId(regulationIds);
         return regulations.stream()
-                .map(r -> MaintenanceRegulationDto.from(
-                        r,
-                        eqTypeNames.getOrDefault(r.getEquipmentTypeId(), null),
-                        conditionsByRegulationId.getOrDefault(r.getId(), List.of())
-                ))
+                .map(r -> {
+                    MaintenanceTemplate template = templates.get(r.getTemplateId());
+                    return MaintenanceRegulationDto.from(
+                            r,
+                            eqTypeNames.getOrDefault(r.getEquipmentTypeId(), null),
+                            template == null ? null : template.getCode(),
+                            template == null ? null : template.getName(),
+                            conditionsByRegulationId.getOrDefault(r.getId(), List.of())
+                    );
+                })
                 .toList();
     }
 
