@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 
 public record MaintenanceActionRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         String category,
         @PositiveOrZero Double defaultDurationHours,
