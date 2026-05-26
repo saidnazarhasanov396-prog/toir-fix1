@@ -264,6 +264,8 @@ public class EquipmentService {
         validateAverageOperatingLifeForUpdate(request.averageOperatingLifeHours());
         validateDepartmentExists(request.departmentId());
 
+        boolean equipmentTypeChanged = isEquipmentTypeChanged(entity.getEquipmentTypeId(), request.equipmentTypeId());
+        validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
 
         applyForUpdate(entity, request);
         validateParent(entity.getId(), entity.getParentId());
@@ -610,6 +612,16 @@ public class EquipmentService {
         }
         if (!manualAttributeWritesEnabled) {
             throw RestException.badRequest(EquipmentManualAttributeService.WRITE_DISABLED_MESSAGE);
+        }
+    }
+
+    private boolean isEquipmentTypeChanged(UUID currentEquipmentTypeId, UUID requestedEquipmentTypeId) {
+        return requestedEquipmentTypeId != null && !Objects.equals(currentEquipmentTypeId, requestedEquipmentTypeId);
+    }
+
+    private void validateAttributesForTypeChange(boolean equipmentTypeChanged, List<?> attributes) {
+        if (equipmentTypeChanged && attributes == null) {
+            throw RestException.badRequest("Attributes are required when equipment type changes.");
         }
     }
 

@@ -5,10 +5,15 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeOptionDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueHistoryDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.uom.UnitOfMeasurementDto;
+import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentAttributeValueHistorySource;
+import com.toir.enums.EquipmentCategory;
+import com.toir.enums.EquipmentStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.equipment.EquipmentAttributeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,11 +28,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -43,13 +50,35 @@ class EquipmentAttributeControllerContractTest {
     @Mock
     EquipmentAttributeService service;
 
+    @Mock
+    ScopeAccessService scopeAccessService;
+
+    @Mock
+    EquipmentRepository equipmentRepository;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new EquipmentAttributeController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new EquipmentAttributeController(service, scopeAccessService, equipmentRepository))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        lenient().when(equipmentRepository.findByIdAndIsDeletedFalse(any()))
+                .thenAnswer(invocation -> Optional.of(equipment(invocation.getArgument(0), UUID.randomUUID())));
+    }
+
+    private Equipment equipment(UUID equipmentId, UUID departmentId) {
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setCode("EQ-2026-0001");
+        equipment.setName("Pump A");
+        equipment.setInventoryNumber("INV-1");
+        equipment.setEquipmentTypeId(UUID.randomUUID());
+        equipment.setDepartmentId(departmentId);
+        equipment.setStatus(EquipmentStatus.ACTIVE);
+        equipment.setCategory(EquipmentCategory.PRODUCTION_EQUIPMENT);
+        return equipment;
     }
 
     @Test

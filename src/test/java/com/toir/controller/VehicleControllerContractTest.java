@@ -5,13 +5,17 @@ import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleDocumentDto;
 import com.toir.dto.vehicle.VehicleStatsResponse;
+import com.toir.entity.equipment.Equipment;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.enums.EquipmentAttributeDataType;
+import com.toir.enums.EquipmentCategory;
+import com.toir.enums.EquipmentStatus;
 import com.toir.enums.ErrorType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
-import com.toir.security.SecurityScope;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.VehicleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,11 +34,13 @@ import org.springframework.web.method.support.ModelAndViewContainer;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -50,7 +56,10 @@ class VehicleControllerContractTest {
     VehicleService service;
 
     @Mock
-    SecurityScope securityScope;
+    ScopeAccessService scopeAccessService;
+
+    @Mock
+    EquipmentRepository equipmentRepository;
 
     private MockMvc mockMvc;
     private UUID currentUserId;
@@ -59,10 +68,13 @@ class VehicleControllerContractTest {
     void setUp() {
         currentUserId = UUID.randomUUID();
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new VehicleController(service, securityScope))
+                .standaloneSetup(new VehicleController(service, scopeAccessService, equipmentRepository))
                 .setCustomArgumentResolvers(new TestCurrentUserResolver(currentUserId))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        lenient().when(equipmentRepository.findByIdAndIsDeletedFalse(any()))
+                .thenAnswer(invocation -> Optional.of(vehicleEquipment(invocation.getArgument(0), UUID.randomUUID())));
     }
 
     @Test
@@ -74,7 +86,8 @@ class VehicleControllerContractTest {
                 1
         );
 
-        when(securityScope.enforceDepartmentScope(isNull())).thenReturn(null);
+        when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(service.getStats(null, null)).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/vehicles/stats"))
@@ -84,7 +97,7 @@ class VehicleControllerContractTest {
                 .andExpect(jsonPath("$.inRepair").value(1))
                 .andExpect(jsonPath("$.outOfService").value(1));
 
-        verify(securityScope).enforceDepartmentScope(null);
+        verify(scopeAccessService).enforceDepartmentScope(null);
         verify(service).getStats(null, null);
     }
 
@@ -100,7 +113,8 @@ class VehicleControllerContractTest {
                 0
         );
 
-        when(securityScope.enforceDepartmentScope(departmentId)).thenReturn(scopedDepartmentId);
+        when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(scopedDepartmentId);
+        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(scopedDepartmentId);
         when(service.getStats(scopedDepartmentId, "kamaz")).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/vehicles/stats")
@@ -112,7 +126,7 @@ class VehicleControllerContractTest {
                 .andExpect(jsonPath("$.inRepair").value(1))
                 .andExpect(jsonPath("$.outOfService").value(0));
 
-        verify(securityScope).enforceDepartmentScope(departmentId);
+        verify(scopeAccessService).enforceDepartmentScope(departmentId);
         verify(service).getStats(scopedDepartmentId, "kamaz");
     }
 
@@ -173,6 +187,8 @@ class VehicleControllerContractTest {
                 )),
                 List.of()
         );
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(vehicleEquipment(equipmentId, UUID.randomUUID())));
         when(service.findByEquipmentId(equipmentId)).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/vehicles/{equipmentId}", equipmentId))
@@ -416,6 +432,19 @@ class VehicleControllerContractTest {
                 "/api/v1/vehicles/" + equipmentId + "/documents/" + documentId + "/presigned-url",
                 LocalDateTime.now()
         );
+    }
+
+    private Equipment vehicleEquipment(UUID equipmentId, UUID departmentId) {
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setCode("VH-2026-0001");
+        equipment.setName("Truck");
+        equipment.setInventoryNumber("INV-1");
+        equipment.setEquipmentTypeId(UUID.randomUUID());
+        equipment.setDepartmentId(departmentId);
+        equipment.setStatus(EquipmentStatus.ACTIVE);
+        equipment.setCategory(EquipmentCategory.VEHICLE);
+        return equipment;
     }
 
     private static class TestCurrentUserResolver implements HandlerMethodArgumentResolver {
