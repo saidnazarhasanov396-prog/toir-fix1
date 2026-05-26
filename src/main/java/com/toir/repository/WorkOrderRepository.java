@@ -34,6 +34,9 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM work_orders WHERE number = cast(:number as varchar) AND is_deleted = false)", nativeQuery = true)
     boolean existsByNumberAndIsDeletedFalse(@Param("number") String number);
 
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM work_orders WHERE ppr_task_id = cast(:pprTaskId as uuid) AND is_deleted = false)", nativeQuery = true)
+    boolean existsByPprTaskIdAndIsDeletedFalse(@Param("pprTaskId") UUID pprTaskId);
+
     @Query(value = "SELECT COUNT(*) FROM work_orders WHERE status = :status AND is_deleted = false", nativeQuery = true)
     long countByStatusAndIsDeletedFalse(@Param("status") String status);
 

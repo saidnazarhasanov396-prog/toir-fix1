@@ -218,6 +218,23 @@ class PprPbacScopeTest {
     }
 
     @Test
+    void generateWorkOrdersChecksPlanScopeBeforeDelegating() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID createdById = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, departmentId)));
+        when(generatorService.generateWorkOrdersForPlan(planId, createdById))
+                .thenReturn(new PprGeneratorService.WorkOrderGenerationResult(planId, 1, 0, List.of(UUID.randomUUID()), List.of()));
+
+        mockMvc.perform(post("/api/v1/ppr-plans/{id}/work-orders/generate", planId)
+                        .param("createdById", createdById.toString()))
+                .andExpect(status().isOk());
+
+        verify(scopeAccessService).assertCanAccessDepartment(departmentId);
+        verify(generatorService).generateWorkOrdersForPlan(planId, createdById);
+    }
+
+    @Test
     void taskListChecksParentPlanScope() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();

@@ -1,16 +1,27 @@
 package com.toir.service;
 
 import com.toir.dto.pprplanning.PprTaskDto;
+import com.toir.dto.pprplanning.PprPlanRequest;
 import com.toir.dto.pprplanning.PprTaskRequest;
 import com.toir.entity.PprPlan;
+import com.toir.entity.PprPlanTarget;
 import com.toir.entity.PprTask;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentType;
 import com.toir.enums.PlanStatus;
+import com.toir.enums.PprFrequency;
+import com.toir.enums.PprScheduleType;
+import com.toir.enums.PprScopeType;
+import com.toir.enums.PprTargetType;
 import com.toir.enums.PprTaskStatus;
+import com.toir.enums.PprType;
 import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import org.junit.jupiter.api.Test;
@@ -24,12 +35,14 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Year;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,6 +58,12 @@ class PprPlanServiceLifecycleTest {
 
     @Mock
     DepartmentRepository departmentRepository;
+
+    @Mock
+    EquipmentRepository equipmentRepository;
+
+    @Mock
+    EquipmentTypeRepository equipmentTypeRepository;
 
     @Mock
     AuditBuilderService auditBuilderService;
@@ -80,6 +99,303 @@ class PprPlanServiceLifecycleTest {
 
         assertThat(result.fromDate()).isEqualTo(LocalDate.of(2026, 4, 1));
         assertThat(result.toDate()).isEqualTo(LocalDate.of(2026, 6, 30));
+        assertThat(result.pprType()).isEqualTo(PprType.PREVENTIVE_MAINTENANCE);
+        assertThat(result.scheduleType()).isEqualTo(PprScheduleType.CALENDAR);
+        assertThat(result.frequency()).isNull();
+        assertThat(result.scopeType()).isEqualTo(PprScopeType.DEPARTMENT);
+        assertThat(result.targets()).isEmpty();
+    }
+
+    @Test
+    void createPreventiveCalendarPlanPersistsFrequency() {
+        UUID createdById = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        mockPlanCodeSave();
+
+        var result = service.create(new PprPlanRequest(
+                "Monthly preventive",
+                departmentId,
+                createdById,
+                "monthly",
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30),
+                PprType.PREVENTIVE_MAINTENANCE,
+                PprScheduleType.CALENDAR,
+                PprFrequency.MONTHLY,
+                null,
+                PprScopeType.DEPARTMENT,
+                List.of(),
+                List.of()
+        ));
+
+        assertThat(result.pprType()).isEqualTo(PprType.PREVENTIVE_MAINTENANCE);
+        assertThat(result.scheduleType()).isEqualTo(PprScheduleType.CALENDAR);
+        assertThat(result.frequency()).isEqualTo(PprFrequency.MONTHLY);
+        assertThat(result.intervalHours()).isNull();
+        assertThat(result.scopeType()).isEqualTo(PprScopeType.DEPARTMENT);
+    }
+
+    @Test
+    void createPlannedRepairOperatingHoursPlanPersistsInterval() {
+        mockPlanCodeSave();
+
+        var result = service.create(new PprPlanRequest(
+                "Engine-hour repair",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30),
+                PprType.PLANNED_REPAIR,
+                PprScheduleType.OPERATING_HOURS,
+                null,
+                10_000L,
+                PprScopeType.DEPARTMENT,
+                List.of(),
+                List.of()
+        ));
+
+        assertThat(result.pprType()).isEqualTo(PprType.PLANNED_REPAIR);
+        assertThat(result.scheduleType()).isEqualTo(PprScheduleType.OPERATING_HOURS);
+        assertThat(result.frequency()).isNull();
+        assertThat(result.intervalHours()).isEqualTo(10_000L);
+    }
+
+    @Test
+    void createOperatingHoursPlanRejectsMissingInterval() {
+        assertThatThrownBy(() -> service.create(new PprPlanRequest(
+                "Invalid operating-hours",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30),
+                PprType.PLANNED_REPAIR,
+                PprScheduleType.OPERATING_HOURS,
+                null,
+                null,
+                PprScopeType.DEPARTMENT,
+                List.of(),
+                List.of()
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("intervalHours must be positive for OPERATING_HOURS PPR schedule");
+                });
+    }
+
+    @Test
+    void createOperatingHoursPlanRejectsNonPositiveInterval() {
+        assertThatThrownBy(() -> service.create(new PprPlanRequest(
+                "Invalid operating-hours",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30),
+                PprType.PLANNED_REPAIR,
+                PprScheduleType.OPERATING_HOURS,
+                null,
+                0L,
+                PprScopeType.DEPARTMENT,
+                List.of(),
+                List.of()
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("intervalHours must be positive for OPERATING_HOURS PPR schedule");
+                });
+    }
+
+    @Test
+    void createCapitalRepairEnterprisePlanAllowsNullDepartment() {
+        mockPlanCodeSave();
+
+        var result = service.create(new PprPlanRequest(
+                "Enterprise overhaul",
+                null,
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 10),
+                PprType.CAPITAL_REPAIR,
+                PprScheduleType.ONE_TIME,
+                null,
+                null,
+                PprScopeType.ENTERPRISE,
+                List.of(),
+                List.of()
+        ));
+
+        assertThat(result.pprType()).isEqualTo(PprType.CAPITAL_REPAIR);
+        assertThat(result.scheduleType()).isEqualTo(PprScheduleType.ONE_TIME);
+        assertThat(result.scopeType()).isEqualTo(PprScopeType.ENTERPRISE);
+        assertThat(result.departmentId()).isNull();
+    }
+
+    @Test
+    void createDepartmentScopeCapitalRepairRequiresDepartment() {
+        assertThatThrownBy(() -> service.create(new PprPlanRequest(
+                "Department overhaul",
+                null,
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 10),
+                PprType.CAPITAL_REPAIR,
+                PprScheduleType.ONE_TIME,
+                null,
+                null,
+                PprScopeType.DEPARTMENT,
+                List.of(),
+                List.of()
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("departmentId is required when PPR scopeType is DEPARTMENT");
+                });
+    }
+
+    @Test
+    void createWithEquipmentAndEquipmentTypeTargetsPersistsTargets() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentId);
+        EquipmentType equipmentType = equipmentType(equipmentTypeId);
+        mockPlanCodeSave();
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of(equipment));
+        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentTypeId))).thenReturn(List.of(equipmentType));
+
+        var result = service.create(new PprPlanRequest(
+                "Targeted preventive",
+                departmentId,
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30),
+                PprType.PREVENTIVE_MAINTENANCE,
+                PprScheduleType.CALENDAR,
+                PprFrequency.MONTHLY,
+                null,
+                PprScopeType.DEPARTMENT,
+                List.of(equipmentId),
+                List.of(equipmentTypeId)
+        ));
+
+        assertThat(result.targets()).hasSize(2);
+        assertThat(result.targets()).anySatisfy(target -> {
+            assertThat(target.targetType()).isEqualTo(PprTargetType.EQUIPMENT);
+            assertThat(target.equipmentId()).isEqualTo(equipmentId);
+            assertThat(target.equipmentTypeId()).isNull();
+        });
+        assertThat(result.targets()).anySatisfy(target -> {
+            assertThat(target.targetType()).isEqualTo(PprTargetType.EQUIPMENT_TYPE);
+            assertThat(target.equipmentId()).isNull();
+            assertThat(target.equipmentTypeId()).isEqualTo(equipmentTypeId);
+        });
+    }
+
+    @Test
+    void createWithEquipmentTargetRejectsDifferentDepartment() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment(equipmentId, UUID.randomUUID())));
+
+        assertThatThrownBy(() -> service.create(new PprPlanRequest(
+                "Wrong department",
+                departmentId,
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30),
+                PprType.PREVENTIVE_MAINTENANCE,
+                PprScheduleType.CALENDAR,
+                PprFrequency.MONTHLY,
+                null,
+                PprScopeType.DEPARTMENT,
+                List.of(equipmentId),
+                List.of()
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("different department");
+                });
+    }
+
+    @Test
+    void updatePlanReplacesTypeScheduleAndTargets() {
+        UUID planId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        PprPlan plan = plan(planId, PlanStatus.DRAFT);
+        plan.setDepartmentId(departmentId);
+        plan.setCreatedById(UUID.randomUUID());
+        PprPlanTarget oldTarget = new PprPlanTarget();
+        oldTarget.setPlan(plan);
+        oldTarget.setTargetType(PprTargetType.EQUIPMENT_TYPE);
+        oldTarget.setEquipmentTypeId(UUID.randomUUID());
+        plan.getTargets().add(oldTarget);
+
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment(equipmentId, departmentId)));
+        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.update(planId, new PprPlanRequest(
+                "Updated plan",
+                departmentId,
+                UUID.randomUUID(),
+                "updated",
+                LocalDate.of(2026, 8, 1),
+                LocalDate.of(2026, 8, 31),
+                PprType.PLANNED_REPAIR,
+                PprScheduleType.OPERATING_HOURS,
+                null,
+                5_000L,
+                PprScopeType.DEPARTMENT,
+                List.of(equipmentId),
+                List.of()
+        ));
+
+        assertThat(result.pprType()).isEqualTo(PprType.PLANNED_REPAIR);
+        assertThat(result.scheduleType()).isEqualTo(PprScheduleType.OPERATING_HOURS);
+        assertThat(result.intervalHours()).isEqualTo(5_000L);
+        assertThat(result.targets()).hasSize(1);
+        assertThat(result.targets().getFirst().targetType()).isEqualTo(PprTargetType.EQUIPMENT);
+        assertThat(result.targets().getFirst().equipmentId()).isEqualTo(equipmentId);
+    }
+
+    @Test
+    void updatePlanPreservesTargetsWhenLegacyRequestOmitsTargetFields() {
+        UUID planId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        PprPlan plan = plan(planId, PlanStatus.DRAFT);
+        plan.setDepartmentId(departmentId);
+        plan.setCreatedById(UUID.randomUUID());
+        PprPlanTarget existingTarget = new PprPlanTarget();
+        existingTarget.setPlan(plan);
+        existingTarget.setTargetType(PprTargetType.EQUIPMENT_TYPE);
+        existingTarget.setEquipmentTypeId(equipmentTypeId);
+        plan.getTargets().add(existingTarget);
+
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.update(planId, new PprPlanRequest(
+                "Legacy update",
+                departmentId,
+                UUID.randomUUID(),
+                "legacy",
+                LocalDate.of(2026, 8, 1),
+                LocalDate.of(2026, 8, 31)
+        ));
+
+        assertThat(result.targets()).hasSize(1);
+        assertThat(result.targets().getFirst().targetType()).isEqualTo(PprTargetType.EQUIPMENT_TYPE);
+        assertThat(result.targets().getFirst().equipmentTypeId()).isEqualTo(equipmentTypeId);
     }
 
     @Test
@@ -268,7 +584,33 @@ class PprPlanServiceLifecycleTest {
         plan.setId(id);
         plan.setStatus(status);
         plan.setTasks(new ArrayList<>());
+        plan.setTargets(new ArrayList<>());
         return plan;
+    }
+
+    private void mockPlanCodeSave() {
+        String codePrefix = "PPR-" + Year.now().getValue() + "-";
+        String expectedCode = "PPR-" + Year.now().getValue() + "-0001";
+        when(planRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(planRepository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
+        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> {
+            PprPlan plan = invocation.getArgument(0);
+            plan.setId(UUID.randomUUID());
+            return plan;
+        });
+    }
+
+    private Equipment equipment(UUID id, UUID departmentId) {
+        Equipment equipment = new Equipment();
+        equipment.setId(id);
+        equipment.setDepartmentId(departmentId);
+        return equipment;
+    }
+
+    private EquipmentType equipmentType(UUID id) {
+        EquipmentType equipmentType = new EquipmentType();
+        equipmentType.setId(id);
+        return equipmentType;
     }
 
     private PprTask task(UUID id, PprPlan plan, PprTaskStatus status) {

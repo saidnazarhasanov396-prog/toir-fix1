@@ -223,9 +223,36 @@ class RbacPprSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = PermissionConstants.PPR_PLAN_GENERATE)
+    void pprPlanGenerateCanGenerateWorkOrders() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID createdById = UUID.randomUUID();
+        when(pprGeneratorService.generateWorkOrdersForPlan(planId, createdById))
+                .thenReturn(new PprGeneratorService.WorkOrderGenerationResult(
+                        planId,
+                        1,
+                        0,
+                        List.of(UUID.randomUUID()),
+                        List.of()
+                ));
+
+        mockMvc.perform(post("/api/v1/ppr-plans/{id}/work-orders/generate", planId)
+                        .param("createdById", createdById.toString()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @WithMockUser(authorities = PermissionConstants.PPR_PLAN_READ)
     void pprPlanReadCannotGenerateTasks() throws Exception {
         mockMvc.perform(post("/api/v1/ppr-plans/{id}/generate", UUID.randomUUID()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PPR_PLAN_READ)
+    void pprPlanReadCannotGenerateWorkOrders() throws Exception {
+        mockMvc.perform(post("/api/v1/ppr-plans/{id}/work-orders/generate", UUID.randomUUID())
+                        .param("createdById", UUID.randomUUID().toString()))
                 .andExpect(status().isForbidden());
     }
 
