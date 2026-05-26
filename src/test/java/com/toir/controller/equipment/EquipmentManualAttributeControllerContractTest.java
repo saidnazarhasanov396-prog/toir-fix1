@@ -90,7 +90,6 @@ class EquipmentManualAttributeControllerContractTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(service.list(equipmentId)).thenReturn(List.of(new EquipmentManualAttributeDto(
                 attributeId,
-                equipmentId,
                 "legacy_key",
                 "legacy value"
         )));
