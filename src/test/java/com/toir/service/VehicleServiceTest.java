@@ -507,7 +507,11 @@ class VehicleServiceTest {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-040", "Truck 040", "INV-VH-040");
         VehicleDetails details = details(equipmentId, "01A040AA", "VIN-040");
-        VehicleRequest request = fullRequest("VH-041", "Truck 041", "INV-VH-041", "01A041AA", "VIN-041");
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-041", "Truck 041", "INV-VH-041", "01A041AA", "VIN-041"),
+                equipment.getEquipmentTypeId(),
+                null
+        );
         Equipment updated = updatedEquipment(equipmentId, request);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
@@ -533,7 +537,11 @@ class VehicleServiceTest {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-050", "Truck 050", "INV-VH-050");
         VehicleDetails details = details(equipmentId, "01A050AA", "VIN-050");
-        VehicleRequest request = fullRequest("VH-050", "Truck 050", "INV-VH-050", "01A050AA", " ");
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-050", "Truck 050", "INV-VH-050", "01A050AA", " "),
+                equipment.getEquipmentTypeId(),
+                null
+        );
         Equipment updated = updatedEquipment(equipmentId, request);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
@@ -554,7 +562,11 @@ class VehicleServiceTest {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-020", "Truck 020", "INV-VH-020");
         VehicleDetails details = details(equipmentId, "01A020AA", "VIN-020");
-        VehicleRequest request = fullRequest("VH-020", "Truck 020 Updated", "INV-VH-020", "01A020AA", "VIN-020");
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-020", "Truck 020 Updated", "INV-VH-020", "01A020AA", "VIN-020"),
+                equipment.getEquipmentTypeId(),
+                null
+        );
         Equipment updated = updatedEquipment(equipmentId, request);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));

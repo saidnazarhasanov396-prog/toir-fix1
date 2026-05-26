@@ -134,7 +134,6 @@ class VehiclePbacScopeTest {
     @Test
     void vehicleAdminCanAccessAllDepartments() throws Exception {
         UUID equipmentId = UUID.randomUUID();
-        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
                 .thenReturn(Optional.of(vehicleEquipment(equipmentId, departmentId)));
         when(service.findByEquipmentId(equipmentId))

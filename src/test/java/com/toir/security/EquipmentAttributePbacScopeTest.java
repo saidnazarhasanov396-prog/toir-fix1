@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -92,7 +93,8 @@ class EquipmentAttributePbacScopeTest {
         UUID equipmentId = UUID.randomUUID();
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
                 .thenReturn(Optional.of(equipment(equipmentId, departmentId)));
-        when(service.findValueHistory(eq(equipmentId), isNull(), any())).thenReturn(Page.empty());
+        when(service.findValueHistory(eq(equipmentId), isNull(), any()))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         mockMvc.perform(get("/api/v1/equipment/{equipmentId}/attributes/history", equipmentId))
                 .andExpect(status().isOk());
@@ -133,7 +135,6 @@ class EquipmentAttributePbacScopeTest {
     @Test
     void equipmentAttributeAdminCanAccessOtherDepartment() throws Exception {
         UUID equipmentId = UUID.randomUUID();
-        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
                 .thenReturn(Optional.of(equipment(equipmentId, departmentId)));
         when(service.findValues(equipmentId)).thenReturn(List.of());
