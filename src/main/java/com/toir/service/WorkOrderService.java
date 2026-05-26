@@ -699,7 +699,7 @@ public class WorkOrderService {
             }
         }
 
-        validatePprTaskRelationForCreate(request.pprTaskId());
+        validatePprTaskRelationForCreate(request.pprTaskId(), request.equipmentId());
 
         if (request.defectId() == null) {
             return null;
@@ -745,12 +745,15 @@ public class WorkOrderService {
         return node;
     }
 
-    private void validatePprTaskRelationForCreate(UUID pprTaskId) {
+    private void validatePprTaskRelationForCreate(UUID pprTaskId, UUID equipmentId) {
         if (pprTaskId == null) {
             return;
         }
         PprTask task = pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(pprTaskId)
                 .orElseThrow(() -> RestException.notFound("PPR task not found: " + pprTaskId));
+        if (task.getEquipmentId() != null && equipmentId != null && !task.getEquipmentId().equals(equipmentId)) {
+            throw RestException.badRequest("PPR task belongs to a different equipment");
+        }
         if (task.getStatus() != PprTaskStatus.APPROVED) {
             throw RestException.badRequest("Only APPROVED PPR tasks can generate work orders");
         }

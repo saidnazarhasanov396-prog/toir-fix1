@@ -16,6 +16,7 @@ public record MaintenanceRegulationRequest(
         @NotBlank String name,
         String description,
         @NotNull UUID equipmentTypeId,
+        UUID templateId,
         @NotNull MaintenanceKind maintenanceKind,
         @PositiveOrZero double normativeLaborHours,
         Boolean active,
@@ -32,6 +33,7 @@ public record MaintenanceRegulationRequest(
                 String name,
                 String description,
                 UUID equipmentTypeId,
+                UUID templateId,
                 MaintenanceKind maintenanceKind,
                 double normativeLaborHours,
                 Boolean active,
@@ -42,7 +44,7 @@ public record MaintenanceRegulationRequest(
                 MeterType triggerMeterType,
                 Double triggerMeterInterval
         ) {
-                this(code, name, description, equipmentTypeId, maintenanceKind, normativeLaborHours, active,
+                this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours, active,
                         periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
                         triggerMeterInterval, null);
         }

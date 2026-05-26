@@ -7,6 +7,7 @@ import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
+import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MeterType;
 import com.toir.enums.MaintenanceRegulationConditionOperator;
@@ -15,6 +16,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,6 +55,9 @@ class MaintenanceRegulationServiceTest {
 
     @Mock
     MaintenanceRegulationAttributeConditionRepository conditionRepository;
+
+    @Mock
+    MaintenanceTemplateRepository templateRepository;
 
     @InjectMocks
     MaintenanceRegulationService service;
@@ -196,6 +201,94 @@ class MaintenanceRegulationServiceTest {
     }
 
     @Test
+    void createWithCompatibleTemplateStoresTemplateId() {
+        int year = Year.now().getValue();
+        String codePrefix = "MR-" + year + "-";
+        String expectedCode = "MR-" + year + "-0001";
+        UUID typeId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId, typeId, MaintenanceKind.PREVENTIVE, true);
+
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(repository.save(any(MaintenanceRegulation.class))).thenAnswer(invocation -> {
+            MaintenanceRegulation regulation = invocation.getArgument(0);
+            regulation.setId(UUID.randomUUID());
+            return regulation;
+        });
+
+        MaintenanceRegulationDto created = service.create(requestWithTemplate(null, typeId, templateId, MaintenanceKind.PREVENTIVE));
+
+        assertThat(created.templateId()).isEqualTo(templateId);
+        assertThat(created.templateCode()).isEqualTo("MT-2026-0001");
+        assertThat(created.templateName()).isEqualTo("Pump preventive template");
+        ArgumentCaptor<MaintenanceRegulation> captor = ArgumentCaptor.forClass(MaintenanceRegulation.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getTemplateId()).isEqualTo(templateId);
+    }
+
+    @Test
+    void createWithTemplateForDifferentEquipmentTypeReturns400() {
+        int year = Year.now().getValue();
+        String expectedCode = "MR-" + year + "-0001";
+        UUID typeId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        when(repository.maxSequenceByCodePrefix("MR-" + year + "-")).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId))
+                .thenReturn(Optional.of(template(templateId, UUID.randomUUID(), MaintenanceKind.PREVENTIVE, true)));
+
+        assertThatThrownBy(() -> service.create(requestWithTemplate(null, typeId, templateId, MaintenanceKind.PREVENTIVE)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("Maintenance template equipment type must match regulation equipment type");
+                });
+
+        verify(repository, never()).save(any(MaintenanceRegulation.class));
+    }
+
+    @Test
+    void createWithTemplateForDifferentMaintenanceKindReturns400() {
+        int year = Year.now().getValue();
+        String expectedCode = "MR-" + year + "-0001";
+        UUID typeId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        when(repository.maxSequenceByCodePrefix("MR-" + year + "-")).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId))
+                .thenReturn(Optional.of(template(templateId, typeId, MaintenanceKind.INSPECTION, true)));
+
+        assertThatThrownBy(() -> service.create(requestWithTemplate(null, typeId, templateId, MaintenanceKind.PREVENTIVE)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("Maintenance template kind must match regulation maintenance kind");
+                });
+
+        verify(repository, never()).save(any(MaintenanceRegulation.class));
+    }
+
+    @Test
+    void createWithInactiveTemplateReturns400() {
+        int year = Year.now().getValue();
+        String expectedCode = "MR-" + year + "-0001";
+        UUID typeId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        when(repository.maxSequenceByCodePrefix("MR-" + year + "-")).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId))
+                .thenReturn(Optional.of(template(templateId, typeId, MaintenanceKind.PREVENTIVE, false)));
+
+        assertThatThrownBy(() -> service.create(requestWithTemplate(null, typeId, templateId, MaintenanceKind.PREVENTIVE)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("Maintenance template must be active");
+                });
+
+        verify(repository, never()).save(any(MaintenanceRegulation.class));
+    }
+
+    @Test
     void createWithUnknownConditionAttributeReturns400() {
         int year = Year.now().getValue();
         String expectedCode = "MR-" + year + "-0001";
@@ -260,6 +353,7 @@ class MaintenanceRegulationServiceTest {
                 "Monthly pump regulation",
                 "Regulation description",
                 UUID.randomUUID(),
+                null,
                 MaintenanceKind.PREVENTIVE,
                 3.0,
                 true,
@@ -278,6 +372,7 @@ class MaintenanceRegulationServiceTest {
                 "High-power pump regulation",
                 "Only pumps above 50 kW",
                 typeId,
+                null,
                 MaintenanceKind.PREVENTIVE,
                 4.0,
                 true,
@@ -297,5 +392,35 @@ class MaintenanceRegulationServiceTest {
                         null
                 ))
         );
+    }
+
+    private MaintenanceRegulationRequest requestWithTemplate(String code, UUID typeId, UUID templateId, MaintenanceKind kind) {
+        return new MaintenanceRegulationRequest(
+                code,
+                "Monthly pump regulation",
+                "Regulation description",
+                typeId,
+                templateId,
+                kind,
+                3.0,
+                true,
+                PeriodicityUnit.MONTH,
+                1,
+                3,
+                false,
+                MeterType.CUSTOM,
+                10.0
+        );
+    }
+
+    private MaintenanceTemplate template(UUID id, UUID typeId, MaintenanceKind kind, boolean active) {
+        MaintenanceTemplate template = new MaintenanceTemplate();
+        template.setId(id);
+        template.setCode("MT-2026-0001");
+        template.setName("Pump preventive template");
+        template.setEquipmentTypeId(typeId);
+        template.setMaintenanceKind(kind);
+        template.setActive(active);
+        return template;
     }
 }

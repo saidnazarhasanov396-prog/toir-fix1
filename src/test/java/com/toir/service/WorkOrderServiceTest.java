@@ -400,6 +400,7 @@ class WorkOrderServiceTest {
         WorkOrderRequest request = requestWithPprTask(taskId);
         PprPlan plan = pprPlan(UUID.randomUUID(), PlanStatus.DRAFT);
         PprTask task = pprTask(taskId, plan, PprTaskStatus.APPROVED);
+        task.setEquipmentId(request.equipmentId());
 
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
         when(pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(taskId)).thenReturn(Optional.of(task));
@@ -419,6 +420,7 @@ class WorkOrderServiceTest {
         WorkOrderRequest request = requestWithPprTask(taskId);
         PprPlan plan = pprPlan(UUID.randomUUID(), PlanStatus.APPROVED);
         PprTask task = pprTask(taskId, plan, PprTaskStatus.PLANNED);
+        task.setEquipmentId(request.equipmentId());
 
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
         when(pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(taskId)).thenReturn(Optional.of(task));
@@ -438,6 +440,7 @@ class WorkOrderServiceTest {
         WorkOrderRequest request = requestWithPprTask(taskId);
         PprPlan plan = pprPlan(UUID.randomUUID(), PlanStatus.APPROVED);
         PprTask task = pprTask(taskId, plan, PprTaskStatus.APPROVED);
+        task.setEquipmentId(request.equipmentId());
 
         when(repository.save(any(WorkOrder.class)))
                 .thenAnswer(invocation -> {
@@ -451,6 +454,26 @@ class WorkOrderServiceTest {
         WorkOrderDto result = service.create(request);
 
         assertThat(result.pprTaskId()).isEqualTo(taskId);
+    }
+
+    @Test
+    void createWithPprTaskForDifferentEquipmentReturns400() {
+        UUID taskId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPprTask(taskId);
+        PprPlan plan = pprPlan(UUID.randomUUID(), PlanStatus.APPROVED);
+        PprTask task = pprTask(taskId, plan, PprTaskStatus.APPROVED);
+        task.setEquipmentId(UUID.randomUUID());
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(taskId)).thenReturn(Optional.of(task));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("PPR task belongs to a different equipment");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
     }
 
     @Test

@@ -15,6 +15,9 @@ public record MaintenanceRegulationDto(
         String description,
         UUID equipmentTypeId,
         String equipmentTypeName,
+        UUID templateId,
+        String templateCode,
+        String templateName,
         MaintenanceKind maintenanceKind,
         double normativeLaborHours,
         boolean active,
@@ -33,6 +36,9 @@ public record MaintenanceRegulationDto(
             String description,
             UUID equipmentTypeId,
             String equipmentTypeName,
+            UUID templateId,
+            String templateCode,
+            String templateName,
             MaintenanceKind maintenanceKind,
             double normativeLaborHours,
             boolean active,
@@ -43,21 +49,24 @@ public record MaintenanceRegulationDto(
             MeterType triggerMeterType,
             Double triggerMeterInterval
     ) {
-        this(id, code, name, description, equipmentTypeId, equipmentTypeName, maintenanceKind,
+        this(id, code, name, description, equipmentTypeId, equipmentTypeName, templateId, templateCode, templateName, maintenanceKind,
                 normativeLaborHours, active, periodicityUnit, periodicityValue, toleranceDays,
                 requiresShutdown, triggerMeterType, triggerMeterInterval, List.of());
     }
 
     public static MaintenanceRegulationDto from(MaintenanceRegulation r, String equipmentTypeName) {
-        return from(r, equipmentTypeName, List.of());
+        return from(r, equipmentTypeName, null, null, List.of());
     }
 
     public static MaintenanceRegulationDto from(MaintenanceRegulation r,
                                                 String equipmentTypeName,
+                                                String templateCode,
+                                                String templateName,
                                                 List<MaintenanceRegulationAttributeConditionDto> attributeConditions) {
         return new MaintenanceRegulationDto(
                 r.getId(), r.getCode(), r.getName(), r.getDescription(),
-                r.getEquipmentTypeId(), equipmentTypeName, r.getMaintenanceKind(), r.getNormativeLaborHours(),
+                r.getEquipmentTypeId(), equipmentTypeName, r.getTemplateId(), templateCode, templateName,
+                r.getMaintenanceKind(), r.getNormativeLaborHours(),
                 r.isActive(), r.getPeriodicityUnit(), r.getPeriodicityValue(),
                 r.getToleranceDays(), r.isRequiresShutdown(),
                 r.getTriggerMeterType(), r.getTriggerMeterInterval(),
