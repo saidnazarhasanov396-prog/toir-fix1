@@ -11,8 +11,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -21,6 +21,7 @@ public class MaintenanceActionService {
 
     private final MaintenanceActionRepository repository;
     private final SparePartService sparePartService;
+    private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
 
     @Transactional(readOnly = true)
     public List<MaintenanceActionDto> findAll(String search, Boolean active) {
@@ -39,31 +40,29 @@ public class MaintenanceActionService {
 
     @Transactional
     public MaintenanceActionDto create(MaintenanceActionRequest request) {
-        String code = normalizeCode(request.code());
-        if (repository.existsByCodeIgnoreCaseAndIsDeletedFalse(code)) {
-            throw RestException.conflict("Maintenance action code already exists: " + code);
-        }
-
+        String codePrefix = "MA-" + Year.now().getValue() + "-";
+        long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
         MaintenanceAction action = new MaintenanceAction();
-        action.setCode(code);
         apply(action, request);
 
-        try {
-            return MaintenanceActionDto.from(repository.save(action));
-        } catch (DataIntegrityViolationException ex) {
-            throw RestException.conflict("Maintenance action code already exists: " + code);
+        for (int attempt = 0; attempt < MAX_CODE_GENERATION_ATTEMPTS; attempt++) {
+            String code = codePrefix + String.format("%04d", sequence + attempt);
+            action.setCode(code);
+            try {
+                return MaintenanceActionDto.from(repository.save(action));
+            } catch (DataIntegrityViolationException ex) {
+                if (!repository.existsByCodeIgnoreCaseAndIsDeletedFalse(code)) {
+                    throw ex;
+                }
+            }
         }
+
+        throw RestException.conflict("Could not generate unique maintenance action code");
     }
 
     @Transactional
     public MaintenanceActionDto update(UUID id, MaintenanceActionRequest request) {
         MaintenanceAction action = getOrThrow(id);
-        String code = normalizeCode(request.code());
-        if (!action.getCode().equalsIgnoreCase(code)
-                && repository.existsByCodeIgnoreCaseAndIsDeletedFalse(code)) {
-            throw RestException.conflict("Maintenance action code already exists: " + code);
-        }
-        action.setCode(code);
         apply(action, request);
         return MaintenanceActionDto.from(repository.save(action));
     }
@@ -92,13 +91,6 @@ public class MaintenanceActionService {
         if (request.active() != null) {
             action.setActive(request.active());
         }
-    }
-
-    private String normalizeCode(String code) {
-        if (code == null || code.isBlank()) {
-            throw RestException.badRequest("Maintenance action code is required");
-        }
-        return code.trim().replaceAll("\\s+", "_").toUpperCase(Locale.ROOT);
     }
 
     private String blankToNull(String value) {
