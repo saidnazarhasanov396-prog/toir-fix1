@@ -28,6 +28,13 @@ public interface ContractorWorkRepository extends JpaRepository<ContractorWork, 
     @Query(value = "SELECT COUNT(*) FROM contractor_works WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
+    default List<ContractorWork> findAllByOptionalContractorIdAndIsDeletedFalseOrderByUpdatedAtDesc(UUID contractorId) {
+        if (contractorId != null) {
+            return findAllByContractorIdAndIsDeletedFalse(contractorId);
+        }
+        return findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    }
+
     @Query(value = "SELECT * FROM contractor_works WHERE contractor_id = :contractorId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ContractorWork> findAllByContractorIdAndIsDeletedFalse(@Param("contractorId") UUID contractorId);
 

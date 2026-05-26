@@ -74,6 +74,42 @@ class ContractorWorkServiceTest {
     ContractorWorkService service;
 
     @Test
+    void shouldReturnAllContractorWorksWhenContractorIdNotProvided() {
+        ContractorWork first = contractorWork(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), ContractorWorkStatus.DRAFT, null);
+        ContractorWork second = contractorWork(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), ContractorWorkStatus.COMPLETED, 100d);
+        when(repository.findAllByOptionalContractorIdAndIsDeletedFalseOrderByUpdatedAtDesc(null))
+                .thenReturn(List.of(first, second));
+
+        List<ContractorWorkDto> result = service.findByContractor(null);
+
+        assertThat(result).extracting(ContractorWorkDto::id).containsExactly(first.getId(), second.getId());
+        verify(repository).findAllByOptionalContractorIdAndIsDeletedFalseOrderByUpdatedAtDesc(null);
+    }
+
+    @Test
+    void shouldFilterByContractorWhenContractorIdProvided() {
+        UUID contractorId = UUID.randomUUID();
+        ContractorWork work = contractorWork(UUID.randomUUID(), contractorId, UUID.randomUUID(), ContractorWorkStatus.DRAFT, null);
+        when(repository.findAllByOptionalContractorIdAndIsDeletedFalseOrderByUpdatedAtDesc(contractorId))
+                .thenReturn(List.of(work));
+
+        List<ContractorWorkDto> result = service.findByContractor(contractorId);
+
+        assertThat(result).extracting(ContractorWorkDto::contractorId).containsExactly(contractorId);
+        verify(repository).findAllByOptionalContractorIdAndIsDeletedFalseOrderByUpdatedAtDesc(contractorId);
+    }
+
+    @Test
+    void shouldNotFailWhenContractorIdIsNull() {
+        when(repository.findAllByOptionalContractorIdAndIsDeletedFalseOrderByUpdatedAtDesc(null))
+                .thenReturn(List.of());
+
+        List<ContractorWorkDto> result = service.findByContractor(null);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     void startShouldFailWhenContractorIsInactive() {
         UUID contractorId = UUID.randomUUID();
         UUID workId = UUID.randomUUID();
