@@ -54,7 +54,10 @@ public class ContractorWorkService {
 
     @Transactional(readOnly = true)
     public List<ContractorWorkDto> findByContractor(UUID contractorId) {
-        return repository.findAllByContractorIdAndIsDeletedFalse(contractorId).stream().map(ContractorWorkDto::from).toList();
+        return repository.findAllByOptionalContractorIdAndIsDeletedFalseOrderByUpdatedAtDesc(contractorId)
+                .stream()
+                .map(ContractorWorkDto::from)
+                .toList();
     }
 
     @Transactional

@@ -2,6 +2,7 @@ package com.toir.controller.contractor;
 import com.toir.dto.contractorwork.ContractorWorkDto;
 import com.toir.service.contactor.ContractorWorkService;
 import com.toir.util.PaginationUtils;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
@@ -22,7 +23,11 @@ public class ContractorWorkController {
     private final ContractorWorkService service;
 
     @GetMapping
-    public ResponseEntity<Page<ContractorWorkDto>> list(@RequestParam UUID contractorId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+    public ResponseEntity<Page<ContractorWorkDto>> list(
+            @Parameter(description = "Optional contractor filter. When omitted, all contractor works are returned.")
+            @RequestParam(required = false) UUID contractorId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(service.findByContractor(contractorId), page, size));
     }
 

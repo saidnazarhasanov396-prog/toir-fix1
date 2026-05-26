@@ -1,10 +1,14 @@
 package com.toir.controller;
 
+import com.toir.entity.projects.ActualCost;
+import com.toir.entity.users.User;
+import com.toir.enums.ActualCostStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.FinanceScopeService;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,9 +18,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
+import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -42,6 +51,9 @@ class BudgetSummaryControllerContractTest {
     UserRepository userRepository;
 
     @Mock
+    EmployeeRepository employeeRepository;
+
+    @Mock
     FinanceScopeService financeScopeService;
 
     private MockMvc mockMvc;
@@ -54,9 +66,56 @@ class BudgetSummaryControllerContractTest {
                         actualCostRepository,
                         costCategoryRepository,
                         userRepository,
+                        employeeRepository,
                         financeScopeService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void actualCostRegisterReturnsReviewedByIdAndReviewedByNameWhenReviewed() throws Exception {
+        UUID actualCostId = UUID.randomUUID();
+        UUID reviewerId = UUID.randomUUID();
+        ActualCost actualCost = actualCost(actualCostId);
+        actualCost.setStatus(ActualCostStatus.APPROVED);
+        actualCost.setReviewedById(reviewerId);
+        actualCost.setReviewedAt(Instant.parse("2026-05-26T10:00:00Z"));
+        actualCost.setReviewComment("Approved");
+
+        User reviewer = new User();
+        ReflectionTestUtils.setField(reviewer, "id", reviewerId);
+        reviewer.setFullName("Finance Reviewer");
+
+        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(actualCost));
+        when(financeScopeService.filterActualCosts(List.of(actualCost))).thenReturn(List.of(actualCost));
+        when(userRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(reviewer));
+        when(employeeRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/budgets/actual-costs/register"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(actualCostId.toString()))
+                .andExpect(jsonPath("$.content[0].reviewedById").value(reviewerId.toString()))
+                .andExpect(jsonPath("$.content[0].reviewedByName").value("Finance Reviewer"))
+                .andExpect(jsonPath("$.content[0].status").value("APPROVED"))
+                .andExpect(jsonPath("$.content[0].amount").value(100.0))
+                .andExpect(jsonPath("$.content[0].reviewComment").value("Approved"));
+    }
+
+    @Test
+    void actualCostRegisterReturnsNullReviewedByNameWhenNotReviewed() throws Exception {
+        UUID actualCostId = UUID.randomUUID();
+        ActualCost actualCost = actualCost(actualCostId);
+
+        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(actualCost));
+        when(financeScopeService.filterActualCosts(List.of(actualCost))).thenReturn(List.of(actualCost));
+
+        mockMvc.perform(get("/api/v1/budgets/actual-costs/register"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(actualCostId.toString()))
+                .andExpect(jsonPath("$.content[0].reviewedById").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].reviewedByName").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].costCategoryId").value(actualCost.getCostCategoryId().toString()))
+                .andExpect(jsonPath("$.content[0].amount").value(100.0));
     }
 
     @Test
@@ -83,5 +142,16 @@ class BudgetSummaryControllerContractTest {
                 .andExpect(jsonPath("$.summary.total").value(0))
                 .andExpect(jsonPath("$.summary.byTargetRole").isArray())
                 .andExpect(jsonPath("$.summary.byDepartment").isArray());
+    }
+
+    private ActualCost actualCost(UUID id) {
+        ActualCost actualCost = new ActualCost();
+        ReflectionTestUtils.setField(actualCost, "id", id);
+        actualCost.setCostCategoryId(UUID.randomUUID());
+        actualCost.setStatus(ActualCostStatus.PENDING);
+        actualCost.setAmount(100.0);
+        actualCost.setCostDate(Instant.parse("2026-05-26T09:00:00Z"));
+        actualCost.setNotes("Existing notes");
+        return actualCost;
     }
 }

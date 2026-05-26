@@ -9,6 +9,7 @@ import com.toir.dto.budget.ContractorWorkRecommendationResponse;
 import com.toir.dto.common.PageResponse;
 import com.toir.dto.common.PageResponseWithSummary;
 import com.toir.dto.costcategory.CostCategoryDto;
+import com.toir.entity.users.Employee;
 import com.toir.entity.users.User;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.BudgetLine;
@@ -21,14 +22,20 @@ import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.FinanceScopeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -58,6 +65,7 @@ public class BudgetSummaryController {
     private final ActualCostRepository actualCostRepository;
     private final CostCategoryRepository costCategoryRepository;
     private final UserRepository userRepository;
+    private final EmployeeRepository employeeRepository;
     private final FinanceScopeService financeScopeService;
 
     @GetMapping("/summary")
@@ -154,8 +162,9 @@ public class BudgetSummaryController {
                 rejectedCount
         );
 
+        Map<UUID, String> reviewerNames = reviewerNamesById(items);
         return ResponseEntity.ok(PageResponseWithSummary.of(
-                items.stream().map(this::actualCostRow).toList(),
+                items.stream().map(c -> actualCostRow(c, reviewerNames)).toList(),
                 page,
                 size,
                 summary
@@ -170,7 +179,12 @@ public class BudgetSummaryController {
         List<ActualCost> pending = financeScopeService.filterActualCosts(
                 actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING)
         );
-        return ResponseEntity.ok(PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, size));
+        Map<UUID, String> reviewerNames = reviewerNamesById(pending);
+        return ResponseEntity.ok(PageResponse.of(
+                pending.stream().map(c -> actualCostRow(c, reviewerNames)).toList(),
+                page,
+                size
+        ));
     }
 
     @GetMapping("/actual-costs/{id}/review-history")
@@ -230,8 +244,9 @@ public class BudgetSummaryController {
                 recent.stream().map(ActualCost::getId).distinct().count()
         );
 
+        Map<UUID, String> reviewerNames = reviewerNamesById(recent);
         return ResponseEntity.ok(PageResponseWithSummary.of(
-                recent.stream().map(this::actualCostRow).toList(),
+                recent.stream().map(c -> actualCostRow(c, reviewerNames)).toList(),
                 page,
                 size,
                 summary
@@ -265,7 +280,12 @@ public class BudgetSummaryController {
         List<ActualCost> pending = financeScopeService.filterActualCosts(
                 actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING)
         );
-        return ResponseEntity.ok(PageResponse.of(pending.stream().map(this::actualCostRow).toList(), page, size));
+        Map<UUID, String> reviewerNames = reviewerNamesById(pending);
+        return ResponseEntity.ok(PageResponse.of(
+                pending.stream().map(c -> actualCostRow(c, reviewerNames)).toList(),
+                page,
+                size
+        ));
     }
 
     @GetMapping("/actual-costs/review-history-pack")
@@ -277,7 +297,12 @@ public class BudgetSummaryController {
                 .filterActualCosts(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).stream()
                 .filter(c -> c.getReviewedAt() != null)
                 .toList();
-        return ResponseEntity.ok(PageResponse.of(reviewed.stream().map(this::actualCostRow).toList(), page, size));
+        Map<UUID, String> reviewerNames = reviewerNamesById(reviewed);
+        return ResponseEntity.ok(PageResponse.of(
+                reviewed.stream().map(c -> actualCostRow(c, reviewerNames)).toList(),
+                page,
+                size
+        ));
     }
 
     @GetMapping("/contractor-works/{id}/recommendation")
@@ -286,7 +311,7 @@ public class BudgetSummaryController {
         return ResponseEntity.ok(new ContractorWorkRecommendationResponse(id.toString(), 0, List.of()));
     }
 
-    private ActualCostBudgetRow actualCostRow(ActualCost c) {
+    private ActualCostBudgetRow actualCostRow(ActualCost c, Map<UUID, String> reviewerNames) {
         return new ActualCostBudgetRow(
                 c.getId(),
                 c.getWorkOrderId(),
@@ -299,8 +324,32 @@ public class BudgetSummaryController {
                 c.getNotes(),
                 c.getReviewedAt(),
                 c.getReviewedById(),
+                c.getReviewedById() != null ? reviewerNames.get(c.getReviewedById()) : null,
                 c.getReviewComment()
         );
+    }
+
+    private Map<UUID, String> reviewerNamesById(List<ActualCost> costs) {
+        Set<UUID> reviewerIds = costs.stream()
+                .map(ActualCost::getReviewedById)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (reviewerIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<UUID, String> names = new HashMap<>();
+        userRepository.findAllByIdInAndIsDeletedFalse(reviewerIds)
+                .forEach(user -> names.put(user.getId(), user.getFullName()));
+        employeeRepository.findAllByIdInAndIsDeletedFalse(reviewerIds)
+                .forEach(employee -> names.putIfAbsent(employee.getId(), employeeName(employee)));
+        return names;
+    }
+
+    private String employeeName(Employee employee) {
+        return Stream.of(employee.getLastName(), employee.getFirstName(), employee.getMiddleName())
+                .filter(part -> part != null && !part.isBlank())
+                .collect(Collectors.joining(" "));
     }
 
     private ActualCostReviewHistoryResponse.UserRef toUserRef(UUID userId) {
