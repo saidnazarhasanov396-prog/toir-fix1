@@ -117,6 +117,9 @@ class EquipmentServiceTest {
     EquipmentAttributeService equipmentAttributeService;
 
     @Mock
+    EquipmentManualAttributeService equipmentManualAttributeService;
+
+    @Mock
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @Mock

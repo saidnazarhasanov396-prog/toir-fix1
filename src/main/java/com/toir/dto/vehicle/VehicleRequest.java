@@ -1,6 +1,7 @@
 package com.toir.dto.vehicle;
 
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
+import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeRequest;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.VehicleType;
 import jakarta.validation.constraints.NotBlank;
@@ -41,7 +42,8 @@ public record VehicleRequest(
         LocalDate insuranceExpiryDate,
         LocalDate technicalInspectionExpiryDate,
         String gpsDeviceId,
-        List<EquipmentAttributeValueRequest> attributes
+        List<EquipmentAttributeValueRequest> attributes,
+        List<EquipmentManualAttributeRequest> manualAttributes
 ) {
     public VehicleRequest(
             String code,
@@ -80,7 +82,7 @@ public record VehicleRequest(
                 bodyNumber, chassisNumber, engineNumber, fuelType, fuelTankCapacity, carryingCapacity,
                 seatCount, assignedDriverId, currentOdometerKm, currentEngineHours,
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
-                technicalInspectionExpiryDate, gpsDeviceId, null);
+                technicalInspectionExpiryDate, gpsDeviceId, null, null);
     }
 
     public static VehicleRequest minimal(String code, String name, String inventoryNumber,
@@ -126,7 +128,8 @@ public record VehicleRequest(
                 insuranceExpiryDate,
                 technicalInspectionExpiryDate,
                 gpsDeviceId,
-                attributes
+                attributes,
+                manualAttributes
         );
     }
 }

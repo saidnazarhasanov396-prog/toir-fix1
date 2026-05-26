@@ -63,6 +63,7 @@ public class EquipmentService {
     private final WorkOrderRepository workOrderRepository;
     private final DowntimeEventRepository downtimeEventRepository;
     private final EquipmentAttributeService equipmentAttributeService;
+    private final EquipmentManualAttributeService equipmentManualAttributeService;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final AuditBuilderService auditBuilderService;
@@ -193,7 +194,8 @@ public class EquipmentService {
                 defects,
                 workOrders,
                 downtimeEvents,
-                equipmentAttributeService == null ? List.of() : equipmentAttributeService.findValues(id)
+                equipmentAttributeService == null ? List.of() : equipmentAttributeService.findValues(id),
+                equipmentManualAttributeService == null ? List.of() : equipmentManualAttributeService.list(id)
         );
     }
 
@@ -222,6 +224,12 @@ public class EquipmentService {
             equipmentAttributeService.upsertValues(
                     saved,
                     request.attributes() == null ? List.of() : request.attributes()
+            );
+        }
+        if (equipmentManualAttributeService != null && request.manualAttributes() != null) {
+            equipmentManualAttributeService.replaceAll(
+                    saved.getId(),
+                    new com.toir.dto.equipmentmanualattribute.BulkEquipmentManualAttributeRequest(request.manualAttributes())
             );
         }
         if (request.warehouseId() != null) {
@@ -258,6 +266,12 @@ public class EquipmentService {
         Equipment saved = repository.save(entity);
         if (equipmentAttributeService != null && request.attributes() != null) {
             equipmentAttributeService.upsertValues(saved, request.attributes());
+        }
+        if (equipmentManualAttributeService != null && request.manualAttributes() != null) {
+            equipmentManualAttributeService.replaceAll(
+                    saved.getId(),
+                    new com.toir.dto.equipmentmanualattribute.BulkEquipmentManualAttributeRequest(request.manualAttributes())
+            );
         }
 
         auditBuilderService.log(

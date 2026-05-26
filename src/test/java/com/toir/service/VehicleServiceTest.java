@@ -27,6 +27,7 @@ import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentAttributeService;
+import com.toir.service.equipment.EquipmentManualAttributeService;
 import com.toir.service.file_management.FileService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,6 +68,9 @@ class VehicleServiceTest {
 
     @Mock
     EquipmentAttributeService equipmentAttributeService;
+
+    @Mock
+    EquipmentManualAttributeService equipmentManualAttributeService;
 
     @InjectMocks
     VehicleService service;
