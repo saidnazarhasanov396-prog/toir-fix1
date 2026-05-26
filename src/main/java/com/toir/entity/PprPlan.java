@@ -1,5 +1,9 @@
 package com.toir.entity;
 import com.toir.enums.PlanStatus;
+import com.toir.enums.PprFrequency;
+import com.toir.enums.PprScheduleType;
+import com.toir.enums.PprScopeType;
+import com.toir.enums.PprType;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -45,6 +49,28 @@ public class PprPlan extends BaseEntity {
 
     private String notes;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ppr_type")
+    private PprType pprType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "schedule_type")
+    private PprScheduleType scheduleType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "frequency")
+    private PprFrequency frequency;
+
+    @Column(name = "interval_hours")
+    private Long intervalHours;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "scope_type")
+    private PprScopeType scopeType;
+
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PprTask> tasks = new ArrayList<>();
+
+    @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PprPlanTarget> targets = new ArrayList<>();
 }
