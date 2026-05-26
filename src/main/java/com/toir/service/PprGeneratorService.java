@@ -5,6 +5,7 @@ import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
 import com.toir.entity.equipment.EquipmentAttributeValue;
+import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
 import com.toir.dto.workorder.WorkOrderDto;
@@ -19,6 +20,7 @@ import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -48,6 +50,7 @@ public class PprGeneratorService {
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
     private final MaintenanceRegulationRepository regulationRepository;
+    private final EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
     private final MaintenanceRegulationAttributeConditionRepository conditionRepository;
     private final EquipmentRepository equipmentRepository;
     private final EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
@@ -89,6 +92,14 @@ public class PprGeneratorService {
                 .filter(regulation -> isAllowedForPprType(plan, regulation))
                 .filter(regulation -> isAllowedForSchedule(plan, regulation, planMonth))
                 .toList();
+        List<EquipmentMaintenanceRule> individualRules = equipmentMaintenanceRuleRepository.findAllActive().stream()
+                .filter(rule -> isAllowedForPprType(plan, rule.getMaintenanceKind()))
+                .filter(rule -> isAllowedForSchedule(plan, rule, planMonth))
+                .toList();
+        Set<RegulationOverrideSignature> individualOverrides = individualRules.stream()
+                .filter(rule -> rule.getBaseRegulationId() != null)
+                .map(rule -> new RegulationOverrideSignature(rule.getBaseRegulationId(), rule.getEquipmentId()))
+                .collect(Collectors.toSet());
         Map<UUID, List<MaintenanceRegulationAttributeCondition>> conditionsByRegulationId =
                 loadConditionsByRegulationId(regulations);
 
@@ -133,6 +144,10 @@ public class PprGeneratorService {
                     if (!matchesConditions(eq, conditions, attributeIndex)) {
                         continue;
                     }
+                    if (individualOverrides.contains(new RegulationOverrideSignature(reg.getId(), eq.getId()))) {
+                        skipped++;
+                        continue;
+                    }
                     matching.add(eq);
                 }
             }
@@ -140,7 +155,7 @@ public class PprGeneratorService {
             int seq = 1;
             for (Equipment eq : matching) {
                 String code = String.format("PT-%s-%02d-%s-%d", reg.getCode(), planMonth.getMonthValue(), eq.getCode(), seq++);
-                TaskSignature signature = new TaskSignature(plan.getId(), reg.getId(), eq.getId());
+                TaskSignature signature = new TaskSignature(plan.getId(), reg.getId(), null, eq.getId());
                 if (existingCodes.contains(code) || existingSignatures.contains(signature)) {
                     skipped++;
                     continue;
@@ -176,6 +191,61 @@ public class PprGeneratorService {
                 existingCodes.add(code);
                 existingSignatures.add(signature);
             }
+        }
+
+        Map<UUID, Equipment> equipmentByIdForRules = allEquipment.stream()
+                .collect(Collectors.toMap(Equipment::getId, Function.identity(), (left, right) -> left));
+        for (EquipmentMaintenanceRule rule : individualRules) {
+            if (!shouldGenerate(plan, rule, planMonth)) {
+                continue;
+            }
+            Equipment eq = equipmentByIdForRules.get(rule.getEquipmentId());
+            if (eq == null) {
+                skipped++;
+                continue;
+            }
+            if (plan.getDepartmentId() != null && !plan.getDepartmentId().equals(eq.getDepartmentId())) {
+                continue;
+            }
+            if (!targetContext.matches(eq)) {
+                continue;
+            }
+
+            String code = String.format("PT-%s-%02d-%s", rule.getCode(), planMonth.getMonthValue(), eq.getCode());
+            TaskSignature signature = new TaskSignature(plan.getId(), null, rule.getId(), eq.getId());
+            if (existingCodes.contains(code) || existingSignatures.contains(signature)) {
+                skipped++;
+                continue;
+            }
+
+            PprTask task = new PprTask();
+            task.setCode(code);
+            task.setPlan(plan);
+            task.setRegulationId(rule.getBaseRegulationId());
+            task.setEquipmentMaintenanceRuleId(rule.getId());
+            task.setEquipmentId(eq.getId());
+            task.setTitle(rule.getName() + " — " + eq.getCode());
+            task.setScheduledStart(planStart.atTime(LocalTime.of(9, 0)));
+            task.setScheduledEnd(resolveScheduledEnd(plan, rule, planStart, planEnd));
+            task.setDueDate(planEnd.atTime(LocalTime.of(18, 0)));
+            task.setPlannedLaborHours(rule.getNormativeLaborHours());
+            task.setPriority(PriorityLevel.MEDIUM);
+            task.setStatus(PprTaskStatus.PLANNED);
+
+            plan.getTasks().add(task);
+            PprTask saved = taskRepository.save(task);
+            auditBuilderService.log(
+                    "ppr_task",
+                    saved.getId().toString(),
+                    AuditAction.CREATE,
+                    AuditModule.PPR_TASK,
+                    "Задача ППР создана",
+                    null,
+                    saved
+            );
+            created++;
+            existingCodes.add(code);
+            existingSignatures.add(signature);
         }
 
         if (created > 0 && plan.getStatus() == PlanStatus.DRAFT) {
@@ -229,6 +299,7 @@ public class PprGeneratorService {
 
         Map<UUID, Equipment> equipmentById = loadEquipmentById(candidates);
         Map<UUID, MaintenanceRegulation> regulationById = loadRegulationById(candidates);
+        Map<UUID, EquipmentMaintenanceRule> maintenanceRuleById = loadMaintenanceRuleById(candidates);
         List<UUID> createdWorkOrderIds = new ArrayList<>();
         Set<String> reservedNumbers = new HashSet<>();
 
@@ -244,6 +315,7 @@ public class PprGeneratorService {
                 continue;
             }
             MaintenanceRegulation regulation = regulationById.get(task.getRegulationId());
+            EquipmentMaintenanceRule maintenanceRule = maintenanceRuleById.get(task.getEquipmentMaintenanceRuleId());
             WorkOrderRequest request = new WorkOrderRequest(
                     generateWorkOrderNumber(reservedNumbers),
                     task.getTitle(),
@@ -254,8 +326,8 @@ public class PprGeneratorService {
                     null,
                     task.getId(),
                     null,
-                    workOrderType(plan, regulation),
-                    workType(regulation),
+                    workOrderType(plan, regulation, maintenanceRule),
+                    workType(regulation, maintenanceRule),
                     null,
                     null,
                     task.getPriority(),
@@ -278,11 +350,20 @@ public class PprGeneratorService {
     }
 
     private boolean shouldGenerate(PprPlan plan, MaintenanceRegulation reg, YearMonth planMonth) {
+        return shouldGenerate(plan, reg.getPeriodicityUnit(), reg.getPeriodicityValue(), planMonth);
+    }
+
+    private boolean shouldGenerate(PprPlan plan, EquipmentMaintenanceRule rule, YearMonth planMonth) {
+        return shouldGenerate(plan, rule.getPeriodicityUnit(), rule.getPeriodicityValue(), planMonth);
+    }
+
+    private boolean shouldGenerate(PprPlan plan,
+                                   PeriodicityUnit unit,
+                                   int value,
+                                   YearMonth planMonth) {
         if (plan.getScheduleType() == PprScheduleType.ONE_TIME) {
             return true;
         }
-        PeriodicityUnit unit = reg.getPeriodicityUnit();
-        int value = reg.getPeriodicityValue();
         int month = planMonth.getMonthValue();
         return switch (unit) {
             case DAY, WEEK, MONTH -> true;
@@ -293,10 +374,13 @@ public class PprGeneratorService {
     }
 
     private boolean isAllowedForPprType(PprPlan plan, MaintenanceRegulation regulation) {
+        return isAllowedForPprType(plan, regulation.getMaintenanceKind());
+    }
+
+    private boolean isAllowedForPprType(PprPlan plan, MaintenanceKind kind) {
         if (plan.getPprType() == null) {
             return true;
         }
-        MaintenanceKind kind = regulation.getMaintenanceKind();
         return switch (plan.getPprType()) {
             case PREVENTIVE_MAINTENANCE -> EnumSet.of(
                     MaintenanceKind.PREVENTIVE,
@@ -342,27 +426,49 @@ public class PprGeneratorService {
                 .collect(Collectors.toMap(MaintenanceRegulation::getId, Function.identity(), (left, right) -> left));
     }
 
-    private WorkOrderType workOrderType(PprPlan plan, MaintenanceRegulation regulation) {
+    private Map<UUID, EquipmentMaintenanceRule> loadMaintenanceRuleById(List<PprTask> tasks) {
+        List<UUID> ruleIds = tasks.stream()
+                .map(PprTask::getEquipmentMaintenanceRuleId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (ruleIds.isEmpty()) {
+            return Map.of();
+        }
+        return equipmentMaintenanceRuleRepository.findAllByIdInAndIsDeletedFalse(ruleIds).stream()
+                .collect(Collectors.toMap(EquipmentMaintenanceRule::getId, Function.identity(), (left, right) -> left));
+    }
+
+    private WorkOrderType workOrderType(PprPlan plan,
+                                        MaintenanceRegulation regulation,
+                                        EquipmentMaintenanceRule maintenanceRule) {
         PprType pprType = plan.getPprType();
         if (pprType == PprType.CAPITAL_REPAIR) {
             return WorkOrderType.OVERHAUL;
         }
-        if (pprType == PprType.PREVENTIVE_MAINTENANCE && isInspectionOrDiagnostic(regulation)) {
+        if (pprType == PprType.PREVENTIVE_MAINTENANCE
+                && isInspectionOrDiagnostic(maintenanceKind(regulation, maintenanceRule))) {
             return WorkOrderType.INSPECTION;
         }
         return WorkOrderType.PLANNED;
     }
 
-    private WorkType workType(MaintenanceRegulation regulation) {
-        return isInspectionOrDiagnostic(regulation) ? WorkType.DIAGNOSTICS : WorkType.REPAIR;
+    private WorkType workType(MaintenanceRegulation regulation, EquipmentMaintenanceRule maintenanceRule) {
+        return isInspectionOrDiagnostic(maintenanceKind(regulation, maintenanceRule))
+                ? WorkType.DIAGNOSTICS
+                : WorkType.REPAIR;
     }
 
-    private boolean isInspectionOrDiagnostic(MaintenanceRegulation regulation) {
-        if (regulation == null) {
-            return false;
+    private MaintenanceKind maintenanceKind(MaintenanceRegulation regulation,
+                                            EquipmentMaintenanceRule maintenanceRule) {
+        if (maintenanceRule != null) {
+            return maintenanceRule.getMaintenanceKind();
         }
-        return regulation.getMaintenanceKind() == MaintenanceKind.INSPECTION
-                || regulation.getMaintenanceKind() == MaintenanceKind.DIAGNOSTIC;
+        return regulation != null ? regulation.getMaintenanceKind() : null;
+    }
+
+    private boolean isInspectionOrDiagnostic(MaintenanceKind kind) {
+        return kind == MaintenanceKind.INSPECTION || kind == MaintenanceKind.DIAGNOSTIC;
     }
 
     private String workOrderSummary(PprPlan plan, PprTask task) {
@@ -390,6 +496,20 @@ public class PprGeneratorService {
     private boolean isAllowedForSchedule(PprPlan plan,
                                          MaintenanceRegulation regulation,
                                          YearMonth planMonth) {
+        return isAllowedForSchedule(plan, regulation.getPeriodicityUnit(), regulation, null, planMonth);
+    }
+
+    private boolean isAllowedForSchedule(PprPlan plan,
+                                         EquipmentMaintenanceRule rule,
+                                         YearMonth planMonth) {
+        return isAllowedForSchedule(plan, rule.getPeriodicityUnit(), null, rule, planMonth);
+    }
+
+    private boolean isAllowedForSchedule(PprPlan plan,
+                                         PeriodicityUnit periodicityUnit,
+                                         MaintenanceRegulation regulation,
+                                         EquipmentMaintenanceRule rule,
+                                         YearMonth planMonth) {
         PprScheduleType scheduleType = plan.getScheduleType();
         if (scheduleType == null) {
             return true;
@@ -398,9 +518,11 @@ public class PprGeneratorService {
             return true;
         }
         if (scheduleType == PprScheduleType.CALENDAR && plan.getFrequency() != null) {
-            return regulation.getPeriodicityUnit() == periodicityUnit(plan.getFrequency());
+            return periodicityUnit == periodicityUnit(plan.getFrequency());
         }
-        return shouldGenerate(plan, regulation, planMonth);
+        return regulation != null
+                ? shouldGenerate(plan, regulation, planMonth)
+                : shouldGenerate(plan, rule, planMonth);
     }
 
     private PeriodicityUnit periodicityUnit(PprFrequency frequency) {
@@ -420,10 +542,24 @@ public class PprGeneratorService {
                                                         MaintenanceRegulation regulation,
                                                         LocalDate planStart,
                                                         LocalDate planEnd) {
+        return resolveScheduledEnd(plan, regulation.getNormativeLaborHours(), planStart, planEnd);
+    }
+
+    private java.time.LocalDateTime resolveScheduledEnd(PprPlan plan,
+                                                        EquipmentMaintenanceRule rule,
+                                                        LocalDate planStart,
+                                                        LocalDate planEnd) {
+        return resolveScheduledEnd(plan, rule.getNormativeLaborHours(), planStart, planEnd);
+    }
+
+    private java.time.LocalDateTime resolveScheduledEnd(PprPlan plan,
+                                                        double normativeLaborHours,
+                                                        LocalDate planStart,
+                                                        LocalDate planEnd) {
         if (plan.getScheduleType() == PprScheduleType.ONE_TIME) {
             return planEnd.atTime(scheduledEndTime());
         }
-        return planStart.plusDays(Math.max(1, (int) Math.ceil(regulation.getNormativeLaborHours() / 8)))
+        return planStart.plusDays(Math.max(1, (int) Math.ceil(normativeLaborHours / 8)))
                 .atTime(scheduledEndTime());
     }
 
@@ -623,13 +759,23 @@ public class PprGeneratorService {
         }
     }
 
-    private record TaskSignature(UUID planId, UUID regulationId, UUID equipmentId) {}
+    private record RegulationOverrideSignature(UUID regulationId, UUID equipmentId) {}
+
+    private record TaskSignature(UUID planId, UUID regulationId, UUID equipmentMaintenanceRuleId, UUID equipmentId) {}
 
     private static TaskSignature taskSignature(PprTask task) {
-        if (task == null || task.getPlan() == null || task.getPlan().getId() == null || task.getRegulationId() == null) {
+        if (task == null || task.getPlan() == null || task.getPlan().getId() == null) {
             return null;
         }
-        return new TaskSignature(task.getPlan().getId(), task.getRegulationId(), task.getEquipmentId());
+        if (task.getRegulationId() == null && task.getEquipmentMaintenanceRuleId() == null) {
+            return null;
+        }
+        return new TaskSignature(
+                task.getPlan().getId(),
+                task.getRegulationId(),
+                task.getEquipmentMaintenanceRuleId(),
+                task.getEquipmentId()
+        );
     }
 
     public record GenerationResult(UUID planId, int created, int skipped) {}

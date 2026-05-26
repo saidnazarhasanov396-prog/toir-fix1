@@ -24,8 +24,11 @@ public class PprTask extends BaseEntity {
     @JoinColumn(name = "plan_id", nullable = false)
     private PprPlan plan;
 
-    @Column(name = "regulation_id", nullable = false)
+    @Column(name = "regulation_id")
     private UUID regulationId;
+
+    @Column(name = "equipment_maintenance_rule_id")
+    private UUID equipmentMaintenanceRuleId;
 
     @Column(name = "equipment_id")
     private UUID equipmentId;

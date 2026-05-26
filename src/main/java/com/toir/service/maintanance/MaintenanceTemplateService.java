@@ -4,6 +4,7 @@ import com.toir.dto.maintenancetemplate.MaintenanceOperationDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateStatsResponse;
+import com.toir.entity.maintenance.MaintenanceAction;
 import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.AuditAction;
@@ -13,6 +14,7 @@ import com.toir.exception.RestException;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
+import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateStatsProjection;
 import com.toir.service.SparePartService;
@@ -37,6 +39,7 @@ public class MaintenanceTemplateService {
 
     private final MaintenanceTemplateRepository repository;
     private final MaintenanceOperationRepository operationRepository;
+    private final MaintenanceActionRepository actionRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final SparePartService sparePartService;
     private final AuditBuilderService auditBuilderService;
@@ -127,17 +130,33 @@ public class MaintenanceTemplateService {
     @Transactional
     public MaintenanceOperationDto addOperation(UUID templateId, MaintenanceOperationDto r) {
         MaintenanceTemplate t = getOrThrow(templateId);
+        MaintenanceAction action = null;
+        if (r.actionId() != null) {
+            action = actionRepository.findByIdAndIsDeletedFalse(r.actionId())
+                    .orElseThrow(() -> RestException.notFound("Maintenance action not found: " + r.actionId()));
+            if (!action.isActive()) {
+                throw RestException.badRequest("Maintenance action is inactive: " + r.actionId());
+            }
+        }
         MaintenanceOperation op = new MaintenanceOperation();
         op.setTemplate(t);
+        op.setAction(action);
         op.setSequence(r.sequence());
-        op.setName(r.name());
+        String operationName = firstText(r.name(), action != null ? action.getName() : null);
+        if (operationName == null) {
+            throw RestException.badRequest("Maintenance operation name is required");
+        }
+        op.setName(operationName);
         op.setDescription(r.description());
-        op.setDurationHours(r.durationHours());
-        op.setRequiredSkill(r.requiredSkill());
-        op.setSafetyNotes(r.safetyNotes());
-        op.setToolsRequired(r.toolsRequired());
-        op.setSparePartsRequired(r.sparePartsRequired());
-        op.setConsumablesRequired(r.consumablesRequired());
+        op.setDurationHours(r.durationHours() > 0 ? r.durationHours()
+                : action != null && action.getDefaultDurationHours() != null
+                ? action.getDefaultDurationHours()
+                : 0);
+        op.setRequiredSkill(firstText(r.requiredSkill(), action != null ? action.getRequiredSkill() : null));
+        op.setSafetyNotes(firstText(r.safetyNotes(), action != null ? action.getSafetyNotes() : null));
+        op.setToolsRequired(firstText(r.toolsRequired(), action != null ? action.getToolsRequired() : null));
+        op.setSparePartsRequired(firstText(r.sparePartsRequired(), action != null ? action.getSparePartsRequired() : null));
+        op.setConsumablesRequired(firstText(r.consumablesRequired(), action != null ? action.getConsumablesRequired() : null));
         op.setControlParameter(r.controlParameter());
         op.setControlUnit(r.controlUnit());
         op.setControlMin(r.controlMin());
@@ -158,6 +177,13 @@ public class MaintenanceTemplateService {
     private MaintenanceTemplate getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Template not found: " + id));
+    }
+
+    private String firstText(String preferred, String fallback) {
+        if (preferred != null && !preferred.isBlank()) {
+            return preferred.trim();
+        }
+        return fallback != null && !fallback.isBlank() ? fallback.trim() : null;
     }
 
     private void applyMutableFields(MaintenanceTemplate t, MaintenanceTemplateRequest r) {

@@ -6,6 +6,7 @@ import com.toir.entity.PprPlan;
 import com.toir.entity.PprPlanTarget;
 import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.PlanStatus;
@@ -22,6 +23,7 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
@@ -55,6 +57,7 @@ public class PprPlanService {
     private final DepartmentRepository departmentRepository;
     private final EquipmentRepository equipmentRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
+    private final EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
     private final AuditBuilderService auditBuilderService;
     private final AuditSerializationService auditSerializationService;
     private static final int MAX_PLAN_CODE_GENERATION_ATTEMPTS = 50;
@@ -318,9 +321,10 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public List<PprTaskDto> findTasksByPlan(UUID planId) {
-        return taskRepository.findAllByPlanIdAndIsDeletedFalseOrderByScheduledStartAscIdAsc(planId)
-                .stream()
-                .map(PprTaskDto::from)
+        List<PprTask> tasks = taskRepository.findAllByPlanIdAndIsDeletedFalseOrderByScheduledStartAscIdAsc(planId);
+        Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
+        return tasks.stream()
+                .map(task -> PprTaskDto.from(task, ruleById))
                 .toList();
     }
 
@@ -331,7 +335,7 @@ public class PprPlanService {
 
     private PprPlanDto toDto(PprPlan plan) {
         Map<UUID, String> departmentNames = resolveDepartmentNames(List.of(plan));
-        return PprPlanDto.from(plan, departmentName(departmentNames, plan));
+        return PprPlanDto.from(plan, departmentName(departmentNames, plan), loadMaintenanceRuleById(plan.getTasks()));
     }
 
     private List<PprPlanDto> toDtos(List<PprPlan> plans) {
@@ -339,6 +343,19 @@ public class PprPlanService {
         return plans.stream()
                 .map(plan -> PprPlanDto.from(plan, departmentName(departmentNames, plan)))
                 .toList();
+    }
+
+    private Map<UUID, EquipmentMaintenanceRule> loadMaintenanceRuleById(List<PprTask> tasks) {
+        List<UUID> ruleIds = tasks.stream()
+                .map(PprTask::getEquipmentMaintenanceRuleId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (ruleIds.isEmpty()) {
+            return Map.of();
+        }
+        return equipmentMaintenanceRuleRepository.findAllByIdInAndIsDeletedFalse(ruleIds).stream()
+                .collect(Collectors.toMap(EquipmentMaintenanceRule::getId, rule -> rule, (left, right) -> left));
     }
 
     private String departmentName(Map<UUID, String> departmentNames, PprPlan plan) {
