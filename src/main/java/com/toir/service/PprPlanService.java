@@ -3,16 +3,25 @@ package com.toir.service;
 import com.toir.dto.pprplanning.*;
 import com.toir.entity.Department;
 import com.toir.entity.PprPlan;
+import com.toir.entity.PprPlanTarget;
 import com.toir.entity.PprTask;
+import com.toir.entity.equipment.Equipment;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.PlanStatus;
+import com.toir.enums.PprFrequency;
+import com.toir.enums.PprScheduleType;
+import com.toir.enums.PprScopeType;
+import com.toir.enums.PprTargetType;
 import com.toir.enums.PprTaskStatus;
+import com.toir.enums.PprType;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprPlanStatsProjection;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
@@ -33,6 +42,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,6 +53,8 @@ public class PprPlanService {
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
     private final DepartmentRepository departmentRepository;
+    private final EquipmentRepository equipmentRepository;
+    private final EquipmentTypeRepository equipmentTypeRepository;
     private final AuditBuilderService auditBuilderService;
     private final AuditSerializationService auditSerializationService;
     private static final int MAX_PLAN_CODE_GENERATION_ATTEMPTS = 50;
@@ -71,7 +83,7 @@ public class PprPlanService {
                         PaginationUtils.pageRequest(page, size)
                 );
         Map<UUID, String> departmentNames = resolveDepartmentNames(plans.getContent());
-        return plans.map(plan -> PprPlanDto.from(plan, departmentNames.get(plan.getDepartmentId())));
+        return plans.map(plan -> PprPlanDto.from(plan, departmentName(departmentNames, plan)));
     }
 
     @Transactional(readOnly = true)
@@ -319,14 +331,18 @@ public class PprPlanService {
 
     private PprPlanDto toDto(PprPlan plan) {
         Map<UUID, String> departmentNames = resolveDepartmentNames(List.of(plan));
-        return PprPlanDto.from(plan, departmentNames.get(plan.getDepartmentId()));
+        return PprPlanDto.from(plan, departmentName(departmentNames, plan));
     }
 
     private List<PprPlanDto> toDtos(List<PprPlan> plans) {
         Map<UUID, String> departmentNames = resolveDepartmentNames(plans);
         return plans.stream()
-                .map(plan -> PprPlanDto.from(plan, departmentNames.get(plan.getDepartmentId())))
+                .map(plan -> PprPlanDto.from(plan, departmentName(departmentNames, plan)))
                 .toList();
+    }
+
+    private String departmentName(Map<UUID, String> departmentNames, PprPlan plan) {
+        return plan.getDepartmentId() == null ? null : departmentNames.get(plan.getDepartmentId());
     }
 
     private Map<UUID, String> resolveDepartmentNames(List<PprPlan> plans) {
@@ -521,6 +537,151 @@ public class PprPlanService {
             plan.setCreatedById(request.createdById());
         }
         plan.setNotes(request.notes());
+        applyPlanContractFields(plan, request);
+        replacePlanTargets(plan, request);
+    }
+
+    private void applyPlanContractFields(PprPlan plan, PprPlanRequest request) {
+        PprType pprType = request.pprType() != null ? request.pprType() : PprType.PREVENTIVE_MAINTENANCE;
+        PprScheduleType scheduleType = request.scheduleType() != null ? request.scheduleType() : PprScheduleType.CALENDAR;
+        PprScopeType scopeType = request.scopeType() != null
+                ? request.scopeType()
+                : (request.departmentId() != null ? PprScopeType.DEPARTMENT : PprScopeType.ENTERPRISE);
+
+        validateSchedule(scheduleType, request.frequency(), request.intervalHours());
+        validateScope(pprType, scopeType, request.departmentId());
+
+        plan.setPprType(pprType);
+        plan.setScheduleType(scheduleType);
+        plan.setFrequency(scheduleType == PprScheduleType.CALENDAR ? request.frequency() : null);
+        plan.setIntervalHours(scheduleType == PprScheduleType.OPERATING_HOURS ? request.intervalHours() : null);
+        plan.setScopeType(scopeType);
+    }
+
+    private void validateSchedule(PprScheduleType scheduleType, PprFrequency frequency, Long intervalHours) {
+        if (scheduleType == PprScheduleType.CALENDAR) {
+            if (intervalHours != null) {
+                throw RestException.badRequest("intervalHours is allowed only for OPERATING_HOURS PPR schedule");
+            }
+            return;
+        }
+        if (scheduleType == PprScheduleType.OPERATING_HOURS) {
+            if (frequency != null) {
+                throw RestException.badRequest("frequency is allowed only for CALENDAR PPR schedule");
+            }
+            if (intervalHours == null || intervalHours <= 0) {
+                throw RestException.badRequest("intervalHours must be positive for OPERATING_HOURS PPR schedule");
+            }
+            return;
+        }
+        if (scheduleType == PprScheduleType.ONE_TIME) {
+            if (frequency != null) {
+                throw RestException.badRequest("frequency is allowed only for CALENDAR PPR schedule");
+            }
+            if (intervalHours != null) {
+                throw RestException.badRequest("intervalHours is allowed only for OPERATING_HOURS PPR schedule");
+            }
+        }
+    }
+
+    private void validateScope(PprType pprType, PprScopeType scopeType, UUID departmentId) {
+        if (scopeType == PprScopeType.DEPARTMENT && departmentId == null) {
+            throw RestException.badRequest("departmentId is required when PPR scopeType is DEPARTMENT");
+        }
+        if (pprType == PprType.CAPITAL_REPAIR
+                && scopeType != PprScopeType.DEPARTMENT
+                && scopeType != PprScopeType.ENTERPRISE) {
+            throw RestException.badRequest("CAPITAL_REPAIR PPR scopeType must be DEPARTMENT or ENTERPRISE");
+        }
+    }
+
+    private void replacePlanTargets(PprPlan plan, PprPlanRequest request) {
+        if (request.equipmentIds() == null && request.equipmentTypeIds() == null) {
+            return;
+        }
+
+        List<UUID> equipmentIds = distinctIds(request.equipmentIds());
+        List<UUID> equipmentTypeIds = distinctIds(request.equipmentTypeIds());
+
+        validateNoDuplicateIds("equipmentIds", request.equipmentIds(), equipmentIds);
+        validateNoDuplicateIds("equipmentTypeIds", request.equipmentTypeIds(), equipmentTypeIds);
+
+        Map<UUID, Equipment> equipmentById = resolveEquipmentTargets(equipmentIds, plan.getDepartmentId());
+        validateEquipmentTypeTargets(equipmentTypeIds);
+
+        plan.getTargets().clear();
+        for (UUID equipmentId : equipmentIds) {
+            PprPlanTarget target = new PprPlanTarget();
+            target.setPlan(plan);
+            target.setTargetType(PprTargetType.EQUIPMENT);
+            target.setEquipmentId(equipmentById.get(equipmentId).getId());
+            plan.getTargets().add(target);
+        }
+        for (UUID equipmentTypeId : equipmentTypeIds) {
+            PprPlanTarget target = new PprPlanTarget();
+            target.setPlan(plan);
+            target.setTargetType(PprTargetType.EQUIPMENT_TYPE);
+            target.setEquipmentTypeId(equipmentTypeId);
+            plan.getTargets().add(target);
+        }
+    }
+
+    private List<UUID> distinctIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return ids.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toCollection(LinkedHashSet::new),
+                        List::copyOf
+                ));
+    }
+
+    private void validateNoDuplicateIds(String fieldName, List<UUID> requestedIds, List<UUID> distinctIds) {
+        if (requestedIds == null || requestedIds.isEmpty()) {
+            return;
+        }
+        long nonNullCount = requestedIds.stream().filter(Objects::nonNull).count();
+        if (nonNullCount != requestedIds.size()) {
+            throw RestException.badRequest(fieldName + " must not contain null values");
+        }
+        if (distinctIds.size() != requestedIds.size()) {
+            throw RestException.badRequest(fieldName + " must not contain duplicate values");
+        }
+    }
+
+    private Map<UUID, Equipment> resolveEquipmentTargets(List<UUID> equipmentIds, UUID departmentId) {
+        if (equipmentIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Equipment> equipment = equipmentRepository.findAllByIdInAndIsDeletedFalse(equipmentIds);
+        Map<UUID, Equipment> equipmentById = equipment.stream()
+                .collect(Collectors.toMap(Equipment::getId, item -> item));
+        for (UUID equipmentId : equipmentIds) {
+            Equipment item = equipmentById.get(equipmentId);
+            if (item == null) {
+                throw RestException.notFound("Equipment not found: " + equipmentId);
+            }
+            if (departmentId != null && !departmentId.equals(item.getDepartmentId())) {
+                throw RestException.badRequest("PPR equipment target belongs to a different department: " + equipmentId);
+            }
+        }
+        return equipmentById;
+    }
+
+    private void validateEquipmentTypeTargets(List<UUID> equipmentTypeIds) {
+        if (equipmentTypeIds.isEmpty()) {
+            return;
+        }
+        Set<UUID> existingIds = equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(equipmentTypeIds).stream()
+                .map(type -> type.getId())
+                .collect(Collectors.toSet());
+        for (UUID equipmentTypeId : equipmentTypeIds) {
+            if (!existingIds.contains(equipmentTypeId)) {
+                throw RestException.notFound("Equipment type not found: " + equipmentTypeId);
+            }
+        }
     }
 
     private LocalDate resolvePlanStartDate(PprPlanRequest request) {

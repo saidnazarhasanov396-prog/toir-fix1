@@ -2,10 +2,15 @@ package com.toir.controller;
 
 import com.toir.dto.pprplanning.PprTaskDto;
 import com.toir.dto.pprplanning.PprPlanDto;
+import com.toir.dto.pprplanning.PprPlanRequest;
 import com.toir.dto.pprplanning.PprPlanStatsResponse;
 import com.toir.entity.PprPlan;
 import com.toir.enums.PlanStatus;
+import com.toir.enums.PprFrequency;
+import com.toir.enums.PprScheduleType;
+import com.toir.enums.PprScopeType;
 import com.toir.enums.PprTaskStatus;
+import com.toir.enums.PprType;
 import com.toir.enums.PriorityLevel;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
@@ -20,6 +25,7 @@ import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
@@ -39,6 +45,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -255,6 +262,70 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.toDate").value("2026-06-30"));
 
         verify(service).create(any());
+    }
+
+    @Test
+    void createPlanAcceptsPhase1ContractFields() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID createdById = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        PprPlanDto plan = new PprPlanDto(
+                planId,
+                "PPR-2026-0002",
+                "Monthly preventive",
+                PlanStatus.DRAFT,
+                departmentId,
+                "Mechanical",
+                createdById,
+                null,
+                "phase1",
+                List.of(),
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30),
+                PprType.PREVENTIVE_MAINTENANCE,
+                PprScheduleType.CALENDAR,
+                PprFrequency.MONTHLY,
+                null,
+                PprScopeType.DEPARTMENT,
+                List.of()
+        );
+        when(service.create(any())).thenReturn(plan);
+
+        mockMvc.perform(post("/api/v1/ppr-plans")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Monthly preventive",
+                                  "fromDate": "2026-06-01",
+                                  "toDate": "2026-06-30",
+                                  "departmentId": "%s",
+                                  "createdById": "%s",
+                                  "notes": "phase1",
+                                  "pprType": "PREVENTIVE_MAINTENANCE",
+                                  "scheduleType": "CALENDAR",
+                                  "frequency": "MONTHLY",
+                                  "scopeType": "DEPARTMENT",
+                                  "equipmentIds": ["%s"],
+                                  "equipmentTypeIds": ["%s"]
+                                }
+                                """.formatted(departmentId, createdById, equipmentId, equipmentTypeId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.pprType").value("PREVENTIVE_MAINTENANCE"))
+                .andExpect(jsonPath("$.scheduleType").value("CALENDAR"))
+                .andExpect(jsonPath("$.frequency").value("MONTHLY"))
+                .andExpect(jsonPath("$.scopeType").value("DEPARTMENT"))
+                .andExpect(jsonPath("$.targets").isArray());
+
+        ArgumentCaptor<PprPlanRequest> captor = ArgumentCaptor.forClass(PprPlanRequest.class);
+        verify(service).create(captor.capture());
+        assertThat(captor.getValue().pprType()).isEqualTo(PprType.PREVENTIVE_MAINTENANCE);
+        assertThat(captor.getValue().scheduleType()).isEqualTo(PprScheduleType.CALENDAR);
+        assertThat(captor.getValue().frequency()).isEqualTo(PprFrequency.MONTHLY);
+        assertThat(captor.getValue().scopeType()).isEqualTo(PprScopeType.DEPARTMENT);
+        assertThat(captor.getValue().equipmentIds()).containsExactly(equipmentId);
+        assertThat(captor.getValue().equipmentTypeIds()).containsExactly(equipmentTypeId);
     }
 
     @Test
