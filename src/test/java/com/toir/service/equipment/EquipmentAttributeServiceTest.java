@@ -960,6 +960,52 @@ class EquipmentAttributeServiceTest {
     }
 
     @Test
+    void equipmentAttributeEndpointAfterTypeChangeShowsOnlyCurrentTypeAttributes() {
+        UUID oldTypeId = UUID.randomUUID();
+        UUID newTypeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, newTypeId);
+        EquipmentAttributeDefinition oldDefinition = definition(UUID.randomUUID(), oldTypeId, "old_type_key",
+                EquipmentAttributeDataType.TEXT, false);
+        EquipmentAttributeDefinition newDefinition = definition(UUID.randomUUID(), newTypeId, "payload_capacity",
+                EquipmentAttributeDataType.NUMBER, false);
+        EquipmentAttributeValue oldValue = value(equipmentId, oldDefinition.getId());
+        oldValue.setValueText("legacy");
+        EquipmentAttributeValue newValue = value(equipmentId, newDefinition.getId());
+        newValue.setValueNumber(12000.0);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(newTypeId)).thenReturn(List.of(newDefinition));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of(oldValue, newValue));
+
+        List<EquipmentAttributeValueDto> result = service.findValues(equipmentId);
+
+        assertThat(result).extracting(EquipmentAttributeValueDto::key).containsExactly("payload_capacity");
+        assertThat(result.getFirst().valueNumber()).isEqualTo(12000.0);
+    }
+
+    @Test
+    void equipmentDetailAfterTypeChangeShowsOnlyNewTypeAttributes() {
+        UUID oldTypeId = UUID.randomUUID();
+        UUID newTypeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, newTypeId);
+        EquipmentAttributeDefinition oldDefinition = definition(UUID.randomUUID(), oldTypeId, "legacy_metric",
+                EquipmentAttributeDataType.NUMBER, false);
+        EquipmentAttributeDefinition newDefinition = definition(UUID.randomUUID(), newTypeId, "new_metric",
+                EquipmentAttributeDataType.NUMBER, false);
+        EquipmentAttributeValue oldValue = value(equipmentId, oldDefinition.getId());
+        oldValue.setValueNumber(1.0);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(newTypeId)).thenReturn(List.of(newDefinition));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of(oldValue));
+
+        List<EquipmentAttributeValueDto> result = service.findValues(equipmentId);
+
+        assertThat(result).extracting(EquipmentAttributeValueDto::key).containsExactly("new_metric");
+        assertThat(result.getFirst().valueNumber()).isNull();
+    }
+
+    @Test
     void upsertValues_createsHistoryForNewValue() {
         UUID typeId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
