@@ -5,6 +5,7 @@ import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.FinanceScopeService;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +58,9 @@ class RbacFinancialReviewSecurityTest {
 
     @MockBean
     UserRepository userRepository;
+
+    @MockBean
+    EmployeeRepository employeeRepository;
 
     @MockBean
     FinanceScopeService financeScopeService;

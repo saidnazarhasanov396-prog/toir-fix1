@@ -9,6 +9,7 @@ import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.FinanceScopeService;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,7 @@ class FinancePbacScopeTest {
     ActualCostRepository actualCostRepository;
     CostCategoryRepository costCategoryRepository;
     UserRepository userRepository;
+    EmployeeRepository employeeRepository;
     FinanceScopeService financeScopeService;
     BudgetSummaryController controller;
 
@@ -44,6 +46,7 @@ class FinancePbacScopeTest {
         actualCostRepository = mock(ActualCostRepository.class);
         costCategoryRepository = mock(CostCategoryRepository.class);
         userRepository = mock(UserRepository.class);
+        employeeRepository = mock(EmployeeRepository.class);
         financeScopeService = mock(FinanceScopeService.class);
         controller = new BudgetSummaryController(
                 budgetRepository,
@@ -51,6 +54,7 @@ class FinancePbacScopeTest {
                 actualCostRepository,
                 costCategoryRepository,
                 userRepository,
+                employeeRepository,
                 financeScopeService
         );
     }
