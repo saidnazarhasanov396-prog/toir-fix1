@@ -259,6 +259,38 @@ class VehicleServiceTest {
     }
 
     @Test
+    void vehicleCreateAcceptsFullOfficialAttributes() {
+        List<EquipmentAttributeValueRequest> attributes = List.of(
+                new EquipmentAttributeValueRequest(null, "payload_capacity", null, 12000.0, null, null, null, null),
+                new EquipmentAttributeValueRequest(null, "axle_count", null, 4.0, null, null, null, null)
+        );
+        VehicleRequest request = fullRequest("VH-FULL-ATTR-001", "Truck Full Attr", "INV-VH-FULL-ATTR-001", "01A207AA", null)
+                .withAttributes(attributes);
+
+        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-FULL-ATTR-001")).thenReturn(false);
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-FULL-ATTR-001")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A207AA")).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(any(UUID.class))).thenAnswer(invocation ->
+                EquipmentDto.from(equipment(invocation.getArgument(0), "VH-FULL-ATTR-001", "Truck Full Attr", "INV-VH-FULL-ATTR-001")));
+        when(equipmentAttributeService.findValues(any(UUID.class))).thenReturn(List.of(
+                attributeValue(UUID.randomUUID(), "payload_capacity", 12000.0),
+                attributeValue(UUID.randomUUID(), "axle_count", 4.0)
+        ));
+
+        VehicleDetailDto result = service.create(request);
+
+        verify(equipmentAttributeService).upsertValues(any(Equipment.class), eq(attributes));
+        assertThat(result.attributes()).extracting(EquipmentAttributeValueDto::key)
+                .containsExactly("payload_capacity", "axle_count");
+    }
+
+    @Test
     void vehicleCreateThenDetailContainsOfficialAttributes() {
         VehicleRequest request = fullRequest("VH-DETAIL-CREATE", "Truck Detail Create", "INV-VH-DETAIL-CREATE", "01A304AA", null)
                 .withAttributes(List.of(new EquipmentAttributeValueRequest(null, "payload_capacity", null, 13000.0, null, null, null, null)));
@@ -475,7 +507,11 @@ class VehicleServiceTest {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-040", "Truck 040", "INV-VH-040");
         VehicleDetails details = details(equipmentId, "01A040AA", "VIN-040");
-        VehicleRequest request = fullRequest("VH-041", "Truck 041", "INV-VH-041", "01A041AA", "VIN-041");
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-041", "Truck 041", "INV-VH-041", "01A041AA", "VIN-041"),
+                equipment.getEquipmentTypeId(),
+                null
+        );
         Equipment updated = updatedEquipment(equipmentId, request);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
@@ -501,7 +537,11 @@ class VehicleServiceTest {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-050", "Truck 050", "INV-VH-050");
         VehicleDetails details = details(equipmentId, "01A050AA", "VIN-050");
-        VehicleRequest request = fullRequest("VH-050", "Truck 050", "INV-VH-050", "01A050AA", " ");
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-050", "Truck 050", "INV-VH-050", "01A050AA", " "),
+                equipment.getEquipmentTypeId(),
+                null
+        );
         Equipment updated = updatedEquipment(equipmentId, request);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
@@ -522,7 +562,11 @@ class VehicleServiceTest {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-020", "Truck 020", "INV-VH-020");
         VehicleDetails details = details(equipmentId, "01A020AA", "VIN-020");
-        VehicleRequest request = fullRequest("VH-020", "Truck 020 Updated", "INV-VH-020", "01A020AA", "VIN-020");
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-020", "Truck 020 Updated", "INV-VH-020", "01A020AA", "VIN-020"),
+                equipment.getEquipmentTypeId(),
+                null
+        );
         Equipment updated = updatedEquipment(equipmentId, request);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
@@ -582,6 +626,192 @@ class VehicleServiceTest {
         verify(equipmentAttributeService).upsertValues(eq(equipment), eq(request.attributes()));
         verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
         assertThat(result.attributes()).extracting(EquipmentAttributeValueDto::key).containsExactly("payload_capacity");
+    }
+
+    @Test
+    void vehicleUpdateAcceptsFullOfficialAttributes() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-FULL-ATTR-003", "Truck Full Attr Update", "INV-VH-FULL-ATTR-003");
+        equipment.setCategory(EquipmentCategory.VEHICLE);
+        VehicleDetails details = details(equipmentId, "01A208AA", null);
+        List<EquipmentAttributeValueRequest> attributes = List.of(
+                new EquipmentAttributeValueRequest(null, "payload_capacity", null, 14000.0, null, null, null, null),
+                new EquipmentAttributeValueRequest(null, "axle_count", null, 6.0, null, null, null, null)
+        );
+        VehicleRequest request = fullRequest("VH-FULL-ATTR-003", "Truck Full Attr Update", "INV-VH-FULL-ATTR-003", "01A208AA", null)
+                .withAttributes(attributes);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(equipment));
+        when(equipmentAttributeService.findValues(equipmentId)).thenReturn(List.of(
+                attributeValue(equipmentId, "payload_capacity", 14000.0),
+                attributeValue(equipmentId, "axle_count", 6.0)
+        ));
+
+        VehicleDetailDto result = service.update(equipmentId, request);
+
+        verify(equipmentAttributeService).upsertValues(eq(equipment), eq(attributes));
+        assertThat(result.attributes()).extracting(EquipmentAttributeValueDto::key)
+                .containsExactly("payload_capacity", "axle_count");
+    }
+
+    @Test
+    void vehicleUpdateSameTypeWithoutAttributesKeepsExistingBehavior() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-SAME-TYPE", "Truck Same Type", "INV-VH-SAME-TYPE");
+        equipment.setCategory(EquipmentCategory.VEHICLE);
+        equipment.setEquipmentTypeId(typeId);
+        VehicleDetails details = details(equipmentId, "01A401AA", null);
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-SAME-TYPE", "Truck Same Type Updated", "INV-VH-SAME-TYPE", "01A401AA", null),
+                typeId,
+                null
+        );
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(equipment));
+
+        service.update(equipmentId, request);
+
+        verify(equipmentAttributeService, never()).upsertValues(any(), any());
+    }
+
+    @Test
+    void vehicleTypeChangeWithoutAttributesIsRejected() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-TYPE-NO-ATTR", "Truck Type Change", "INV-VH-TYPE-NO-ATTR");
+        equipment.setCategory(EquipmentCategory.VEHICLE);
+        VehicleDetails details = details(equipmentId, "01A402AA", null);
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-TYPE-NO-ATTR", "Truck Type Change", "INV-VH-TYPE-NO-ATTR", "01A402AA", null),
+                UUID.randomUUID(),
+                null
+        );
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+
+        assertThatThrownBy(() -> service.update(equipmentId, request))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Attributes are required when equipment type changes."));
+
+        verify(equipmentRepository, never()).save(any());
+        verify(equipmentAttributeService, never()).upsertValues(any(), any());
+    }
+
+    @Test
+    void vehicleTypeChangeWithEmptyAttributesAndRequiredNewTypeIsRejected() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-TYPE-EMPTY", "Truck Type Empty", "INV-VH-TYPE-EMPTY");
+        equipment.setCategory(EquipmentCategory.VEHICLE);
+        VehicleDetails details = details(equipmentId, "01A403AA", null);
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-TYPE-EMPTY", "Truck Type Empty", "INV-VH-TYPE-EMPTY", "01A403AA", null),
+                UUID.randomUUID(),
+                List.of()
+        );
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(RestException.badRequest("Missing required equipment attributes: payload_capacity (required by equipment type)"))
+                .when(equipmentAttributeService).upsertValues(any(Equipment.class), eq(List.of()));
+
+        assertThatThrownBy(() -> service.update(equipmentId, request))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Missing required equipment attributes"));
+    }
+
+    @Test
+    void vehicleTypeChangeWithRequiredNewTypeAttributesSucceeds() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID newTypeId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-TYPE-ATTR", "Truck Type Attr", "INV-VH-TYPE-ATTR");
+        equipment.setCategory(EquipmentCategory.VEHICLE);
+        VehicleDetails details = details(equipmentId, "01A404AA", null);
+        List<EquipmentAttributeValueRequest> attributes = List.of(
+                new EquipmentAttributeValueRequest(null, "payload_capacity", null, 14000.0, null, null, null, null)
+        );
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-TYPE-ATTR", "Truck Type Attr", "INV-VH-TYPE-ATTR", "01A404AA", null),
+                newTypeId,
+                attributes
+        );
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(equipment));
+
+        service.update(equipmentId, request);
+
+        ArgumentCaptor<Equipment> equipmentCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(equipmentAttributeService).upsertValues(equipmentCaptor.capture(), eq(attributes));
+        assertThat(equipmentCaptor.getValue().getEquipmentTypeId()).isEqualTo(newTypeId);
+    }
+
+    @Test
+    void vehicleTypeChangeRejectsOldTypeAttributeKey() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-TYPE-OLD-KEY", "Truck Old Key", "INV-VH-TYPE-OLD-KEY");
+        equipment.setCategory(EquipmentCategory.VEHICLE);
+        VehicleDetails details = details(equipmentId, "01A405AA", null);
+        List<EquipmentAttributeValueRequest> attributes = List.of(
+                new EquipmentAttributeValueRequest(null, "old_type_key", "legacy", null, null, null, null, null)
+        );
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-TYPE-OLD-KEY", "Truck Old Key", "INV-VH-TYPE-OLD-KEY", "01A405AA", null),
+                UUID.randomUUID(),
+                attributes
+        );
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(RestException.badRequest("Unknown equipment attribute key: old_type_key"))
+                .when(equipmentAttributeService).upsertValues(any(Equipment.class), eq(attributes));
+
+        assertThatThrownBy(() -> service.update(equipmentId, request))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Unknown equipment attribute key"));
+    }
+
+    @Test
+    void vehicleTypeChangeRejectsOldTypeAttributeDefinitionId() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID oldDefinitionId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-TYPE-OLD-ID", "Truck Old Id", "INV-VH-TYPE-OLD-ID");
+        equipment.setCategory(EquipmentCategory.VEHICLE);
+        VehicleDetails details = details(equipmentId, "01A406AA", null);
+        List<EquipmentAttributeValueRequest> attributes = List.of(
+                new EquipmentAttributeValueRequest(oldDefinitionId, null, "legacy", null, null, null, null, null)
+        );
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-TYPE-OLD-ID", "Truck Old Id", "INV-VH-TYPE-OLD-ID", "01A406AA", null),
+                UUID.randomUUID(),
+                attributes
+        );
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(RestException.badRequest("Attribute definition is not allowed for this equipment type: " + oldDefinitionId))
+                .when(equipmentAttributeService).upsertValues(any(Equipment.class), eq(attributes));
+
+        assertThatThrownBy(() -> service.update(equipmentId, request))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("not allowed for this equipment type"));
     }
 
     @Test
@@ -1224,6 +1454,47 @@ class VehicleServiceTest {
                 request.gpsDeviceId(),
                 request.attributes(),
                 manualAttributes
+        );
+    }
+
+    private static VehicleRequest withEquipmentTypeAndAttributes(
+            VehicleRequest request,
+            UUID equipmentTypeId,
+            List<EquipmentAttributeValueRequest> attributes
+    ) {
+        return new VehicleRequest(
+                request.code(),
+                request.name(),
+                request.inventoryNumber(),
+                request.technicalNumber(),
+                request.serialNumber(),
+                equipmentTypeId,
+                request.departmentId(),
+                request.locationId(),
+                request.status(),
+                request.plateNumber(),
+                request.vin(),
+                request.brand(),
+                request.model(),
+                request.manufactureYear(),
+                request.vehicleType(),
+                request.bodyNumber(),
+                request.chassisNumber(),
+                request.engineNumber(),
+                request.fuelType(),
+                request.fuelTankCapacity(),
+                request.carryingCapacity(),
+                request.seatCount(),
+                request.assignedDriverId(),
+                request.currentOdometerKm(),
+                request.currentEngineHours(),
+                request.registrationCertificateNumber(),
+                request.insurancePolicyNumber(),
+                request.insuranceExpiryDate(),
+                request.technicalInspectionExpiryDate(),
+                request.gpsDeviceId(),
+                attributes,
+                request.manualAttributes()
         );
     }
 

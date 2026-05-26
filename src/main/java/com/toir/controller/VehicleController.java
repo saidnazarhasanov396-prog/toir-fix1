@@ -6,11 +6,14 @@ import com.toir.dto.vehicle.VehicleDocumentDto;
 import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.dto.vehicle.VehicleSummaryDto;
+import com.toir.entity.equipment.Equipment;
+import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
-import com.toir.security.SecurityScope;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.VehicleService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -22,6 +25,8 @@ import org.springframework.http.MediaType;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,9 +46,11 @@ import org.springframework.web.multipart.MultipartFile;
 public class VehicleController {
 
     private final VehicleService service;
-    private final SecurityScope securityScope;
+    private final ScopeAccessService scopeAccessService;
+    private final EquipmentRepository equipmentRepository;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<Page<VehicleSummaryDto>> list(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) EquipmentStatus status,
@@ -52,7 +59,7 @@ public class VehicleController {
             @RequestParam(name = "size", defaultValue = "20") int size
     ) {
         return ResponseEntity.ok(service.list(
-                securityScope.enforceDepartmentScope(departmentId),
+                scopedDepartment(departmentId),
                 status,
                 search,
                 page,
@@ -61,117 +68,176 @@ public class VehicleController {
     }
 
     @GetMapping("/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<VehicleStatsResponse> stats(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) String search
     ) {
         return ResponseEntity.ok(service.getStats(
-                securityScope.enforceDepartmentScope(departmentId),
+                scopedDepartment(departmentId),
                 search
         ));
     }
 
     @GetMapping("/{equipmentId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<VehicleDetailDto> get(@PathVariable UUID equipmentId) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.findByEquipmentId(equipmentId));
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_CREATE')")
     public ResponseEntity<VehicleDetailDto> create(@Valid @RequestBody VehicleRequest request) {
+        if (request.departmentId() != null) {
+            scopeAccessService.assertCanAccessDepartment(request.departmentId());
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
     @PutMapping("/{equipmentId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<VehicleDetailDto> update(@PathVariable UUID equipmentId, @Valid @RequestBody VehicleRequest request) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
+        if (request.departmentId() != null) {
+            scopeAccessService.assertCanAccessDepartment(request.departmentId());
+        }
         return ResponseEntity.ok(service.update(equipmentId, request));
     }
 
     @PostMapping(value = "/{equipmentId}/document", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<VehicleDetailDto> attachDocument(
             @PathVariable UUID equipmentId,
             @RequestParam("document") MultipartFile document,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.attachDocument(equipmentId, document, currentUserId(user)));
     }
 
     @PostMapping(value = "/{equipmentId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<List<VehicleDocumentDto>> attachDocuments(
             @PathVariable UUID equipmentId,
             @RequestParam("files") List<MultipartFile> files,
             @RequestParam(required = false) String documentType,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(service.attachDocuments(equipmentId, files, documentType, user));
     }
 
     @GetMapping("/{equipmentId}/documents")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<List<VehicleDocumentDto>> getDocuments(
             @PathVariable UUID equipmentId,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.getDocuments(equipmentId, user));
     }
 
     @GetMapping("/{equipmentId}/documents/{documentId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<VehicleDocumentDto> getDocument(
             @PathVariable UUID equipmentId,
             @PathVariable UUID documentId,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.getDocument(equipmentId, documentId, user));
     }
 
     @GetMapping("/{equipmentId}/documents/{documentId}/presigned-url")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<PresignedUrlResponse> getDocumentPresignedUrl(
             @PathVariable UUID equipmentId,
             @PathVariable UUID documentId,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.getDocumentPresignedUrl(equipmentId, documentId, user));
     }
 
     @DeleteMapping("/{equipmentId}/documents/{documentId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<Void> deleteDocument(
             @PathVariable UUID equipmentId,
             @PathVariable UUID documentId,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         service.deleteDocument(equipmentId, documentId, user);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{equipmentId}/document")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<VehicleDocumentDto> getDocument(
             @PathVariable UUID equipmentId,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.getDocument(equipmentId, currentUserId(user)));
     }
 
     @GetMapping("/{equipmentId}/document/presigned-url")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<PresignedUrlResponse> getDocumentPresignedUrl(
             @PathVariable UUID equipmentId,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.getDocumentPresignedUrl(equipmentId, currentUserId(user)));
     }
 
     @DeleteMapping("/{equipmentId}/document")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<Void> deleteDocument(
             @PathVariable UUID equipmentId,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         service.deleteDocument(equipmentId, currentUserId(user));
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{equipmentId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_DELETE')")
     public ResponseEntity<Void> delete(@PathVariable UUID equipmentId) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         service.delete(equipmentId);
         return ResponseEntity.noContent().build();
+    }
+
+    private UUID scopedDepartment(UUID requestedDepartmentId) {
+        UUID scopedDepartmentId = scopeAccessService.enforceDepartmentScope(requestedDepartmentId);
+        if (!scopeAccessService.isScopeAdmin() && scopeAccessService.currentDepartmentIdOrNull() == null) {
+            throw new AccessDeniedException("Access denied by vehicle department scope");
+        }
+        return scopedDepartmentId;
+    }
+
+    private Equipment vehicleEquipmentOrThrow(UUID equipmentId) {
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
+        if (equipment.getCategory() != EquipmentCategory.VEHICLE) {
+            throw RestException.badRequest("Equipment is not a vehicle: " + equipmentId);
+        }
+        return equipment;
+    }
+
+    private void assertCanAccessVehicleEquipment(Equipment equipment) {
+        if (equipment.getDepartmentId() == null) {
+            if (!scopeAccessService.isScopeAdmin()) {
+                throw new AccessDeniedException("Access denied by vehicle department scope");
+            }
+            return;
+        }
+        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
     }
 
     private UUID currentUserId(AuthenticatedUser user) {

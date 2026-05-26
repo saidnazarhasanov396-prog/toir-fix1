@@ -8,7 +8,10 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeOptionSourceRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueHistoryDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
+import com.toir.entity.equipment.Equipment;
 import com.toir.exception.RestException;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.equipment.EquipmentAttributeService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,6 +21,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,6 +47,8 @@ import java.util.UUID;
 public class EquipmentAttributeController {
 
     private final EquipmentAttributeService service;
+    private final ScopeAccessService scopeAccessService;
+    private final EquipmentRepository equipmentRepository;
 
     @GetMapping("/equipment-attribute-option-sources")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TYPE_READ')")
@@ -120,6 +126,7 @@ public class EquipmentAttributeController {
     @GetMapping("/equipment/{equipmentId}/attributes")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<List<EquipmentAttributeValueDto>> listValues(@PathVariable UUID equipmentId) {
+        assertCanAccessEquipment(equipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.findValues(equipmentId));
     }
 
@@ -130,6 +137,7 @@ public class EquipmentAttributeController {
             @RequestParam(required = false) UUID attributeDefinitionId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        assertCanAccessEquipment(equipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.findValueHistory(
                 equipmentId,
                 attributeDefinitionId,
@@ -142,6 +150,7 @@ public class EquipmentAttributeController {
     public ResponseEntity<List<EquipmentAttributeValueDto>> replaceValues(
             @PathVariable UUID equipmentId,
             @RequestBody List<EquipmentAttributeValueRequest> request) {
+        assertCanAccessEquipment(equipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.replaceValues(equipmentId, request));
     }
 
@@ -150,7 +159,23 @@ public class EquipmentAttributeController {
     public ResponseEntity<List<EquipmentAttributeValueDto>> saveValues(
             @PathVariable UUID equipmentId,
             @RequestBody List<EquipmentAttributeValueRequest> request) {
+        assertCanAccessEquipment(equipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.replaceValues(equipmentId, request));
+    }
+
+    private Equipment equipmentOrThrow(UUID equipmentId) {
+        return equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
+    }
+
+    private void assertCanAccessEquipment(Equipment equipment) {
+        if (equipment.getDepartmentId() == null) {
+            if (!scopeAccessService.isScopeAdmin()) {
+                throw new AccessDeniedException("Access denied by equipment department scope");
+            }
+            return;
+        }
+        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
     }
 
     private void validateBatchRequest(List<EquipmentAttributeDefinitionRequest> request) {

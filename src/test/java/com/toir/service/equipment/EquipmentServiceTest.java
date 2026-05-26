@@ -1787,6 +1787,121 @@ class EquipmentServiceTest {
         verify(equipmentAttributeService, never()).upsertValues(any(), any());
     }
 
+    @Test
+    void equipmentUpdateSameTypeWithoutAttributesKeepsExistingBehavior() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-SAME-TYPE-NO-ATTR");
+        equipment.setId(equipmentId);
+        equipment.setEquipmentTypeId(typeId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+
+        service.update(equipmentId, updateRequestWithTypeAndAttributes(typeId, null));
+
+        verify(equipmentAttributeService, never()).upsertValues(any(), any());
+    }
+
+    @Test
+    void equipmentTypeChangeWithoutAttributesIsRejected() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-TYPE-CHANGE-NO-ATTR");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.update(
+                equipmentId,
+                updateRequestWithTypeAndAttributes(UUID.randomUUID(), null)
+        ))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Attributes are required when equipment type changes."));
+
+        verify(repository, never()).save(any());
+        verify(equipmentAttributeService, never()).upsertValues(any(), any());
+    }
+
+    @Test
+    void equipmentTypeChangeWithEmptyAttributesAndRequiredNewTypeIsRejected() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-TYPE-CHANGE-EMPTY-ATTR");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(RestException.badRequest("Missing required equipment attributes: payload_capacity (required by equipment type)"))
+                .when(equipmentAttributeService).upsertValues(any(Equipment.class), eq(List.of()));
+
+        assertThatThrownBy(() -> service.update(
+                equipmentId,
+                updateRequestWithTypeAndAttributes(UUID.randomUUID(), List.of())
+        ))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Missing required equipment attributes"));
+    }
+
+    @Test
+    void equipmentTypeChangeWithRequiredNewTypeAttributesSucceeds() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID newTypeId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-TYPE-CHANGE-ATTR");
+        equipment.setId(equipmentId);
+        List<EquipmentAttributeValueRequest> attributes = List.of(
+                new EquipmentAttributeValueRequest(null, "payload_capacity", null, 12000.0, null, null, null, null)
+        );
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+
+        service.update(equipmentId, updateRequestWithTypeAndAttributes(newTypeId, attributes));
+
+        ArgumentCaptor<Equipment> equipmentCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(equipmentAttributeService).upsertValues(equipmentCaptor.capture(), eq(attributes));
+        assertThat(equipmentCaptor.getValue().getEquipmentTypeId()).isEqualTo(newTypeId);
+    }
+
+    @Test
+    void equipmentTypeChangeRejectsOldTypeAttributeKey() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-TYPE-CHANGE-OLD-KEY");
+        equipment.setId(equipmentId);
+        List<EquipmentAttributeValueRequest> attributes = List.of(
+                new EquipmentAttributeValueRequest(null, "old_type_key", "legacy", null, null, null, null, null)
+        );
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(RestException.badRequest("Unknown equipment attribute key: old_type_key"))
+                .when(equipmentAttributeService).upsertValues(any(Equipment.class), eq(attributes));
+
+        assertThatThrownBy(() -> service.update(
+                equipmentId,
+                updateRequestWithTypeAndAttributes(UUID.randomUUID(), attributes)
+        ))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Unknown equipment attribute key"));
+    }
+
+    @Test
+    void equipmentTypeChangeRejectsOldTypeAttributeDefinitionId() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID oldDefinitionId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-TYPE-CHANGE-OLD-ID");
+        equipment.setId(equipmentId);
+        List<EquipmentAttributeValueRequest> attributes = List.of(
+                new EquipmentAttributeValueRequest(oldDefinitionId, null, "legacy", null, null, null, null, null)
+        );
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(RestException.badRequest("Attribute definition is not allowed for this equipment type: " + oldDefinitionId))
+                .when(equipmentAttributeService).upsertValues(any(Equipment.class), eq(attributes));
+
+        assertThatThrownBy(() -> service.update(
+                equipmentId,
+                updateRequestWithTypeAndAttributes(UUID.randomUUID(), attributes)
+        ))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("not allowed for this equipment type"));
+    }
+
 
     @Test
     void getEquipmentStatsWithoutFiltersReturnsStats() {
@@ -2096,6 +2211,33 @@ class EquipmentServiceTest {
                 null,
                 null,
                 null
+        );
+    }
+
+    private EquipmentUpdateRequest updateRequestWithTypeAndAttributes(
+            UUID equipmentTypeId,
+            List<EquipmentAttributeValueRequest> attributes
+    ) {
+        return new EquipmentUpdateRequest(
+                null,
+                "Compressor Updated",
+                null,
+                null,
+                null,
+                null,
+                equipmentTypeId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                attributes
         );
     }
 

@@ -188,6 +188,8 @@ public class VehicleService {
                 .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
 
         validateUniqueUpdate(equipmentId, equipment, details, request);
+        boolean equipmentTypeChanged = isEquipmentTypeChanged(equipment.getEquipmentTypeId(), request.equipmentTypeId());
+        validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
         applyEquipment(equipment, request);
         applyDetails(details, request);
 
@@ -410,6 +412,16 @@ public class VehicleService {
         }
         if (!manualAttributeWritesEnabled) {
             throw RestException.badRequest(VEHICLE_MANUAL_ATTRIBUTES_DISABLED_MESSAGE);
+        }
+    }
+
+    private boolean isEquipmentTypeChanged(UUID currentEquipmentTypeId, UUID requestedEquipmentTypeId) {
+        return requestedEquipmentTypeId != null && !Objects.equals(currentEquipmentTypeId, requestedEquipmentTypeId);
+    }
+
+    private void validateAttributesForTypeChange(boolean equipmentTypeChanged, List<?> attributes) {
+        if (equipmentTypeChanged && attributes == null) {
+            throw RestException.badRequest("Attributes are required when equipment type changes.");
         }
     }
 
