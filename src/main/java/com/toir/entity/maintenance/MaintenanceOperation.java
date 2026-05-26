@@ -17,6 +17,10 @@ public class MaintenanceOperation extends BaseEntity {
     @JoinColumn(name = "template_id", nullable = false)
     private MaintenanceTemplate template;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "action_id")
+    private MaintenanceAction action;
+
     @Column(nullable = false)
     private int sequence;
 

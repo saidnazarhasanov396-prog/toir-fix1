@@ -47,6 +47,10 @@ public class PprPlanController {
             "hasAnyAuthority('PPR_PLAN_APPROVE','SYSTEM_ADMIN','*')";
     private static final String PPR_PLAN_GENERATE_AUTH =
             "hasAnyAuthority('PPR_PLAN_GENERATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_WORK_ORDER_GENERATE_AUTH =
+            "(" + PPR_PLAN_GENERATE_AUTH + ")"
+                    + " and hasAnyAuthority('WORK_ORDER_CREATE','SYSTEM_ADMIN','*')"
+                    + " and (hasAuthority('SYSTEM_ADMIN') or (!hasAuthority('VIEWER') and !hasAuthority('CONTRACTOR')))";
     private static final String PPR_TASK_READ_AUTH =
             "hasAnyAuthority('PPR_TASK_READ','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_CREATE_AUTH =
@@ -152,7 +156,7 @@ public class PprPlanController {
     }
 
     @PostMapping("/{id}/work-orders/generate")
-    @PreAuthorize(PPR_PLAN_GENERATE_AUTH)
+    @PreAuthorize(PPR_WORK_ORDER_GENERATE_AUTH)
     public ResponseEntity<PprGeneratorService.WorkOrderGenerationResult> generateWorkOrders(
             @PathVariable UUID id,
             @RequestParam UUID createdById
