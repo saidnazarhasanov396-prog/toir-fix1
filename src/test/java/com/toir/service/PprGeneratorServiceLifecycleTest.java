@@ -25,6 +25,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
@@ -66,6 +67,9 @@ class PprGeneratorServiceLifecycleTest {
     MaintenanceRegulationRepository regulationRepository;
 
     @Mock
+    EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
+
+    @Mock
     MaintenanceRegulationAttributeConditionRepository conditionRepository;
 
     @Mock
@@ -95,6 +99,7 @@ class PprGeneratorServiceLifecycleTest {
             UUID planId = UUID.randomUUID();
             when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, status)));
             when(regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+            when(equipmentMaintenanceRuleRepository.findAllActive()).thenReturn(List.of());
             when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
             when(taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
 
@@ -610,6 +615,7 @@ class PprGeneratorServiceLifecycleTest {
                                 boolean stubWrites) {
         when(planRepository.findByIdAndIsDeletedFalse(plan.getId())).thenReturn(Optional.of(plan));
         when(regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(regulations);
+        when(equipmentMaintenanceRuleRepository.findAllActive()).thenReturn(List.of());
         when(conditionRepository.findAllByRegulationIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
         when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(equipment);
         when(attributeDefinitionRepository.findAllByEquipmentTypeIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());

@@ -19,6 +19,7 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
@@ -55,6 +56,9 @@ class PprGeneratorDynamicConditionTest {
 
     @Mock
     MaintenanceRegulationRepository regulationRepository;
+
+    @Mock
+    EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
 
     @Mock
     MaintenanceRegulationAttributeConditionRepository conditionRepository;
@@ -164,6 +168,7 @@ class PprGeneratorDynamicConditionTest {
 
         when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
         when(regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(regulation));
+        when(equipmentMaintenanceRuleRepository.findAllActive()).thenReturn(List.of());
         when(conditionRepository.findAllByRegulationIdInAndIsDeletedFalse(List.of(regulationId))).thenReturn(conditions);
         when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(equipment);
         when(attributeDefinitionRepository.findAllByEquipmentTypeIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of(motorPower));

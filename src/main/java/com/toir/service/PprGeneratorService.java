@@ -407,7 +407,7 @@ public class PprGeneratorService {
                 .distinct()
                 .toList();
         if (equipmentIds.isEmpty()) {
-            return Map.of();
+            return new HashMap<>();
         }
         return equipmentRepository.findAllByIdInAndIsDeletedFalse(equipmentIds).stream()
                 .collect(Collectors.toMap(Equipment::getId, Function.identity(), (left, right) -> left));
@@ -420,7 +420,7 @@ public class PprGeneratorService {
                 .distinct()
                 .toList();
         if (regulationIds.isEmpty()) {
-            return Map.of();
+            return new HashMap<>();
         }
         return regulationRepository.findAllByIdInAndIsDeletedFalse(regulationIds).stream()
                 .collect(Collectors.toMap(MaintenanceRegulation::getId, Function.identity(), (left, right) -> left));
@@ -433,7 +433,7 @@ public class PprGeneratorService {
                 .distinct()
                 .toList();
         if (ruleIds.isEmpty()) {
-            return Map.of();
+            return new HashMap<>();
         }
         return equipmentMaintenanceRuleRepository.findAllByIdInAndIsDeletedFalse(ruleIds).stream()
                 .collect(Collectors.toMap(EquipmentMaintenanceRule::getId, Function.identity(), (left, right) -> left));

@@ -223,7 +223,10 @@ class RbacPprSecurityTest {
     }
 
     @Test
-    @WithMockUser(authorities = PermissionConstants.PPR_PLAN_GENERATE)
+    @WithMockUser(authorities = {
+            PermissionConstants.PPR_PLAN_GENERATE,
+            PermissionConstants.WORK_ORDER_CREATE
+    })
     void pprPlanGenerateCanGenerateWorkOrders() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID createdById = UUID.randomUUID();
@@ -408,19 +411,27 @@ class RbacPprSecurityTest {
         );
     }
 
-    private static PprTaskDto taskDto(UUID planId) {
-        LocalDateTime start = LocalDateTime.of(2026, 6, 1, 9, 0);
+    private PprTaskDto taskDto(UUID planId) {
+        LocalDateTime start = LocalDateTime.of(2026, 5, 1, 9, 0);
+
+        UUID regulationId = UUID.randomUUID();
+        UUID equipmentMaintenanceRuleId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
         return new PprTaskDto(
                 UUID.randomUUID(),
                 "PPR-TASK-2026-0001",
                 planId,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                "Manual PPR task",
+                regulationId,
+                equipmentMaintenanceRuleId,
+                "RULE-001",          // equipmentMaintenanceRuleCode
+                "Manual rule",       // equipmentMaintenanceRuleName
+                equipmentId,          // equipmentId
+                "Manual task",       // title
                 start,
                 start.plusHours(2),
-                LocalDate.of(2026, 6, 1),
-                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 5, 1),
                 start.plusDays(1),
                 PprTaskStatus.PLANNED,
                 PriorityLevel.MEDIUM,

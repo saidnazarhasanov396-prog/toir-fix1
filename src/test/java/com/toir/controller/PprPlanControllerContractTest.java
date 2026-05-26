@@ -373,6 +373,9 @@ class PprPlanControllerContractTest {
                 generatedCode,
                 planId,
                 regulationId,
+                null, // equipmentMaintenanceRuleId
+                null, // equipmentMaintenanceRuleCode
+                null, // equipmentMaintenanceRuleName
                 equipmentId,
                 "Manual PPR task",
                 start,
@@ -422,7 +425,10 @@ class PprPlanControllerContractTest {
                 generatedCode,
                 planId,
                 regulationId,
-                null,
+                null, // equipmentMaintenanceRuleId
+                null, // equipmentMaintenanceRuleCode
+                null, // equipmentMaintenanceRuleName
+                null, // equipmentId
                 "Manual PPR task",
                 start,
                 start.plusHours(2),

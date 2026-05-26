@@ -353,13 +353,21 @@ class PprPbacScopeTest {
 
     private PprTaskDto taskDto(UUID planId) {
         LocalDateTime start = LocalDateTime.of(2026, 5, 1, 9, 0);
+
+        UUID regulationId = UUID.randomUUID();
+        UUID equipmentMaintenanceRuleId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
         return new PprTaskDto(
                 UUID.randomUUID(),
                 "PPR-TASK-2026-0001",
                 planId,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                "Manual task",
+                regulationId,
+                equipmentMaintenanceRuleId,
+                "RULE-001",          // equipmentMaintenanceRuleCode
+                "Manual rule",       // equipmentMaintenanceRuleName
+                equipmentId,          // equipmentId
+                "Manual task",       // title
                 start,
                 start.plusHours(2),
                 LocalDate.of(2026, 5, 1),
