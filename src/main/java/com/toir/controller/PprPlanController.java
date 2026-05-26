@@ -151,6 +151,16 @@ public class PprPlanController {
         return ResponseEntity.ok(generatorService.generateForPlan(id));
     }
 
+    @PostMapping("/{id}/work-orders/generate")
+    @PreAuthorize(PPR_PLAN_GENERATE_AUTH)
+    public ResponseEntity<PprGeneratorService.WorkOrderGenerationResult> generateWorkOrders(
+            @PathVariable UUID id,
+            @RequestParam UUID createdById
+    ) {
+        assertCanAccessPlan(planOrThrow(id));
+        return ResponseEntity.ok(generatorService.generateWorkOrdersForPlan(id, createdById));
+    }
+
     @GetMapping("/{id}/tasks")
     @PreAuthorize(PPR_TASK_READ_AUTH)
     public ResponseEntity<Page<PprTaskDto>> tasks(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {

@@ -329,6 +329,38 @@ class PprPlanControllerContractTest {
     }
 
     @Test
+    void generateWorkOrdersFromPprPlanReturnsCreatedAndSkippedResult() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID createdById = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID skippedTaskId = UUID.randomUUID();
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, UUID.randomUUID())));
+        when(generatorService.generateWorkOrdersForPlan(planId, createdById))
+                .thenReturn(new PprGeneratorService.WorkOrderGenerationResult(
+                        planId,
+                        1,
+                        1,
+                        List.of(workOrderId),
+                        List.of(new PprGeneratorService.WorkOrderGenerationSkippedItem(
+                                skippedTaskId,
+                                "WORK_ORDER_ALREADY_EXISTS"
+                        ))
+                ));
+
+        mockMvc.perform(post("/api/v1/ppr-plans/{id}/work-orders/generate", planId)
+                        .param("createdById", createdById.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.planId").value(planId.toString()))
+                .andExpect(jsonPath("$.createdCount").value(1))
+                .andExpect(jsonPath("$.skippedCount").value(1))
+                .andExpect(jsonPath("$.createdWorkOrderIds[0]").value(workOrderId.toString()))
+                .andExpect(jsonPath("$.skippedItems[0].pprTaskId").value(skippedTaskId.toString()))
+                .andExpect(jsonPath("$.skippedItems[0].reason").value("WORK_ORDER_ALREADY_EXISTS"));
+
+        verify(generatorService).generateWorkOrdersForPlan(planId, createdById);
+    }
+
+    @Test
     void createTaskWithoutCodeReturnsGeneratedCode() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID taskId = UUID.randomUUID();

@@ -5,6 +5,8 @@ import com.toir.entity.PprPlanTarget;
 import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.dto.workorder.WorkOrderDto;
+import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceKind;
@@ -14,10 +16,12 @@ import com.toir.enums.PprFrequency;
 import com.toir.enums.PprScheduleType;
 import com.toir.enums.PprScopeType;
 import com.toir.enums.PprTargetType;
+import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PprType;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -34,6 +38,7 @@ import org.springframework.http.HttpStatus;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -74,6 +79,12 @@ class PprGeneratorServiceLifecycleTest {
 
     @Mock
     AuditBuilderService auditBuilderService;
+
+    @Mock
+    WorkOrderRepository workOrderRepository;
+
+    @Mock
+    WorkOrderService workOrderService;
 
     @InjectMocks
     PprGeneratorService service;
@@ -298,6 +309,190 @@ class PprGeneratorServiceLifecycleTest {
         verify(taskRepository, never()).save(any(PprTask.class));
     }
 
+    @Test
+    void approvedPlanWithApprovedTaskCreatesLinkedWorkOrder() {
+        UUID planId = UUID.randomUUID();
+        UUID createdById = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        PprPlan plan = executablePlan(planId, PprType.PREVENTIVE_MAINTENANCE, departmentId);
+        PprTask task = approvedTask(plan, regulationId, equipmentId);
+        Equipment equipment = equipment(equipmentId, "P-101", UUID.randomUUID(), departmentId);
+        MaintenanceRegulation regulation =
+                regulation("MR-PREV", equipment.getEquipmentTypeId(), MaintenanceKind.PREVENTIVE, PeriodicityUnit.MONTH);
+        regulation.setId(regulationId);
+        stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
+        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderService.create(any())).thenReturn(workOrderDto(workOrderId, task));
+
+        PprGeneratorService.WorkOrderGenerationResult result =
+                service.generateWorkOrdersForPlan(planId, createdById);
+
+        assertThat(result.planId()).isEqualTo(planId);
+        assertThat(result.createdCount()).isEqualTo(1);
+        assertThat(result.skippedCount()).isZero();
+        assertThat(result.createdWorkOrderIds()).containsExactly(workOrderId);
+        ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
+        verify(workOrderService).create(requestCaptor.capture());
+        WorkOrderRequest request = requestCaptor.getValue();
+        assertThat(request.pprTaskId()).isEqualTo(task.getId());
+        assertThat(request.equipmentId()).isEqualTo(equipmentId);
+        assertThat(request.departmentId()).isEqualTo(departmentId);
+        assertThat(request.createdById()).isEqualTo(createdById);
+        assertThat(request.startPlannedAt()).isEqualTo(task.getScheduledStart().atZone(ZoneId.systemDefault()).toInstant());
+        assertThat(request.endPlannedAt()).isEqualTo(task.getScheduledEnd().atZone(ZoneId.systemDefault()).toInstant());
+        assertThat(request.type()).isEqualTo(com.toir.enums.WorkOrderType.PLANNED);
+        assertThat(request.workType()).isEqualTo(com.toir.enums.WorkType.REPAIR);
+        assertThat(request.summary()).contains(plan.getCode(), plan.getName(), task.getCode());
+    }
+
+    @Test
+    void preventiveInspectionTaskMapsToInspectionDiagnosticsWorkOrder() {
+        UUID planId = UUID.randomUUID();
+        UUID createdById = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        PprPlan plan = executablePlan(planId, PprType.PREVENTIVE_MAINTENANCE, departmentId);
+        PprTask task = approvedTask(plan, regulationId, equipmentId);
+        Equipment equipment = equipment(equipmentId, "P-101", UUID.randomUUID(), departmentId);
+        MaintenanceRegulation regulation =
+                regulation("MR-INSP", equipment.getEquipmentTypeId(), MaintenanceKind.INSPECTION, PeriodicityUnit.MONTH);
+        regulation.setId(regulationId);
+        stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
+        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID(), task));
+
+        service.generateWorkOrdersForPlan(planId, createdById);
+
+        ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
+        verify(workOrderService).create(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().type()).isEqualTo(com.toir.enums.WorkOrderType.INSPECTION);
+        assertThat(requestCaptor.getValue().workType()).isEqualTo(com.toir.enums.WorkType.DIAGNOSTICS);
+    }
+
+    @Test
+    void plannedRepairTaskMapsToPlannedWorkOrder() {
+        UUID planId = UUID.randomUUID();
+        UUID createdById = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        PprPlan plan = executablePlan(planId, PprType.PLANNED_REPAIR, departmentId);
+        PprTask task = approvedTask(plan, regulationId, equipmentId);
+        Equipment equipment = equipment(equipmentId, "P-101", UUID.randomUUID(), departmentId);
+        MaintenanceRegulation regulation =
+                regulation("MR-CURRENT", equipment.getEquipmentTypeId(), MaintenanceKind.CURRENT_REPAIR, PeriodicityUnit.YEAR);
+        regulation.setId(regulationId);
+        stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
+        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID(), task));
+
+        service.generateWorkOrdersForPlan(planId, createdById);
+
+        ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
+        verify(workOrderService).create(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().type()).isEqualTo(com.toir.enums.WorkOrderType.PLANNED);
+        assertThat(requestCaptor.getValue().workType()).isEqualTo(com.toir.enums.WorkType.REPAIR);
+    }
+
+    @Test
+    void capitalRepairTaskMapsToOverhaulWorkOrder() {
+        UUID planId = UUID.randomUUID();
+        UUID createdById = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        PprPlan plan = executablePlan(planId, PprType.CAPITAL_REPAIR, departmentId);
+        PprTask task = approvedTask(plan, regulationId, equipmentId);
+        Equipment equipment = equipment(equipmentId, "P-101", UUID.randomUUID(), departmentId);
+        MaintenanceRegulation regulation =
+                regulation("MR-OVERHAUL", equipment.getEquipmentTypeId(), MaintenanceKind.OVERHAUL, PeriodicityUnit.YEAR);
+        regulation.setId(regulationId);
+        stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
+        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID(), task));
+
+        service.generateWorkOrdersForPlan(planId, createdById);
+
+        ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
+        verify(workOrderService).create(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().type()).isEqualTo(com.toir.enums.WorkOrderType.OVERHAUL);
+        assertThat(requestCaptor.getValue().workType()).isEqualTo(com.toir.enums.WorkType.REPAIR);
+    }
+
+    @Test
+    void taskWithoutEquipmentIsSkippedWhenGeneratingWorkOrders() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = executablePlan(planId, PprType.PREVENTIVE_MAINTENANCE, UUID.randomUUID());
+        PprTask task = approvedTask(plan, UUID.randomUUID(), null);
+        stubWorkOrderGeneration(plan, List.of(task), List.of(), List.of());
+
+        PprGeneratorService.WorkOrderGenerationResult result =
+                service.generateWorkOrdersForPlan(planId, UUID.randomUUID());
+
+        assertThat(result.createdCount()).isZero();
+        assertThat(result.skippedCount()).isEqualTo(1);
+        assertThat(result.skippedItems()).extracting(PprGeneratorService.WorkOrderGenerationSkippedItem::reason)
+                .containsExactly("TASK_EQUIPMENT_MISSING");
+        verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void existingWorkOrderForTaskIsSkippedWhenGeneratingWorkOrders() {
+        UUID planId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        PprPlan plan = executablePlan(planId, PprType.PREVENTIVE_MAINTENANCE, departmentId);
+        PprTask task = approvedTask(plan, UUID.randomUUID(), equipmentId);
+        stubWorkOrderGeneration(plan, List.of(task), List.of(), List.of());
+        when(workOrderRepository.existsByPprTaskIdAndIsDeletedFalse(task.getId())).thenReturn(true);
+
+        PprGeneratorService.WorkOrderGenerationResult result =
+                service.generateWorkOrdersForPlan(planId, UUID.randomUUID());
+
+        assertThat(result.createdCount()).isZero();
+        assertThat(result.skippedCount()).isEqualTo(1);
+        assertThat(result.skippedItems()).extracting(PprGeneratorService.WorkOrderGenerationSkippedItem::reason)
+                .containsExactly("WORK_ORDER_ALREADY_EXISTS");
+        verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void nonApprovedPprTaskIsSkippedWhenGeneratingWorkOrders() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = executablePlan(planId, PprType.PREVENTIVE_MAINTENANCE, UUID.randomUUID());
+        PprTask task = approvedTask(plan, UUID.randomUUID(), UUID.randomUUID());
+        task.setStatus(PprTaskStatus.PLANNED);
+        stubWorkOrderGeneration(plan, List.of(task), List.of(), List.of());
+
+        PprGeneratorService.WorkOrderGenerationResult result =
+                service.generateWorkOrdersForPlan(planId, UUID.randomUUID());
+
+        assertThat(result.createdCount()).isZero();
+        assertThat(result.skippedCount()).isEqualTo(1);
+        assertThat(result.skippedItems()).extracting(PprGeneratorService.WorkOrderGenerationSkippedItem::reason)
+                .containsExactly("TASK_STATUS_NOT_APPROVED");
+        verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void draftPlanCannotGenerateWorkOrders() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId, PlanStatus.DRAFT);
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+
+        assertThatThrownBy(() -> service.generateWorkOrdersForPlan(planId, UUID.randomUUID()))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("APPROVED or IN_PROGRESS");
+                });
+
+        verify(workOrderService, never()).create(any());
+    }
+
     private PprPlan plan(UUID id, PlanStatus status) {
         PprPlan plan = new PprPlan();
         plan.setId(id);
@@ -320,6 +515,85 @@ class PprGeneratorServiceLifecycleTest {
         plan.setFrequency(PprFrequency.MONTHLY);
         plan.setScopeType(PprScopeType.DEPARTMENT);
         return plan;
+    }
+
+    private PprPlan executablePlan(UUID id, PprType pprType, UUID departmentId) {
+        PprPlan plan = plan(id, PlanStatus.APPROVED);
+        plan.setPprType(pprType);
+        plan.setDepartmentId(departmentId);
+        return plan;
+    }
+
+    private PprTask approvedTask(PprPlan plan, UUID regulationId, UUID equipmentId) {
+        PprTask task = new PprTask();
+        task.setId(UUID.randomUUID());
+        task.setCode("PT-2026-0001");
+        task.setPlan(plan);
+        task.setRegulationId(regulationId);
+        task.setEquipmentId(equipmentId);
+        task.setTitle("PPR task");
+        task.setScheduledStart(java.time.LocalDateTime.of(2026, 6, 10, 9, 0));
+        task.setScheduledEnd(java.time.LocalDateTime.of(2026, 6, 10, 18, 0));
+        task.setDueDate(java.time.LocalDateTime.of(2026, 6, 11, 9, 0));
+        task.setStatus(PprTaskStatus.APPROVED);
+        task.setPriority(com.toir.enums.PriorityLevel.HIGH);
+        task.setPlannedLaborHours(8.0);
+        return task;
+    }
+
+    private WorkOrderDto workOrderDto(UUID workOrderId, PprTask task) {
+        return new WorkOrderDto(
+                workOrderId,
+                "WO-PPR-2026-0001",
+                task.getTitle(),
+                task.getEquipmentId(),
+                task.getPlan().getDepartmentId(),
+                "Equipment",
+                "Department",
+                null,
+                null,
+                task.getId(),
+                null,
+                com.toir.enums.WorkOrderStatus.DRAFT,
+                com.toir.enums.WorkOrderType.PLANNED,
+                com.toir.enums.WorkType.REPAIR,
+                task.getPriority(),
+                task.getScheduledStart().atZone(ZoneId.systemDefault()).toInstant(),
+                task.getScheduledEnd().atZone(ZoneId.systemDefault()).toInstant(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                UUID.randomUUID(),
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                0,
+                0
+        );
+    }
+
+    private void stubWorkOrderGeneration(PprPlan plan,
+                                         List<PprTask> tasks,
+                                         List<Equipment> equipment,
+                                         List<MaintenanceRegulation> regulations) {
+        when(planRepository.findByIdAndIsDeletedFalse(plan.getId())).thenReturn(Optional.of(plan));
+        when(taskRepository.findAllByPlanIdAndIsDeletedFalseOrderByScheduledStartAscIdAsc(plan.getId())).thenReturn(tasks);
+        if (!equipment.isEmpty()) {
+            when(equipmentRepository.findAllByIdInAndIsDeletedFalse(
+                    equipment.stream().map(Equipment::getId).toList()
+            )).thenReturn(equipment);
+        }
+        if (!regulations.isEmpty()) {
+            when(regulationRepository.findAllByIdInAndIsDeletedFalse(
+                    regulations.stream().map(MaintenanceRegulation::getId).toList()
+            )).thenReturn(regulations);
+        }
     }
 
     private void stubGeneration(PprPlan plan,
