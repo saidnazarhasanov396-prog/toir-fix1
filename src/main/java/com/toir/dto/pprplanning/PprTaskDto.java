@@ -34,6 +34,47 @@ public record PprTaskDto(
         Double actualLaborHours,
         String postponeReason
 ) {
+    public PprTaskDto(
+            UUID id,
+            String code,
+            UUID planId,
+            UUID regulationId,
+            UUID equipmentId,
+            String title,
+            LocalDateTime scheduledStart,
+            LocalDateTime scheduledEnd,
+            LocalDate startDate,
+            LocalDate endDate,
+            LocalDateTime dueDate,
+            PprTaskStatus status,
+            PriorityLevel priority,
+            double plannedLaborHours,
+            Double actualLaborHours,
+            String postponeReason
+    ) {
+        this(
+                id,
+                code,
+                planId,
+                regulationId,
+                null,
+                null,
+                null,
+                equipmentId,
+                title,
+                scheduledStart,
+                scheduledEnd,
+                startDate,
+                endDate,
+                dueDate,
+                status,
+                priority,
+                plannedLaborHours,
+                actualLaborHours,
+                postponeReason
+        );
+    }
+
     public static PprTaskDto from(PprTask t) {
         return from(t, Map.of());
     }
