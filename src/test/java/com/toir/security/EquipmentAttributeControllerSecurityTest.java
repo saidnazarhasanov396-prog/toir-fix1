@@ -14,6 +14,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -96,7 +97,8 @@ class EquipmentAttributeControllerSecurityTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
                 .thenReturn(Optional.of(equipment(equipmentId, UUID.randomUUID())));
         when(service.findValues(equipmentId)).thenReturn(List.of());
-        when(service.findValueHistory(eq(equipmentId), isNull(), any())).thenReturn(Page.empty());
+        when(service.findValueHistory(eq(equipmentId), isNull(), any()))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         mockMvc.perform(get("/api/v1/equipment/{equipmentId}/attributes", equipmentId))
                 .andExpect(status().isOk());

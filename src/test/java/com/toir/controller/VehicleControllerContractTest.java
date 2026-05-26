@@ -114,7 +114,6 @@ class VehicleControllerContractTest {
         );
 
         when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(scopedDepartmentId);
-        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(scopedDepartmentId);
         when(service.getStats(scopedDepartmentId, "kamaz")).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/vehicles/stats")
