@@ -1,9 +1,11 @@
 package com.toir.controller;
 
+import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleDocumentDto;
 import com.toir.dto.vehicle.VehicleStatsResponse;
+import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.ErrorType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
@@ -112,6 +114,73 @@ class VehicleControllerContractTest {
 
         verify(securityScope).enforceDepartmentScope(departmentId);
         verify(service).getStats(scopedDepartmentId, "kamaz");
+    }
+
+    @Test
+    void getVehicleDetailReturnsOfficialAttributes() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID attributeId = UUID.randomUUID();
+        UUID definitionId = UUID.randomUUID();
+        VehicleDetailDto response = new VehicleDetailDto(
+                null,
+                new VehicleDetailDto.Details(
+                        UUID.randomUUID(),
+                        "01A123AA",
+                        null,
+                        "MAN",
+                        "TGS",
+                        2022,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        0,
+                        0,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of()
+                ),
+                List.of(new EquipmentAttributeValueDto(
+                        attributeId,
+                        equipmentId,
+                        definitionId,
+                        "payload_capacity",
+                        "Payload capacity",
+                        "Грузоподъемность",
+                        "Yuk ko'tarish",
+                        EquipmentAttributeDataType.NUMBER,
+                        "kg",
+                        false,
+                        null,
+                        List.of(),
+                        "vehicle_metrics",
+                        10,
+                        null,
+                        12000.0,
+                        null,
+                        null,
+                        null,
+                        null
+                )),
+                List.of()
+        );
+        when(service.findByEquipmentId(equipmentId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/vehicles/{equipmentId}", equipmentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attributes[0].key").value("payload_capacity"))
+                .andExpect(jsonPath("$.attributes[0].valueNumber").value(12000.0));
+
+        verify(service).findByEquipmentId(equipmentId);
     }
 
     @Test

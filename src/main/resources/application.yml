@@ -17,6 +17,11 @@ springdoc:
   cache:
     disabled: true
 
+app:
+  features:
+    manual-attributes:
+      write-enabled: ${APP_FEATURES_MANUAL_ATTRIBUTES_WRITE_ENABLED:false}
+
 minio:
   endpoint: ${MINIO_ENDPOINT:https://s3.tenzorsoft.uz}
   access-key: ${MINIO_ACCESS_KEY:s3_tenzorsoft_minio_user}

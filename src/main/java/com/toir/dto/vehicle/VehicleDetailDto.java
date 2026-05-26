@@ -1,6 +1,7 @@
 package com.toir.dto.vehicle;
 
 import com.toir.dto.equipment.EquipmentDto;
+import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeDto;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.VehicleDocument;
@@ -14,10 +15,24 @@ import java.util.UUID;
 public record VehicleDetailDto(
         EquipmentDto equipment,
         Details vehicleDetails,
+        List<EquipmentAttributeValueDto> attributes,
         List<EquipmentManualAttributeDto> manualAttributes
 ) {
     public VehicleDetailDto(EquipmentDto equipment, Details vehicleDetails) {
-        this(equipment, vehicleDetails, List.of());
+        this(equipment, vehicleDetails, List.of(), List.of());
+    }
+
+    public VehicleDetailDto(
+            EquipmentDto equipment,
+            Details vehicleDetails,
+            List<EquipmentManualAttributeDto> manualAttributes
+    ) {
+        this(equipment, vehicleDetails, List.of(), manualAttributes);
+    }
+
+    public VehicleDetailDto {
+        attributes = attributes == null ? List.of() : List.copyOf(attributes);
+        manualAttributes = manualAttributes == null ? List.of() : List.copyOf(manualAttributes);
     }
 
     public record Details(
@@ -72,17 +87,27 @@ public record VehicleDetailDto(
     }
 
     public static VehicleDetailDto from(EquipmentDto equipment, VehicleDetails details) {
-        return from(equipment, details, List.of(), List.of());
+        return from(equipment, details, List.of(), List.of(), List.of());
     }
 
     public static VehicleDetailDto from(EquipmentDto equipment, VehicleDetails details, List<VehicleDocument> documents) {
-        return from(equipment, details, documents, List.of());
+        return from(equipment, details, documents, List.of(), List.of());
     }
 
     public static VehicleDetailDto from(
             EquipmentDto equipment,
             VehicleDetails details,
             List<VehicleDocument> documents,
+            List<EquipmentAttributeValueDto> attributes
+    ) {
+        return from(equipment, details, documents, attributes, List.of());
+    }
+
+    public static VehicleDetailDto from(
+            EquipmentDto equipment,
+            VehicleDetails details,
+            List<VehicleDocument> documents,
+            List<EquipmentAttributeValueDto> attributes,
             List<EquipmentManualAttributeDto> manualAttributes
     ) {
         List<VehicleDocumentDto> documentDtos = documents == null ? List.of() : documents.stream()
@@ -120,6 +145,7 @@ public record VehicleDetailDto(
                         legacyDocument,
                         documentDtos
                 ),
+                attributes == null ? List.of() : List.copyOf(attributes),
                 manualAttributes == null ? List.of() : List.copyOf(manualAttributes)
         );
     }

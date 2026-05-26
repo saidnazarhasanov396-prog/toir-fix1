@@ -9,6 +9,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentManualAttributeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +26,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class EquipmentManualAttributeService {
+
+    public static final String WRITE_DISABLED_MESSAGE =
+            "Manual attributes are temporarily disabled. Use official equipment attributes.";
 
     private static final int MAX_KEY_LENGTH = 100;
     private static final int MAX_VALUE_LENGTH = 2000;
@@ -52,6 +56,9 @@ public class EquipmentManualAttributeService {
     private final EquipmentRepository equipmentRepository;
     private final EquipmentManualAttributeRepository repository;
 
+    @Value("${app.features.manual-attributes.write-enabled:false}")
+    private boolean writeEnabled;
+
     @Transactional(readOnly = true)
     public List<EquipmentManualAttributeDto> list(UUID equipmentId) {
         ensureEquipmentExists(equipmentId);
@@ -63,6 +70,7 @@ public class EquipmentManualAttributeService {
 
     @Transactional
     public EquipmentManualAttributeDto create(UUID equipmentId, EquipmentManualAttributeRequest request) {
+        assertWriteEnabled();
         ensureEquipmentExists(equipmentId);
         NormalizedAttribute normalized = normalizeAndValidate(request);
         repository.findByEquipmentIdAndKeyIgnoreCaseAndIsDeletedFalse(equipmentId, normalized.key())
@@ -79,6 +87,7 @@ public class EquipmentManualAttributeService {
 
     @Transactional
     public List<EquipmentManualAttributeDto> replaceAll(UUID equipmentId, BulkEquipmentManualAttributeRequest request) {
+        assertWriteEnabled();
         ensureEquipmentExists(equipmentId);
         List<NormalizedAttribute> normalizedAttributes = normalizeBulk(request);
         Map<String, NormalizedAttribute> requestedByKey = new LinkedHashMap<>();
@@ -129,6 +138,7 @@ public class EquipmentManualAttributeService {
 
     @Transactional
     public EquipmentManualAttributeDto update(UUID attributeId, EquipmentManualAttributeRequest request) {
+        assertWriteEnabled();
         EquipmentManualAttribute attribute = findActiveAttribute(attributeId);
         ensureEquipmentExists(attribute.getEquipmentId());
         NormalizedAttribute normalized = normalizeAndValidate(request);
@@ -144,6 +154,7 @@ public class EquipmentManualAttributeService {
 
     @Transactional
     public void delete(UUID attributeId) {
+        assertWriteEnabled();
         EquipmentManualAttribute attribute = findActiveAttribute(attributeId);
         ensureEquipmentExists(attribute.getEquipmentId());
         attribute.setDeleted(true);
@@ -154,6 +165,16 @@ public class EquipmentManualAttributeService {
     public EquipmentManualAttribute findActiveAttribute(UUID attributeId) {
         return repository.findByIdAndIsDeletedFalse(attributeId)
                 .orElseThrow(() -> RestException.notFound("Manual attribute not found: " + attributeId));
+    }
+
+    public void assertWriteEnabled() {
+        if (!writeEnabled) {
+            throw RestException.badRequest(WRITE_DISABLED_MESSAGE);
+        }
+    }
+
+    public boolean isWriteEnabled() {
+        return writeEnabled;
     }
 
     private Equipment ensureEquipmentExists(UUID equipmentId) {
