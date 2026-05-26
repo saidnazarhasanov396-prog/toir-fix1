@@ -3,10 +3,12 @@ package com.toir.dto.pprplanning;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.toir.enums.PriorityLevel;
 import com.toir.entity.PprTask;
+import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.enums.PprTaskStatus;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 public record PprTaskDto(
@@ -14,6 +16,9 @@ public record PprTaskDto(
         String code,
         UUID planId,
         UUID regulationId,
+        UUID equipmentMaintenanceRuleId,
+        String equipmentMaintenanceRuleCode,
+        String equipmentMaintenanceRuleName,
         UUID equipmentId,
         String title,
         LocalDateTime scheduledStart,
@@ -30,8 +35,19 @@ public record PprTaskDto(
         String postponeReason
 ) {
     public static PprTaskDto from(PprTask t) {
+        return from(t, Map.of());
+    }
+
+    public static PprTaskDto from(PprTask t, Map<UUID, EquipmentMaintenanceRule> ruleById) {
+        EquipmentMaintenanceRule rule = t.getEquipmentMaintenanceRuleId() == null
+                ? null
+                : ruleById.get(t.getEquipmentMaintenanceRuleId());
         return new PprTaskDto(
-                t.getId(), t.getCode(), t.getPlan().getId(), t.getRegulationId(), t.getEquipmentId(),
+                t.getId(), t.getCode(), t.getPlan().getId(), t.getRegulationId(),
+                t.getEquipmentMaintenanceRuleId(),
+                rule != null ? rule.getCode() : null,
+                rule != null ? rule.getName() : null,
+                t.getEquipmentId(),
                 t.getTitle(), t.getScheduledStart(), t.getScheduledEnd(),
                 t.getScheduledStart() != null ? t.getScheduledStart().toLocalDate() : null,
                 t.getScheduledEnd() != null ? t.getScheduledEnd().toLocalDate() : null,
