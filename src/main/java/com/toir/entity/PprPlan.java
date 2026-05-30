@@ -7,6 +7,7 @@ import com.toir.enums.PprType;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -69,8 +70,10 @@ public class PprPlan extends BaseEntity {
     private PprScopeType scopeType;
 
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 50)
     private List<PprTask> tasks = new ArrayList<>();
 
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 50)
     private List<PprPlanTarget> targets = new ArrayList<>();
 }

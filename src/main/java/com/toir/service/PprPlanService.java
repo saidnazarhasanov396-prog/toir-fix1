@@ -7,6 +7,7 @@ import com.toir.entity.PprPlanTarget;
 import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
+import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.PlanStatus;
@@ -24,6 +25,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
@@ -58,6 +60,7 @@ public class PprPlanService {
     private final EquipmentRepository equipmentRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
+    private final MaintenanceRegulationRepository maintenanceRegulationRepository;
     private final AuditBuilderService auditBuilderService;
     private final AuditSerializationService auditSerializationService;
     private static final int MAX_PLAN_CODE_GENERATION_ATTEMPTS = 50;
@@ -86,7 +89,17 @@ public class PprPlanService {
                         PaginationUtils.pageRequest(page, size)
                 );
         Map<UUID, String> departmentNames = resolveDepartmentNames(plans.getContent());
-        return plans.map(plan -> PprPlanDto.from(plan, departmentName(departmentNames, plan)));
+        List<PprTask> tasks = collectTasks(plans.getContent());
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(tasks);
+        Map<UUID, String> regulationNames = resolveRegulationNames(tasks);
+        Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
+        return plans.map(plan -> PprPlanDto.from(
+                plan,
+                departmentName(departmentNames, plan),
+                ruleById,
+                equipmentNames,
+                regulationNames
+        ));
     }
 
     @Transactional(readOnly = true)
@@ -323,8 +336,10 @@ public class PprPlanService {
     public List<PprTaskDto> findTasksByPlan(UUID planId) {
         List<PprTask> tasks = taskRepository.findAllByPlanIdAndIsDeletedFalseOrderByScheduledStartAscIdAsc(planId);
         Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(tasks);
+        Map<UUID, String> regulationNames = resolveRegulationNames(tasks);
         return tasks.stream()
-                .map(task -> PprTaskDto.from(task, ruleById))
+                .map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames))
                 .toList();
     }
 
@@ -335,13 +350,36 @@ public class PprPlanService {
 
     private PprPlanDto toDto(PprPlan plan) {
         Map<UUID, String> departmentNames = resolveDepartmentNames(List.of(plan));
-        return PprPlanDto.from(plan, departmentName(departmentNames, plan), loadMaintenanceRuleById(plan.getTasks()));
+        List<PprTask> tasks = plan.getTasks();
+        return PprPlanDto.from(
+                plan,
+                departmentName(departmentNames, plan),
+                loadMaintenanceRuleById(tasks),
+                resolveEquipmentNames(tasks),
+                resolveRegulationNames(tasks)
+        );
     }
 
     private List<PprPlanDto> toDtos(List<PprPlan> plans) {
         Map<UUID, String> departmentNames = resolveDepartmentNames(plans);
+        List<PprTask> tasks = collectTasks(plans);
+        Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(tasks);
+        Map<UUID, String> regulationNames = resolveRegulationNames(tasks);
         return plans.stream()
-                .map(plan -> PprPlanDto.from(plan, departmentName(departmentNames, plan)))
+                .map(plan -> PprPlanDto.from(
+                        plan,
+                        departmentName(departmentNames, plan),
+                        ruleById,
+                        equipmentNames,
+                        regulationNames
+                ))
+                .toList();
+    }
+
+    private List<PprTask> collectTasks(List<PprPlan> plans) {
+        return plans.stream()
+                .flatMap(plan -> plan.getTasks().stream())
                 .toList();
     }
 
@@ -356,6 +394,32 @@ public class PprPlanService {
         }
         return equipmentMaintenanceRuleRepository.findAllByIdInAndIsDeletedFalse(ruleIds).stream()
                 .collect(Collectors.toMap(EquipmentMaintenanceRule::getId, rule -> rule, (left, right) -> left));
+    }
+
+    private Map<UUID, String> resolveEquipmentNames(List<PprTask> tasks) {
+        List<UUID> equipmentIds = tasks.stream()
+                .map(PprTask::getEquipmentId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (equipmentIds.isEmpty()) {
+            return Map.of();
+        }
+        return equipmentRepository.findAllByIdInAndIsDeletedFalse(equipmentIds).stream()
+                .collect(Collectors.toMap(Equipment::getId, Equipment::getName, (left, right) -> left));
+    }
+
+    private Map<UUID, String> resolveRegulationNames(List<PprTask> tasks) {
+        List<UUID> regulationIds = tasks.stream()
+                .map(PprTask::getRegulationId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (regulationIds.isEmpty()) {
+            return Map.of();
+        }
+        return maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(regulationIds).stream()
+                .collect(Collectors.toMap(MaintenanceRegulation::getId, MaintenanceRegulation::getName, (left, right) -> left));
     }
 
     private String departmentName(Map<UUID, String> departmentNames, PprPlan plan) {

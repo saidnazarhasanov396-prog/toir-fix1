@@ -4,6 +4,8 @@ import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.entity.Department;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.PprTaskStatus;
@@ -12,6 +14,10 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprPlanStatsProjection;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import org.junit.jupiter.api.Test;
@@ -46,6 +52,18 @@ class PprPlanServiceListFilterTest {
 
     @Mock
     DepartmentRepository departmentRepository;
+
+    @Mock
+    EquipmentRepository equipmentRepository;
+
+    @Mock
+    EquipmentTypeRepository equipmentTypeRepository;
+
+    @Mock
+    EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
+
+    @Mock
+    MaintenanceRegulationRepository maintenanceRegulationRepository;
 
     @Mock
     AuditBuilderService auditBuilderService;
@@ -189,6 +207,84 @@ class PprPlanServiceListFilterTest {
     }
 
     @Test
+    void getByIdIncludesEquipmentAndRegulationNames() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        PprPlan plan = plan(2026, 5, UUID.randomUUID());
+        PprTask task = task(plan, LocalDateTime.of(2026, 5, 1, 9, 0));
+        task.setEquipmentId(equipmentId);
+        task.setRegulationId(regulationId);
+        plan.getTasks().add(task);
+        Equipment equipment = equipment(equipmentId, "Pump 17");
+        MaintenanceRegulation regulation = regulation(regulationId, "Monthly inspection");
+
+        when(planRepository.findByIdAndIsDeletedFalse(plan.getId())).thenReturn(Optional.of(plan));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of(equipment));
+        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(List.of(regulationId)))
+                .thenReturn(List.of(regulation));
+
+        var result = service.findById(plan.getId());
+
+        assertThat(result.tasks()).hasSize(1);
+        assertThat(result.tasks().getFirst().equipmentId()).isEqualTo(equipmentId);
+        assertThat(result.tasks().getFirst().equipmentName()).isEqualTo("Pump 17");
+        assertThat(result.tasks().getFirst().regulationId()).isEqualTo(regulationId);
+        assertThat(result.tasks().getFirst().regulationName()).isEqualTo("Monthly inspection");
+    }
+
+    @Test
+    void listIncludesEquipmentAndRegulationNamesForEveryItem() {
+        UUID firstEquipmentId = UUID.randomUUID();
+        UUID secondEquipmentId = UUID.randomUUID();
+        UUID firstRegulationId = UUID.randomUUID();
+        UUID secondRegulationId = UUID.randomUUID();
+        PprPlan firstPlan = plan(2026, 5, UUID.randomUUID());
+        PprPlan secondPlan = plan(2026, 5, UUID.randomUUID());
+        PprTask firstTask = task(firstPlan, LocalDateTime.of(2026, 5, 1, 9, 0));
+        firstTask.setEquipmentId(firstEquipmentId);
+        firstTask.setRegulationId(firstRegulationId);
+        firstPlan.getTasks().add(firstTask);
+        PprTask secondTask = task(secondPlan, LocalDateTime.of(2026, 5, 2, 9, 0));
+        secondTask.setEquipmentId(secondEquipmentId);
+        secondTask.setRegulationId(secondRegulationId);
+        secondPlan.getTasks().add(secondTask);
+
+        when(planRepository.searchPlans(null, null, null, null, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(firstPlan, secondPlan), PageRequest.of(0, 20), 2));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(firstEquipmentId, secondEquipmentId)))
+                .thenReturn(List.of(equipment(firstEquipmentId, "Compressor A"), equipment(secondEquipmentId, "Pump B")));
+        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(List.of(firstRegulationId, secondRegulationId)))
+                .thenReturn(List.of(regulation(firstRegulationId, "Quarterly PM"), regulation(secondRegulationId, "Annual PM")));
+
+        var result = service.findAll(null, null, null, null, 0, 20);
+
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getContent().get(0).tasks().getFirst().equipmentName()).isEqualTo("Compressor A");
+        assertThat(result.getContent().get(0).tasks().getFirst().regulationName()).isEqualTo("Quarterly PM");
+        assertThat(result.getContent().get(1).tasks().getFirst().equipmentName()).isEqualTo("Pump B");
+        assertThat(result.getContent().get(1).tasks().getFirst().regulationName()).isEqualTo("Annual PM");
+    }
+
+    @Test
+    void getByIdLeavesNamesNullWhenOptionalRelationsAreMissing() {
+        PprPlan plan = plan(2026, 5, UUID.randomUUID());
+        PprTask task = task(plan, LocalDateTime.of(2026, 5, 1, 9, 0));
+        task.setEquipmentId(null);
+        task.setRegulationId(null);
+        plan.getTasks().add(task);
+
+        when(planRepository.findByIdAndIsDeletedFalse(plan.getId())).thenReturn(Optional.of(plan));
+
+        var result = service.findById(plan.getId());
+
+        assertThat(result.tasks()).hasSize(1);
+        assertThat(result.tasks().getFirst().equipmentId()).isNull();
+        assertThat(result.tasks().getFirst().equipmentName()).isNull();
+        assertThat(result.tasks().getFirst().regulationId()).isNull();
+        assertThat(result.tasks().getFirst().regulationName()).isNull();
+    }
+
+    @Test
     void statsWithDepartmentUsesSameFilter() {
         UUID departmentId = UUID.randomUUID();
         when(planRepository.getStats(2026, 5, 12, departmentId)).thenReturn(stats(2, 0, 1, 1, 3, 2, 1));
@@ -248,8 +344,8 @@ class PprPlanServiceListFilterTest {
         task.setId(UUID.randomUUID());
         task.setCode("PPR-TASK-" + scheduledStart.toLocalDate());
         task.setPlan(plan);
-        task.setRegulationId(UUID.randomUUID());
-        task.setEquipmentId(UUID.randomUUID());
+        task.setRegulationId(null);
+        task.setEquipmentId(null);
         task.setTitle("Task");
         task.setScheduledStart(scheduledStart);
         task.setScheduledEnd(scheduledStart.plusHours(2));
@@ -258,6 +354,20 @@ class PprPlanServiceListFilterTest {
         task.setPriority(PriorityLevel.MEDIUM);
         task.setPlannedLaborHours(2.0);
         return task;
+    }
+
+    private Equipment equipment(UUID id, String name) {
+        Equipment equipment = new Equipment();
+        equipment.setId(id);
+        equipment.setName(name);
+        return equipment;
+    }
+
+    private MaintenanceRegulation regulation(UUID id, String name) {
+        MaintenanceRegulation regulation = new MaintenanceRegulation();
+        regulation.setId(id);
+        regulation.setName(name);
+        return regulation;
     }
 
     private PprPlanStatsProjection stats(

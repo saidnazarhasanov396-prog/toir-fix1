@@ -16,10 +16,12 @@ public record PprTaskDto(
         String code,
         UUID planId,
         UUID regulationId,
+        String regulationName,
         UUID equipmentMaintenanceRuleId,
         String equipmentMaintenanceRuleCode,
         String equipmentMaintenanceRuleName,
         UUID equipmentId,
+        String equipmentName,
         String title,
         LocalDateTime scheduledStart,
         LocalDateTime scheduledEnd,
@@ -60,7 +62,9 @@ public record PprTaskDto(
                 null,
                 null,
                 null,
+                null,
                 equipmentId,
+                null,
                 title,
                 scheduledStart,
                 scheduledEnd,
@@ -80,21 +84,76 @@ public record PprTaskDto(
     }
 
     public static PprTaskDto from(PprTask t, Map<UUID, EquipmentMaintenanceRule> ruleById) {
+        return from(t, ruleById, Map.of(), Map.of());
+    }
+
+    public static PprTaskDto from(PprTask t,
+                                  Map<UUID, EquipmentMaintenanceRule> ruleById,
+                                  Map<UUID, String> equipmentNames,
+                                  Map<UUID, String> regulationNames) {
         EquipmentMaintenanceRule rule = t.getEquipmentMaintenanceRuleId() == null
                 ? null
                 : ruleById.get(t.getEquipmentMaintenanceRuleId());
         return new PprTaskDto(
                 t.getId(), t.getCode(), t.getPlan().getId(), t.getRegulationId(),
+                t.getRegulationId() != null ? regulationNames.get(t.getRegulationId()) : null,
                 t.getEquipmentMaintenanceRuleId(),
                 rule != null ? rule.getCode() : null,
                 rule != null ? rule.getName() : null,
                 t.getEquipmentId(),
+                t.getEquipmentId() != null ? equipmentNames.get(t.getEquipmentId()) : null,
                 t.getTitle(), t.getScheduledStart(), t.getScheduledEnd(),
                 t.getScheduledStart() != null ? t.getScheduledStart().toLocalDate() : null,
                 t.getScheduledEnd() != null ? t.getScheduledEnd().toLocalDate() : null,
                 t.getDueDate(),
                 t.getStatus(), t.getPriority(), t.getPlannedLaborHours(), t.getActualLaborHours(),
                 t.getPostponeReason()
+        );
+    }
+
+    public PprTaskDto(
+            UUID id,
+            String code,
+            UUID planId,
+            UUID regulationId,
+            UUID equipmentMaintenanceRuleId,
+            String equipmentMaintenanceRuleCode,
+            String equipmentMaintenanceRuleName,
+            UUID equipmentId,
+            String title,
+            LocalDateTime scheduledStart,
+            LocalDateTime scheduledEnd,
+            LocalDate startDate,
+            LocalDate endDate,
+            LocalDateTime dueDate,
+            PprTaskStatus status,
+            PriorityLevel priority,
+            double plannedLaborHours,
+            Double actualLaborHours,
+            String postponeReason
+    ) {
+        this(
+                id,
+                code,
+                planId,
+                regulationId,
+                null,
+                equipmentMaintenanceRuleId,
+                equipmentMaintenanceRuleCode,
+                equipmentMaintenanceRuleName,
+                equipmentId,
+                null,
+                title,
+                scheduledStart,
+                scheduledEnd,
+                startDate,
+                endDate,
+                dueDate,
+                status,
+                priority,
+                plannedLaborHours,
+                actualLaborHours,
+                postponeReason
         );
     }
 }
