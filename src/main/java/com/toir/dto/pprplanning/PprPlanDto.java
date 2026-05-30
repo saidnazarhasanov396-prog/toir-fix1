@@ -65,10 +65,20 @@ public record PprPlanDto(
     public static PprPlanDto from(PprPlan p,
                                   String departmentName,
                                   Map<UUID, EquipmentMaintenanceRule> ruleById) {
+        return from(p, departmentName, ruleById, Map.of(), Map.of());
+    }
+
+    public static PprPlanDto from(PprPlan p,
+                                  String departmentName,
+                                  Map<UUID, EquipmentMaintenanceRule> ruleById,
+                                  Map<UUID, String> equipmentNames,
+                                  Map<UUID, String> regulationNames) {
         return new PprPlanDto(
                 p.getId(), p.getCode(), p.getName(), p.getStatus(),
                 p.getDepartmentId(), departmentName, p.getCreatedById(), p.getApprovedById(), p.getNotes(),
-                p.getTasks().stream().map(task -> PprTaskDto.from(task, ruleById)).toList(),
+                p.getTasks().stream()
+                        .map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames))
+                        .toList(),
                 p.getStartDate(),
                 p.getEndDate(),
                 p.getPprType(),
