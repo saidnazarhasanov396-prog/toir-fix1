@@ -227,12 +227,38 @@ class EquipmentAttributeServiceTest {
     }
 
     @Test
+    void findDefinitionsResolvesStoredUnitUuidAndDoesNotExposeUuidAsName() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        EquipmentAttributeDefinition definition = definition(UUID.randomUUID(), equipmentTypeId, "motor_power",
+                EquipmentAttributeDataType.NUMBER, true);
+        UnitOfMeasurement unit = unit("UOM-2026-0001", "Kilowatt", "Kilowatt", "Kilovatt");
+        definition.setUnit(unit.getId().toString());
+        stubEquipmentType(equipmentTypeId);
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId))
+                .thenReturn(List.of(definition));
+        when(requiredCriticalityRepository.findAllByAttributeDefinitionIdInAndIsDeletedFalse(List.of(definition.getId())))
+                .thenReturn(List.of());
+        when(unitOfMeasurementRepository.findByIdAndIsDeletedFalse(unit.getId())).thenReturn(Optional.of(unit));
+
+        var result = service.findDefinitions(equipmentTypeId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().unit().id()).isEqualTo(unit.getId());
+        assertThat(result.getFirst().unit().code()).isEqualTo("UOM-2026-0001");
+        assertThat(result.getFirst().unit().name()).isEqualTo("Kilowatt");
+        assertThat(result.getFirst().unit().name()).isNotEqualTo(unit.getId().toString());
+        assertThat(result.getFirst().unit().nameEn()).isEqualTo("Kilowatt");
+        assertThat(result.getFirst().unit().nameUz()).isEqualTo("Kilovatt");
+    }
+
+    @Test
     void createDefinitionPersistsPumpAttribute() {
         UUID equipmentTypeId = UUID.randomUUID();
         stubEquipmentType(equipmentTypeId);
         UnitOfMeasurement unit = unit("UOM-2026-0001", "kW", "Kilowatt", "Kilovatt");
         when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "motor_power")).thenReturn(false);
         when(unitOfMeasurementRepository.findByTokenIgnoreCase("kW")).thenReturn(List.of(unit));
+        when(unitOfMeasurementRepository.findByIdAndIsDeletedFalse(unit.getId())).thenReturn(Optional.of(unit));
         when(definitionRepository.save(any(EquipmentAttributeDefinition.class))).thenAnswer(invocation -> {
             EquipmentAttributeDefinition definition = invocation.getArgument(0);
             definition.setId(UUID.randomUUID());
@@ -267,8 +293,84 @@ class EquipmentAttributeServiceTest {
                 ArgumentCaptor.forClass(EquipmentAttributeDefinition.class);
         verify(definitionRepository).save(captor.capture());
         assertThat(captor.getValue().getEquipmentTypeId()).isEqualTo(equipmentTypeId);
+        assertThat(captor.getValue().getUnit()).isEqualTo(unit.getId().toString());
         assertThat(captor.getValue().getMinValue()).isZero();
         assertThat(captor.getValue().getMaxValue()).isEqualTo(500.0);
+    }
+
+    @Test
+    void createDefinitionAcceptsUnitIdAndReturnsFullUnitDictionaryObject() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        UnitOfMeasurement unit = unit("UOM-2026-0002", "Celsius", "Celsius", "Selsiy");
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "operating_temperature"))
+                .thenReturn(false);
+        when(unitOfMeasurementRepository.findByIdAndIsDeletedFalse(unit.getId())).thenReturn(Optional.of(unit));
+        when(definitionRepository.save(any(EquipmentAttributeDefinition.class))).thenAnswer(invocation -> {
+            EquipmentAttributeDefinition definition = invocation.getArgument(0);
+            definition.setId(UUID.randomUUID());
+            return definition;
+        });
+
+        var dto = service.createDefinition(equipmentTypeId, new EquipmentAttributeDefinitionRequest(
+                "operating_temperature",
+                "Operating Temperature",
+                null,
+                null,
+                EquipmentAttributeDataType.NUMBER,
+                null,
+                false,
+                null,
+                null,
+                null,
+                List.of(),
+                "Monitoring",
+                20,
+                List.of(),
+                unit.getId()
+        ));
+
+        assertThat(dto.unit().id()).isEqualTo(unit.getId());
+        assertThat(dto.unit().code()).isEqualTo("UOM-2026-0002");
+        assertThat(dto.unit().name()).isEqualTo("Celsius");
+        assertThat(dto.unit().name()).isNotEqualTo(unit.getId().toString());
+
+        ArgumentCaptor<EquipmentAttributeDefinition> captor =
+                ArgumentCaptor.forClass(EquipmentAttributeDefinition.class);
+        verify(definitionRepository).save(captor.capture());
+        assertThat(captor.getValue().getUnit()).isEqualTo(unit.getId().toString());
+    }
+
+    @Test
+    void createDefinitionRejectsUnknownUnitIdWithBadRequest() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID missingUnitId = UUID.randomUUID();
+        stubEquipmentType(equipmentTypeId);
+        when(definitionRepository.existsActiveByEquipmentTypeIdAndKey(equipmentTypeId, "operating_temperature"))
+                .thenReturn(false);
+        when(unitOfMeasurementRepository.findByIdAndIsDeletedFalse(missingUnitId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.createDefinition(equipmentTypeId, new EquipmentAttributeDefinitionRequest(
+                "operating_temperature",
+                "Operating Temperature",
+                null,
+                null,
+                EquipmentAttributeDataType.NUMBER,
+                null,
+                false,
+                null,
+                null,
+                null,
+                List.of(),
+                "Monitoring",
+                20,
+                List.of(),
+                missingUnitId
+        ))).isInstanceOfSatisfying(RestException.class, ex -> {
+            assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(ex.getMessage()).contains("Unknown unitId").contains(missingUnitId.toString());
+        });
+        verify(definitionRepository, never()).save(any());
     }
 
     @ParameterizedTest
@@ -296,6 +398,7 @@ class EquipmentAttributeServiceTest {
         when(criticalityClassRepository.findAllByIdInAndIsDeletedFalse(List.of(criticalityId)))
                 .thenReturn(List.of(criticalityClass(criticalityId)));
         when(unitOfMeasurementRepository.findByTokenIgnoreCase("kW")).thenReturn(List.of(unit));
+        when(unitOfMeasurementRepository.findByIdAndIsDeletedFalse(unit.getId())).thenReturn(Optional.of(unit));
         when(definitionRepository.saveAll(any())).thenAnswer(invocation -> {
             List<EquipmentAttributeDefinition> definitions = toDefinitionList(invocation.getArgument(0));
             definitions.forEach(definition -> definition.setId(UUID.randomUUID()));
