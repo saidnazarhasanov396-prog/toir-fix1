@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -494,7 +495,7 @@ public class EquipmentAttributeService {
         definition.setLabelRu(request.labelRu());
         definition.setLabelUz(request.labelUz());
         definition.setDataType(request.dataType());
-        definition.setUnit(request.unit());
+        definition.setUnit(resolveRequestedUnitId(request));
         definition.setRequired(request.required());
         definition.setMinValue(request.minValue());
         definition.setMaxValue(request.maxValue());
@@ -812,16 +813,51 @@ public class EquipmentAttributeService {
         if (token == null) {
             return null;
         }
-        return unitOfMeasurementRepository.findByTokenIgnoreCase(token).stream()
-                .findFirst()
+        return findUnitByIdOrToken(token)
                 .map(UnitOfMeasurementDto::from)
-                .orElseGet(() -> fallbackUnit(token));
+                .orElse(null);
     }
 
-    private UnitOfMeasurementDto fallbackUnit(String unit) {
-        UnitOfMeasurement fallback = new UnitOfMeasurement();
-        fallback.setName(unit);
-        return UnitOfMeasurementDto.from(fallback);
+    private String resolveRequestedUnitId(EquipmentAttributeDefinitionRequest request) {
+        if (request.unitId() != null) {
+            return unitOfMeasurementRepository.findByIdAndIsDeletedFalse(request.unitId())
+                    .map(unit -> unit.getId().toString())
+                    .orElseThrow(() -> RestException.badRequest("Unknown unitId: " + request.unitId()));
+        }
+
+        String token = normalizeSearch(request.unit());
+        if (token == null) {
+            return null;
+        }
+
+        Optional<UUID> parsedUnitId = parseUuid(token);
+        if (parsedUnitId.isPresent()) {
+            UUID unitId = parsedUnitId.get();
+            return unitOfMeasurementRepository.findByIdAndIsDeletedFalse(unitId)
+                    .map(unit -> unit.getId().toString())
+                    .orElseThrow(() -> RestException.badRequest("Unknown unitId: " + unitId));
+        }
+
+        return unitOfMeasurementRepository.findByTokenIgnoreCase(token).stream()
+                .findFirst()
+                .map(unit -> unit.getId().toString())
+                .orElse(token);
+    }
+
+    private Optional<UnitOfMeasurement> findUnitByIdOrToken(String token) {
+        Optional<UUID> unitId = parseUuid(token);
+        if (unitId.isPresent()) {
+            return unitOfMeasurementRepository.findByIdAndIsDeletedFalse(unitId.get());
+        }
+        return unitOfMeasurementRepository.findByTokenIgnoreCase(token).stream().findFirst();
+    }
+
+    private Optional<UUID> parseUuid(String token) {
+        try {
+            return Optional.of(UUID.fromString(token));
+        } catch (IllegalArgumentException ignored) {
+            return Optional.empty();
+        }
     }
 
     private EquipmentAttributeDefinition getDefinitionOrThrow(UUID id) {
