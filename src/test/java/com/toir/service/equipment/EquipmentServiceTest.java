@@ -68,6 +68,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
@@ -1674,16 +1675,20 @@ class EquipmentServiceTest {
     }
 
     @Test
-    void equipmentCreateRejectsTemporarilyDisabledManualAttributes() {
+    void equipmentCreatePersistsManualAttributes() {
         EquipmentCreateRequest request = createRequestWithManualAttributes(List.of(
                 new EquipmentManualAttributeRequest("legacy_key", "legacy value")
         ));
 
-        assertThatThrownBy(() -> service.create(request))
-                .isInstanceOfSatisfying(RestException.class, ex ->
-                        assertThat(ex.getMessage()).contains("Manual attributes are temporarily disabled. Use official equipment attributes."));
-        verify(repository, never()).save(any());
-        verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
+        stubCreateFlow("INV-MANUAL-DISABLED");
+        when(departmentRepository.findByIdAndIsDeletedFalse(request.departmentId())).thenReturn(Optional.of(department(request.departmentId())));
+
+        service.create(request);
+
+        verify(equipmentManualAttributeService).replaceAll(any(UUID.class), argThat(bulk ->
+                bulk.attributes().size() == 1
+                        && "legacy_key".equals(bulk.attributes().getFirst().key())
+                        && "legacy value".equals(bulk.attributes().getFirst().value())));
     }
 
     @Test
@@ -1760,17 +1765,24 @@ class EquipmentServiceTest {
     }
 
     @Test
-    void equipmentUpdateRejectsTemporarilyDisabledManualAttributes() {
+    void equipmentUpdatePersistsManualAttributes() {
         UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-UPDATE-MANUAL-ATTR");
+        equipment.setId(equipmentId);
         EquipmentUpdateRequest request = updateRequestWithManualAttributes(List.of(
                 new EquipmentManualAttributeRequest("legacy_key", "legacy value")
         ));
 
-        assertThatThrownBy(() -> service.update(equipmentId, request))
-                .isInstanceOfSatisfying(RestException.class, ex ->
-                        assertThat(ex.getMessage()).contains("Manual attributes are temporarily disabled. Use official equipment attributes."));
-        verify(repository, never()).save(any());
-        verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+
+        service.update(equipmentId, request);
+
+        verify(equipmentManualAttributeService).replaceAll(eq(equipmentId), argThat(bulk ->
+                bulk.attributes().size() == 1
+                        && "legacy_key".equals(bulk.attributes().getFirst().key())
+                        && "legacy value".equals(bulk.attributes().getFirst().value())));
     }
 
     @Test

@@ -16,6 +16,8 @@ import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
 import com.toir.service.ApprovalService;
 import com.toir.util.PaginationUtils;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -75,15 +77,30 @@ public class PprPlanController {
 
     @GetMapping
     @PreAuthorize(PPR_PLAN_READ_AUTH)
-    public ResponseEntity<Page<PprPlanDto>> list(
+    @Operation(
+            summary = "List PPR plans",
+            description = "When both page and size are provided, returns the existing paginated response. "
+                    + "When both are omitted, returns all matching PPR plans as a list. "
+                    + "Providing only one pagination parameter is rejected."
+    )
+    public ResponseEntity<?> list(
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer day,
             @RequestParam(required = false) UUID departmentId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @Parameter(description = "Optional page index. Must be provided together with size.")
+            @RequestParam(required = false) Integer page,
+            @Parameter(description = "Optional page size. Must be provided together with page.")
+            @RequestParam(required = false) Integer size
     ) {
-        return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartment(departmentId), page, size));
+        UUID scopedDepartmentId = scopedDepartment(departmentId);
+        if (page == null && size == null) {
+            return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId));
+        }
+        if (page == null || size == null) {
+            throw RestException.badRequest("Both page and size must be provided for paginated PPR plan list");
+        }
+        return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId, page, size));
     }
 
     @GetMapping("/stats")

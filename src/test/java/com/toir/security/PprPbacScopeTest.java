@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
@@ -88,14 +87,34 @@ class PprPbacScopeTest {
         UUID currentDepartmentId = UUID.randomUUID();
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
         when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(currentDepartmentId);
-        when(service.findAll(2026, 5, 12, currentDepartmentId, 0, 20))
-                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+        when(service.findAll(2026, 5, 12, currentDepartmentId)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/ppr-plans")
                         .param("year", "2026")
                         .param("month", "5")
                         .param("day", "12")
                         .param("departmentId", requestedDepartmentId.toString()))
+                .andExpect(status().isOk());
+
+        verify(service).findAll(2026, 5, 12, currentDepartmentId);
+    }
+
+    @Test
+    void paginatedListClampsRequestedDepartmentToCurrentUserDepartment() throws Exception {
+        UUID requestedDepartmentId = UUID.randomUUID();
+        UUID currentDepartmentId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
+        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(currentDepartmentId);
+        when(service.findAll(2026, 5, 12, currentDepartmentId, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/ppr-plans")
+                        .param("year", "2026")
+                        .param("month", "5")
+                        .param("day", "12")
+                        .param("departmentId", requestedDepartmentId.toString())
+                        .param("page", "0")
+                        .param("size", "20"))
                 .andExpect(status().isOk());
 
         verify(service).findAll(2026, 5, 12, currentDepartmentId, 0, 20);
@@ -117,12 +136,12 @@ class PprPbacScopeTest {
     void adminCanRequestGlobalList() throws Exception {
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(service.findAll(null, null, null, null, 0, 20)).thenReturn(Page.empty(PageRequest.of(0, 20)));
+        when(service.findAll(null, null, null, null)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/ppr-plans"))
                 .andExpect(status().isOk());
 
-        verify(service).findAll(null, null, null, null, 0, 20);
+        verify(service).findAll(null, null, null, null);
     }
 
     @Test

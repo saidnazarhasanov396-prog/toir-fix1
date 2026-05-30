@@ -33,7 +33,6 @@ import com.toir.service.file_management.FileService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -50,9 +49,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class VehicleService {
 
-    private static final String VEHICLE_MANUAL_ATTRIBUTES_DISABLED_MESSAGE =
-            "Manual vehicle attributes are temporarily disabled. Use official equipment attributes.";
-
     private final EquipmentRepository equipmentRepository;
     private final VehicleDetailsRepository vehicleDetailsRepository;
     private final EquipmentService equipmentService;
@@ -63,9 +59,6 @@ public class VehicleService {
     private final EquipmentAttributeService equipmentAttributeService;
     private final EquipmentManualAttributeService equipmentManualAttributeService;
     private final VehicleDocumentRepository vehicleDocumentRepository;
-
-    @Value("${app.features.manual-attributes.write-enabled:false}")
-    private boolean manualAttributeWritesEnabled;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, String search, int page, int pageSize) {
@@ -134,7 +127,6 @@ public class VehicleService {
 
     @Transactional
     public VehicleDetailDto create(VehicleRequest request) {
-        assertManualVehicleAttributesAllowed(request.manualAttributes());
         validateUniqueCreate(request);
         Equipment equipment = new Equipment();
         applyEquipment(equipment, request);
@@ -178,7 +170,6 @@ public class VehicleService {
 
     @Transactional
     public VehicleDetailDto update(UUID equipmentId, VehicleRequest request) {
-        assertManualVehicleAttributesAllowed(request.manualAttributes());
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
         if (equipment.getCategory() != EquipmentCategory.VEHICLE) {
@@ -403,15 +394,6 @@ public class VehicleService {
         }
         if (!Objects.equals(equipment.getDepartmentId(), userDepartmentId)) {
             throw RestException.forbidden("Vehicle access denied");
-        }
-    }
-
-    private void assertManualVehicleAttributesAllowed(List<?> manualAttributes) {
-        if (manualAttributes == null || manualAttributes.isEmpty()) {
-            return;
-        }
-        if (!manualAttributeWritesEnabled) {
-            throw RestException.badRequest(VEHICLE_MANUAL_ATTRIBUTES_DISABLED_MESSAGE);
         }
     }
 
