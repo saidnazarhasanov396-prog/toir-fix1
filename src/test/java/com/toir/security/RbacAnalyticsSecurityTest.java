@@ -105,9 +105,30 @@ class RbacAnalyticsSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = PermissionConstants.ANALYTICS_READ)
+    void analyticsReadCanReadEquipmentAnalytics() throws Exception {
+        mockMvc.perform(get("/api/v1/analytics/equipment/{equipmentId}", UUID.randomUUID()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.EQUIPMENT_READ)
+    void equipmentReadAloneCannotReadEquipmentAnalytics() throws Exception {
+        mockMvc.perform(get("/api/v1/analytics/equipment/{equipmentId}", UUID.randomUUID()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void systemAdminCanReadAnalytics() throws Exception {
         mockMvc.perform(get("/api/v1/analytics/overview"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = "SYSTEM_ADMIN")
+    void systemAdminCanReadEquipmentAnalytics() throws Exception {
+        mockMvc.perform(get("/api/v1/analytics/equipment/{equipmentId}", UUID.randomUUID()))
                 .andExpect(status().isOk());
     }
 

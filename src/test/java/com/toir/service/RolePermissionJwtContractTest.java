@@ -129,6 +129,21 @@ class RolePermissionJwtContractTest {
     }
 
     @Test
+    void departmentHeadLoginIncludesEquipmentAnalyticsPermission() {
+        LoginResponse response = loginWith(primaryRole("WORKSHOP_HEAD", List.of(
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.REPAIR_REQUEST_READ,
+                PermissionConstants.ANALYTICS_READ
+        )));
+
+        assertThat(response.user().permissions()).contains(
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.ANALYTICS_READ
+        );
+        assertJwtPermissionsContain(PermissionConstants.EQUIPMENT_READ, PermissionConstants.ANALYTICS_READ);
+    }
+
+    @Test
     void systemAdminLoginIncludesWildcard() {
         LoginResponse response = loginWith(primaryRole("SYSTEM_ADMIN", List.of(PermissionConstants.WILDCARD)));
 
