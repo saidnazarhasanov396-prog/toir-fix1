@@ -5,6 +5,7 @@ import com.toir.repository.users.RoleRepository;
 import com.toir.entity.users.User;
 import com.toir.repository.users.UserRepository;
 import com.toir.enums.UserStatus;
+import com.toir.security.RolePermissionDefaults;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.core.annotation.Order;
@@ -12,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -67,22 +69,24 @@ public class DataBootstrap implements CommandLineRunner {
             r1.setNameUz("Tizim administratori");
             r1.setDescription("Полный доступ ко всем модулям");
             r1.setSystem(true);
-            r1.setPermissions(List.of("*"));
+            r1.setPermissions(RolePermissionDefaults.forRole(ADMIN_ROLE_CODE));
             return roleRepository.save(r1);
         });
+        mergeDefaultPermissions(adminRole);
 
         for (String[] row : BASE_ROLES) {
             String code = row[0];
-            if (!roleRepository.existsByCodeAndIsDeletedFalse(code)) {
+            Role role = roleRepository.findByCodeAndIsDeletedFalse(code).orElseGet(() -> {
                 Role r = new Role();
                 r.setCode(code);
                 r.setName(row[1]);
                 r.setNameEn(row[2]);
                 r.setNameUz(row[3]);
                 r.setSystem(true);
-                r.setPermissions(List.of("read"));
-                roleRepository.save(r);
-            }
+                r.setPermissions(RolePermissionDefaults.forRole(code));
+                return roleRepository.save(r);
+            });
+            mergeDefaultPermissions(role);
         }
 
         if (!bootstrapProperties.isCreateDefaultAdmin()) {
@@ -102,5 +106,15 @@ public class DataBootstrap implements CommandLineRunner {
             u.setRoles(roles);
             return userRepository.save(u);
         });
+    }
+
+    private void mergeDefaultPermissions(Role role) {
+        Set<String> original = new LinkedHashSet<>(role.getPermissions() == null ? List.of() : role.getPermissions());
+        Set<String> merged = new LinkedHashSet<>(original);
+        merged.addAll(RolePermissionDefaults.forRole(role.getCode()));
+        if (!merged.equals(original)) {
+            role.setPermissions(List.copyOf(merged));
+            roleRepository.save(role);
+        }
     }
 }

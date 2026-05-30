@@ -1,0 +1,270 @@
+package com.toir.security;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+public final class RolePermissionDefaults {
+
+    private RolePermissionDefaults() {
+    }
+
+    private static final Map<String, List<String>> DEFAULTS = buildDefaults();
+
+    public static List<String> forRole(String roleCode) {
+        return DEFAULTS.getOrDefault(roleCode, List.of(PermissionConstants.READ_LEGACY));
+    }
+
+    private static Map<String, List<String>> buildDefaults() {
+        Map<String, List<String>> defaults = new LinkedHashMap<>();
+        defaults.put("SYSTEM_ADMIN", List.of(PermissionConstants.WILDCARD));
+        defaults.put("PPR_ENGINEER", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_PLAN_CREATE,
+                PermissionConstants.PPR_PLAN_UPDATE,
+                PermissionConstants.PPR_PLAN_GENERATE,
+                PermissionConstants.PPR_TASK_READ,
+                PermissionConstants.PPR_TASK_CREATE,
+                PermissionConstants.PPR_TASK_START,
+                PermissionConstants.PPR_TASK_COMPLETE,
+                PermissionConstants.PPR_TASK_POSTPONE,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.REPAIR_REQUEST_READ,
+                PermissionConstants.KNOWLEDGE_READ
+        ));
+        defaults.put("RELIABILITY_ENGINEER", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.EQUIPMENT_UPDATE,
+                PermissionConstants.DEFECT_READ,
+                PermissionConstants.DEFECT_CREATE,
+                PermissionConstants.DEFECT_UPDATE,
+                PermissionConstants.DEFECT_RESOLVE,
+                PermissionConstants.DEFECT_LIST_READ,
+                PermissionConstants.KNOWLEDGE_READ,
+                PermissionConstants.KNOWLEDGE_CREATE,
+                PermissionConstants.KNOWLEDGE_UPDATE,
+                PermissionConstants.ANALYTICS_READ,
+                PermissionConstants.ANALYTICS_EXPORT,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.REPAIR_REQUEST_READ
+        ));
+        defaults.put("FOREMAN", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.REPAIR_REQUEST_READ,
+                PermissionConstants.REPAIR_REQUEST_UPDATE,
+                PermissionConstants.REPAIR_REQUEST_APPROVE,
+                PermissionConstants.REPAIR_REQUEST_ASSIGN,
+                PermissionConstants.REPAIR_REQUEST_REJECT,
+                PermissionConstants.REPAIR_REQUEST_CLOSE,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.WORK_ORDER_CREATE,
+                PermissionConstants.WORK_ORDER_APPROVE,
+                PermissionConstants.WORK_ORDER_START,
+                PermissionConstants.WORK_ORDER_COMPLETE,
+                PermissionConstants.WORK_ORDER_CLOSE,
+                PermissionConstants.DEFECT_READ,
+                PermissionConstants.DEFECT_CREATE,
+                PermissionConstants.DEFECT_UPDATE,
+                PermissionConstants.DEFECT_RESOLVE,
+                PermissionConstants.DEFECT_LIST_READ,
+                PermissionConstants.DEFECT_LIST_CREATE,
+                PermissionConstants.DEFECT_LIST_UPDATE,
+                PermissionConstants.DEFECT_LIST_APPROVE,
+                PermissionConstants.DEFECT_LIST_CLOSE,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.EMPLOYEE_READ,
+                PermissionConstants.TIMESHEET_READ,
+                PermissionConstants.TIMESHEET_APPROVE,
+                PermissionConstants.KNOWLEDGE_READ,
+                PermissionConstants.ANALYTICS_READ
+        ));
+        defaults.put("TECHNICAL_DIRECTOR", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.EQUIPMENT_CREATE,
+                PermissionConstants.EQUIPMENT_UPDATE,
+                PermissionConstants.EQUIPMENT_TRANSFER,
+                PermissionConstants.REPAIR_REQUEST_READ,
+                PermissionConstants.REPAIR_REQUEST_UPDATE,
+                PermissionConstants.REPAIR_REQUEST_APPROVE,
+                PermissionConstants.REPAIR_REQUEST_ASSIGN,
+                PermissionConstants.REPAIR_REQUEST_REJECT,
+                PermissionConstants.REPAIR_REQUEST_CLOSE,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.WORK_ORDER_CREATE,
+                PermissionConstants.WORK_ORDER_APPROVE,
+                PermissionConstants.WORK_ORDER_START,
+                PermissionConstants.WORK_ORDER_COMPLETE,
+                PermissionConstants.WORK_ORDER_CLOSE,
+                PermissionConstants.DEFECT_READ,
+                PermissionConstants.DEFECT_CREATE,
+                PermissionConstants.DEFECT_UPDATE,
+                PermissionConstants.DEFECT_RESOLVE,
+                PermissionConstants.DEFECT_LIST_READ,
+                PermissionConstants.DEFECT_LIST_CREATE,
+                PermissionConstants.DEFECT_LIST_UPDATE,
+                PermissionConstants.DEFECT_LIST_APPROVE,
+                PermissionConstants.DEFECT_LIST_CLOSE,
+                PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_PLAN_CREATE,
+                PermissionConstants.PPR_PLAN_UPDATE,
+                PermissionConstants.PPR_PLAN_APPROVE,
+                PermissionConstants.PPR_PLAN_GENERATE,
+                PermissionConstants.PPR_TASK_READ,
+                PermissionConstants.PPR_TASK_CREATE,
+                PermissionConstants.PPR_TASK_APPROVE,
+                PermissionConstants.PPR_TASK_START,
+                PermissionConstants.PPR_TASK_COMPLETE,
+                PermissionConstants.PPR_TASK_POSTPONE,
+                PermissionConstants.INSPECTION_READ,
+                PermissionConstants.INSPECTION_CREATE,
+                PermissionConstants.INSPECTION_UPDATE,
+                PermissionConstants.INSPECTION_START,
+                PermissionConstants.INSPECTION_COMPLETE,
+                PermissionConstants.KNOWLEDGE_READ,
+                PermissionConstants.KNOWLEDGE_CREATE,
+                PermissionConstants.KNOWLEDGE_UPDATE,
+                PermissionConstants.ANALYTICS_READ,
+                PermissionConstants.ANALYTICS_EXPORT
+        ));
+        List<String> chiefMaintenancePermissions = List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.REPAIR_REQUEST_READ,
+                PermissionConstants.REPAIR_REQUEST_UPDATE,
+                PermissionConstants.REPAIR_REQUEST_APPROVE,
+                PermissionConstants.REPAIR_REQUEST_ASSIGN,
+                PermissionConstants.REPAIR_REQUEST_REJECT,
+                PermissionConstants.REPAIR_REQUEST_CLOSE,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.WORK_ORDER_CREATE,
+                PermissionConstants.WORK_ORDER_APPROVE,
+                PermissionConstants.WORK_ORDER_START,
+                PermissionConstants.WORK_ORDER_COMPLETE,
+                PermissionConstants.WORK_ORDER_CLOSE,
+                PermissionConstants.DEFECT_READ,
+                PermissionConstants.DEFECT_CREATE,
+                PermissionConstants.DEFECT_UPDATE,
+                PermissionConstants.DEFECT_RESOLVE,
+                PermissionConstants.DEFECT_LIST_READ,
+                PermissionConstants.DEFECT_LIST_CREATE,
+                PermissionConstants.DEFECT_LIST_UPDATE,
+                PermissionConstants.DEFECT_LIST_APPROVE,
+                PermissionConstants.DEFECT_LIST_CLOSE,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.EMPLOYEE_READ,
+                PermissionConstants.TIMESHEET_READ,
+                PermissionConstants.TIMESHEET_APPROVE,
+                PermissionConstants.KNOWLEDGE_READ,
+                PermissionConstants.ANALYTICS_READ,
+                PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_TASK_READ,
+                PermissionConstants.INSPECTION_READ,
+                PermissionConstants.INSPECTION_START,
+                PermissionConstants.INSPECTION_COMPLETE
+        );
+        defaults.put("CHIEF_MECHANIC", chiefMaintenancePermissions);
+        defaults.put("CHIEF_POWER_ENGINEER", chiefMaintenancePermissions);
+        defaults.put("CHIEF_INSTRUMENT_ENGINEER", chiefMaintenancePermissions);
+        List<String> shopLeadPermissions = List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.REPAIR_REQUEST_READ,
+                PermissionConstants.REPAIR_REQUEST_UPDATE,
+                PermissionConstants.REPAIR_REQUEST_APPROVE,
+                PermissionConstants.REPAIR_REQUEST_ASSIGN,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.WORK_ORDER_APPROVE,
+                PermissionConstants.WORK_ORDER_START,
+                PermissionConstants.WORK_ORDER_COMPLETE,
+                PermissionConstants.DEFECT_READ,
+                PermissionConstants.DEFECT_CREATE,
+                PermissionConstants.DEFECT_UPDATE,
+                PermissionConstants.DEFECT_LIST_READ,
+                PermissionConstants.DEFECT_LIST_APPROVE,
+                PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_TASK_READ,
+                PermissionConstants.EMPLOYEE_READ,
+                PermissionConstants.TIMESHEET_READ,
+                PermissionConstants.TIMESHEET_APPROVE,
+                PermissionConstants.ANALYTICS_READ,
+                PermissionConstants.KNOWLEDGE_READ
+        );
+        defaults.put("WORKSHOP_HEAD", shopLeadPermissions);
+        defaults.put("SECTION_HEAD", shopLeadPermissions);
+        defaults.put("STOREKEEPER", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.WAREHOUSE_READ,
+                PermissionConstants.WAREHOUSE_EQUIPMENT_READ,
+                PermissionConstants.WAREHOUSE_EQUIPMENT_STATUS_UPDATE,
+                PermissionConstants.STOCK_READ,
+                PermissionConstants.STOCK_RECEIVE,
+                PermissionConstants.STOCK_ISSUE,
+                PermissionConstants.STOCK_MOVE,
+                PermissionConstants.MATERIAL_USAGE_READ,
+                PermissionConstants.MATERIAL_USAGE_ISSUE,
+                PermissionConstants.SPARE_PART_READ,
+                PermissionConstants.SPARE_PART_CREATE,
+                PermissionConstants.SPARE_PART_UPDATE,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.PROCUREMENT_READ
+        ));
+        defaults.put("SUPPLY_SPECIALIST", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.PROCUREMENT_READ,
+                PermissionConstants.PROCUREMENT_CREATE,
+                PermissionConstants.PROCUREMENT_SUBMIT,
+                PermissionConstants.PROCUREMENT_ORDER,
+                PermissionConstants.PROCUREMENT_RECEIVE,
+                PermissionConstants.PROCUREMENT_CANCEL,
+                PermissionConstants.WAREHOUSE_READ,
+                PermissionConstants.STOCK_READ,
+                PermissionConstants.SPARE_PART_READ,
+                PermissionConstants.SPARE_PART_CREATE,
+                PermissionConstants.SPARE_PART_UPDATE,
+                PermissionConstants.ANALYTICS_READ
+        ));
+        defaults.put("ECONOMIST", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.ACTUAL_COST_READ,
+                PermissionConstants.ACTUAL_COST_CREATE,
+                PermissionConstants.BUDGET_READ,
+                PermissionConstants.BUDGET_CREATE,
+                PermissionConstants.BUDGET_UPDATE,
+                PermissionConstants.ANALYTICS_READ,
+                PermissionConstants.ANALYTICS_EXPORT,
+                PermissionConstants.APPROVAL_READ,
+                PermissionConstants.APPROVAL_CREATE
+        ));
+        defaults.put("VIEWER", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.REPAIR_REQUEST_READ,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.DEFECT_READ,
+                PermissionConstants.DEFECT_LIST_READ,
+                PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_TASK_READ,
+                PermissionConstants.WAREHOUSE_READ,
+                PermissionConstants.STOCK_READ,
+                PermissionConstants.SPARE_PART_READ,
+                PermissionConstants.PROCUREMENT_READ,
+                PermissionConstants.BUDGET_READ,
+                PermissionConstants.ACTUAL_COST_READ,
+                PermissionConstants.APPROVAL_READ,
+                PermissionConstants.INSPECTION_READ,
+                PermissionConstants.KNOWLEDGE_READ,
+                PermissionConstants.ANALYTICS_READ,
+                PermissionConstants.DEPARTMENT_READ,
+                PermissionConstants.BRIGADE_READ,
+                PermissionConstants.LOCATION_READ,
+                PermissionConstants.EQUIPMENT_TYPE_READ,
+                PermissionConstants.CATEGORY_READ
+        ));
+        defaults.put("CONTRACTOR", List.of(PermissionConstants.READ_LEGACY));
+        return Map.copyOf(defaults);
+    }
+}

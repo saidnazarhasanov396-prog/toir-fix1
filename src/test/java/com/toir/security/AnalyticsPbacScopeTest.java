@@ -1,6 +1,6 @@
 package com.toir.security;
 
-import com.toir.entity.DowntimeEvent;
+import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.entity.ReliabilityMetric;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
@@ -28,8 +28,12 @@ import com.toir.repository.users.UserRepository;
 import com.toir.service.AnalyticsService;
 import com.toir.service.DashboardService;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 import java.util.Optional;
@@ -69,6 +73,11 @@ class AnalyticsPbacScopeTest {
     ScopeAccessService scopeAccessService;
     DashboardService dashboardService;
     AnalyticsService analyticsService;
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @BeforeEach
     void setUp() {
@@ -205,6 +214,20 @@ class AnalyticsPbacScopeTest {
     }
 
     @Test
+    void equipmentAnalyticsAllowsCurrentDepartmentEquipment() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentA = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentA);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        authenticateDepartmentUser(departmentA);
+
+        EquipmentAnalyticsResponse response = analyticsServiceWithRealScope().equipmentAnalytics(equipmentId);
+
+        assertThat(response.equipmentId()).isEqualTo(equipmentId.toString());
+        verify(repairRequestRepository).search(null, null, equipmentId);
+    }
+
+    @Test
     void missingEquipmentAnalyticsReturns404BeforeScopeCheck() {
         UUID equipmentId = UUID.randomUUID();
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.empty());
@@ -270,5 +293,39 @@ class AnalyticsPbacScopeTest {
         equipment.setStatus(EquipmentStatus.ACTIVE);
         equipment.setCategory(EquipmentCategory.PRODUCTION_EQUIPMENT);
         return equipment;
+    }
+
+    private AnalyticsService analyticsServiceWithRealScope() {
+        return new AnalyticsService(
+                repairRequestRepository,
+                defectRepository,
+                workOrderRepository,
+                pprTaskRepository,
+                downtimeEventRepository,
+                reliabilityMetricRepository,
+                equipmentRepository,
+                departmentRepository,
+                actualCostRepository,
+                new ScopeAccessService(mock(com.toir.repository.users.EmployeeRepository.class))
+        );
+    }
+
+    private void authenticateDepartmentUser(UUID departmentId) {
+        AuthenticatedUser user = new AuthenticatedUser(
+                UUID.randomUUID().toString(),
+                "department-user",
+                "department-user@example.com",
+                "Department User",
+                departmentId.toString(),
+                "WORKSHOP_HEAD",
+                List.of(PermissionConstants.ANALYTICS_READ)
+        );
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        user,
+                        null,
+                        List.of(new SimpleGrantedAuthority(PermissionConstants.ANALYTICS_READ))
+                )
+        );
     }
 }
