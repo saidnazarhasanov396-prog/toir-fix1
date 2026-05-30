@@ -28,6 +28,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.service.maintanance.MaintenanceDueCalculationService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -89,6 +90,9 @@ class PprGeneratorServiceLifecycleTest {
 
     @Mock
     WorkOrderService workOrderService;
+
+    @Mock
+    MaintenanceDueCalculationService maintenanceDueCalculationService;
 
     @InjectMocks
     PprGeneratorService service;
@@ -249,19 +253,21 @@ class PprGeneratorServiceLifecycleTest {
     }
 
     @Test
-    void operatingHoursPlanIsRejectedWithoutGeneratingTasks() {
+    void operatingHoursPlanGeneratesOnlyDueTasksAndAllowsEmptyResult() {
         UUID planId = UUID.randomUUID();
         PprPlan plan = plan(planId, PlanStatus.DRAFT);
         plan.setPprType(PprType.PLANNED_REPAIR);
         plan.setScheduleType(PprScheduleType.OPERATING_HOURS);
         plan.setIntervalHours(10_000L);
         when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(equipmentMaintenanceRuleRepository.findAllActive()).thenReturn(List.of());
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.generateForPlan(planId))
-                .isInstanceOfSatisfying(RestException.class, ex -> {
-                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).isEqualTo("Operating-hours PPR generation is not implemented yet");
-                });
+        PprGeneratorService.GenerationResult result = service.generateForPlan(planId);
+
+        assertThat(result.created()).isZero();
         verify(taskRepository, never()).save(any(PprTask.class));
     }
 

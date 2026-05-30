@@ -8,5 +8,15 @@ public record EquipmentMaintenanceProfileDto(
         UUID equipmentId,
         UUID equipmentTypeId,
         List<MaintenanceRegulationDto> inheritedRules,
-        List<EquipmentMaintenanceRuleDto> individualRules
-) {}
+        List<EquipmentMaintenanceRuleDto> individualRules,
+        List<EffectiveMaintenanceRuleDto> effectiveRules
+) {
+        public EquipmentMaintenanceProfileDto(
+                UUID equipmentId,
+                UUID equipmentTypeId,
+                List<MaintenanceRegulationDto> inheritedRules,
+                List<EquipmentMaintenanceRuleDto> individualRules
+        ) {
+                this(equipmentId, equipmentTypeId, inheritedRules, individualRules, List.of());
+        }
+}

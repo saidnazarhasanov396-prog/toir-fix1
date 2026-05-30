@@ -21,6 +21,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
+import com.toir.service.maintanance.MaintenanceDueCalculationService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -58,6 +59,7 @@ public class PprGeneratorService {
     private final AuditBuilderService auditBuilderService;
     private final WorkOrderRepository workOrderRepository;
     private final WorkOrderService workOrderService;
+    private final MaintenanceDueCalculationService maintenanceDueCalculationService;
     private static final Set<PlanStatus> PLAN_TASK_GENERATION_STATUSES =
             EnumSet.of(PlanStatus.DRAFT, PlanStatus.GENERATED);
     private static final Set<PlanStatus> PLAN_WORK_ORDER_GENERATION_STATUSES =
@@ -81,10 +83,8 @@ public class PprGeneratorService {
         if (planStart == null || planEnd == null) {
             throw RestException.badRequest("PPR plan date range is required before generating tasks");
         }
-        if (plan.getScheduleType() == PprScheduleType.OPERATING_HOURS) {
-            throw RestException.badRequest("Operating-hours PPR generation is not implemented yet");
-        }
         YearMonth planMonth = YearMonth.from(planStart);
+        boolean dueStatusRequired = plan.getScheduleType() == PprScheduleType.OPERATING_HOURS;
         TargetContext targetContext = targetContext(plan);
 
         List<MaintenanceRegulation> regulations = regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -148,6 +148,10 @@ public class PprGeneratorService {
                         skipped++;
                         continue;
                     }
+                    if (dueStatusRequired && !isDueForGeneration(eq.getId(), reg)) {
+                        skipped++;
+                        continue;
+                    }
                     matching.add(eq);
                 }
             }
@@ -208,6 +212,10 @@ public class PprGeneratorService {
                 continue;
             }
             if (!targetContext.matches(eq)) {
+                continue;
+            }
+            if (dueStatusRequired && !isDueForGeneration(eq.getId(), rule)) {
+                skipped++;
                 continue;
             }
 
@@ -351,6 +359,16 @@ public class PprGeneratorService {
 
     private boolean shouldGenerate(PprPlan plan, MaintenanceRegulation reg, YearMonth planMonth) {
         return shouldGenerate(plan, reg.getPeriodicityUnit(), reg.getPeriodicityValue(), planMonth);
+    }
+
+    private boolean isDueForGeneration(UUID equipmentId, MaintenanceRegulation regulation) {
+        MaintenanceDueStatus status = maintenanceDueCalculationService.calculate(equipmentId, regulation).status();
+        return status == MaintenanceDueStatus.DUE || status == MaintenanceDueStatus.OVERDUE;
+    }
+
+    private boolean isDueForGeneration(UUID equipmentId, EquipmentMaintenanceRule rule) {
+        MaintenanceDueStatus status = maintenanceDueCalculationService.calculate(equipmentId, rule).status();
+        return status == MaintenanceDueStatus.DUE || status == MaintenanceDueStatus.OVERDUE;
     }
 
     private boolean shouldGenerate(PprPlan plan, EquipmentMaintenanceRule rule, YearMonth planMonth) {

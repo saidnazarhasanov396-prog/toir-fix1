@@ -4,6 +4,7 @@ import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.entity.CompletionAct;
 import com.toir.entity.Department;
 import com.toir.entity.PprPlan;
@@ -42,6 +43,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import com.toir.repository.projection.WorkOrderCountProjection;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
@@ -126,6 +128,12 @@ class WorkOrderServiceTest {
 
     @Mock
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+
+    @Mock
+    MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
+
+    @Mock
+    ObjectMapper objectMapper;
 
     @InjectMocks
     WorkOrderService service;

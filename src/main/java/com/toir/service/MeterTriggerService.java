@@ -4,10 +4,13 @@ import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 
 import com.toir.dto.meter.MeterTriggerMatch;
+import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
 
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.enums.MaintenanceDueStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.service.maintanance.MaintenanceDueCalculationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +25,7 @@ public class MeterTriggerService {
     private final EquipmentMeterRepository meterRepository;
     private final EquipmentRepository equipmentRepository;
     private final MaintenanceRegulationRepository regulationRepository;
+    private final MaintenanceDueCalculationService dueCalculationService;
 
 
 
@@ -38,15 +42,16 @@ public class MeterTriggerService {
         for (MaintenanceRegulation reg : regs) {
             for (EquipmentMeter meter : meters) {
                 if (meter.getMeterType() != reg.getTriggerMeterType()) continue;
-                double interval = reg.getTriggerMeterInterval();
-                double current = meter.getCurrentValue();
-                double elapsedSinceAnchor = current % interval;
-                double remaining = interval - elapsedSinceAnchor;
-                boolean due = remaining <= (interval * 0.05);
+                MaintenanceDueCalculationDto dueCalculation = dueCalculationService.calculate(equipmentId, reg);
+                double interval = dueCalculation.meterInterval() == null ? reg.getTriggerMeterInterval() : dueCalculation.meterInterval();
+                double current = dueCalculation.meterCurrentValue() == null ? meter.getCurrentValue() : dueCalculation.meterCurrentValue();
+                double remaining = dueCalculation.meterRemaining() == null ? interval : dueCalculation.meterRemaining();
+                boolean due = dueCalculation.status() == MaintenanceDueStatus.DUE
+                        || dueCalculation.status() == MaintenanceDueStatus.OVERDUE;
                 result.add(new MeterTriggerMatch(
                         reg.getId(), reg.getCode(), reg.getName(),
                         meter.getId(), meter.getMeterType(), current,
-                        interval, remaining, due));
+                        interval, remaining, due, dueCalculation.status(), dueCalculation.explanation()));
             }
         }
         return result;

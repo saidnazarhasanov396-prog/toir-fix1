@@ -2,6 +2,8 @@ package com.toir.entity.maintenance;
 
 import com.toir.entity.BaseEntity;
 import com.toir.enums.MaintenanceKind;
+import com.toir.enums.MaintenanceRecalculationPolicy;
+import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import jakarta.persistence.Column;
@@ -72,4 +74,19 @@ public class EquipmentMaintenanceRule extends BaseEntity {
 
     @Column(name = "trigger_meter_interval")
     private Double triggerMeterInterval;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "trigger_policy", nullable = false)
+    private MaintenanceTriggerPolicy triggerPolicy = MaintenanceTriggerPolicy.ANY;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "recalculation_policy", nullable = false)
+    private MaintenanceRecalculationPolicy recalculationPolicy =
+            MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION;
+
+    @Column(name = "disables_base_regulation", nullable = false)
+    private boolean disablesBaseRegulation;
+
+    @Column(name = "override_reason", columnDefinition = "text")
+    private String overrideReason;
 }
