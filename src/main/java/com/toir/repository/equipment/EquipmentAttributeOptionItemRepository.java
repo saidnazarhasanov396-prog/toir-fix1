@@ -22,6 +22,13 @@ public interface EquipmentAttributeOptionItemRepository extends JpaRepository<Eq
 
     @Query(value = """
             SELECT * FROM equipment_attribute_option_items
+            WHERE option_source_id = :sourceId
+            ORDER BY sort_order ASC, label ASC
+            """, nativeQuery = true)
+    List<EquipmentAttributeOptionItem> findAllBySourceIdIncludingDeleted(@Param("sourceId") UUID sourceId);
+
+    @Query(value = """
+            SELECT * FROM equipment_attribute_option_items
             WHERE option_source_id IN (:sourceIds) AND is_deleted = false
             ORDER BY sort_order ASC, label ASC
             """, nativeQuery = true)

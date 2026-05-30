@@ -163,6 +163,22 @@ class EquipmentAttributeControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value("mechanical_seal"))
                 .andExpect(jsonPath("$[0].label").value("Mechanical seal"));
+
+        mockMvc.perform(post("/api/v1/equipment-attribute-option-sources/{sourceId}/options", sourceId)
+                        .contentType("application/json")
+                        .content("""
+                                [
+                                  {
+                                    "id": "mechanical_seal",
+                                    "label": "Mechanical seal",
+                                    "sortOrder": 10,
+                                    "active": true
+                                  }
+                                ]
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("mechanical_seal"))
+                .andExpect(jsonPath("$[0].label").value("Mechanical seal"));
     }
 
     @Test

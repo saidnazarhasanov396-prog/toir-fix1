@@ -82,6 +82,14 @@ public class EquipmentAttributeController {
         return ResponseEntity.ok(service.replaceOptions(sourceId, request));
     }
 
+    @PostMapping("/equipment-attribute-option-sources/{sourceId}/options")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TYPE_UPDATE')")
+    public ResponseEntity<List<EquipmentAttributeOptionDto>> syncOptions(
+            @PathVariable UUID sourceId,
+            @RequestBody List<EquipmentAttributeOptionDto> request) {
+        return ResponseEntity.ok(service.replaceOptions(sourceId, request));
+    }
+
     @GetMapping("/equipment-types/{equipmentTypeId}/attributes")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_TYPE_READ')")
     public ResponseEntity<List<EquipmentAttributeDefinitionDto>> listDefinitions(@PathVariable UUID equipmentTypeId) {

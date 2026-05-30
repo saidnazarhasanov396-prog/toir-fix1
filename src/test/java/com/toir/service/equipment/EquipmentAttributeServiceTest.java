@@ -35,6 +35,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -103,6 +104,102 @@ class EquipmentAttributeServiceTest {
         assertThat(result.getFirst().optionCounts()).isEqualTo(2);
         verify(optionSourceRepository).findAllBySearch("seal");
         verify(optionItemRepository).findAllBySourceIdInAndIsDeletedFalse(List.of(sourceId));
+    }
+
+    @Test
+    void replaceOptionsUpdatesExistingFullListInsteadOfInsertingDuplicate() {
+        UUID sourceId = UUID.randomUUID();
+        stubOptionSource(sourceId);
+        EquipmentAttributeOptionItem existing = optionItem(sourceId, "275/45 R21");
+        existing.setLabel("Old label");
+        existing.setSortOrder(99);
+        when(optionItemRepository.findAllBySourceIdIncludingDeleted(sourceId)).thenReturn(List.of(existing));
+        when(optionItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(optionItemRepository.findAllBySourceIdAndIsDeletedFalse(sourceId)).thenReturn(List.of(existing));
+
+        service.replaceOptions(sourceId, List.of(
+                new EquipmentAttributeOptionDto("275/45 R21", "275/45 R21", "RU", "UZ", 0, true)
+        ));
+
+        List<EquipmentAttributeOptionItem> saved = capturedSavedOptionItems();
+        assertThat(saved).containsExactly(existing);
+        assertThat(existing.getLabel()).isEqualTo("275/45 R21");
+        assertThat(existing.getLabelRu()).isEqualTo("RU");
+        assertThat(existing.getLabelUz()).isEqualTo("UZ");
+        assertThat(existing.getSortOrder()).isZero();
+        assertThat(existing.isActive()).isTrue();
+        assertThat(existing.isDeleted()).isFalse();
+    }
+
+    @Test
+    void replaceOptionsAddsNewOption() {
+        UUID sourceId = UUID.randomUUID();
+        stubOptionSource(sourceId);
+        when(optionItemRepository.findAllBySourceIdIncludingDeleted(sourceId)).thenReturn(List.of());
+        when(optionItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(optionItemRepository.findAllBySourceIdAndIsDeletedFalse(sourceId)).thenReturn(List.of());
+
+        service.replaceOptions(sourceId, List.of(option("275/40 R22", "275/40 R22")));
+
+        List<EquipmentAttributeOptionItem> saved = capturedSavedOptionItems();
+        assertThat(saved).hasSize(1);
+        assertThat(saved.getFirst().getOptionSourceId()).isEqualTo(sourceId);
+        assertThat(saved.getFirst().getOptionId()).isEqualTo("275/40 R22");
+        assertThat(saved.getFirst().getLabel()).isEqualTo("275/40 R22");
+        assertThat(saved.getFirst().isDeleted()).isFalse();
+    }
+
+    @Test
+    void replaceOptionsRestoresSoftDeletedOption() {
+        UUID sourceId = UUID.randomUUID();
+        stubOptionSource(sourceId);
+        EquipmentAttributeOptionItem deleted = optionItem(sourceId, "275/45 R21");
+        deleted.setDeleted(true);
+        deleted.setActive(false);
+        when(optionItemRepository.findAllBySourceIdIncludingDeleted(sourceId)).thenReturn(List.of(deleted));
+        when(optionItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(optionItemRepository.findAllBySourceIdAndIsDeletedFalse(sourceId)).thenReturn(List.of(deleted));
+
+        service.replaceOptions(sourceId, List.of(option("275/45 R21", "275/45 R21")));
+
+        assertThat(deleted.isDeleted()).isFalse();
+        assertThat(deleted.isActive()).isTrue();
+        assertThat(capturedSavedOptionItems()).containsExactly(deleted);
+    }
+
+    @Test
+    void replaceOptionsSoftDeletesOmittedOptions() {
+        UUID sourceId = UUID.randomUUID();
+        stubOptionSource(sourceId);
+        EquipmentAttributeOptionItem kept = optionItem(sourceId, "275/45 R21");
+        EquipmentAttributeOptionItem omitted = optionItem(sourceId, "275/40 R22");
+        when(optionItemRepository.findAllBySourceIdIncludingDeleted(sourceId)).thenReturn(List.of(kept, omitted));
+        when(optionItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(optionItemRepository.findAllBySourceIdAndIsDeletedFalse(sourceId)).thenReturn(List.of(kept));
+
+        service.replaceOptions(sourceId, List.of(option("275/45 R21", "275/45 R21")));
+
+        assertThat(omitted.isDeleted()).isTrue();
+        assertThat(omitted.isActive()).isFalse();
+        assertThat(capturedSavedOptionItems()).contains(kept, omitted);
+    }
+
+    @Test
+    void replaceOptionsRejectsDuplicateOptionIdsInRequest() {
+        UUID sourceId = UUID.randomUUID();
+        stubOptionSource(sourceId);
+
+        assertThatThrownBy(() -> service.replaceOptions(sourceId, List.of(
+                option("275/45 R21", "275/45 R21"),
+                option(" 275/45 R21 ", "Duplicate")
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Duplicate option id");
+                });
+
+        verify(optionItemRepository, never()).findAllBySourceIdIncludingDeleted(any());
+        verify(optionItemRepository, never()).saveAll(any());
     }
 
     @Test
@@ -1231,6 +1328,23 @@ class EquipmentAttributeServiceTest {
 
     private EquipmentAttributeOptionDto option(String id, String label) {
         return new EquipmentAttributeOptionDto(id, label, null, null, null, true);
+    }
+
+    private void stubOptionSource(UUID sourceId) {
+        EquipmentAttributeOptionSource source = new EquipmentAttributeOptionSource();
+        source.setId(sourceId);
+        source.setCode("tire_sizes");
+        source.setName("Tire Sizes");
+        when(optionSourceRepository.findByIdAndIsDeletedFalse(sourceId)).thenReturn(Optional.of(source));
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private List<EquipmentAttributeOptionItem> capturedSavedOptionItems() {
+        ArgumentCaptor<Iterable> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(optionItemRepository).saveAll(captor.capture());
+        List<EquipmentAttributeOptionItem> result = new ArrayList<>();
+        captor.getValue().forEach(item -> result.add((EquipmentAttributeOptionItem) item));
+        return result;
     }
 
     private EquipmentAttributeOptionItem optionItem(UUID sourceId, String optionId) {
