@@ -157,6 +157,32 @@ class RepairRequestServiceTest {
     }
 
     @Test
+    void createWithoutDefectIdSucceedsWithoutDefectAssociation() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequest(null, equipmentId);
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        stubNameLookups(repairRequestForCreate(savedRequestId, request));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        RepairRequestDto result = service.create(request);
+
+        assertThat(result.id()).isEqualTo(savedRequestId);
+        assertThat(result.linkedDefects()).isEmpty();
+        verify(defectRepository, never()).findByIdAndIsDeletedFalse(any());
+        verify(defectRepository, never()).save(any(Defect.class));
+    }
+
+    @Test
     void createRejectsUnknownDefect() {
         UUID defectId = UUID.randomUUID();
         RepairRequestRequest request = createRequest(defectId, UUID.randomUUID());
