@@ -88,6 +88,18 @@ class PprPlanServiceListFilterTest {
     }
 
     @Test
+    void listWithoutPaginationReturnsAllMatchingPlans() {
+        PprPlan first = plan(2026, 5, UUID.randomUUID());
+        PprPlan second = plan(2026, 5, UUID.randomUUID());
+        when(planRepository.searchPlans(null, null, null, null)).thenReturn(List.of(first, second));
+
+        var result = service.findAll(null, null, null, null);
+
+        assertThat(result).extracting(PprPlanDto::id).containsExactly(first.getId(), second.getId());
+        verify(planRepository).searchPlans(null, null, null, null);
+    }
+
+    @Test
     void listFiltersByDatePartsAndDepartmentId() {
         UUID departmentId = UUID.randomUUID();
         when(planRepository.searchPlans(2026, 5, 12, departmentId, PageRequest.of(0, 20)))
@@ -96,6 +108,16 @@ class PprPlanServiceListFilterTest {
         service.findAll(2026, 5, 12, departmentId, 0, 20);
 
         verify(planRepository).searchPlans(2026, 5, 12, departmentId, PageRequest.of(0, 20));
+    }
+
+    @Test
+    void listWithoutPaginationFiltersByDatePartsAndDepartmentId() {
+        UUID departmentId = UUID.randomUUID();
+        when(planRepository.searchPlans(2026, 5, 12, departmentId)).thenReturn(List.of());
+
+        service.findAll(2026, 5, 12, departmentId);
+
+        verify(planRepository).searchPlans(2026, 5, 12, departmentId);
     }
 
     @Test

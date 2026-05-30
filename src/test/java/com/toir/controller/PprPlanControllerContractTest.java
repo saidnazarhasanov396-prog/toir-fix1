@@ -121,17 +121,14 @@ class PprPlanControllerContractTest {
 
     @Test
     void listPlansWithoutFiltersKeepsOldListBehavior() throws Exception {
-        when(service.findAll(null, null, null, null, 0, 20))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+        when(service.findAll(null, null, null, null)).thenReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/ppr-plans")
-                        .param("page", "0")
-                        .param("size", "20"))
+        mockMvc.perform(get("/api/v1/ppr-plans"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content").isArray())
-                .andExpect(jsonPath("$.totalElements").value(0));
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(0));
 
-        verify(service).findAll(null, null, null, null, 0, 20);
+        verify(service).findAll(null, null, null, null);
     }
 
     @Test
@@ -201,6 +198,89 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.tasks[0].equipmentName").value("Main pump"))
                 .andExpect(jsonPath("$.tasks[0].regulationId").value(regulationId.toString()))
                 .andExpect(jsonPath("$.tasks[0].regulationName").value("Monthly lubrication"));
+    }
+
+    @Test
+    void listWithoutPaginationReturnsAllPlansAndNames() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.of(2026, 6, 1, 9, 0);
+        PprPlanDto plan = new PprPlanDto(
+                planId,
+                "PPR-2026-0100",
+                "All plans item",
+                PlanStatus.DRAFT,
+                departmentId,
+                "Instrumentation",
+                UUID.randomUUID(),
+                null,
+                null,
+                List.of(new PprTaskDto(
+                        taskId,
+                        "PPR-TASK-2026-0100",
+                        planId,
+                        regulationId,
+                        "Weekly inspection",
+                        null,
+                        null,
+                        null,
+                        equipmentId,
+                        "Cooling tower",
+                        "Inspect tower",
+                        start,
+                        start.plusHours(2),
+                        LocalDate.of(2026, 6, 1),
+                        LocalDate.of(2026, 6, 1),
+                        start.plusDays(1),
+                        PprTaskStatus.PLANNED,
+                        PriorityLevel.MEDIUM,
+                        2.0,
+                        null,
+                        null
+                )),
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30)
+        );
+        when(service.findAll(null, null, null, null)).thenReturn(List.of(plan));
+
+        mockMvc.perform(get("/api/v1/ppr-plans"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(planId.toString()))
+                .andExpect(jsonPath("$[0].tasks[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$[0].tasks[0].equipmentName").value("Cooling tower"))
+                .andExpect(jsonPath("$[0].tasks[0].regulationId").value(regulationId.toString()))
+                .andExpect(jsonPath("$[0].tasks[0].regulationName").value("Weekly inspection"));
+
+        verify(service).findAll(null, null, null, null);
+    }
+
+    @Test
+    void listWithoutPaginationStillPassesFiltersToService() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
+        when(service.findAll(2026, 5, 12, departmentId)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/ppr-plans")
+                        .param("year", "2026")
+                        .param("month", "5")
+                        .param("day", "12")
+                        .param("departmentId", departmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
+
+        verify(service).findAll(2026, 5, 12, departmentId);
+    }
+
+    @Test
+    void listWithOnlyOnePaginationParameterReturnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/ppr-plans")
+                        .param("page", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("Both page and size must be provided for paginated PPR plan list"));
     }
 
     @Test

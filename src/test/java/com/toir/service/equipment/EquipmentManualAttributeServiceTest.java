@@ -8,13 +8,11 @@ import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentManualAttributeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -37,11 +35,6 @@ class EquipmentManualAttributeServiceTest {
 
     @InjectMocks
     EquipmentManualAttributeService service;
-
-    @BeforeEach
-    void setUp() {
-        ReflectionTestUtils.setField(service, "writeEnabled", true);
-    }
 
     @Test
     void createNormalizesKeyAndTrimsValue() {

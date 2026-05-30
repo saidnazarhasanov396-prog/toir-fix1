@@ -5,7 +5,6 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.exception.GlobalExceptionHandler;
-import com.toir.exception.RestException;
 import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.security.ScopeAccessService;
@@ -22,10 +21,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -62,10 +61,15 @@ class EquipmentManualAttributeControllerContractTest {
     }
 
     @Test
-    void manualAttributeWriteEndpointIsTemporarilyDisabled() throws Exception {
+    void manualAttributeWriteEndpointCreatesAttribute() throws Exception {
         UUID equipmentId = UUID.randomUUID();
-        doThrow(RestException.badRequest("Manual attributes are temporarily disabled. Use official equipment attributes."))
-                .when(service).assertWriteEnabled();
+        UUID attributeId = UUID.randomUUID();
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+        when(service.create(eq(equipmentId), any())).thenReturn(new EquipmentManualAttributeDto(
+                attributeId,
+                "legacy_key",
+                "legacy value"
+        ));
 
         mockMvc.perform(post("/api/v1/equipment/{equipmentId}/manual-attributes", equipmentId)
                         .contentType("application/json")
@@ -75,10 +79,12 @@ class EquipmentManualAttributeControllerContractTest {
                                   "value": "legacy value"
                                 }
                                 """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Manual attributes are temporarily disabled. Use official equipment attributes."));
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(attributeId.toString()))
+                .andExpect(jsonPath("$.key").value("legacy_key"))
+                .andExpect(jsonPath("$.value").value("legacy value"));
 
-        verify(service, never()).create(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(service).create(eq(equipmentId), any());
     }
 
     @Test

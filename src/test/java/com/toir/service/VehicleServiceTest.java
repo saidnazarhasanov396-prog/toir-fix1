@@ -5,6 +5,7 @@ import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.file.UploadFileResponse;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
+import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeDto;
 import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeRequest;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleDocumentDto;
@@ -234,6 +235,46 @@ class VehicleServiceTest {
     }
 
     @Test
+    void vehicleDetailReturnsManualAttributes() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DETAIL-MANUAL", "Truck Manual Detail", "INV-VH-DETAIL-MANUAL");
+        VehicleDetails details = details(equipmentId, "01A307AA", null);
+        EquipmentManualAttributeDto manualAttribute = manualAttribute("legacy_key", "legacy value");
+
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(vehicleDocumentRepository.findAllByEquipmentId(equipmentId)).thenReturn(List.of());
+        when(equipmentAttributeService.findValues(equipmentId)).thenReturn(List.of());
+        when(equipmentManualAttributeService.list(equipmentId)).thenReturn(List.of(manualAttribute));
+
+        VehicleDetailDto result = service.findByEquipmentId(equipmentId);
+
+        assertThat(result.manualAttributes()).containsExactly(manualAttribute);
+    }
+
+    @Test
+    void vehicleCreateWithoutManualAttributesDoesNotWriteManualAttributes() {
+        VehicleRequest request = fullRequest("VH-NO-MANUAL-001", "Truck No Manual", "INV-VH-NO-MANUAL-001", "01A308AA", null);
+
+        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-NO-MANUAL-001")).thenReturn(false);
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-NO-MANUAL-001")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A308AA")).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(any(UUID.class))).thenAnswer(invocation ->
+                EquipmentDto.from(equipment(invocation.getArgument(0), "VH-NO-MANUAL-001", "Truck No Manual", "INV-VH-NO-MANUAL-001")));
+
+        VehicleDetailDto result = service.create(request);
+
+        verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
+        assertThat(result.manualAttributes()).isEmpty();
+    }
+
+    @Test
     void vehicleCreateStillAcceptsOfficialAttributes() {
         VehicleRequest request = fullRequest("VH-OFFICIAL-001", "Truck Official", "INV-VH-OFFICIAL-001", "01A201AA", null)
                 .withAttributes(List.of(new EquipmentAttributeValueRequest(null, "payload_capacity", null, 12000.0, null, null, null, null)));
@@ -315,17 +356,33 @@ class VehicleServiceTest {
     }
 
     @Test
-    void vehicleCreateRejectsTemporarilyDisabledManualAttributes() {
+    void vehicleCreateAcceptsManualAttributes() {
         VehicleRequest request = withManualAttributes(
                 fullRequest("VH-MANUAL-001", "Truck Manual", "INV-VH-MANUAL-001", "01A202AA", null),
                 List.of(new EquipmentManualAttributeRequest("legacy_key", "legacy value"))
         );
+        EquipmentManualAttributeDto manualAttribute = manualAttribute("legacy_key", "legacy value");
 
-        assertThatThrownBy(() -> service.create(request))
-                .isInstanceOfSatisfying(RestException.class, ex ->
-                        assertThat(ex.getMessage()).contains("Manual vehicle attributes are temporarily disabled. Use official equipment attributes."));
-        verify(equipmentRepository, never()).save(any());
-        verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
+        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-MANUAL-001")).thenReturn(false);
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-MANUAL-001")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A202AA")).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(any(UUID.class))).thenAnswer(invocation ->
+                EquipmentDto.from(equipment(invocation.getArgument(0), "VH-MANUAL-001", "Truck Manual", "INV-VH-MANUAL-001")));
+        when(equipmentManualAttributeService.list(any(UUID.class))).thenReturn(List.of(manualAttribute));
+
+        VehicleDetailDto result = service.create(request);
+
+        verify(equipmentManualAttributeService).replaceAll(any(UUID.class), argThat(bulk ->
+                bulk.attributes().size() == 1
+                        && "legacy_key".equals(bulk.attributes().getFirst().key())
+                        && "legacy value".equals(bulk.attributes().getFirst().value())));
+        assertThat(result.manualAttributes()).containsExactly(manualAttribute);
     }
 
     @Test
@@ -837,32 +894,68 @@ class VehicleServiceTest {
     }
 
     @Test
-    void vehicleUpdateRejectsTemporarilyDisabledManualAttributes() {
+    void vehicleUpdateAcceptsManualAttributes() {
         UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-MANUAL-003", "Truck Manual Update", "INV-VH-MANUAL-003");
+        equipment.setCategory(EquipmentCategory.VEHICLE);
+        VehicleDetails details = details(equipmentId, "01A204AA", null);
         VehicleRequest request = withManualAttributes(
-                fullRequest("VH-MANUAL-003", "Truck Manual Update", "INV-VH-MANUAL-003", "01A204AA", null),
+                withEquipmentTypeAndAttributes(
+                        fullRequest("VH-MANUAL-003", "Truck Manual Update", "INV-VH-MANUAL-003", "01A204AA", null),
+                        equipment.getEquipmentTypeId(),
+                        null
+                ),
                 List.of(new EquipmentManualAttributeRequest("legacy_key", "legacy value"))
         );
+        EquipmentManualAttributeDto manualAttribute = manualAttribute("legacy_key", "legacy value");
 
-        assertThatThrownBy(() -> service.update(equipmentId, request))
-                .isInstanceOfSatisfying(RestException.class, ex ->
-                        assertThat(ex.getMessage()).contains("Manual vehicle attributes are temporarily disabled. Use official equipment attributes."));
-        verify(equipmentRepository, never()).save(any());
-        verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(equipment));
+        when(equipmentManualAttributeService.list(equipmentId)).thenReturn(List.of(manualAttribute));
+
+        VehicleDetailDto result = service.update(equipmentId, request);
+
+        verify(equipmentManualAttributeService).replaceAll(eq(equipmentId), argThat(bulk ->
+                bulk.attributes().size() == 1
+                        && "legacy_key".equals(bulk.attributes().getFirst().key())
+                        && "legacy value".equals(bulk.attributes().getFirst().value())));
+        verify(equipmentAttributeService, never()).upsertValues(any(), any());
+        assertThat(result.manualAttributes()).containsExactly(manualAttribute);
     }
 
     @Test
-    void phase1aVehicleManualAttributesStillRejected() {
+    void createVehicleWithOfficialAndManualAttributesPersistsBoth() {
         VehicleRequest request = withManualAttributes(
-                fullRequest("VH-MANUAL-PHASE1A", "Truck Manual Phase1A", "INV-VH-MANUAL-PHASE1A", "01A306AA", null),
+                fullRequest("VH-MANUAL-PHASE1A", "Truck Manual Phase1A", "INV-VH-MANUAL-PHASE1A", "01A306AA", null)
+                        .withAttributes(List.of(new EquipmentAttributeValueRequest(null, "payload_capacity", null, 12000.0, null, null, null, null))),
                 List.of(new EquipmentManualAttributeRequest("legacy_key", "legacy value"))
         );
+        EquipmentManualAttributeDto manualAttribute = manualAttribute("legacy_key", "legacy value");
+        EquipmentAttributeValueDto officialAttribute = attributeValue(UUID.randomUUID(), "payload_capacity", 12000.0);
 
-        assertThatThrownBy(() -> service.create(request))
-                .isInstanceOfSatisfying(RestException.class, ex ->
-                        assertThat(ex.getMessage()).contains("Manual vehicle attributes are temporarily disabled. Use official equipment attributes."));
-        verify(equipmentAttributeService, never()).upsertValues(any(), any());
-        verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
+        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-MANUAL-PHASE1A")).thenReturn(false);
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-MANUAL-PHASE1A")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A306AA")).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(any(UUID.class))).thenAnswer(invocation ->
+                EquipmentDto.from(equipment(invocation.getArgument(0), "VH-MANUAL-PHASE1A", "Truck Manual Phase1A", "INV-VH-MANUAL-PHASE1A")));
+        when(equipmentAttributeService.findValues(any(UUID.class))).thenReturn(List.of(officialAttribute));
+        when(equipmentManualAttributeService.list(any(UUID.class))).thenReturn(List.of(manualAttribute));
+
+        VehicleDetailDto result = service.create(request);
+
+        verify(equipmentAttributeService).upsertValues(any(Equipment.class), eq(request.attributes()));
+        verify(equipmentManualAttributeService).replaceAll(any(UUID.class), any());
+        assertThat(result.attributes()).containsExactly(officialAttribute);
+        assertThat(result.manualAttributes()).containsExactly(manualAttribute);
     }
 
     @Test
@@ -1521,6 +1614,10 @@ class VehicleServiceTest {
                 null,
                 null
         );
+    }
+
+    private static EquipmentManualAttributeDto manualAttribute(String key, String value) {
+        return new EquipmentManualAttributeDto(UUID.randomUUID(), key, value);
     }
 
     private static Equipment equipment(UUID id, String code, String name, String inventoryNumber) {

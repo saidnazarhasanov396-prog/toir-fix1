@@ -96,6 +96,31 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
     );
 
     @Query(value = """
+            SELECT p.*
+            FROM ppr_plans p
+            WHERE p.is_deleted = false
+              AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
+              AND (
+                    (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
+                    OR EXISTS (
+                        SELECT 1
+                        FROM generate_series(p.start_date, p.end_date, interval '1 day') AS d(value)
+                        WHERE (cast(:year as integer) IS NULL OR extract(year from d.value)::integer = cast(:year as integer))
+                          AND (cast(:month as integer) IS NULL OR extract(month from d.value)::integer = cast(:month as integer))
+                          AND (cast(:day as integer) IS NULL OR extract(day from d.value)::integer = cast(:day as integer))
+                    )
+              )
+            ORDER BY p.start_date DESC, p.updated_at DESC, p.id ASC
+            """,
+            nativeQuery = true)
+    List<PprPlan> searchPlans(
+            @Param("year") Integer year,
+            @Param("month") Integer month,
+            @Param("day") Integer day,
+            @Param("departmentId") UUID departmentId
+    );
+
+    @Query(value = """
             select
                 count(distinct p.id) as "totalPlans",
                 count(distinct p.id) filter (where p.status = 'DRAFT') as "draftPlans",

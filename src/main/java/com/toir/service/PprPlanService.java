@@ -79,6 +79,12 @@ public class PprPlanService {
     }
 
     @Transactional(readOnly = true)
+    public List<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId) {
+        validateDateFilterParts(year, month, day);
+        return toDtos(planRepository.searchPlans(year, month, day, departmentId));
+    }
+
+    @Transactional(readOnly = true)
     public Page<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId, int page, int size) {
         validateDateFilterParts(year, month, day);
         Page<PprPlan> plans = planRepository.searchPlans(
