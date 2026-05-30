@@ -321,7 +321,11 @@ class RepairRequestControllerContractTest {
     }
 
     @Test
-    void createEndpointRequiresDefectId() throws Exception {
+    void createEndpointAcceptsMissingDefectId() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithoutLinks(requestId);
+        when(service.create(any())).thenReturn(response);
+
         mockMvc.perform(post("/api/v1/repair-requests")
                         .contentType("application/json")
                         .content("""
@@ -334,9 +338,12 @@ class RepairRequestControllerContractTest {
                                   "reporterId": "%s"
                                 }
                                 """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(requestId.toString()))
+                .andExpect(jsonPath("$.linkedDefects").isArray())
+                .andExpect(jsonPath("$.linkedDefects").isEmpty());
 
-        verify(service, never()).create(any());
+        verify(service).create(any());
     }
 
     @Test

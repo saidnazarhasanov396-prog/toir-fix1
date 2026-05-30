@@ -133,8 +133,10 @@ public class RepairRequestService {
         entity.setTargetCompletionAt(request.targetCompletionAt());
         RepairRequest saved = repository.save(entity);
 
-        defect.setRepairRequestId(saved.getId());
-        defectRepository.save(defect);
+        if (defect != null) {
+            defect.setRepairRequestId(saved.getId());
+            defectRepository.save(defect);
+        }
 
         auditBuilderService.log(
                 "repair_request",
@@ -159,6 +161,9 @@ public class RepairRequestService {
     }
 
     private Defect getDefectForCreate(RepairRequestRequest request) {
+        if (request.defectId() == null) {
+            return null;
+        }
         Defect defect = defectRepository.findByIdAndIsDeletedFalse(request.defectId())
                 .orElseThrow(() -> RestException.notFound("Defect not found: " + request.defectId()));
         if (isDefectTerminal(defect)) {
