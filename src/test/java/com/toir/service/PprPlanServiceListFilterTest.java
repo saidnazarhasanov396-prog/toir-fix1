@@ -4,14 +4,13 @@ import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.entity.Department;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
-import com.toir.entity.equipment.Equipment;
-import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.PprTaskStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprPlanStatsProjection;
+import com.toir.repository.PprPlanTaskCountProjection;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -229,62 +228,48 @@ class PprPlanServiceListFilterTest {
     }
 
     @Test
-    void getByIdIncludesEquipmentAndRegulationNames() {
-        UUID equipmentId = UUID.randomUUID();
-        UUID regulationId = UUID.randomUUID();
+    void getByIdReturnsZeroTaskCountWhenPlanHasNoTasks() {
         PprPlan plan = plan(2026, 5, UUID.randomUUID());
-        PprTask task = task(plan, LocalDateTime.of(2026, 5, 1, 9, 0));
-        task.setEquipmentId(equipmentId);
-        task.setRegulationId(regulationId);
-        plan.getTasks().add(task);
-        Equipment equipment = equipment(equipmentId, "Pump 17");
-        MaintenanceRegulation regulation = regulation(regulationId, "Monthly inspection");
 
         when(planRepository.findByIdAndIsDeletedFalse(plan.getId())).thenReturn(Optional.of(plan));
-        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of(equipment));
-        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(List.of(regulationId)))
-                .thenReturn(List.of(regulation));
+        when(planRepository.countTasksByPlanIds(List.of(plan.getId()))).thenReturn(List.of(count(plan.getId(), 0)));
 
         var result = service.findById(plan.getId());
 
-        assertThat(result.tasks()).hasSize(1);
-        assertThat(result.tasks().getFirst().equipmentId()).isEqualTo(equipmentId);
-        assertThat(result.tasks().getFirst().equipmentName()).isEqualTo("Pump 17");
-        assertThat(result.tasks().getFirst().regulationId()).isEqualTo(regulationId);
-        assertThat(result.tasks().getFirst().regulationName()).isEqualTo("Monthly inspection");
+        assertThat(result.taskCount()).isZero();
+        assertThat(result.tasks()).isEmpty();
     }
 
     @Test
-    void listIncludesEquipmentAndRegulationNamesForEveryItem() {
-        UUID firstEquipmentId = UUID.randomUUID();
-        UUID secondEquipmentId = UUID.randomUUID();
-        UUID firstRegulationId = UUID.randomUUID();
-        UUID secondRegulationId = UUID.randomUUID();
+    void getByIdReturnsTaskCountForMultipleTasks() {
+        PprPlan plan = plan(2026, 5, UUID.randomUUID());
+
+        when(planRepository.findByIdAndIsDeletedFalse(plan.getId())).thenReturn(Optional.of(plan));
+        when(planRepository.countTasksByPlanIds(List.of(plan.getId()))).thenReturn(List.of(count(plan.getId(), 3)));
+
+        var result = service.findById(plan.getId());
+
+        assertThat(result.taskCount()).isEqualTo(3);
+        assertThat(result.tasks()).isEmpty();
+    }
+
+    @Test
+    void listReturnsTaskCountsForEveryItem() {
         PprPlan firstPlan = plan(2026, 5, UUID.randomUUID());
         PprPlan secondPlan = plan(2026, 5, UUID.randomUUID());
-        PprTask firstTask = task(firstPlan, LocalDateTime.of(2026, 5, 1, 9, 0));
-        firstTask.setEquipmentId(firstEquipmentId);
-        firstTask.setRegulationId(firstRegulationId);
-        firstPlan.getTasks().add(firstTask);
-        PprTask secondTask = task(secondPlan, LocalDateTime.of(2026, 5, 2, 9, 0));
-        secondTask.setEquipmentId(secondEquipmentId);
-        secondTask.setRegulationId(secondRegulationId);
-        secondPlan.getTasks().add(secondTask);
 
         when(planRepository.searchPlans(null, null, null, null, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(firstPlan, secondPlan), PageRequest.of(0, 20), 2));
-        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(firstEquipmentId, secondEquipmentId)))
-                .thenReturn(List.of(equipment(firstEquipmentId, "Compressor A"), equipment(secondEquipmentId, "Pump B")));
-        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(List.of(firstRegulationId, secondRegulationId)))
-                .thenReturn(List.of(regulation(firstRegulationId, "Quarterly PM"), regulation(secondRegulationId, "Annual PM")));
+        when(planRepository.countTasksByPlanIds(List.of(firstPlan.getId(), secondPlan.getId())))
+                .thenReturn(List.of(count(firstPlan.getId(), 2), count(secondPlan.getId(), 5)));
 
         var result = service.findAll(null, null, null, null, 0, 20);
 
         assertThat(result.getContent()).hasSize(2);
-        assertThat(result.getContent().get(0).tasks().getFirst().equipmentName()).isEqualTo("Compressor A");
-        assertThat(result.getContent().get(0).tasks().getFirst().regulationName()).isEqualTo("Quarterly PM");
-        assertThat(result.getContent().get(1).tasks().getFirst().equipmentName()).isEqualTo("Pump B");
-        assertThat(result.getContent().get(1).tasks().getFirst().regulationName()).isEqualTo("Annual PM");
+        assertThat(result.getContent().get(0).taskCount()).isEqualTo(2);
+        assertThat(result.getContent().get(0).tasks()).isEmpty();
+        assertThat(result.getContent().get(1).taskCount()).isEqualTo(5);
+        assertThat(result.getContent().get(1).tasks()).isEmpty();
     }
 
     @Test
@@ -299,11 +284,8 @@ class PprPlanServiceListFilterTest {
 
         var result = service.findById(plan.getId());
 
-        assertThat(result.tasks()).hasSize(1);
-        assertThat(result.tasks().getFirst().equipmentId()).isNull();
-        assertThat(result.tasks().getFirst().equipmentName()).isNull();
-        assertThat(result.tasks().getFirst().regulationId()).isNull();
-        assertThat(result.tasks().getFirst().regulationName()).isNull();
+        assertThat(result.tasks()).isEmpty();
+        assertThat(result.taskCount()).isZero();
     }
 
     @Test
@@ -378,18 +360,18 @@ class PprPlanServiceListFilterTest {
         return task;
     }
 
-    private Equipment equipment(UUID id, String name) {
-        Equipment equipment = new Equipment();
-        equipment.setId(id);
-        equipment.setName(name);
-        return equipment;
-    }
+    private PprPlanTaskCountProjection count(UUID planId, long taskCount) {
+        return new PprPlanTaskCountProjection() {
+            @Override
+            public UUID getPlanId() {
+                return planId;
+            }
 
-    private MaintenanceRegulation regulation(UUID id, String name) {
-        MaintenanceRegulation regulation = new MaintenanceRegulation();
-        regulation.setId(id);
-        regulation.setName(name);
-        return regulation;
+            @Override
+            public Long getTaskCount() {
+                return taskCount;
+            }
+        };
     }
 
     private PprPlanStatsProjection stats(
