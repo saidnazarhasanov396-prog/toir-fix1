@@ -164,17 +164,45 @@ public class EquipmentAttributeService {
     @Transactional
     public List<EquipmentAttributeOptionDto> replaceOptions(UUID sourceId, List<EquipmentAttributeOptionDto> options) {
         ensureOptionSourceExists(sourceId);
-        List<EquipmentAttributeOptionItem> existing = optionItemRepository.findAllBySourceIdAndIsDeletedFalse(sourceId);
+        List<EquipmentAttributeOptionDto> requestedOptions =
+                options == null ? List.of() : options;
+        validateUniqueOptionIds(requestedOptions);
+
+        List<EquipmentAttributeOptionItem> existing =
+                optionItemRepository.findAllBySourceIdIncludingDeleted(sourceId);
+        Map<String, EquipmentAttributeOptionItem> existingByOptionId = existing.stream()
+                .collect(Collectors.toMap(
+                        item -> normalizeOptionId(item.getOptionId()),
+                        Function.identity(),
+                        (first, second) -> first.isDeleted() && !second.isDeleted() ? second : first,
+                        java.util.LinkedHashMap::new
+                ));
+
+        Set<String> requestedIds = new HashSet<>();
+        List<EquipmentAttributeOptionItem> toSave = new ArrayList<>();
+        for (EquipmentAttributeOptionDto option : requestedOptions) {
+            String optionId = normalizeRequestedOptionId(option);
+            requestedIds.add(optionId);
+            EquipmentAttributeOptionItem item = existingByOptionId.get(optionId);
+            if (item == null) {
+                item = new EquipmentAttributeOptionItem();
+                item.setOptionSourceId(sourceId);
+                item.setOptionId(optionId);
+            }
+            applyOption(item, option);
+            toSave.add(item);
+        }
+
         for (EquipmentAttributeOptionItem item : existing) {
-            item.setDeleted(true);
+            String optionId = normalizeOptionId(item.getOptionId());
+            if (!requestedIds.contains(optionId) && !item.isDeleted()) {
+                item.setDeleted(true);
+                item.setActive(false);
+                item.setUpdatedAt(Instant.now());
+                toSave.add(item);
+            }
         }
-        if (!existing.isEmpty()) {
-            optionItemRepository.saveAll(existing);
-        }
-        List<EquipmentAttributeOptionItem> toSave = (options == null ? List.<EquipmentAttributeOptionDto>of() : options)
-                .stream()
-                .map(option -> toOptionItem(sourceId, option))
-                .toList();
+
         if (!toSave.isEmpty()) {
             optionItemRepository.saveAll(toSave);
         }
@@ -838,6 +866,40 @@ public class EquipmentAttributeService {
         item.setSortOrder(option.sortOrder() == null ? 0 : option.sortOrder());
         item.setActive(option.active() == null || option.active());
         return item;
+    }
+
+    private void applyOption(EquipmentAttributeOptionItem item, EquipmentAttributeOptionDto option) {
+        if (option.label() == null || option.label().isBlank()) {
+            throw RestException.badRequest("Option label is required");
+        }
+        item.setLabel(option.label());
+        item.setLabelRu(option.labelRu());
+        item.setLabelUz(option.labelUz());
+        item.setSortOrder(option.sortOrder() == null ? 0 : option.sortOrder());
+        item.setActive(option.active() == null || option.active());
+        item.setDeleted(false);
+        item.setUpdatedAt(Instant.now());
+    }
+
+    private void validateUniqueOptionIds(List<EquipmentAttributeOptionDto> options) {
+        Set<String> optionIds = new HashSet<>();
+        for (EquipmentAttributeOptionDto option : options) {
+            String optionId = normalizeRequestedOptionId(option);
+            if (!optionIds.add(optionId)) {
+                throw RestException.badRequest("Duplicate option id in request: " + optionId);
+            }
+        }
+    }
+
+    private String normalizeRequestedOptionId(EquipmentAttributeOptionDto option) {
+        if (option == null || option.id() == null || option.id().isBlank()) {
+            throw RestException.badRequest("Option id is required");
+        }
+        return normalizeOptionId(option.id());
+    }
+
+    private String normalizeOptionId(String optionId) {
+        return optionId == null ? "" : optionId.trim();
     }
 
     private EquipmentAttributeOptionDto toOptionDto(EquipmentAttributeOptionItem item) {
