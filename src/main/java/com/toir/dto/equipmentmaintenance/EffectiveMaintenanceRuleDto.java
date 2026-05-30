@@ -1,32 +1,36 @@
 package com.toir.dto.equipmentmaintenance;
 
 import com.toir.enums.MaintenanceKind;
+import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
 import com.toir.enums.MaintenanceRecalculationPolicy;
+import com.toir.enums.MaintenanceRuleOrigin;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.PositiveOrZero;
 import java.util.UUID;
 
-public record EquipmentMaintenanceRuleRequest(
+public record EffectiveMaintenanceRuleDto(
+        UUID id,
+        UUID regulationId,
+        UUID equipmentMaintenanceRuleId,
+        UUID equipmentId,
         UUID baseRegulationId,
         UUID templateId,
-        @NotBlank String name,
+        String code,
+        String name,
         String description,
-        @NotNull MaintenanceKind maintenanceKind,
-        @PositiveOrZero double normativeLaborHours,
-        Boolean active,
-        @NotNull PeriodicityUnit periodicityUnit,
-        @Positive int periodicityValue,
+        MaintenanceKind maintenanceKind,
+        double normativeLaborHours,
+        boolean active,
+        PeriodicityUnit periodicityUnit,
+        int periodicityValue,
         Integer toleranceDays,
         boolean requiresShutdown,
         MeterType triggerMeterType,
         Double triggerMeterInterval,
         MaintenanceTriggerPolicy triggerPolicy,
         MaintenanceRecalculationPolicy recalculationPolicy,
-        Boolean disablesBaseRegulation,
-        String overrideReason
+        MaintenanceRuleOrigin origin,
+        String overrideReason,
+        MaintenanceDueCalculationDto due
 ) {}

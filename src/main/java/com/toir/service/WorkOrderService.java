@@ -2,9 +2,12 @@ package com.toir.service;
 
 import com.toir.dto.workorder.*;
 import com.toir.dto.triad.TriadLinkMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.entity.Department;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderTask;
@@ -13,6 +16,7 @@ import com.toir.entity.PprTask;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.PlanStatus;
+import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.repository.CompletionActRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.PprPlanRepository;
@@ -41,6 +45,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -51,6 +56,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -83,6 +89,8 @@ public class WorkOrderService {
     private final SafetyPermitRepository safetyPermitRepository;
     private final CompletionActRepository completionActRepository;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+    private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
+    private final ObjectMapper objectMapper;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.APPROVED, WorkOrderStatus.IN_PROGRESS);
     private static final Set<WorkOrderStatus> TERMINAL_WORK_ORDER_STATUSES =
@@ -274,6 +282,7 @@ public class WorkOrderService {
         completeLinkedPprTask(entity);
 
         WorkOrder saved = repository.save(entity);
+        createMaintenanceCompletionAnchor(saved, request);
         syncLinkedOnComplete(saved);
         if (!isReplacementWorkOrder(saved)) {
             equipmentStatusLifecycleService.recordWorkOrderReturn(
@@ -334,6 +343,51 @@ public class WorkOrderService {
         }
         if (request.result() == null || request.result().isBlank()) {
             throw RestException.badRequest("Result is required to complete a work order");
+        }
+    }
+
+    private void createMaintenanceCompletionAnchor(WorkOrder workOrder, CompleteWorkOrderRequest request) {
+        UUID regulationId = request.regulationId();
+        UUID equipmentMaintenanceRuleId = request.equipmentMaintenanceRuleId();
+        Instant plannedDueAt = request.plannedDueAt();
+        if ((regulationId == null && equipmentMaintenanceRuleId == null) && workOrder.getPprTaskId() != null) {
+            PprTask task = pprTaskRepository.findByIdAndIsDeletedFalse(workOrder.getPprTaskId()).orElse(null);
+            if (task != null) {
+                regulationId = task.getRegulationId();
+                equipmentMaintenanceRuleId = task.getEquipmentMaintenanceRuleId();
+                if (plannedDueAt == null && task.getDueDate() != null) {
+                    plannedDueAt = task.getDueDate().atZone(ZoneId.systemDefault()).toInstant();
+                }
+            }
+        }
+        if (regulationId == null && equipmentMaintenanceRuleId == null) {
+            return;
+        }
+        MaintenanceCompletionAnchor anchor = new MaintenanceCompletionAnchor();
+        anchor.setEquipmentId(workOrder.getEquipmentId());
+        anchor.setRegulationId(regulationId);
+        anchor.setEquipmentMaintenanceRuleId(equipmentMaintenanceRuleId);
+        anchor.setWorkOrderId(workOrder.getId());
+        anchor.setPprTaskId(workOrder.getPprTaskId());
+        anchor.setPerformedAt(request.performedAt() == null ? workOrder.getCompletedAt() : request.performedAt());
+        anchor.setPlannedDueAt(plannedDueAt);
+        anchor.setRecalculationPolicy(request.recalculationPolicy() == null
+                ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
+                : request.recalculationPolicy());
+        anchor.setMeterSnapshots(toMeterSnapshotsJson(request.meterSnapshots()));
+        anchor.setSource("WORK_ORDER");
+        anchor.setNote(request.summary());
+        maintenanceCompletionAnchorRepository.save(anchor);
+    }
+
+    private String toMeterSnapshotsJson(List<CompletionMeterSnapshotRequest> snapshots) {
+        if (snapshots == null || snapshots.isEmpty()) {
+            return "[]";
+        }
+        try {
+            return objectMapper.writeValueAsString(snapshots);
+        } catch (JsonProcessingException ex) {
+            throw RestException.badRequest("Invalid meter snapshots");
         }
     }
 

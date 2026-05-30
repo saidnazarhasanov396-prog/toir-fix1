@@ -2,6 +2,8 @@ package com.toir.dto.equipmentmaintenance;
 
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.enums.MaintenanceKind;
+import com.toir.enums.MaintenanceRecalculationPolicy;
+import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import java.util.UUID;
@@ -22,7 +24,11 @@ public record EquipmentMaintenanceRuleDto(
         Integer toleranceDays,
         boolean requiresShutdown,
         MeterType triggerMeterType,
-        Double triggerMeterInterval
+        Double triggerMeterInterval,
+        MaintenanceTriggerPolicy triggerPolicy,
+        MaintenanceRecalculationPolicy recalculationPolicy,
+        boolean disablesBaseRegulation,
+        String overrideReason
 ) {
     public static EquipmentMaintenanceRuleDto from(EquipmentMaintenanceRule rule) {
         return new EquipmentMaintenanceRuleDto(
@@ -41,7 +47,13 @@ public record EquipmentMaintenanceRuleDto(
                 rule.getToleranceDays(),
                 rule.isRequiresShutdown(),
                 rule.getTriggerMeterType(),
-                rule.getTriggerMeterInterval()
+                rule.getTriggerMeterInterval(),
+                rule.getTriggerPolicy() == null ? MaintenanceTriggerPolicy.ANY : rule.getTriggerPolicy(),
+                rule.getRecalculationPolicy() == null
+                        ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
+                        : rule.getRecalculationPolicy(),
+                rule.isDisablesBaseRegulation(),
+                rule.getOverrideReason()
         );
     }
 }

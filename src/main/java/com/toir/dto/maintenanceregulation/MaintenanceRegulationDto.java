@@ -2,6 +2,8 @@ package com.toir.dto.maintenanceregulation;
 
 import com.toir.enums.MaintenanceKind;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.enums.MaintenanceRecalculationPolicy;
+import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 
@@ -27,6 +29,8 @@ public record MaintenanceRegulationDto(
         boolean requiresShutdown,
         MeterType triggerMeterType,
         Double triggerMeterInterval,
+        MaintenanceTriggerPolicy triggerPolicy,
+        MaintenanceRecalculationPolicy recalculationPolicy,
         List<MaintenanceRegulationAttributeConditionDto> attributeConditions
 ) {
     public MaintenanceRegulationDto(
@@ -51,7 +55,36 @@ public record MaintenanceRegulationDto(
     ) {
         this(id, code, name, description, equipmentTypeId, equipmentTypeName, templateId, templateCode, templateName, maintenanceKind,
                 normativeLaborHours, active, periodicityUnit, periodicityValue, toleranceDays,
-                requiresShutdown, triggerMeterType, triggerMeterInterval, List.of());
+                requiresShutdown, triggerMeterType, triggerMeterInterval, MaintenanceTriggerPolicy.ANY,
+                MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION, List.of());
+    }
+
+    public MaintenanceRegulationDto(
+            UUID id,
+            String code,
+            String name,
+            String description,
+            UUID equipmentTypeId,
+            String equipmentTypeName,
+            UUID templateId,
+            String templateCode,
+            String templateName,
+            MaintenanceKind maintenanceKind,
+            double normativeLaborHours,
+            boolean active,
+            PeriodicityUnit periodicityUnit,
+            int periodicityValue,
+            Integer toleranceDays,
+            boolean requiresShutdown,
+            MeterType triggerMeterType,
+            Double triggerMeterInterval,
+            List<MaintenanceRegulationAttributeConditionDto> attributeConditions
+    ) {
+        this(id, code, name, description, equipmentTypeId, equipmentTypeName, templateId, templateCode, templateName, maintenanceKind,
+                normativeLaborHours, active, periodicityUnit, periodicityValue, toleranceDays,
+                requiresShutdown, triggerMeterType, triggerMeterInterval, MaintenanceTriggerPolicy.ANY,
+                MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION,
+                attributeConditions == null ? List.of() : attributeConditions);
     }
 
     public static MaintenanceRegulationDto from(MaintenanceRegulation r, String equipmentTypeName) {
@@ -70,6 +103,10 @@ public record MaintenanceRegulationDto(
                 r.isActive(), r.getPeriodicityUnit(), r.getPeriodicityValue(),
                 r.getToleranceDays(), r.isRequiresShutdown(),
                 r.getTriggerMeterType(), r.getTriggerMeterInterval(),
+                r.getTriggerPolicy() == null ? MaintenanceTriggerPolicy.ANY : r.getTriggerPolicy(),
+                r.getRecalculationPolicy() == null
+                        ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
+                        : r.getRecalculationPolicy(),
                 attributeConditions == null ? List.of() : attributeConditions
         );
     }

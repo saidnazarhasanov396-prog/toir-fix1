@@ -1,6 +1,7 @@
 package com.toir.dto.meter;
 
 import com.toir.enums.MeterType;
+import com.toir.enums.MaintenanceDueStatus;
 
 import java.util.UUID;
 
@@ -13,5 +14,7 @@ public record MeterTriggerMatch(
         double currentValue,
         double interval,
         double remaining,
-        boolean due
+        boolean due,
+        MaintenanceDueStatus status,
+        String explanation
 ) {}

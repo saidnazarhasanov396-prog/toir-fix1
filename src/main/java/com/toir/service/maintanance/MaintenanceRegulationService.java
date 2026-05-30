@@ -9,7 +9,9 @@ import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceRegulationConditionOperator;
+import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.exception.RestException;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
@@ -149,6 +151,10 @@ public class MaintenanceRegulationService {
         entity.setRequiresShutdown(request.requiresShutdown());
         entity.setTriggerMeterType(request.triggerMeterType());
         entity.setTriggerMeterInterval(request.triggerMeterInterval());
+        entity.setTriggerPolicy(request.triggerPolicy() == null ? MaintenanceTriggerPolicy.ANY : request.triggerPolicy());
+        entity.setRecalculationPolicy(request.recalculationPolicy() == null
+                ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
+                : request.recalculationPolicy());
     }
 
     private void replaceConditions(UUID regulationId,

@@ -22,6 +22,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.service.maintanance.MaintenanceDueCalculationService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -74,6 +75,9 @@ class PprGeneratorDynamicConditionTest {
 
     @Mock
     AuditBuilderService auditBuilderService;
+
+    @Mock
+    MaintenanceDueCalculationService maintenanceDueCalculationService;
 
     @InjectMocks
     PprGeneratorService service;
