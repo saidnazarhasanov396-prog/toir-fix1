@@ -135,6 +135,10 @@ class PprPlanControllerContractTest {
     void listAndGetByIdReturnSamePlanId() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.of(2026, 6, 1, 9, 0);
         PprPlanDto plan = new PprPlanDto(
                 planId,
                 "PPR-2026-0099",
@@ -145,7 +149,29 @@ class PprPlanControllerContractTest {
                 UUID.randomUUID(),
                 null,
                 null,
-                1,
+                List.of(new PprTaskDto(
+                        taskId,
+                        "PPR-TASK-2026-0001",
+                        planId,
+                        regulationId,
+                        "Monthly lubrication",
+                        null,
+                        null,
+                        null,
+                        equipmentId,
+                        "Main pump",
+                        "Lubricate bearings",
+                        start,
+                        start.plusHours(2),
+                        LocalDate.of(2026, 6, 1),
+                        LocalDate.of(2026, 6, 1),
+                        start.plusDays(1),
+                        PprTaskStatus.PLANNED,
+                        PriorityLevel.MEDIUM,
+                        2.0,
+                        null,
+                        null
+                )),
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 30)
         );
@@ -160,20 +186,28 @@ class PprPlanControllerContractTest {
                         .param("size", "20"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(planId.toString()))
-                .andExpect(jsonPath("$.content[0].taskCount").value(1))
-                .andExpect(jsonPath("$.content[0].tasks").doesNotExist());
+                .andExpect(jsonPath("$.content[0].tasks[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.content[0].tasks[0].equipmentName").value("Main pump"))
+                .andExpect(jsonPath("$.content[0].tasks[0].regulationId").value(regulationId.toString()))
+                .andExpect(jsonPath("$.content[0].tasks[0].regulationName").value("Monthly lubrication"));
 
         mockMvc.perform(get("/api/v1/ppr-plans/{id}", planId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(planId.toString()))
-                .andExpect(jsonPath("$.taskCount").value(1))
-                .andExpect(jsonPath("$.tasks").doesNotExist());
+                .andExpect(jsonPath("$.tasks[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.tasks[0].equipmentName").value("Main pump"))
+                .andExpect(jsonPath("$.tasks[0].regulationId").value(regulationId.toString()))
+                .andExpect(jsonPath("$.tasks[0].regulationName").value("Monthly lubrication"));
     }
 
     @Test
-    void listWithoutPaginationReturnsAllPlansAndTaskCount() throws Exception {
+    void listWithoutPaginationReturnsAllPlansAndNames() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.of(2026, 6, 1, 9, 0);
         PprPlanDto plan = new PprPlanDto(
                 planId,
                 "PPR-2026-0100",
@@ -184,7 +218,29 @@ class PprPlanControllerContractTest {
                 UUID.randomUUID(),
                 null,
                 null,
-                4,
+                List.of(new PprTaskDto(
+                        taskId,
+                        "PPR-TASK-2026-0100",
+                        planId,
+                        regulationId,
+                        "Weekly inspection",
+                        null,
+                        null,
+                        null,
+                        equipmentId,
+                        "Cooling tower",
+                        "Inspect tower",
+                        start,
+                        start.plusHours(2),
+                        LocalDate.of(2026, 6, 1),
+                        LocalDate.of(2026, 6, 1),
+                        start.plusDays(1),
+                        PprTaskStatus.PLANNED,
+                        PriorityLevel.MEDIUM,
+                        2.0,
+                        null,
+                        null
+                )),
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 30)
         );
@@ -193,8 +249,10 @@ class PprPlanControllerContractTest {
         mockMvc.perform(get("/api/v1/ppr-plans"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(planId.toString()))
-                .andExpect(jsonPath("$[0].taskCount").value(4))
-                .andExpect(jsonPath("$[0].tasks").doesNotExist());
+                .andExpect(jsonPath("$[0].tasks[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$[0].tasks[0].equipmentName").value("Cooling tower"))
+                .andExpect(jsonPath("$[0].tasks[0].regulationId").value(regulationId.toString()))
+                .andExpect(jsonPath("$[0].tasks[0].regulationName").value("Weekly inspection"));
 
         verify(service).findAll(null, null, null, null);
     }
