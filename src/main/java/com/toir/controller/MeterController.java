@@ -15,6 +15,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -23,10 +24,24 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class MeterController {
 
+    private static final String METER_READ_AUTH =
+            "hasAnyAuthority('read','METER_READ','SYSTEM_ADMIN','*')";
+    private static final String METER_CREATE_AUTH =
+            "hasAnyAuthority('METER_CREATE','SYSTEM_ADMIN','*')";
+    private static final String METER_UPDATE_AUTH =
+            "hasAnyAuthority('METER_UPDATE','SYSTEM_ADMIN','*')";
+    private static final String METER_DELETE_AUTH =
+            "hasAnyAuthority('METER_DELETE','SYSTEM_ADMIN','*')";
+    private static final String METER_READING_CREATE_AUTH =
+            "hasAnyAuthority('METER_READING_CREATE','SYSTEM_ADMIN','*')";
+    private static final String METER_READING_DELETE_AUTH =
+            "hasAnyAuthority('METER_READING_DELETE','SYSTEM_ADMIN','*')";
+
     private final MeterService service;
     private final MeterTriggerService triggerService;
 
     @GetMapping("/triggers")
+    @PreAuthorize(METER_READ_AUTH)
     public ResponseEntity<Page<MeterTriggerMatch>> triggers(@RequestParam(required = false) UUID equipmentId,
                                                             @RequestParam(required = false) String equipmentSearch,
                                                             @RequestParam(defaultValue = "0") int page,
@@ -35,6 +50,7 @@ public class MeterController {
     }
 
     @GetMapping
+    @PreAuthorize(METER_READ_AUTH)
     public ResponseEntity<Page<EquipmentMeterDto>> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) MeterType meterType,
@@ -46,6 +62,7 @@ public class MeterController {
     }
 
     @GetMapping("/stats")
+    @PreAuthorize(METER_READ_AUTH)
     public ResponseEntity<MeterStatsResponse> stats(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) MeterType meterType,
@@ -56,21 +73,25 @@ public class MeterController {
 
 
     @GetMapping("/{id}")
+    @PreAuthorize(METER_READ_AUTH)
     public ResponseEntity<EquipmentMeterDto> get(@PathVariable UUID id) {
         return ResponseEntity.ok(service.findMeter(id));
     }
 
     @PostMapping
+    @PreAuthorize(METER_CREATE_AUTH)
     public ResponseEntity<EquipmentMeterDto> create(@Valid @RequestBody EquipmentMeterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.createMeter(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize(METER_UPDATE_AUTH)
     public ResponseEntity<EquipmentMeterDto> update(@PathVariable UUID id, @Valid @RequestBody EquipmentMeterRequest request) {
         return ResponseEntity.ok(service.updateMeter(id, request));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize(METER_DELETE_AUTH)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.deleteMeter(id);
@@ -78,11 +99,13 @@ public class MeterController {
     }
 
     @PostMapping("/readings")
+    @PreAuthorize(METER_READING_CREATE_AUTH)
     public ResponseEntity<MeterReadingDto> addReading(@Valid @RequestBody MeterReadingRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addReading(request));
     }
 
     @GetMapping("/{id}/readings")
+    @PreAuthorize(METER_READ_AUTH)
     public ResponseEntity<Page<MeterReadingDto>> history(
             @PathVariable UUID id,
             @RequestParam(defaultValue = "100") int limit,
@@ -97,6 +120,7 @@ public class MeterController {
     }
 
     @DeleteMapping("/readings/{readingId}")
+    @PreAuthorize(METER_READING_DELETE_AUTH)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public ResponseEntity<Void> deleteReading(@PathVariable UUID readingId) {
         service.deleteReading(readingId);
