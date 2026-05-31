@@ -1160,6 +1160,32 @@ class EquipmentAttributeServiceTest {
     }
 
     @Test
+    void findValuesReturnsFullUnitDictionaryObject() {
+        UUID typeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        UnitOfMeasurement unit = unit("UOM-2026-0003", "kg", "Kilogram", "Kilogramm");
+        EquipmentAttributeDefinition payload = definition(UUID.randomUUID(), typeId, "payload_capacity",
+                EquipmentAttributeDataType.NUMBER, false);
+        payload.setUnit(unit.getId().toString());
+        EquipmentAttributeValue value = value(equipmentId, payload.getId());
+        value.setValueNumber(12000.0);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(definitionRepository.findAllByEquipmentTypeIdAndIsDeletedFalse(typeId)).thenReturn(List.of(payload));
+        when(valueRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of(value));
+        when(unitOfMeasurementRepository.findByIdAndIsDeletedFalse(unit.getId())).thenReturn(Optional.of(unit));
+
+        List<EquipmentAttributeValueDto> result = service.findValues(equipmentId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().unit().id()).isEqualTo(unit.getId());
+        assertThat(result.getFirst().unit().code()).isEqualTo("UOM-2026-0003");
+        assertThat(result.getFirst().unit().name()).isEqualTo("kg");
+        assertThat(result.getFirst().unit().nameEn()).isEqualTo("Kilogram");
+        assertThat(result.getFirst().unit().nameUz()).isEqualTo("Kilogramm");
+    }
+
+    @Test
     void equipmentAttributeEndpointAfterTypeChangeShowsOnlyCurrentTypeAttributes() {
         UUID oldTypeId = UUID.randomUUID();
         UUID newTypeId = UUID.randomUUID();
