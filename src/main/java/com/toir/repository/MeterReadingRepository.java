@@ -44,4 +44,49 @@ public interface MeterReadingRepository extends JpaRepository<MeterReading, UUID
 
     @Query(value = "SELECT * FROM meter_readings WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<MeterReading> findAllByEquipmentIdAndIsDeletedFalseOrderByReadAtDesc(@Param("equipmentId") UUID equipmentId);
+
+    @Query(value = """
+            SELECT *
+            FROM meter_readings r
+            WHERE r.is_deleted = false
+              AND (
+                    cast(:search as varchar) IS NULL
+                    OR lower(cast(r.meter_id as varchar)) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                    OR lower(cast(r.equipment_id as varchar)) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                    OR lower(cast(r.source as varchar)) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                    OR lower(cast(r.device_id as varchar)) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                    OR lower(cast(r.note as varchar)) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                    OR cast(r.value as varchar) LIKE concat('%', cast(:search as varchar), '%')
+              )
+            ORDER BY
+              CASE WHEN :sort = 'createdAt' AND :direction = 'asc' THEN r.created_at END ASC,
+              CASE WHEN :sort = 'createdAt' AND :direction = 'desc' THEN r.created_at END DESC,
+              CASE WHEN :sort = 'readAt' AND :direction = 'asc' THEN r.read_at END ASC,
+              CASE WHEN :sort = 'readAt' AND :direction = 'desc' THEN r.read_at END DESC,
+              CASE WHEN :sort = 'value' AND :direction = 'asc' THEN r.value END ASC,
+              CASE WHEN :sort = 'value' AND :direction = 'desc' THEN r.value END DESC,
+              r.created_at DESC,
+              r.id ASC
+            """,
+            countQuery = """
+            SELECT count(*)
+            FROM meter_readings r
+            WHERE r.is_deleted = false
+              AND (
+                    cast(:search as varchar) IS NULL
+                    OR lower(cast(r.meter_id as varchar)) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                    OR lower(cast(r.equipment_id as varchar)) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                    OR lower(cast(r.source as varchar)) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                    OR lower(cast(r.device_id as varchar)) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                    OR lower(cast(r.note as varchar)) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                    OR cast(r.value as varchar) LIKE concat('%', cast(:search as varchar), '%')
+              )
+            """,
+            nativeQuery = true)
+    Page<MeterReading> searchReadings(
+            @Param("search") String search,
+            @Param("sort") String sort,
+            @Param("direction") String direction,
+            Pageable pageable
+    );
 }

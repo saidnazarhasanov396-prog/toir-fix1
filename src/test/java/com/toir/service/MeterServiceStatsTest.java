@@ -1,6 +1,8 @@
 package com.toir.service;
 
 import com.toir.dto.meter.MeterStatsResponse;
+import com.toir.entity.equipment.MeterReading;
+import com.toir.enums.MeterSource;
 import com.toir.enums.MeterType;
 import com.toir.repository.MeterReadingRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
@@ -13,7 +15,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -99,6 +105,40 @@ class MeterServiceStatsTest {
         assertThat(stats.dueTriggers()).isZero();
     }
 
+    @Test
+    void listReadingsDefaultsToCreatedAtDescAndMapsPage() {
+        MeterReading reading = reading(UUID.randomUUID(), "shift reading");
+        when(readingRepository.searchReadings(null, "createdAt", "desc", PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(reading), PageRequest.of(0, 20), 1));
+
+        var result = service.listReadings(null, null, null, 0, 20);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().getFirst().id()).isEqualTo(reading.getId());
+        assertThat(result.getContent().getFirst().createdAt()).isEqualTo(reading.getCreatedAt());
+        verify(readingRepository).searchReadings(null, "createdAt", "desc", PageRequest.of(0, 20));
+    }
+
+    @Test
+    void listReadingsTrimsSearchAndPassesSortDirection() {
+        when(readingRepository.searchReadings("shift", "readAt", "asc", PageRequest.of(2, 5)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(2, 5), 0));
+
+        service.listReadings(" shift ", "readAt", "asc", 2, 5);
+
+        verify(readingRepository).searchReadings("shift", "readAt", "asc", PageRequest.of(2, 5));
+    }
+
+    @Test
+    void listReadingsAcceptsCombinedSortDirection() {
+        when(readingRepository.searchReadings(null, "createdAt", "desc", PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        service.listReadings(null, "createdAt,desc", "asc", 0, 20);
+
+        verify(readingRepository).searchReadings(null, "createdAt", "desc", PageRequest.of(0, 20));
+    }
+
     private MeterStatsProjection mockProjection(Long total, Long active, Long readings, Long due) {
         MeterStatsProjection p = mock(MeterStatsProjection.class);
         when(p.getTotalMeters()).thenReturn(total);
@@ -106,5 +146,22 @@ class MeterServiceStatsTest {
         when(p.getTotalReadings()).thenReturn(readings);
         when(p.getDueTriggers()).thenReturn(due);
         return p;
+    }
+
+    private MeterReading reading(UUID id, String note) {
+        MeterReading reading = new MeterReading();
+        reading.setId(id);
+        reading.setMeterId(UUID.randomUUID());
+        reading.setEquipmentId(UUID.randomUUID());
+        reading.setValue(125.5);
+        reading.setDelta(5.5);
+        reading.setReadAt(Instant.parse("2026-05-31T07:55:00Z"));
+        reading.setSource(MeterSource.MANUAL);
+        reading.setRecordedByUserId(UUID.randomUUID());
+        reading.setDeviceId("tablet-1");
+        reading.setNote(note);
+        reading.setCreatedAt(Instant.parse("2026-05-31T08:00:00Z"));
+        reading.setUpdatedAt(Instant.parse("2026-05-31T08:00:00Z"));
+        return reading;
     }
 }

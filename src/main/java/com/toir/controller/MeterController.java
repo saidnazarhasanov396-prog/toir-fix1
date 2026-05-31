@@ -104,6 +104,17 @@ public class MeterController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addReading(request));
     }
 
+    @GetMapping("/readings")
+    @PreAuthorize(METER_READ_AUTH)
+    public ResponseEntity<Page<MeterReadingDto>> readings(
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "createdAt") String sort,
+            @RequestParam(defaultValue = "desc") String direction,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(service.listReadings(search, sort, direction, page, size));
+    }
+
     @GetMapping("/{id}/readings")
     @PreAuthorize(METER_READ_AUTH)
     public ResponseEntity<Page<MeterReadingDto>> history(

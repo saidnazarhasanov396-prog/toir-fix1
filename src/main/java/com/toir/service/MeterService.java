@@ -15,6 +15,7 @@ import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +26,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class MeterService {
+
+    private static final List<String> READING_SORT_FIELDS = List.of("createdAt", "readAt", "value");
 
     private final EquipmentMeterRepository meterRepository;
     private final MeterReadingRepository readingRepository;
@@ -207,6 +210,27 @@ public class MeterService {
     }
 
     @Transactional(readOnly = true)
+    public Page<MeterReadingDto> listReadings(String search, String sort, String direction, int page, int size) {
+        String requestedSort = sort;
+        String requestedDirection = direction;
+        if (sort != null && sort.contains(",")) {
+            String[] parts = sort.split(",", 2);
+            requestedSort = parts[0];
+            requestedDirection = parts[1];
+        }
+        String safeSort = normalizeReadingSort(requestedSort);
+        String safeDirection = "asc".equalsIgnoreCase(requestedDirection) ? "asc" : "desc";
+        String normalizedSearch = search == null || search.isBlank() ? null : search.trim();
+        return readingRepository.searchReadings(
+                        normalizedSearch,
+                        safeSort,
+                        safeDirection,
+                        PaginationUtils.pageRequest(page, size)
+                )
+                .map(MeterReadingDto::from);
+    }
+
+    @Transactional(readOnly = true)
     public List<MeterReadingDto> historyBetween(UUID meterId, Instant from, Instant to) {
         getMeterOrThrow(meterId);
         return readingRepository.findAllByMeterIdAndReadAtBetweenAndIsDeletedFalseOrderByReadAtAsc(meterId, from, to)
@@ -243,5 +267,16 @@ public class MeterService {
                 .map(Equipment::getName)
                 .orElse("Unknown");
         return EquipmentMeterDto.from(meter, equipmentName);
+    }
+
+    private String normalizeReadingSort(String sort) {
+        if (sort == null || sort.isBlank()) {
+            return "createdAt";
+        }
+        String trimmed = sort.trim();
+        if (READING_SORT_FIELDS.contains(trimmed)) {
+            return trimmed;
+        }
+        throw RestException.badRequest("Unsupported meter reading sort: " + sort);
     }
 }
