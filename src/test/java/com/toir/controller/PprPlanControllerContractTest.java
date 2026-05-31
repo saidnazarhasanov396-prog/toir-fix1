@@ -17,7 +17,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.security.ScopeAccessService;
-import com.toir.service.ApprovalService;
+
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
 import org.springframework.data.domain.PageImpl;
@@ -69,16 +69,13 @@ class PprPlanControllerContractTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
-    @Mock
-    ApprovalService approvalService;
-
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         lenient().when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
-        mockMvc = MockMvcBuilders.standaloneSetup(new PprPlanController(service, approvalService, generatorService, planRepository, taskRepository, scopeAccessService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new PprPlanController(service, generatorService, planRepository, taskRepository, scopeAccessService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
