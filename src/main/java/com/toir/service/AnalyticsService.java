@@ -8,6 +8,7 @@ import com.toir.dto.analytics.RcaOverviewResponse;
 import com.toir.dto.analytics.AnalyticsOverview.*;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.exception.RestException;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.enums.DefectStatus;
 import com.toir.entity.Department;
@@ -29,7 +30,11 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.security.ScopeAccessService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +47,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AnalyticsService {
 
     private final RepairRequestRepository repairRequestRepository;
@@ -313,8 +319,8 @@ public class AnalyticsService {
 
     public EquipmentAnalyticsResponse equipmentAnalytics(UUID equipmentId) {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
-                .orElseThrow(() -> com.toir.exception.RestException.notFound("Equipment not found: " + equipmentId));
-        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
+        assertCanAccessEquipmentAnalytics(equipment);
 
         List<RepairRequest> requests = repairRequestRepository.search(null, null, equipmentId);
         if (requests == null) {
@@ -414,5 +420,48 @@ public class AnalyticsService {
     private boolean isEquipmentInDepartment(Map<UUID, Equipment> equipById, UUID equipmentId, UUID departmentId) {
         Equipment equipment = equipById.get(equipmentId);
         return equipment != null && departmentId.equals(equipment.getDepartmentId());
+    }
+
+    private void assertCanAccessEquipmentAnalytics(Equipment equipment) {
+        UUID requestedDepartmentId = equipment.getDepartmentId();
+        if (requestedDepartmentId == null) {
+            if (scopeAccessService.isScopeAdmin()) {
+                logEquipmentAnalyticsScopeDecision(equipment, "allowed: scope admin and equipment has no department");
+                return;
+            }
+            logEquipmentAnalyticsScopeDecision(equipment, "denied: equipment has no department and user is not scope admin");
+            throw new AccessDeniedException("Access denied by equipment analytics department scope");
+        }
+
+        try {
+            scopeAccessService.assertCanAccessDepartment(requestedDepartmentId);
+            logEquipmentAnalyticsScopeDecision(equipment, "allowed: requested equipment department is in user scope");
+        } catch (AccessDeniedException ex) {
+            logEquipmentAnalyticsScopeDecision(equipment, "denied: requested equipment department is outside user scope");
+            throw ex;
+        }
+    }
+
+    private void logEquipmentAnalyticsScopeDecision(Equipment equipment, String reason) {
+        if (!log.isDebugEnabled()) {
+            return;
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication != null ? authentication.getName() : null;
+        List<String> authorities = authentication == null || authentication.getAuthorities() == null
+                ? List.of()
+                : authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .toList();
+        log.debug(
+                "Equipment analytics scope decision: username={}, userId={}, authorities={}, currentDepartmentId={}, equipmentId={}, requestedEquipmentDepartmentId={}, reason={}",
+                username,
+                scopeAccessService.currentUserIdOrNull(),
+                authorities,
+                scopeAccessService.currentDepartmentIdOrNull(),
+                equipment.getId(),
+                equipment.getDepartmentId(),
+                reason
+        );
     }
 }

@@ -199,6 +199,61 @@ class AnalyticsPbacScopeTest {
     }
 
     @Test
+    void adminCanAccessAnyEquipmentAnalytics() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, null);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        authenticateSystemAdmin();
+
+        EquipmentAnalyticsResponse response = analyticsServiceWithRealScope().equipmentAnalytics(equipmentId);
+
+        assertThat(response.equipmentId()).isEqualTo(equipmentId.toString());
+        verify(repairRequestRepository).search(null, null, equipmentId);
+    }
+
+    @Test
+    void analyticsReadUserCanAccessOwnDepartmentEquipmentAnalytics() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentA = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentA);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        authenticateDepartmentUser(departmentA);
+
+        EquipmentAnalyticsResponse response = analyticsServiceWithRealScope().equipmentAnalytics(equipmentId);
+
+        assertThat(response.equipmentId()).isEqualTo(equipmentId.toString());
+        verify(repairRequestRepository).search(null, null, equipmentId);
+    }
+
+    @Test
+    void analyticsReadUserCannotAccessOtherDepartmentEquipmentAnalytics() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentA = UUID.randomUUID();
+        UUID departmentB = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentB);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        authenticateDepartmentUser(departmentA);
+
+        assertThatThrownBy(() -> analyticsServiceWithRealScope().equipmentAnalytics(equipmentId))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verify(repairRequestRepository, never()).search(any(), any(), eq(equipmentId));
+    }
+
+    @Test
+    void fakeEquipmentIdReturns404BeforeScopeCheck() {
+        UUID equipmentId = UUID.randomUUID();
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> analyticsService.equipmentAnalytics(equipmentId))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Equipment not found");
+
+        verify(scopeAccessService, never()).assertCanAccessDepartment(any());
+        verify(scopeAccessService, never()).isScopeAdmin();
+    }
+
+    @Test
     void equipmentAnalyticsDeniesOutOfScopeEquipment() {
         UUID equipmentId = UUID.randomUUID();
         UUID departmentB = UUID.randomUUID();
@@ -325,6 +380,25 @@ class AnalyticsPbacScopeTest {
                         user,
                         null,
                         List.of(new SimpleGrantedAuthority(PermissionConstants.ANALYTICS_READ))
+                )
+        );
+    }
+
+    private void authenticateSystemAdmin() {
+        AuthenticatedUser user = new AuthenticatedUser(
+                UUID.randomUUID().toString(),
+                "system-admin",
+                "system-admin@example.com",
+                "System Admin",
+                UUID.randomUUID().toString(),
+                "SYSTEM_ADMIN",
+                List.of()
+        );
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        user,
+                        null,
+                        List.of(new SimpleGrantedAuthority("SYSTEM_ADMIN"))
                 )
         );
     }
