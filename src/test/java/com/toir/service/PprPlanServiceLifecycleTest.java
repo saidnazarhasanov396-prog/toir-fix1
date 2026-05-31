@@ -8,6 +8,7 @@ import com.toir.entity.PprPlanTarget;
 import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
+import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PprFrequency;
 import com.toir.enums.PprScheduleType;
@@ -22,8 +23,11 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -66,10 +70,19 @@ class PprPlanServiceLifecycleTest {
     EquipmentTypeRepository equipmentTypeRepository;
 
     @Mock
+    EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
+
+    @Mock
+    MaintenanceRegulationRepository maintenanceRegulationRepository;
+
+    @Mock
     AuditBuilderService auditBuilderService;
 
     @Mock
     AuditSerializationService auditSerializationService;
+
+    @Mock
+    EntityManager entityManager;
 
     @InjectMocks
     PprPlanService service;
@@ -82,10 +95,29 @@ class PprPlanServiceLifecycleTest {
         String expectedCode = "PPR-" + Year.now().getValue() + "-0001";
         when(planRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
         when(planRepository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
-        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> {
+        when(planRepository.saveAndFlush(any(PprPlan.class))).thenAnswer(invocation -> {
             PprPlan plan = invocation.getArgument(0);
             plan.setId(UUID.randomUUID());
             return plan;
+        });
+        when(planRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> {
+            UUID id = invocation.getArgument(0);
+            PprPlan plan = new PprPlan();
+            plan.setId(id);
+            plan.setCode(expectedCode);
+            plan.setName("Q2 plan");
+            plan.setStartDate(LocalDate.of(2026, 4, 1));
+            plan.setEndDate(LocalDate.of(2026, 6, 30));
+            plan.setStatus(PlanStatus.DRAFT);
+            plan.setDepartmentId(departmentId);
+            plan.setCreatedById(createdById);
+            plan.setNotes("quarterly");
+            plan.setPprType(PprType.PREVENTIVE_MAINTENANCE);
+            plan.setScheduleType(PprScheduleType.CALENDAR);
+            plan.setScopeType(PprScopeType.DEPARTMENT);
+            plan.setTasks(new ArrayList<>());
+            plan.setTargets(new ArrayList<>());
+            return Optional.of(plan);
         });
 
         var result = service.create(new com.toir.dto.pprplanning.PprPlanRequest(
@@ -341,7 +373,7 @@ class PprPlanServiceLifecycleTest {
         when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
         when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
                 .thenReturn(List.of(equipment(equipmentId, departmentId)));
-        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(planRepository.saveAndFlush(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         var result = service.update(planId, new PprPlanRequest(
                 "Updated plan",
@@ -382,7 +414,7 @@ class PprPlanServiceLifecycleTest {
         plan.getTargets().add(existingTarget);
 
         when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
-        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(planRepository.saveAndFlush(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         var result = service.update(planId, new PprPlanRequest(
                 "Legacy update",
@@ -418,7 +450,7 @@ class PprPlanServiceLifecycleTest {
                     assertThat(ex.getMessage()).isEqualTo("PPR plan toDate must not be before fromDate");
                 });
 
-        verify(planRepository, never()).save(any(PprPlan.class));
+        verify(planRepository, never()).saveAndFlush(any(PprPlan.class));
     }
 
     @Test
@@ -593,11 +625,71 @@ class PprPlanServiceLifecycleTest {
         String expectedCode = "PPR-" + Year.now().getValue() + "-0001";
         when(planRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
         when(planRepository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
-        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> {
+        final PprPlan[] savedPlan = new PprPlan[1];
+        when(planRepository.saveAndFlush(any(PprPlan.class))).thenAnswer(invocation -> {
             PprPlan plan = invocation.getArgument(0);
             plan.setId(UUID.randomUUID());
+            savedPlan[0] = plan;
             return plan;
         });
+        when(planRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> Optional.of(savedPlan[0]));
+    }
+
+    @Test
+    void createWithAllFieldsAndTargetsReloadsPersistedPlanWithNames() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentId);
+        equipment.setName("Pump 17");
+        EquipmentType equipmentType = equipmentType(equipmentTypeId);
+        equipmentType.setName("Pump");
+        MaintenanceRegulation regulation = regulation(regulationId, "Monthly inspection");
+        mockPlanCodeSave();
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of(equipment));
+        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentTypeId))).thenReturn(List.of(equipmentType));
+        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(List.of(regulationId))).thenReturn(List.of(regulation));
+
+        var result = service.create(new PprPlanRequest(
+                "Full targeted plan",
+                departmentId,
+                UUID.randomUUID(),
+                "all fields",
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30),
+                PprType.PREVENTIVE_MAINTENANCE,
+                PprScheduleType.CALENDAR,
+                PprFrequency.MONTHLY,
+                null,
+                PprScopeType.DEPARTMENT,
+                List.of(equipmentId),
+                List.of(equipmentTypeId),
+                List.of(regulationId)
+        ));
+
+        assertThat(result.name()).isEqualTo("Full targeted plan");
+        assertThat(result.notes()).isEqualTo("all fields");
+        assertThat(result.pprType()).isEqualTo(PprType.PREVENTIVE_MAINTENANCE);
+        assertThat(result.frequency()).isEqualTo(PprFrequency.MONTHLY);
+        assertThat(result.targets()).hasSize(3);
+        assertThat(result.targets()).anySatisfy(target -> {
+            assertThat(target.targetType()).isEqualTo(PprTargetType.EQUIPMENT);
+            assertThat(target.equipmentId()).isEqualTo(equipmentId);
+            assertThat(target.equipmentName()).isEqualTo("Pump 17");
+        });
+        assertThat(result.targets()).anySatisfy(target -> {
+            assertThat(target.targetType()).isEqualTo(PprTargetType.EQUIPMENT_TYPE);
+            assertThat(target.equipmentTypeId()).isEqualTo(equipmentTypeId);
+            assertThat(target.equipmentTypeName()).isEqualTo("Pump");
+        });
+        assertThat(result.targets()).anySatisfy(target -> {
+            assertThat(target.targetType()).isEqualTo(PprTargetType.REGULATION);
+            assertThat(target.regulationId()).isEqualTo(regulationId);
+            assertThat(target.regulationName()).isEqualTo("Monthly inspection");
+        });
+        verify(planRepository).saveAndFlush(any(PprPlan.class));
+        verify(planRepository).findByIdAndIsDeletedFalse(result.id());
     }
 
     private Equipment equipment(UUID id, UUID departmentId) {
@@ -611,6 +703,13 @@ class PprPlanServiceLifecycleTest {
         EquipmentType equipmentType = new EquipmentType();
         equipmentType.setId(id);
         return equipmentType;
+    }
+
+    private MaintenanceRegulation regulation(UUID id, String name) {
+        MaintenanceRegulation regulation = new MaintenanceRegulation();
+        regulation.setId(id);
+        regulation.setName(name);
+        return regulation;
     }
 
     private PprTask task(UUID id, PprPlan plan, PprTaskStatus status) {

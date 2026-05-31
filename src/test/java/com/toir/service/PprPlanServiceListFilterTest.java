@@ -3,10 +3,13 @@ package com.toir.service;
 import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.entity.Department;
 import com.toir.entity.PprPlan;
+import com.toir.entity.PprPlanTarget;
 import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.PlanStatus;
+import com.toir.enums.PprTargetType;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.PprTaskStatus;
 import com.toir.exception.RestException;
@@ -305,6 +308,48 @@ class PprPlanServiceListFilterTest {
     }
 
     @Test
+    void listAndGetByIdIncludePlanTargetIdsAndNames() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        PprPlan plan = plan(2026, 5, UUID.randomUUID());
+        plan.getTargets().add(target(plan, PprTargetType.EQUIPMENT, equipmentId, null, null));
+        plan.getTargets().add(target(plan, PprTargetType.EQUIPMENT_TYPE, null, equipmentTypeId, null));
+        plan.getTargets().add(target(plan, PprTargetType.REGULATION, null, null, regulationId));
+
+        when(planRepository.searchPlans(null, null, null, null, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
+        when(planRepository.findByIdAndIsDeletedFalse(plan.getId())).thenReturn(Optional.of(plan));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment(equipmentId, "Pump 17")));
+        EquipmentType equipmentType = new EquipmentType();
+        equipmentType.setId(equipmentTypeId);
+        equipmentType.setName("Pump");
+        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentTypeId)))
+                .thenReturn(List.of(equipmentType));
+        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(List.of(regulationId)))
+                .thenReturn(List.of(regulation(regulationId, "Monthly inspection")));
+
+        var listed = service.findAll(null, null, null, null, 0, 20).getContent().getFirst();
+        var detailed = service.findById(plan.getId());
+
+        assertThat(listed.targets()).hasSize(3);
+        assertThat(detailed.targets()).hasSize(3);
+        assertThat(detailed.targets()).anySatisfy(target -> {
+            assertThat(target.equipmentId()).isEqualTo(equipmentId);
+            assertThat(target.equipmentName()).isEqualTo("Pump 17");
+        });
+        assertThat(detailed.targets()).anySatisfy(target -> {
+            assertThat(target.equipmentTypeId()).isEqualTo(equipmentTypeId);
+            assertThat(target.equipmentTypeName()).isEqualTo("Pump");
+        });
+        assertThat(detailed.targets()).anySatisfy(target -> {
+            assertThat(target.regulationId()).isEqualTo(regulationId);
+            assertThat(target.regulationName()).isEqualTo("Monthly inspection");
+        });
+    }
+
+    @Test
     void getByIdLeavesNamesNullWhenOptionalRelationsAreMissing() {
         PprPlan plan = plan(2026, 5, UUID.randomUUID());
         PprTask task = task(plan, LocalDateTime.of(2026, 5, 1, 9, 0));
@@ -375,6 +420,7 @@ class PprPlanServiceListFilterTest {
         plan.setDepartmentId(departmentId);
         plan.setCreatedById(UUID.randomUUID());
         plan.setTasks(new ArrayList<>());
+        plan.setTargets(new ArrayList<>());
         return plan;
     }
 
@@ -407,6 +453,23 @@ class PprPlanServiceListFilterTest {
         regulation.setId(id);
         regulation.setName(name);
         return regulation;
+    }
+
+    private PprPlanTarget target(
+            PprPlan plan,
+            PprTargetType targetType,
+            UUID equipmentId,
+            UUID equipmentTypeId,
+            UUID regulationId
+    ) {
+        PprPlanTarget target = new PprPlanTarget();
+        target.setId(UUID.randomUUID());
+        target.setPlan(plan);
+        target.setTargetType(targetType);
+        target.setEquipmentId(equipmentId);
+        target.setEquipmentTypeId(equipmentTypeId);
+        target.setRegulationId(regulationId);
+        return target;
     }
 
     private PprPlanStatsProjection stats(

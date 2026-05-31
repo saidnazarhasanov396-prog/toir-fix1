@@ -24,8 +24,28 @@ public record PprPlanRequest(
         Long intervalHours,
         PprScopeType scopeType,
         List<UUID> equipmentIds,
-        List<UUID> equipmentTypeIds
+        List<UUID> equipmentTypeIds,
+        List<UUID> regulationIds
 ) {
+    public PprPlanRequest(
+            String name,
+            UUID departmentId,
+            UUID createdById,
+            String notes,
+            LocalDate fromDate,
+            LocalDate toDate,
+            PprType pprType,
+            PprScheduleType scheduleType,
+            PprFrequency frequency,
+            Long intervalHours,
+            PprScopeType scopeType,
+            List<UUID> equipmentIds,
+            List<UUID> equipmentTypeIds
+    ) {
+        this(name, departmentId, createdById, notes, fromDate, toDate,
+                pprType, scheduleType, frequency, intervalHours, scopeType, equipmentIds, equipmentTypeIds, null);
+    }
+
     public PprPlanRequest(
             String name,
             UUID departmentId,
@@ -35,6 +55,6 @@ public record PprPlanRequest(
             LocalDate toDate
     ) {
         this(name, departmentId, createdById, notes, fromDate, toDate,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
     }
 }

@@ -6,6 +6,7 @@ import com.toir.entity.PprPlan;
 import com.toir.entity.PprPlanTarget;
 import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AuditAction;
@@ -29,6 +30,7 @@ import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -63,6 +65,7 @@ public class PprPlanService {
     private final MaintenanceRegulationRepository maintenanceRegulationRepository;
     private final AuditBuilderService auditBuilderService;
     private final AuditSerializationService auditSerializationService;
+    private final EntityManager entityManager;
     private static final int MAX_PLAN_CODE_GENERATION_ATTEMPTS = 50;
     private static final int MAX_TASK_CODE_GENERATION_ATTEMPTS = 50;
     private static final String CLIENT_CODE_REJECT_MESSAGE =
@@ -102,14 +105,16 @@ public class PprPlanService {
                 );
         Map<UUID, String> departmentNames = resolveDepartmentNames(plans.getContent());
         List<PprTask> tasks = collectTasks(plans.getContent());
-        Map<UUID, String> equipmentNames = resolveEquipmentNames(tasks);
-        Map<UUID, String> regulationNames = resolveRegulationNames(tasks);
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(plans.getContent(), tasks);
+        Map<UUID, String> equipmentTypeNames = resolveEquipmentTypeNames(plans.getContent());
+        Map<UUID, String> regulationNames = resolveRegulationNames(plans.getContent(), tasks);
         Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
         return plans.map(plan -> PprPlanDto.from(
                 plan,
                 departmentName(departmentNames, plan),
                 ruleById,
                 equipmentNames,
+                equipmentTypeNames,
                 regulationNames
         ));
     }
@@ -151,9 +156,10 @@ public class PprPlanService {
                 saved
         );
 
-        return toDto(saved);
+        return toDto(reloadPlan(saved.getId()));
     }
 
+    @Transactional
     public PprPlanDto update(UUID id, PprPlanRequest request) {
         PprPlan plan = getPlan(id);
         if (plan.getStatus() != PlanStatus.DRAFT) {
@@ -161,7 +167,7 @@ public class PprPlanService {
         }
         applyPlanMutableFields(plan, request, false);
 
-        PprPlan saved = planRepository.save(plan);
+        PprPlan saved = planRepository.saveAndFlush(plan);
         auditBuilderService.log(
                 "ppr_plan",
                 saved.getId().toString(),
@@ -171,7 +177,7 @@ public class PprPlanService {
                 plan,
                 saved
         );
-        return toDto(plan);
+        return toDto(reloadPlan(saved.getId()));
     }
 
     @Transactional
@@ -201,7 +207,8 @@ public class PprPlanService {
         }
         plan.setStatus(PlanStatus.APPROVED);
         plan.setApprovedById(approverId);
-        return toDto(plan);
+        PprPlan saved = planRepository.saveAndFlush(plan);
+        return toDto(reloadPlan(saved.getId()));
     }
 
     public PprTaskDto addTask(UUID planId, PprTaskRequest request) {
@@ -348,8 +355,8 @@ public class PprPlanService {
     public List<PprTaskDto> findTasksByPlan(UUID planId) {
         List<PprTask> tasks = taskRepository.findAllByPlanIdAndIsDeletedFalseOrderByScheduledStartAscIdAsc(planId);
         Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
-        Map<UUID, String> equipmentNames = resolveEquipmentNames(tasks);
-        Map<UUID, String> regulationNames = resolveRegulationNames(tasks);
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(List.of(), tasks);
+        Map<UUID, String> regulationNames = resolveRegulationNames(List.of(), tasks);
         return tasks.stream()
                 .map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames))
                 .toList();
@@ -360,6 +367,11 @@ public class PprPlanService {
                 .orElseThrow(() -> RestException.notFound("PPR plan not found: " + id));
     }
 
+    private PprPlan reloadPlan(UUID id) {
+        entityManager.clear();
+        return getPlan(id);
+    }
+
     private PprPlanDto toDto(PprPlan plan) {
         Map<UUID, String> departmentNames = resolveDepartmentNames(List.of(plan));
         List<PprTask> tasks = plan.getTasks();
@@ -367,8 +379,9 @@ public class PprPlanService {
                 plan,
                 departmentName(departmentNames, plan),
                 loadMaintenanceRuleById(tasks),
-                resolveEquipmentNames(tasks),
-                resolveRegulationNames(tasks)
+                resolveEquipmentNames(List.of(plan), tasks),
+                resolveEquipmentTypeNames(List.of(plan)),
+                resolveRegulationNames(List.of(plan), tasks)
         );
     }
 
@@ -376,14 +389,16 @@ public class PprPlanService {
         Map<UUID, String> departmentNames = resolveDepartmentNames(plans);
         List<PprTask> tasks = collectTasks(plans);
         Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
-        Map<UUID, String> equipmentNames = resolveEquipmentNames(tasks);
-        Map<UUID, String> regulationNames = resolveRegulationNames(tasks);
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(plans, tasks);
+        Map<UUID, String> equipmentTypeNames = resolveEquipmentTypeNames(plans);
+        Map<UUID, String> regulationNames = resolveRegulationNames(plans, tasks);
         return plans.stream()
                 .map(plan -> PprPlanDto.from(
                         plan,
                         departmentName(departmentNames, plan),
                         ruleById,
                         equipmentNames,
+                        equipmentTypeNames,
                         regulationNames
                 ))
                 .toList();
@@ -408,30 +423,52 @@ public class PprPlanService {
                 .collect(Collectors.toMap(EquipmentMaintenanceRule::getId, rule -> rule, (left, right) -> left));
     }
 
-    private Map<UUID, String> resolveEquipmentNames(List<PprTask> tasks) {
-        List<UUID> equipmentIds = tasks.stream()
-                .map(PprTask::getEquipmentId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
+    private Map<UUID, String> resolveEquipmentNames(List<PprPlan> plans, List<PprTask> tasks) {
+        List<UUID> equipmentIds = distinctUuidStream(java.util.stream.Stream.concat(
+                tasks.stream().map(PprTask::getEquipmentId),
+                plans.stream()
+                        .flatMap(plan -> plan.getTargets().stream())
+                        .map(PprPlanTarget::getEquipmentId)
+        ));
         if (equipmentIds.isEmpty()) {
             return Map.of();
         }
         return equipmentRepository.findAllByIdInAndIsDeletedFalse(equipmentIds).stream()
+                .filter(equipment -> equipment.getName() != null)
                 .collect(Collectors.toMap(Equipment::getId, Equipment::getName, (left, right) -> left));
     }
 
-    private Map<UUID, String> resolveRegulationNames(List<PprTask> tasks) {
-        List<UUID> regulationIds = tasks.stream()
-                .map(PprTask::getRegulationId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
+    private Map<UUID, String> resolveEquipmentTypeNames(List<PprPlan> plans) {
+        List<UUID> equipmentTypeIds = distinctUuidStream(plans.stream()
+                .flatMap(plan -> plan.getTargets().stream())
+                .map(PprPlanTarget::getEquipmentTypeId));
+        if (equipmentTypeIds.isEmpty()) {
+            return Map.of();
+        }
+        return equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(equipmentTypeIds).stream()
+                .filter(equipmentType -> equipmentType.getName() != null)
+                .collect(Collectors.toMap(EquipmentType::getId, EquipmentType::getName, (left, right) -> left));
+    }
+
+    private Map<UUID, String> resolveRegulationNames(List<PprPlan> plans, List<PprTask> tasks) {
+        List<UUID> regulationIds = distinctUuidStream(java.util.stream.Stream.concat(
+                tasks.stream().map(PprTask::getRegulationId),
+                plans.stream()
+                        .flatMap(plan -> plan.getTargets().stream())
+                        .map(PprPlanTarget::getRegulationId)
+        ));
         if (regulationIds.isEmpty()) {
             return Map.of();
         }
         return maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(regulationIds).stream()
+                .filter(regulation -> regulation.getName() != null)
                 .collect(Collectors.toMap(MaintenanceRegulation::getId, MaintenanceRegulation::getName, (left, right) -> left));
+    }
+
+    private List<UUID> distinctUuidStream(java.util.stream.Stream<UUID> ids) {
+        return ids.filter(Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     private String departmentName(Map<UUID, String> departmentNames, PprPlan plan) {
@@ -605,7 +642,7 @@ public class PprPlanService {
             applyPlanMutableFields(plan, request, true);
 
             try {
-                return planRepository.save(plan);
+                return planRepository.saveAndFlush(plan);
             } catch (DataIntegrityViolationException ex) {
                 if (isPlanCodeConflict(ex)) {
                     continue;
@@ -689,18 +726,21 @@ public class PprPlanService {
     }
 
     private void replacePlanTargets(PprPlan plan, PprPlanRequest request) {
-        if (request.equipmentIds() == null && request.equipmentTypeIds() == null) {
+        if (request.equipmentIds() == null && request.equipmentTypeIds() == null && request.regulationIds() == null) {
             return;
         }
 
         List<UUID> equipmentIds = distinctIds(request.equipmentIds());
         List<UUID> equipmentTypeIds = distinctIds(request.equipmentTypeIds());
+        List<UUID> regulationIds = distinctIds(request.regulationIds());
 
         validateNoDuplicateIds("equipmentIds", request.equipmentIds(), equipmentIds);
         validateNoDuplicateIds("equipmentTypeIds", request.equipmentTypeIds(), equipmentTypeIds);
+        validateNoDuplicateIds("regulationIds", request.regulationIds(), regulationIds);
 
         Map<UUID, Equipment> equipmentById = resolveEquipmentTargets(equipmentIds, plan.getDepartmentId());
         validateEquipmentTypeTargets(equipmentTypeIds);
+        validateRegulationTargets(regulationIds);
 
         plan.getTargets().clear();
         for (UUID equipmentId : equipmentIds) {
@@ -715,6 +755,13 @@ public class PprPlanService {
             target.setPlan(plan);
             target.setTargetType(PprTargetType.EQUIPMENT_TYPE);
             target.setEquipmentTypeId(equipmentTypeId);
+            plan.getTargets().add(target);
+        }
+        for (UUID regulationId : regulationIds) {
+            PprPlanTarget target = new PprPlanTarget();
+            target.setPlan(plan);
+            target.setTargetType(PprTargetType.REGULATION);
+            target.setRegulationId(regulationId);
             plan.getTargets().add(target);
         }
     }
@@ -773,6 +820,20 @@ public class PprPlanService {
         for (UUID equipmentTypeId : equipmentTypeIds) {
             if (!existingIds.contains(equipmentTypeId)) {
                 throw RestException.notFound("Equipment type not found: " + equipmentTypeId);
+            }
+        }
+    }
+
+    private void validateRegulationTargets(List<UUID> regulationIds) {
+        if (regulationIds.isEmpty()) {
+            return;
+        }
+        Set<UUID> existingIds = maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(regulationIds).stream()
+                .map(MaintenanceRegulation::getId)
+                .collect(Collectors.toSet());
+        for (UUID regulationId : regulationIds) {
+            if (!existingIds.contains(regulationId)) {
+                throw RestException.notFound("Maintenance regulation not found: " + regulationId);
             }
         }
     }

@@ -366,6 +366,7 @@ class PprPlanControllerContractTest {
         UUID createdById = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
         PprPlanDto plan = new PprPlanDto(
                 planId,
                 "PPR-2026-0002",
@@ -403,9 +404,10 @@ class PprPlanControllerContractTest {
                                   "frequency": "MONTHLY",
                                   "scopeType": "DEPARTMENT",
                                   "equipmentIds": ["%s"],
-                                  "equipmentTypeIds": ["%s"]
+                                  "equipmentTypeIds": ["%s"],
+                                  "regulationIds": ["%s"]
                                 }
-                                """.formatted(departmentId, createdById, equipmentId, equipmentTypeId)))
+                                """.formatted(departmentId, createdById, equipmentId, equipmentTypeId, regulationId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.pprType").value("PREVENTIVE_MAINTENANCE"))
                 .andExpect(jsonPath("$.scheduleType").value("CALENDAR"))
@@ -421,6 +423,7 @@ class PprPlanControllerContractTest {
         assertThat(captor.getValue().scopeType()).isEqualTo(PprScopeType.DEPARTMENT);
         assertThat(captor.getValue().equipmentIds()).containsExactly(equipmentId);
         assertThat(captor.getValue().equipmentTypeIds()).containsExactly(equipmentTypeId);
+        assertThat(captor.getValue().regulationIds()).containsExactly(regulationId);
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.toir.enums.PprFrequency;
 import com.toir.enums.PprScheduleType;
 import com.toir.enums.PprScopeType;
 import com.toir.enums.PprType;
+import com.toir.enums.PprTargetType;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -116,6 +117,15 @@ public record PprPlanDto(
                                   Map<UUID, EquipmentMaintenanceRule> ruleById,
                                   Map<UUID, String> equipmentNames,
                                   Map<UUID, String> regulationNames) {
+        return from(p, departmentName, ruleById, equipmentNames, Map.of(), regulationNames);
+    }
+
+    public static PprPlanDto from(PprPlan p,
+                                  String departmentName,
+                                  Map<UUID, EquipmentMaintenanceRule> ruleById,
+                                  Map<UUID, String> equipmentNames,
+                                  Map<UUID, String> equipmentTypeNames,
+                                  Map<UUID, String> regulationNames) {
         List<PprTaskDto> tasks = p.getTasks().stream()
                 .map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames))
                 .toList();
@@ -131,7 +141,20 @@ public record PprPlanDto(
                 p.getFrequency(),
                 p.getIntervalHours(),
                 p.getScopeType(),
-                p.getTargets().stream().map(PprPlanTargetDto::from).toList()
+                p.getTargets().stream()
+                        .map(target -> PprPlanTargetDto.from(
+                                target,
+                                target.getTargetType() == PprTargetType.EQUIPMENT
+                                        ? equipmentNames.get(target.getEquipmentId())
+                                        : null,
+                                target.getTargetType() == PprTargetType.EQUIPMENT_TYPE
+                                        ? equipmentTypeNames.get(target.getEquipmentTypeId())
+                                        : null,
+                                target.getTargetType() == PprTargetType.REGULATION
+                                        ? regulationNames.get(target.getRegulationId())
+                                        : null
+                        ))
+                        .toList()
         );
     }
 
