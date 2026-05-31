@@ -99,6 +99,23 @@ class PprPlanServiceListFilterTest {
     }
 
     @Test
+    void unpaginatedListReturnsPageWrapperWithAllMatchingPlans() {
+        PprPlan first = plan(2026, 5, UUID.randomUUID());
+        PprPlan second = plan(2026, 5, UUID.randomUUID());
+        when(planRepository.searchPlans(null, null, null, null)).thenReturn(List.of(first, second));
+
+        var result = service.findAllUnpaged(null, null, null, null);
+
+        assertThat(result.getContent()).extracting(PprPlanDto::id).containsExactly(first.getId(), second.getId());
+        assertThat(result.getNumber()).isEqualTo(0);
+        assertThat(result.getSize()).isEqualTo(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+        assertThat(result.isLast()).isTrue();
+        verify(planRepository).searchPlans(null, null, null, null);
+    }
+
+    @Test
     void listFiltersByDatePartsAndDepartmentId() {
         UUID departmentId = UUID.randomUUID();
         when(planRepository.searchPlans(2026, 5, 12, departmentId, PageRequest.of(0, 20)))

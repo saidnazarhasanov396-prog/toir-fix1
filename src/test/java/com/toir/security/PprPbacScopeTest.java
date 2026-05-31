@@ -87,7 +87,8 @@ class PprPbacScopeTest {
         UUID currentDepartmentId = UUID.randomUUID();
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
         when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(currentDepartmentId);
-        when(service.findAll(2026, 5, 12, currentDepartmentId)).thenReturn(List.of());
+        when(service.findAllUnpaged(2026, 5, 12, currentDepartmentId))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/ppr-plans")
                         .param("year", "2026")
@@ -96,7 +97,7 @@ class PprPbacScopeTest {
                         .param("departmentId", requestedDepartmentId.toString()))
                 .andExpect(status().isOk());
 
-        verify(service).findAll(2026, 5, 12, currentDepartmentId);
+        verify(service).findAllUnpaged(2026, 5, 12, currentDepartmentId);
     }
 
     @Test
@@ -136,12 +137,13 @@ class PprPbacScopeTest {
     void adminCanRequestGlobalList() throws Exception {
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(service.findAll(null, null, null, null)).thenReturn(List.of());
+        when(service.findAllUnpaged(null, null, null, null))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/ppr-plans"))
                 .andExpect(status().isOk());
 
-        verify(service).findAll(null, null, null, null);
+        verify(service).findAllUnpaged(null, null, null, null);
     }
 
     @Test

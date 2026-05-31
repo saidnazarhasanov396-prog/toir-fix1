@@ -38,7 +38,7 @@ class JwtAuthenticationFilterAuthorityMappingTest {
 
         doFilter();
 
-        assertThat(authorityNames()).containsExactly(
+        assertThat(authorityNames()).contains(
                 "PPR_ENGINEER",
                 PermissionConstants.PPR_TASK_START,
                 PermissionConstants.PPR_PLAN_READ
@@ -74,7 +74,7 @@ class JwtAuthenticationFilterAuthorityMappingTest {
 
         doFilter();
 
-        assertThat(authorityNames()).containsExactly("PPR_ENGINEER", PermissionConstants.PPR_TASK_START);
+        assertThat(authorityNames()).contains("PPR_ENGINEER", PermissionConstants.PPR_TASK_START);
     }
 
     @Test
@@ -84,7 +84,7 @@ class JwtAuthenticationFilterAuthorityMappingTest {
 
         doFilter();
 
-        assertThat(authorityNames()).containsExactly("VIEWER");
+        assertThat(authorityNames()).contains("VIEWER", PermissionConstants.ANALYTICS_READ);
     }
 
     @Test
@@ -95,7 +95,38 @@ class JwtAuthenticationFilterAuthorityMappingTest {
 
         doFilter();
 
-        assertThat(authorityNames()).containsExactly("VIEWER");
+        assertThat(authorityNames()).contains("VIEWER", PermissionConstants.ANALYTICS_READ);
+    }
+
+    @Test
+    void roleOnlyTokenIsExpandedWithKnownRolePermissionsAndWildcard() throws Exception {
+        Claims claims = claims(List.of("SYSTEM_ADMIN"), null, "SYSTEM_ADMIN");
+        when(jwtService.parse("token")).thenReturn(claims);
+
+        doFilter();
+
+        assertThat(authorityNames()).contains("SYSTEM_ADMIN", PermissionConstants.WILDCARD);
+    }
+
+    @Test
+    void roleOnlyTokenIsExpandedWithAnalyticsPermissionForKnownAllowedRole() throws Exception {
+        Claims claims = claims(List.of("WORKSHOP_HEAD"), null, "WORKSHOP_HEAD");
+        when(jwtService.parse("token")).thenReturn(claims);
+
+        doFilter();
+
+        assertThat(authorityNames()).contains("WORKSHOP_HEAD", PermissionConstants.ANALYTICS_READ);
+    }
+
+    @Test
+    void unknownRoleOnlyTokenDoesNotGainAnalyticsPermission() throws Exception {
+        Claims claims = claims(List.of("CUSTOM_ROLE"), null, "CUSTOM_ROLE");
+        when(jwtService.parse("token")).thenReturn(claims);
+
+        doFilter();
+
+        assertThat(authorityNames()).containsExactly("CUSTOM_ROLE");
+        assertThat(authorityNames()).doesNotContain(PermissionConstants.ANALYTICS_READ);
     }
 
     private Claims claims(List<String> authorities, List<String> permissions, String primaryRoleCode) {

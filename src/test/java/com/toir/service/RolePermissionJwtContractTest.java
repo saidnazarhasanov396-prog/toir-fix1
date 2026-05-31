@@ -197,12 +197,15 @@ class RolePermissionJwtContractTest {
     }
 
     private void assertJwtPermissionsContain(String... permissions) {
+        ArgumentCaptor<List<String>> authoritiesCaptor = ArgumentCaptor.captor();
         ArgumentCaptor<Map<String, Object>> extraClaimsCaptor = ArgumentCaptor.captor();
-        verify(jwtService).generateToken(anyString(), eq("role-user"), any(), extraClaimsCaptor.capture());
+        verify(jwtService).generateToken(anyString(), eq("role-user"), authoritiesCaptor.capture(), extraClaimsCaptor.capture());
         @SuppressWarnings("unchecked")
         List<Object> jwtPermissions = (List<Object>) extraClaimsCaptor.getValue().get("permissions");
         assertThat(jwtPermissions)
                 .contains((Object[]) permissions);
+        assertThat(authoritiesCaptor.getValue())
+                .contains(permissions);
         verify(auditLogService).record(
                 any(UUID.class),
                 eq(AuditModule.USERS),
