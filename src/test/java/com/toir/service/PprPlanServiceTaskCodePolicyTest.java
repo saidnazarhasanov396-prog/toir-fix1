@@ -15,6 +15,7 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -58,6 +59,9 @@ class PprPlanServiceTaskCodePolicyTest {
     @Mock
     AuditSerializationService auditSerializationService;
 
+    @Mock
+    EntityManager entityManager;
+
     @InjectMocks
     PprPlanService service;
 
@@ -69,11 +73,12 @@ class PprPlanServiceTaskCodePolicyTest {
 
         when(planRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
         when(planRepository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
-        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> {
+        when(planRepository.saveAndFlush(any(PprPlan.class))).thenAnswer(invocation -> {
             PprPlan plan = invocation.getArgument(0);
             plan.setId(UUID.randomUUID());
             return plan;
         });
+        when(planRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> Optional.of(planFromId(invocation.getArgument(0), expectedCode)));
 
         PprPlanDto created = service.create(planRequest());
 
@@ -91,11 +96,12 @@ class PprPlanServiceTaskCodePolicyTest {
         when(planRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
         when(planRepository.existsByCodeAndIsDeletedFalse(firstCandidate)).thenReturn(true);
         when(planRepository.existsByCodeAndIsDeletedFalse(secondCandidate)).thenReturn(false);
-        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> {
+        when(planRepository.saveAndFlush(any(PprPlan.class))).thenAnswer(invocation -> {
             PprPlan plan = invocation.getArgument(0);
             plan.setId(UUID.randomUUID());
             return plan;
         });
+        when(planRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> Optional.of(planFromId(invocation.getArgument(0), secondCandidate)));
 
         PprPlanDto created = service.create(planRequest());
 
@@ -114,7 +120,7 @@ class PprPlanServiceTaskCodePolicyTest {
         when(planRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
         when(planRepository.existsByCodeAndIsDeletedFalse(firstCandidate)).thenReturn(false);
         when(planRepository.existsByCodeAndIsDeletedFalse(secondCandidate)).thenReturn(false);
-        when(planRepository.save(any(PprPlan.class)))
+        when(planRepository.saveAndFlush(any(PprPlan.class)))
                 .thenThrow(new DataIntegrityViolationException(
                         "duplicate key value violates unique constraint \"ppr_plans_code_key\""))
                 .thenAnswer(invocation -> {
@@ -122,11 +128,12 @@ class PprPlanServiceTaskCodePolicyTest {
                     plan.setId(UUID.randomUUID());
                     return plan;
                 });
+        when(planRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> Optional.of(planFromId(invocation.getArgument(0), secondCandidate)));
 
         PprPlanDto created = service.create(planRequest());
 
         assertThat(created.code()).isEqualTo(secondCandidate);
-        verify(planRepository, times(2)).save(any(PprPlan.class));
+        verify(planRepository, times(2)).saveAndFlush(any(PprPlan.class));
     }
 
     @Test
@@ -136,11 +143,12 @@ class PprPlanServiceTaskCodePolicyTest {
 
         when(planRepository.maxSequenceByCodePrefix("PPR-" + year + "-")).thenReturn(0L);
         when(planRepository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
-        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> {
+        when(planRepository.saveAndFlush(any(PprPlan.class))).thenAnswer(invocation -> {
             PprPlan plan = invocation.getArgument(0);
             plan.setId(UUID.randomUUID());
             return plan;
         });
+        when(planRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> Optional.of(planFromId(invocation.getArgument(0), expectedCode)));
 
         PprPlanDto created = service.create(planRequest());
 
@@ -350,6 +358,7 @@ class PprPlanServiceTaskCodePolicyTest {
         plan.setId(id);
         plan.setStatus(status);
         plan.setTasks(new ArrayList<>());
+        plan.setTargets(new ArrayList<>());
         return plan;
     }
 
@@ -395,5 +404,15 @@ class PprPlanServiceTaskCodePolicyTest {
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 30)
         );
+    }
+
+    private PprPlan planFromId(UUID id, String code) {
+        PprPlan plan = plan(id);
+        plan.setCode(code);
+        plan.setName("June plan");
+        plan.setNotes("Planned maintenance");
+        plan.setStartDate(LocalDate.of(2026, 6, 1));
+        plan.setEndDate(LocalDate.of(2026, 6, 30));
+        return plan;
     }
 }

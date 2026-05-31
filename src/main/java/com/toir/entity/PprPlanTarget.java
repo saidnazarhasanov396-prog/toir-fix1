@@ -39,4 +39,7 @@ public class PprPlanTarget extends BaseEntity {
 
     @Column(name = "equipment_type_id")
     private UUID equipmentTypeId;
+
+    @Column(name = "regulation_id")
+    private UUID regulationId;
 }

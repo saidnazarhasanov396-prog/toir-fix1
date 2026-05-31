@@ -40,4 +40,20 @@ class PprPlanTypeScheduleTargetsMigrationContractTest {
         assertThat(sql).doesNotContain("schedule_type varchar(64) not null");
         assertThat(sql).doesNotContain("scope_type varchar(64) not null");
     }
+
+    @Test
+    void migrationAddsRegulationPlanTargets() throws Exception {
+        Path migration = Path.of(
+                "src/main/resources/db/migration/V20260531_1__ppr_plan_regulation_targets.sql"
+        );
+
+        assertThat(Files.exists(migration)).isTrue();
+        String sql = Files.readString(migration).toLowerCase();
+
+        assertThat(sql).contains("add column if not exists regulation_id uuid");
+        assertThat(sql).contains("references maintenance_regulations(id)");
+        assertThat(sql).contains("target_type = 'regulation'");
+        assertThat(sql).contains("idx_ppr_plan_targets_regulation");
+        assertThat(sql).contains("uq_ppr_plan_targets_active_regulation");
+    }
 }
