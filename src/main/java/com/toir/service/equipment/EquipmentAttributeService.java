@@ -479,7 +479,8 @@ public class EquipmentAttributeService {
                 .map(definition -> EquipmentAttributeValueDto.from(
                         definition,
                         valuesByDefinitionId.get(definition.getId()),
-                        equipment.getId()
+                        equipment.getId(),
+                        resolveUnit(definition.getUnit())
                 ))
                 .toList();
     }

@@ -193,6 +193,7 @@ class VehicleControllerContractTest {
         mockMvc.perform(get("/api/v1/vehicles/{equipmentId}", equipmentId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.attributes[0].key").value("payload_capacity"))
+                .andExpect(jsonPath("$.attributes[0].unit.name").value("kg"))
                 .andExpect(jsonPath("$.attributes[0].valueNumber").value(12000.0));
 
         verify(service).findByEquipmentId(equipmentId);

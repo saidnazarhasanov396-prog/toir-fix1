@@ -743,7 +743,7 @@ class EquipmentControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.attributes").isArray())
                 .andExpect(jsonPath("$.attributes[0].key").value("motor_power"))
-                .andExpect(jsonPath("$.attributes[0].unit").value("kW"))
+                .andExpect(jsonPath("$.attributes[0].unit.name").value("kW"))
                 .andExpect(jsonPath("$.attributes[0].valueNumber").value(75.0));
     }
 
