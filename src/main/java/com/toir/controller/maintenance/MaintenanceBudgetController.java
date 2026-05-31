@@ -1,4 +1,5 @@
 package com.toir.controller.maintenance;
+
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.security.RequiresSensitiveAccess;
@@ -29,11 +30,16 @@ public class MaintenanceBudgetController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_READ')")
-    public ResponseEntity<Page<MaintenanceBudgetDto>> list(@RequestParam int year, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findByYear(year), page, size)); }
+    public ResponseEntity<Page<MaintenanceBudgetDto>> list(@RequestParam int year,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByYear(year), page, size));
+    }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_READ')")
-    public ResponseEntity<MaintenanceBudgetDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
+    public ResponseEntity<MaintenanceBudgetDto> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.findById(id));
+    }
 
     @PostMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_CREATE')")
@@ -44,7 +50,7 @@ public class MaintenanceBudgetController {
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_APPROVE')")
     public ResponseEntity<MaintenanceBudgetDto> approve(@PathVariable UUID id,
-                                                        @RequestParam(required = false) UUID approverId) {
+            @RequestParam(required = false) UUID approverId) {
         MaintenanceBudgetDto current = service.validateCanApprove(id);
         approvalService.createOrReuseApprovalForDocument(
                 "MAINTENANCE_BUDGET",
@@ -53,8 +59,7 @@ public class MaintenanceBudgetController {
                 approverId,
                 "BUDGET_APPROVER",
                 "Maintenance budget approval: " + current.year() + "/" + current.month(),
-                "Approval workflow request for maintenance budget " + current.id()
-        );
+                "Approval workflow request for maintenance budget " + current.id());
         return ResponseEntity.ok(service.findById(id));
     }
 

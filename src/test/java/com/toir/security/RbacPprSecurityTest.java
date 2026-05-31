@@ -79,8 +79,7 @@ class RbacPprSecurityTest {
     @MockBean
     ScopeAccessService scopeAccessService;
 
-    @MockBean
-    ApprovalService approvalService;
+
 
     @BeforeEach
     void setUpPbacBypass() {
@@ -204,7 +203,7 @@ class RbacPprSecurityTest {
     void pprPlanApproveCanApprovePlan() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();
-        when(pprPlanService.findById(planId)).thenReturn(planDto(planId));
+        when(pprPlanService.approve(planId, approverId)).thenReturn(planDto(planId));
 
         mockMvc.perform(post("/api/v1/ppr-plans/{id}/approve", planId)
                         .param("approverId", approverId.toString()))

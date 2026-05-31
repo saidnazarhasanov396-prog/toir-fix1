@@ -100,8 +100,7 @@ public class WorkOrderController {
                 approverId,
                 "WORK_ORDER_APPROVER",
                 "Work order approval: " + workOrder.getNumber(),
-                "Approval workflow request for work order " + workOrder.getNumber()
-        );
+                "Approval workflow request for work order " + workOrder.getNumber());
         return ResponseEntity.ok(service.findById(id));
     }
 

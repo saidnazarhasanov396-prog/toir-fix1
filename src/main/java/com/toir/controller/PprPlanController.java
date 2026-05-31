@@ -14,13 +14,13 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
-import com.toir.service.ApprovalService;
+
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,66 +34,57 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/ppr-plans")
 @Tag(name = "ppr-plans")
-@RequiredArgsConstructor
 public class PprPlanController {
 
-    private static final String PPR_PLAN_READ_AUTH =
-            "hasAnyAuthority('read','PPR_PLAN_READ','SYSTEM_ADMIN','*')";
-    private static final String PPR_PLAN_CREATE_AUTH =
-            "hasAnyAuthority('PPR_PLAN_CREATE','SYSTEM_ADMIN','*')";
-    private static final String PPR_PLAN_UPDATE_AUTH =
-            "hasAnyAuthority('PPR_PLAN_UPDATE','SYSTEM_ADMIN','*')";
-    private static final String PPR_PLAN_DELETE_AUTH =
-            "hasAnyAuthority('PPR_PLAN_DELETE','SYSTEM_ADMIN','*')";
-    private static final String PPR_PLAN_APPROVE_AUTH =
-            "hasAnyAuthority('PPR_PLAN_APPROVE','SYSTEM_ADMIN','*')";
-    private static final String PPR_PLAN_GENERATE_AUTH =
-            "hasAnyAuthority('PPR_PLAN_GENERATE','SYSTEM_ADMIN','*')";
-    private static final String PPR_WORK_ORDER_GENERATE_AUTH =
-            "(" + PPR_PLAN_GENERATE_AUTH + ")"
-                    + " and hasAnyAuthority('WORK_ORDER_CREATE','SYSTEM_ADMIN','*')"
-                    + " and (hasAuthority('SYSTEM_ADMIN') or (!hasAuthority('VIEWER') and !hasAuthority('CONTRACTOR')))";
-    private static final String PPR_TASK_READ_AUTH =
-            "hasAnyAuthority('PPR_TASK_READ','SYSTEM_ADMIN','*')";
-    private static final String PPR_TASK_CREATE_AUTH =
-            "hasAnyAuthority('PPR_TASK_CREATE','SYSTEM_ADMIN','*')";
-    private static final String PPR_TASK_POSTPONE_AUTH =
-            "hasAnyAuthority('PPR_TASK_POSTPONE','SYSTEM_ADMIN','*')";
-    private static final String PPR_TASK_APPROVE_AUTH =
-            "hasAnyAuthority('PPR_TASK_APPROVE','SYSTEM_ADMIN','*')";
-    private static final String PPR_TASK_START_AUTH =
-            "hasAnyAuthority('PPR_TASK_START','SYSTEM_ADMIN','*')";
-    private static final String PPR_TASK_COMPLETE_AUTH =
-            "hasAnyAuthority('PPR_TASK_COMPLETE','SYSTEM_ADMIN','*')";
-    private static final String PPR_TASK_CANCEL_AUTH =
-            "hasAnyAuthority('PPR_TASK_CANCEL','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_READ_AUTH = "hasAnyAuthority('read','PPR_PLAN_READ','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_CREATE_AUTH = "hasAnyAuthority('PPR_PLAN_CREATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_UPDATE_AUTH = "hasAnyAuthority('PPR_PLAN_UPDATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_DELETE_AUTH = "hasAnyAuthority('PPR_PLAN_DELETE','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_APPROVE_AUTH = "hasAnyAuthority('PPR_PLAN_APPROVE','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_GENERATE_AUTH = "hasAnyAuthority('PPR_PLAN_GENERATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_WORK_ORDER_GENERATE_AUTH = "(" + PPR_PLAN_GENERATE_AUTH + ")"
+            + " and hasAnyAuthority('WORK_ORDER_CREATE','SYSTEM_ADMIN','*')"
+            + " and (hasAuthority('SYSTEM_ADMIN') or (!hasAuthority('VIEWER') and !hasAuthority('CONTRACTOR')))";
+    private static final String PPR_TASK_READ_AUTH = "hasAnyAuthority('PPR_TASK_READ','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_CREATE_AUTH = "hasAnyAuthority('PPR_TASK_CREATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_POSTPONE_AUTH = "hasAnyAuthority('PPR_TASK_POSTPONE','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_APPROVE_AUTH = "hasAnyAuthority('PPR_TASK_APPROVE','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_START_AUTH = "hasAnyAuthority('PPR_TASK_START','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_COMPLETE_AUTH = "hasAnyAuthority('PPR_TASK_COMPLETE','SYSTEM_ADMIN','*')";
+    private static final String PPR_TASK_CANCEL_AUTH = "hasAnyAuthority('PPR_TASK_CANCEL','SYSTEM_ADMIN','*')";
 
     private final PprPlanService service;
-    private final ApprovalService approvalService;
     private final PprGeneratorService generatorService;
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
     private final ScopeAccessService scopeAccessService;
 
+    @Autowired
+    public PprPlanController(PprPlanService service,
+                             PprGeneratorService generatorService,
+                             PprPlanRepository planRepository,
+                             PprTaskRepository taskRepository,
+                             ScopeAccessService scopeAccessService) {
+        this.service = service;
+        this.generatorService = generatorService;
+        this.planRepository = planRepository;
+        this.taskRepository = taskRepository;
+        this.scopeAccessService = scopeAccessService;
+    }
+
     @GetMapping
     @PreAuthorize(PPR_PLAN_READ_AUTH)
-    @Operation(
-            summary = "List PPR plans",
-            description = "Always returns a paginated response wrapper with data in content. "
-                    + "When both page and size are provided, returns the existing paginated response. "
-                    + "When both are omitted, returns all matching PPR plans in the same wrapper. "
-                    + "Providing only one pagination parameter is rejected."
-    )
+    @Operation(summary = "List PPR plans", description = "Always returns a paginated response wrapper with data in content. "
+            + "When both page and size are provided, returns the existing paginated response. "
+            + "When both are omitted, returns all matching PPR plans in the same wrapper. "
+            + "Providing only one pagination parameter is rejected.")
     public ResponseEntity<Page<PprPlanDto>> list(
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer day,
             @RequestParam(required = false) UUID departmentId,
-            @Parameter(description = "Optional page index. Must be provided together with size. Omit both page and size to return all matching plans in the same response wrapper.")
-            @RequestParam(required = false) Integer page,
-            @Parameter(description = "Optional page size. Must be provided together with page. Omit both page and size to return all matching plans in the same response wrapper.")
-            @RequestParam(required = false) Integer size
-    ) {
+            @Parameter(description = "Optional page index. Must be provided together with size. Omit both page and size to return all matching plans in the same response wrapper.") @RequestParam(required = false) Integer page,
+            @Parameter(description = "Optional page size. Must be provided together with page. Omit both page and size to return all matching plans in the same response wrapper.") @RequestParam(required = false) Integer size) {
         UUID scopedDepartmentId = scopedDepartment(departmentId);
         if (page == null && size == null) {
             return ResponseEntity.ok(service.findAllUnpaged(year, month, day, scopedDepartmentId));
@@ -110,8 +101,7 @@ public class PprPlanController {
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer day,
-            @RequestParam(required = false) UUID departmentId
-    ) {
+            @RequestParam(required = false) UUID departmentId) {
         return ResponseEntity.ok(service.getStats(year, month, day, scopedDepartment(departmentId)));
     }
 
@@ -150,20 +140,7 @@ public class PprPlanController {
     public ResponseEntity<PprPlanDto> approve(@PathVariable UUID id, @RequestParam UUID approverId) {
         PprPlan plan = planOrThrow(id);
         assertCanAccessPlan(plan);
-        if (plan.getStatus() != com.toir.enums.PlanStatus.DRAFT
-                && plan.getStatus() != com.toir.enums.PlanStatus.GENERATED) {
-            throw RestException.badRequest("Only DRAFT/GENERATED plans can be approved");
-        }
-        approvalService.createOrReuseApprovalForDocument(
-                "PPR_PLAN",
-                id,
-                approverId,
-                approverId,
-                "PPR_PLAN_APPROVER",
-                "PPR plan approval: " + plan.getCode(),
-                "Approval workflow request for PPR plan " + plan.getCode()
-        );
-        return ResponseEntity.ok(service.findById(id));
+        return ResponseEntity.ok(service.approve(id, approverId));
     }
 
     @PostMapping("/{id}/generate")
@@ -177,15 +154,15 @@ public class PprPlanController {
     @PreAuthorize(PPR_WORK_ORDER_GENERATE_AUTH)
     public ResponseEntity<PprGeneratorService.WorkOrderGenerationResult> generateWorkOrders(
             @PathVariable UUID id,
-            @RequestParam UUID createdById
-    ) {
+            @RequestParam UUID createdById) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(generatorService.generateWorkOrdersForPlan(id, createdById));
     }
 
     @GetMapping("/{id}/tasks")
     @PreAuthorize(PPR_TASK_READ_AUTH)
-    public ResponseEntity<Page<PprTaskDto>> tasks(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+    public ResponseEntity<Page<PprTaskDto>> tasks(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(PaginationUtils.page(service.findTasksByPlan(id), page, size));
     }
@@ -199,7 +176,8 @@ public class PprPlanController {
 
     @PostMapping("/tasks/{taskId}/postpone")
     @PreAuthorize(PPR_TASK_POSTPONE_AUTH)
-    public ResponseEntity<PprTaskDto> postponeTask(@PathVariable UUID taskId, @Valid @RequestBody PostponeTaskRequest request) {
+    public ResponseEntity<PprTaskDto> postponeTask(@PathVariable UUID taskId,
+            @Valid @RequestBody PostponeTaskRequest request) {
         assertCanAccessTask(taskOrThrow(taskId));
         return ResponseEntity.ok(service.postponeTask(taskId, request));
     }
@@ -222,8 +200,7 @@ public class PprPlanController {
     @PreAuthorize(PPR_TASK_COMPLETE_AUTH)
     public ResponseEntity<PprTaskDto> completeTask(
             @PathVariable UUID taskId,
-            @RequestParam(required = false) Double actualLaborHours
-    ) {
+            @RequestParam(required = false) Double actualLaborHours) {
         assertCanAccessTask(taskOrThrow(taskId));
         return ResponseEntity.ok(service.completeTask(taskId, actualLaborHours));
     }
@@ -232,8 +209,7 @@ public class PprPlanController {
     @PreAuthorize(PPR_TASK_CANCEL_AUTH)
     public ResponseEntity<PprTaskDto> cancelTask(
             @PathVariable UUID taskId,
-            @RequestParam(required = false) String reason
-    ) {
+            @RequestParam(required = false) String reason) {
         assertCanAccessTask(taskOrThrow(taskId));
         return ResponseEntity.ok(service.cancelTask(taskId, reason));
     }

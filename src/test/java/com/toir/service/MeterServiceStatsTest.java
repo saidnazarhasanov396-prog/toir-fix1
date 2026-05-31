@@ -8,6 +8,7 @@ import com.toir.repository.MeterReadingRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.MeterStatsProjection;
+import com.toir.repository.users.UserRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,8 @@ class MeterServiceStatsTest {
     MeterReadingRepository readingRepository;
     @Mock
     EquipmentRepository equipmentRepository;
+    @Mock
+    UserRepository userRepository;
     @Mock
     AuditBuilderService auditBuilderService;
     @Mock
@@ -151,13 +154,13 @@ class MeterServiceStatsTest {
     private MeterReading reading(UUID id, String note) {
         MeterReading reading = new MeterReading();
         reading.setId(id);
-        reading.setMeterId(UUID.randomUUID());
-        reading.setEquipmentId(UUID.randomUUID());
+        reading.setMeterId(null);
+        reading.setEquipmentId(null);
         reading.setValue(125.5);
         reading.setDelta(5.5);
         reading.setReadAt(Instant.parse("2026-05-31T07:55:00Z"));
         reading.setSource(MeterSource.MANUAL);
-        reading.setRecordedByUserId(UUID.randomUUID());
+        reading.setRecordedByUserId(null);
         reading.setDeviceId("tablet-1");
         reading.setNote(note);
         reading.setCreatedAt(Instant.parse("2026-05-31T08:00:00Z"));
