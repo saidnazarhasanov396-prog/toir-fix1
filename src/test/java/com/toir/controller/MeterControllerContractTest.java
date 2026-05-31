@@ -117,6 +117,9 @@ class MeterControllerContractTest {
                 Instant.parse("2026-05-31T07:55:00Z"),
                 MeterSource.MANUAL,
                 UUID.randomUUID(),
+                "John Doe",
+                "Water Meter",
+                "Pump 1",
                 "tablet-1",
                 "shift reading",
                 createdAt
