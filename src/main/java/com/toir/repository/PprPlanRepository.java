@@ -152,18 +152,4 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             @Param("day") Integer day,
             @Param("departmentId") UUID departmentId
     );
-
-    @Query(value = """
-            SELECT
-                p.id AS "planId",
-                COUNT(t.id) AS "taskCount"
-            FROM ppr_plans p
-            LEFT JOIN ppr_tasks t
-                ON t.plan_id = p.id
-               AND t.is_deleted = false
-            WHERE p.id IN (:planIds)
-              AND p.is_deleted = false
-            GROUP BY p.id
-            """, nativeQuery = true)
-    List<PprPlanTaskCountProjection> countTasksByPlanIds(@Param("planIds") Collection<UUID> planIds);
 }

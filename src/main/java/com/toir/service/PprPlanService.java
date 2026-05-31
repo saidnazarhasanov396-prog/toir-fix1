@@ -20,7 +20,6 @@ import com.toir.enums.PprType;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprPlanStatsProjection;
-import com.toir.repository.PprPlanTaskCountProjection;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -102,12 +101,16 @@ public class PprPlanService {
                         PaginationUtils.pageRequest(page, size)
                 );
         Map<UUID, String> departmentNames = resolveDepartmentNames(plans.getContent());
-        Map<UUID, Long> taskCounts = resolveTaskCounts(plans.getContent());
+        List<PprTask> tasks = collectTasks(plans.getContent());
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(tasks);
+        Map<UUID, String> regulationNames = resolveRegulationNames(tasks);
+        Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
         return plans.map(plan -> PprPlanDto.from(
                 plan,
                 departmentName(departmentNames, plan),
-                0,
-                taskCounts
+                ruleById,
+                equipmentNames,
+                regulationNames
         ));
     }
 
@@ -359,24 +362,36 @@ public class PprPlanService {
 
     private PprPlanDto toDto(PprPlan plan) {
         Map<UUID, String> departmentNames = resolveDepartmentNames(List.of(plan));
+        List<PprTask> tasks = plan.getTasks();
         return PprPlanDto.from(
                 plan,
                 departmentName(departmentNames, plan),
-                0,
-                resolveTaskCounts(List.of(plan))
+                loadMaintenanceRuleById(tasks),
+                resolveEquipmentNames(tasks),
+                resolveRegulationNames(tasks)
         );
     }
 
     private List<PprPlanDto> toDtos(List<PprPlan> plans) {
         Map<UUID, String> departmentNames = resolveDepartmentNames(plans);
-        Map<UUID, Long> taskCounts = resolveTaskCounts(plans);
+        List<PprTask> tasks = collectTasks(plans);
+        Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(tasks);
+        Map<UUID, String> regulationNames = resolveRegulationNames(tasks);
         return plans.stream()
                 .map(plan -> PprPlanDto.from(
                         plan,
                         departmentName(departmentNames, plan),
-                        0,
-                        taskCounts
+                        ruleById,
+                        equipmentNames,
+                        regulationNames
                 ))
+                .toList();
+    }
+
+    private List<PprTask> collectTasks(List<PprPlan> plans) {
+        return plans.stream()
+                .flatMap(plan -> plan.getTasks().stream())
                 .toList();
     }
 
@@ -417,27 +432,6 @@ public class PprPlanService {
         }
         return maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(regulationIds).stream()
                 .collect(Collectors.toMap(MaintenanceRegulation::getId, MaintenanceRegulation::getName, (left, right) -> left));
-    }
-
-    private Map<UUID, Long> resolveTaskCounts(List<PprPlan> plans) {
-        List<UUID> planIds = plans.stream()
-                .map(PprPlan::getId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        if (planIds.isEmpty()) {
-            return Map.of();
-        }
-        List<PprPlanTaskCountProjection> counts = planRepository.countTasksByPlanIds(planIds);
-        if (counts == null || counts.isEmpty()) {
-            return Map.of();
-        }
-        return counts.stream()
-                .collect(Collectors.toMap(
-                        PprPlanTaskCountProjection::getPlanId,
-                        projection -> safe(projection.getTaskCount()),
-                        (left, right) -> left
-                ));
     }
 
     private String departmentName(Map<UUID, String> departmentNames, PprPlan plan) {
