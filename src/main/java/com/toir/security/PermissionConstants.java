@@ -115,6 +115,10 @@ public final class PermissionConstants {
     public static final String METER_DELETE = "METER_DELETE";
     public static final String METER_READING_CREATE = "METER_READING_CREATE";
     public static final String METER_READING_DELETE = "METER_READING_DELETE";
+    public static final String CALIBRATION_RECORD_READ = "CALIBRATION_RECORD_READ";
+    public static final String CALIBRATION_RECORD_CREATE = "CALIBRATION_RECORD_CREATE";
+    public static final String CALIBRATION_RECORD_UPDATE = "CALIBRATION_RECORD_UPDATE";
+    public static final String CALIBRATION_RECORD_DELETE = "CALIBRATION_RECORD_DELETE";
     public static final String EMPLOYEE_READ = "EMPLOYEE_READ";
     public static final String EMPLOYEE_CREATE = "EMPLOYEE_CREATE";
     public static final String EMPLOYEE_UPDATE = "EMPLOYEE_UPDATE";
