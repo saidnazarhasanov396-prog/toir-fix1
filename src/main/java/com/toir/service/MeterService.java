@@ -208,10 +208,10 @@ public class MeterService {
 
     @Transactional(readOnly = true)
     public List<MeterReadingDto> history(UUID meterId, int limit) {
-        return readingRepository
+        List<MeterReading> content = readingRepository
                         .findAllByMeterIdAndIsDeletedFalseOrderByReadAtDesc(meterId, PaginationUtils.pageRequest(0, limit))
-                        .getContent()
-                .stream().map(MeterReadingDto::from).toList();
+                        .getContent();
+        return enrichReadings(content);
     }
 
     @Transactional(readOnly = true)
@@ -226,20 +226,21 @@ public class MeterService {
         String safeSort = normalizeReadingSort(requestedSort);
         String safeDirection = "asc".equalsIgnoreCase(requestedDirection) ? "asc" : "desc";
         String normalizedSearch = search == null || search.isBlank() ? null : search.trim();
-        return readingRepository.searchReadings(
+        Page<MeterReading> pageResult = readingRepository.searchReadings(
                         normalizedSearch,
                         safeSort,
                         safeDirection,
                         PaginationUtils.pageRequest(page, size)
-                )
-                .map(MeterReadingDto::from);
+                );
+        List<MeterReadingDto> enriched = enrichReadings(pageResult.getContent());
+        return new org.springframework.data.domain.PageImpl<>(enriched, pageResult.getPageable(), pageResult.getTotalElements());
     }
 
     @Transactional(readOnly = true)
     public List<MeterReadingDto> historyBetween(UUID meterId, Instant from, Instant to) {
         getMeterOrThrow(meterId);
-        return readingRepository.findAllByMeterIdAndReadAtBetweenAndIsDeletedFalseOrderByReadAtAsc(meterId, from, to)
-                .stream().map(MeterReadingDto::from).toList();
+        List<MeterReading> list = readingRepository.findAllByMeterIdAndReadAtBetweenAndIsDeletedFalseOrderByReadAtAsc(meterId, from, to);
+        return enrichReadings(list);
     }
 
     @Transactional
