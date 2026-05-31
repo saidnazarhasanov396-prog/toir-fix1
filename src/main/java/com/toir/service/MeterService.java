@@ -209,7 +209,7 @@ public class MeterService {
     @Transactional(readOnly = true)
     public List<MeterReadingDto> history(UUID meterId, int limit) {
         return readingRepository
-                        .findAllByMeterIdAndIsDeletedFalseOrderByReadAtDesc(meterId, PaginationUtils.pageRequest(0, safeLimit))
+                        .findAllByMeterIdAndIsDeletedFalseOrderByReadAtDesc(meterId, PaginationUtils.pageRequest(0, limit))
                         .getContent()
                 .stream().map(MeterReadingDto::from).toList();
     }
