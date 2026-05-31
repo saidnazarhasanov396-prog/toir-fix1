@@ -1,7 +1,6 @@
 package com.toir.dto.pprplanning;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.toir.enums.PlanStatus;
 import com.toir.entity.PprPlan;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
@@ -25,7 +24,6 @@ public record PprPlanDto(
         UUID createdById,
         UUID approvedById,
         String notes,
-        @JsonIgnore
         List<PprTaskDto> tasks,
         long taskCount,
         @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
