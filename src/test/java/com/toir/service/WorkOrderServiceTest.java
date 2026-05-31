@@ -650,6 +650,22 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void detailIncludesUpdatedAt() {
+        UUID workOrderId = UUID.randomUUID();
+        java.time.Instant updatedAt = java.time.Instant.parse("2026-05-31T12:00:00Z");
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        workOrder.setUpdatedAt(updatedAt);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(workExecutionRepository.countByWorkOrderIds(List.of(workOrderId))).thenReturn(List.of());
+        when(repairMaterialUsageRepository.countByWorkOrderIds(List.of(workOrderId))).thenReturn(List.of());
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.findById(workOrderId);
+
+        assertThat(response.updatedAt()).isEqualTo(updatedAt);
+    }
+
+    @Test
     void listBatchEnrichmentDoesNotNPlusOne() {
         UUID repairRequestId = UUID.randomUUID();
         UUID defectId = UUID.randomUUID();

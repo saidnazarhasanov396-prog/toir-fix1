@@ -58,4 +58,10 @@ class TriadSchemaModelContractTest {
         assertThat(Arrays.stream(WorkOrderDto.class.getDeclaredMethods()).map(m -> m.getName()))
                 .contains("equipmentNodeId");
     }
+
+    @Test
+    void workOrderDtoMustExposeUpdatedAt() {
+        assertThat(Arrays.stream(WorkOrderDto.class.getDeclaredMethods()).map(m -> m.getName()))
+                .contains("updatedAt");
+    }
 }
