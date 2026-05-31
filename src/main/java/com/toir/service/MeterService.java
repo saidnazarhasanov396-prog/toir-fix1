@@ -4,6 +4,7 @@ import com.toir.dto.meter.*;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.equipment.MeterReading;
+import com.toir.entity.users.User;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.MeterType;
@@ -11,6 +12,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.MeterReadingRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -21,7 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +38,7 @@ public class MeterService {
     private final EquipmentMeterRepository meterRepository;
     private final MeterReadingRepository readingRepository;
     private final EquipmentRepository equipmentRepository;
+    private final UserRepository userRepository;
     private final AuditBuilderService auditBuilderService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
@@ -196,13 +203,11 @@ public class MeterService {
                 savedMeter
         );
 
-        return MeterReadingDto.from(saved);
+        return enrichReading(saved);
     }
 
     @Transactional(readOnly = true)
     public List<MeterReadingDto> history(UUID meterId, int limit) {
-        getMeterOrThrow(meterId);
-        int safeLimit = Math.min(Math.max(limit, 1), 1000);
         return readingRepository
                         .findAllByMeterIdAndIsDeletedFalseOrderByReadAtDesc(meterId, PaginationUtils.pageRequest(0, safeLimit))
                         .getContent()
@@ -278,5 +283,70 @@ public class MeterService {
             return trimmed;
         }
         throw RestException.badRequest("Unsupported meter reading sort: " + sort);
+    }
+
+    private MeterReadingDto enrichReading(MeterReading r) {
+        if (r == null) return null;
+        String userName = r.getRecordedByUserId() == null ? null :
+                userRepository.findByIdAndIsDeletedFalse(r.getRecordedByUserId())
+                        .map(User::getFullName)
+                        .orElse(null);
+        String meterName = r.getMeterId() == null ? null :
+                meterRepository.findByIdAndIsDeletedFalse(r.getMeterId())
+                        .map(EquipmentMeter::getName)
+                        .orElse(null);
+        String equipmentName = r.getEquipmentId() == null ? null :
+                equipmentRepository.findByIdAndIsDeletedFalse(r.getEquipmentId())
+                        .map(Equipment::getName)
+                        .orElse(null);
+        return MeterReadingDto.from(r, userName, meterName, equipmentName);
+    }
+
+    private List<MeterReadingDto> enrichReadings(List<MeterReading> readings) {
+        if (readings == null || readings.isEmpty()) {
+            return List.of();
+        }
+
+        Set<UUID> userIds = readings.stream()
+                .map(MeterReading::getRecordedByUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Set<UUID> meterIds = readings.stream()
+                .map(MeterReading::getMeterId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Set<UUID> equipmentIds = readings.stream()
+                .map(MeterReading::getEquipmentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<UUID, String> userNames = new java.util.HashMap<>();
+        if (!userIds.isEmpty()) {
+            userRepository.findAllByIdInAndIsDeletedFalse(userIds)
+                    .forEach(u -> userNames.put(u.getId(), u.getFullName()));
+        }
+
+        Map<UUID, String> meterNames = new java.util.HashMap<>();
+        if (!meterIds.isEmpty()) {
+            meterRepository.findAllByIdInAndIsDeletedFalse(meterIds)
+                    .forEach(m -> meterNames.put(m.getId(), m.getName()));
+        }
+
+        Map<UUID, String> equipmentNames = new java.util.HashMap<>();
+        if (!equipmentIds.isEmpty()) {
+            equipmentRepository.findAllByIdInAndIsDeletedFalse(equipmentIds)
+                    .forEach(e -> equipmentNames.put(e.getId(), e.getName()));
+        }
+
+        return readings.stream()
+                .map(r -> MeterReadingDto.from(
+                        r,
+                        userNames.get(r.getRecordedByUserId()),
+                        meterNames.get(r.getMeterId()),
+                        equipmentNames.get(r.getEquipmentId())
+                ))
+                .toList();
     }
 }
