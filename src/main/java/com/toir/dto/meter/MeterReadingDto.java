@@ -16,12 +16,14 @@ public record MeterReadingDto(
         MeterSource source,
         UUID recordedByUserId,
         String deviceId,
-        String note
+        String note,
+        Instant createdAt
 ) {
     public static MeterReadingDto from(MeterReading r) {
         return new MeterReadingDto(
                 r.getId(), r.getMeterId(), r.getEquipmentId(), r.getValue(), r.getDelta(),
-                r.getReadAt(), r.getSource(), r.getRecordedByUserId(), r.getDeviceId(), r.getNote()
+                r.getReadAt(), r.getSource(), r.getRecordedByUserId(), r.getDeviceId(), r.getNote(),
+                r.getCreatedAt()
         );
     }
 }
