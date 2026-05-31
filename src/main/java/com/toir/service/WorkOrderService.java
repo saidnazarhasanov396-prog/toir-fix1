@@ -1020,7 +1020,8 @@ public class WorkOrderService {
                 TriadLinkMapper.toRepairRequestBrief(linkedRepairRequest),
                 TriadLinkMapper.toDefectBrief(linkedDefect),
                 operationsCount,
-                materialsCount);
+                materialsCount,
+                entity.getUpdatedAt());
     }
 
     private List<WorkOrderDto> toDtos(List<WorkOrder> entities) {
