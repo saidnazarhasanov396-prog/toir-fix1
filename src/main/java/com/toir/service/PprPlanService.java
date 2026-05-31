@@ -85,6 +85,12 @@ public class PprPlanService {
     }
 
     @Transactional(readOnly = true)
+    public Page<PprPlanDto> findAllUnpaged(Integer year, Integer month, Integer day, UUID departmentId) {
+        List<PprPlanDto> plans = findAll(year, month, day, departmentId);
+        return PaginationUtils.page(plans, 0, PaginationUtils.pageSizeFromList(0, plans.size()), plans.size());
+    }
+
+    @Transactional(readOnly = true)
     public Page<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId, int page, int size) {
         validateDateFilterParts(year, month, day);
         Page<PprPlan> plans = planRepository.searchPlans(

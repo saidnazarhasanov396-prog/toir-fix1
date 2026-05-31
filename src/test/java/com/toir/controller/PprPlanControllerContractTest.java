@@ -114,31 +114,33 @@ class PprPlanControllerContractTest {
                         .param("size", "20"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(planId.toString()))
-                .andExpect(jsonPath("$.content[0].departmentId").value(departmentId.toString()));
+                .andExpect(jsonPath("$.content[0].departmentId").value(departmentId.toString()))
+                .andExpect(jsonPath("$.content[0].taskCount").value(0))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.last").value(true));
 
         verify(service).findAll(2026, 5, 12, departmentId, 0, 20);
     }
 
     @Test
     void listPlansWithoutFiltersKeepsOldListBehavior() throws Exception {
-        when(service.findAll(null, null, null, null)).thenReturn(List.of());
+        when(service.findAllUnpaged(null, null, null, null))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/ppr-plans"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.last").value(true));
 
-        verify(service).findAll(null, null, null, null);
+        verify(service).findAllUnpaged(null, null, null, null);
     }
 
     @Test
     void listAndGetByIdReturnSamePlanId() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
-        UUID taskId = UUID.randomUUID();
-        UUID equipmentId = UUID.randomUUID();
-        UUID regulationId = UUID.randomUUID();
-        LocalDateTime start = LocalDateTime.of(2026, 6, 1, 9, 0);
         PprPlanDto plan = new PprPlanDto(
                 planId,
                 "PPR-2026-0099",
@@ -149,29 +151,7 @@ class PprPlanControllerContractTest {
                 UUID.randomUUID(),
                 null,
                 null,
-                List.of(new PprTaskDto(
-                        taskId,
-                        "PPR-TASK-2026-0001",
-                        planId,
-                        regulationId,
-                        "Monthly lubrication",
-                        null,
-                        null,
-                        null,
-                        equipmentId,
-                        "Main pump",
-                        "Lubricate bearings",
-                        start,
-                        start.plusHours(2),
-                        LocalDate.of(2026, 6, 1),
-                        LocalDate.of(2026, 6, 1),
-                        start.plusDays(1),
-                        PprTaskStatus.PLANNED,
-                        PriorityLevel.MEDIUM,
-                        2.0,
-                        null,
-                        null
-                )),
+                1,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 30)
         );
@@ -186,28 +166,20 @@ class PprPlanControllerContractTest {
                         .param("size", "20"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(planId.toString()))
-                .andExpect(jsonPath("$.content[0].tasks[0].equipmentId").value(equipmentId.toString()))
-                .andExpect(jsonPath("$.content[0].tasks[0].equipmentName").value("Main pump"))
-                .andExpect(jsonPath("$.content[0].tasks[0].regulationId").value(regulationId.toString()))
-                .andExpect(jsonPath("$.content[0].tasks[0].regulationName").value("Monthly lubrication"));
+                .andExpect(jsonPath("$.content[0].taskCount").value(1))
+                .andExpect(jsonPath("$.content[0].tasks").doesNotExist());
 
         mockMvc.perform(get("/api/v1/ppr-plans/{id}", planId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(planId.toString()))
-                .andExpect(jsonPath("$.tasks[0].equipmentId").value(equipmentId.toString()))
-                .andExpect(jsonPath("$.tasks[0].equipmentName").value("Main pump"))
-                .andExpect(jsonPath("$.tasks[0].regulationId").value(regulationId.toString()))
-                .andExpect(jsonPath("$.tasks[0].regulationName").value("Monthly lubrication"));
+                .andExpect(jsonPath("$.taskCount").value(1))
+                .andExpect(jsonPath("$.tasks").doesNotExist());
     }
 
     @Test
-    void listWithoutPaginationReturnsAllPlansAndNames() throws Exception {
+    void listWithoutPaginationReturnsAllPlansAndTaskCount() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
-        UUID taskId = UUID.randomUUID();
-        UUID equipmentId = UUID.randomUUID();
-        UUID regulationId = UUID.randomUUID();
-        LocalDateTime start = LocalDateTime.of(2026, 6, 1, 9, 0);
         PprPlanDto plan = new PprPlanDto(
                 planId,
                 "PPR-2026-0100",
@@ -218,50 +190,31 @@ class PprPlanControllerContractTest {
                 UUID.randomUUID(),
                 null,
                 null,
-                List.of(new PprTaskDto(
-                        taskId,
-                        "PPR-TASK-2026-0100",
-                        planId,
-                        regulationId,
-                        "Weekly inspection",
-                        null,
-                        null,
-                        null,
-                        equipmentId,
-                        "Cooling tower",
-                        "Inspect tower",
-                        start,
-                        start.plusHours(2),
-                        LocalDate.of(2026, 6, 1),
-                        LocalDate.of(2026, 6, 1),
-                        start.plusDays(1),
-                        PprTaskStatus.PLANNED,
-                        PriorityLevel.MEDIUM,
-                        2.0,
-                        null,
-                        null
-                )),
+                4,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 30)
         );
-        when(service.findAll(null, null, null, null)).thenReturn(List.of(plan));
+        when(service.findAllUnpaged(null, null, null, null))
+                .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 1), 1));
 
         mockMvc.perform(get("/api/v1/ppr-plans"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(planId.toString()))
-                .andExpect(jsonPath("$[0].tasks[0].equipmentId").value(equipmentId.toString()))
-                .andExpect(jsonPath("$[0].tasks[0].equipmentName").value("Cooling tower"))
-                .andExpect(jsonPath("$[0].tasks[0].regulationId").value(regulationId.toString()))
-                .andExpect(jsonPath("$[0].tasks[0].regulationName").value("Weekly inspection"));
+                .andExpect(jsonPath("$.content[0].id").value(planId.toString()))
+                .andExpect(jsonPath("$.content[0].taskCount").value(4))
+                .andExpect(jsonPath("$.content[0].tasks").doesNotExist())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.last").value(true));
 
-        verify(service).findAll(null, null, null, null);
+        verify(service).findAllUnpaged(null, null, null, null);
     }
 
     @Test
     void listWithoutPaginationStillPassesFiltersToService() throws Exception {
         UUID departmentId = UUID.randomUUID();
         when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
-        when(service.findAll(2026, 5, 12, departmentId)).thenReturn(List.of());
+        when(service.findAllUnpaged(2026, 5, 12, departmentId))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/ppr-plans")
                         .param("year", "2026")
@@ -269,9 +222,11 @@ class PprPlanControllerContractTest {
                         .param("day", "12")
                         .param("departmentId", departmentId.toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray());
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.last").value(true));
 
-        verify(service).findAll(2026, 5, 12, departmentId);
+        verify(service).findAllUnpaged(2026, 5, 12, departmentId);
     }
 
     @Test

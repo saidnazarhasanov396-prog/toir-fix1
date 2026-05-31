@@ -66,6 +66,7 @@ public class AuthService {
         for (Role role : roles) {
             if (role.getPermissions() != null) permissions.addAll(role.getPermissions());
         }
+        authorityCodes.addAll(permissions);
 
         String primaryRoleCode = user.getPrimaryRole() != null ? user.getPrimaryRole().getCode() : null;
         AuthenticatedUser principal = new AuthenticatedUser(

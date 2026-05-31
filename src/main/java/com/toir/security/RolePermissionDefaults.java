@@ -15,6 +15,10 @@ public final class RolePermissionDefaults {
         return DEFAULTS.getOrDefault(roleCode, List.of(PermissionConstants.READ_LEGACY));
     }
 
+    public static boolean hasDefaults(String roleCode) {
+        return DEFAULTS.containsKey(roleCode);
+    }
+
     private static Map<String, List<String>> buildDefaults() {
         Map<String, List<String>> defaults = new LinkedHashMap<>();
         defaults.put("SYSTEM_ADMIN", List.of(PermissionConstants.WILDCARD));

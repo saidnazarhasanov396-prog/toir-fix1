@@ -84,7 +84,11 @@ class AuthServiceTest {
         verify(jwtService).generateToken(
                 eq(user.getId().toString()),
                 eq("engineer"),
-                eq(List.of("PPR_ENGINEER")),
+                eq(List.of(
+                        "PPR_ENGINEER",
+                        PermissionConstants.PPR_PLAN_READ,
+                        PermissionConstants.PPR_TASK_START
+                )),
                 extraClaimsCaptor.capture()
         );
         assertThat(extraClaimsCaptor.getValue())
@@ -103,6 +107,40 @@ class AuthServiceTest {
                 eq("127.0.0.1"),
                 eq("test")
         );
+    }
+
+    @Test
+    void loginTokenIncludesAnalyticsReadForAllowedRole() {
+        Role role = role("WORKSHOP_HEAD", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.ANALYTICS_READ
+        ));
+        User user = user(role);
+        when(userRepository.findByUsernameAndIsDeletedFalse("engineer")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password", "encoded")).thenReturn(true);
+        when(jwtService.generateToken(eq(user.getId().toString()), eq("engineer"), any(), any()))
+                .thenReturn("token");
+        when(jwtService.getExpirationSeconds()).thenReturn(3600L);
+
+        LoginResponse response = service.login(new LoginRequest("engineer", "password"));
+
+        assertThat(response.user().permissions()).contains(PermissionConstants.ANALYTICS_READ);
+        ArgumentCaptor<Map<String, Object>> extraClaimsCaptor = ArgumentCaptor.captor();
+        verify(jwtService).generateToken(
+                eq(user.getId().toString()),
+                eq("engineer"),
+                eq(List.of(
+                        "WORKSHOP_HEAD",
+                        PermissionConstants.READ_LEGACY,
+                        PermissionConstants.EQUIPMENT_READ,
+                        PermissionConstants.ANALYTICS_READ
+                )),
+                extraClaimsCaptor.capture()
+        );
+        @SuppressWarnings("unchecked")
+        List<Object> jwtPermissions = (List<Object>) extraClaimsCaptor.getValue().get("permissions");
+        assertThat(jwtPermissions).contains(PermissionConstants.ANALYTICS_READ);
     }
 
     private User user(Role role) {

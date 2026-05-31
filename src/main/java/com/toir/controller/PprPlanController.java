@@ -79,23 +79,24 @@ public class PprPlanController {
     @PreAuthorize(PPR_PLAN_READ_AUTH)
     @Operation(
             summary = "List PPR plans",
-            description = "When both page and size are provided, returns the existing paginated response. "
-                    + "When both are omitted, returns all matching PPR plans as a list. "
+            description = "Always returns a paginated response wrapper with data in content. "
+                    + "When both page and size are provided, returns the existing paginated response. "
+                    + "When both are omitted, returns all matching PPR plans in the same wrapper. "
                     + "Providing only one pagination parameter is rejected."
     )
-    public ResponseEntity<?> list(
+    public ResponseEntity<Page<PprPlanDto>> list(
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer day,
             @RequestParam(required = false) UUID departmentId,
-            @Parameter(description = "Optional page index. Must be provided together with size.")
+            @Parameter(description = "Optional page index. Must be provided together with size. Omit both page and size to return all matching plans in the same response wrapper.")
             @RequestParam(required = false) Integer page,
-            @Parameter(description = "Optional page size. Must be provided together with page.")
+            @Parameter(description = "Optional page size. Must be provided together with page. Omit both page and size to return all matching plans in the same response wrapper.")
             @RequestParam(required = false) Integer size
     ) {
         UUID scopedDepartmentId = scopedDepartment(departmentId);
         if (page == null && size == null) {
-            return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId));
+            return ResponseEntity.ok(service.findAllUnpaged(year, month, day, scopedDepartmentId));
         }
         if (page == null || size == null) {
             throw RestException.badRequest("Both page and size must be provided for paginated PPR plan list");

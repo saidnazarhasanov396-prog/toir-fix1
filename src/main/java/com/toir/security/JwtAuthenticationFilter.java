@@ -6,6 +6,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Set;
 
 @Component
+@Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
@@ -53,6 +55,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 if (StringUtils.hasText(principal.primaryRoleCode())) {
                     authorityCodes.add(principal.primaryRoleCode());
                 }
+                expandKnownRolePermissions(authorityCodes);
                 authorityCodes.addAll(principal.permissions());
                 List<SimpleGrantedAuthority> authorities = authorityCodes.stream()
                         .map(SimpleGrantedAuthority::new)
@@ -61,11 +64,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         principal, null, authorities);
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(auth);
-            } catch (JwtException ignored) {
+                log.debug("Authenticated JWT subject={} username={} authorities={}",
+                        claims.getSubject(), principal.username(), authorityCodes);
+            } catch (JwtException ex) {
                 SecurityContextHolder.clearContext();
+                log.debug("Rejected JWT during authentication: {}", ex.getClass().getSimpleName());
             }
         }
         chain.doFilter(request, response);
+    }
+
+    private void expandKnownRolePermissions(Set<String> authorityCodes) {
+        List<String> roleCodes = authorityCodes.stream()
+                .filter(RolePermissionDefaults::hasDefaults)
+                .toList();
+        roleCodes.forEach(roleCode -> authorityCodes.addAll(RolePermissionDefaults.forRole(roleCode)));
     }
 
     private List<String> readList(Claims claims, String key) {
