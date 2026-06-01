@@ -55,7 +55,7 @@ public class MaintenanceBudgetController {
         approvalService.createOrReuseApprovalForDocument(
                 "MAINTENANCE_BUDGET",
                 id,
-                approverId,
+                null,
                 approverId,
                 "BUDGET_APPROVER",
                 "Maintenance budget approval: " + current.year() + "/" + current.month(),
