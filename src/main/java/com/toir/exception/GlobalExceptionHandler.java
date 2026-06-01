@@ -106,12 +106,18 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
-        return build(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), request);
+        String message = (ex.getMessage() == null || ex.getMessage().isBlank())
+                ? "Unexpected server error"
+                : ex.getMessage();
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, message, request);
     }
 
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message, HttpServletRequest request) {
+        String safeMessage = (message == null || message.isBlank())
+                ? status.getReasonPhrase()
+                : message;
         return ResponseEntity.status(status)
-                .body(ErrorResponse.of(message, request.getRequestURI(), status.value()));
+                .body(ErrorResponse.of(safeMessage, request.getRequestURI(), status.value()));
     }
 
     private String buildUnreadableMessage(HttpMessageNotReadableException ex) {

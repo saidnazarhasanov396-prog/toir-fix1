@@ -140,6 +140,24 @@ class MaintenanceRegulationServiceTest {
     }
 
     @Test
+    void equipmentWithRegulationsHandlesEquipmentWithoutType() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, null);
+        when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
+
+        var page = service.equipmentWithRegulations(null, null, null, null);
+
+        assertThat(page.getContent()).hasSize(1);
+        EquipmentWithRegulationsDto dto = page.getContent().getFirst();
+        assertThat(dto.equipmentId()).isEqualTo(equipmentId);
+        assertThat(dto.equipmentTypeId()).isNull();
+        assertThat(dto.equipmentTypeName()).isNull();
+        assertThat(dto.regulations()).isEmpty();
+        verify(equipmentTypeRepository, never()).findAllByIdInAndIsDeletedFalse(any());
+        verify(repository, never()).findAllByEquipmentTypeIdInAndOptionalActive(any(), any());
+    }
+
+    @Test
     void equipmentWithRegulationsRejectsPartialPagination() {
         assertThatThrownBy(() -> service.equipmentWithRegulations(null, null, 0, null))
                 .isInstanceOfSatisfying(RestException.class, ex -> {

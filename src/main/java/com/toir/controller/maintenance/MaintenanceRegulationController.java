@@ -43,7 +43,7 @@ public class MaintenanceRegulationController {
         return ResponseEntity.ok(service.equipmentWithRegulations(equipmentTypeId, active, page, size));
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id:[0-9a-fA-F-]{36}}")
     public ResponseEntity<MaintenanceRegulationDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
@@ -51,12 +51,12 @@ public class MaintenanceRegulationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
-    @PutMapping("/{id}")
+    @PutMapping("/{id:[0-9a-fA-F-]{36}}")
     public ResponseEntity<MaintenanceRegulationDto> update(@PathVariable UUID id, @Valid @RequestBody MaintenanceRegulationRequest request) {
         return ResponseEntity.ok(service.update(id, request));
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{id:[0-9a-fA-F-]{36}}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
