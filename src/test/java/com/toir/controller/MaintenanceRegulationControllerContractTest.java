@@ -1,8 +1,10 @@
 package com.toir.controller;
 
 import com.toir.controller.maintenance.MaintenanceRegulationController;
+import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationSummaryDto;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MeterType;
 import com.toir.enums.MaintenanceRegulationConditionOperator;
@@ -10,6 +12,8 @@ import com.toir.enums.PeriodicityUnit;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.service.maintanance.MaintenanceRegulationService;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,7 +28,9 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -43,6 +49,71 @@ class MaintenanceRegulationControllerContractTest {
         mockMvc = MockMvcBuilders.standaloneSetup(new MaintenanceRegulationController(service))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void listPassesEquipmentTypeAndActiveFiltersToService() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        when(service.search(0, 20, "pump", equipmentTypeId, true, "PREVENTIVE"))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/maintenance-regulations")
+                        .param("equipmentTypeId", equipmentTypeId.toString())
+                        .param("active", "true")
+                        .param("category", "PREVENTIVE")
+                        .param("search", "pump"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+    }
+
+    @Test
+    void equipmentWithRegulationsReturnsEquipmentAndSummaries() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        EquipmentWithRegulationsDto dto = new EquipmentWithRegulationsDto(
+                equipmentId,
+                "Pump A",
+                "EQ-2026-0001",
+                equipmentTypeId,
+                "Pump",
+                List.of(new MaintenanceRegulationSummaryDto(
+                        regulationId,
+                        "MR-2026-0001",
+                        "Monthly pump regulation",
+                        "PREVENTIVE",
+                        3,
+                        "Mechanic",
+                        "Lockout",
+                        "Wrench",
+                        "Seal kit",
+                        "Grease",
+                        true
+                ))
+        );
+        when(service.equipmentWithRegulations(equipmentTypeId, true, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/maintenance-regulations/equipment")
+                        .param("equipmentTypeId", equipmentTypeId.toString())
+                        .param("active", "true")
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.content[0].equipmentTypeName").value("Pump"))
+                .andExpect(jsonPath("$.content[0].regulations[0].id").value(regulationId.toString()))
+                .andExpect(jsonPath("$.content[0].regulations[0].requiredSkill").value("Mechanic"));
+    }
+
+    @Test
+    void equipmentWithRegulationsSupportsUnpagedWrapper() throws Exception {
+        when(service.equipmentWithRegulations(isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/maintenance-regulations/equipment"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
     }
 
     @Test

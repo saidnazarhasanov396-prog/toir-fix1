@@ -22,6 +22,16 @@ public interface MaintenanceOperationRepository extends JpaRepository<Maintenanc
     @Query(value = "SELECT * FROM maintenance_operations WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<MaintenanceOperation> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
+    @Query("""
+            select o
+            from MaintenanceOperation o
+            join fetch o.template t
+            where o.isDeleted = false
+              and t.id in :templateIds
+            order by t.id, o.sequence
+            """)
+    List<MaintenanceOperation> findAllByTemplateIdInAndIsDeletedFalse(@Param("templateIds") Collection<UUID> templateIds);
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM maintenance_operations WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 

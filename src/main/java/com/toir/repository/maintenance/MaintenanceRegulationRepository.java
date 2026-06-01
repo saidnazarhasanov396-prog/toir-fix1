@@ -33,6 +33,9 @@ public interface MaintenanceRegulationRepository extends JpaRepository<Maintenan
     @Query(nativeQuery = true, value = """
             select * from maintenance_regulations m where
             m.is_deleted = false
+            and (:equipmentTypeId is null or m.equipment_type_id = cast(:equipmentTypeId as uuid))
+            and (:active is null or m.is_active = cast(:active as boolean))
+            and (:category is null or m.maintenance_kind = cast(:category as varchar))
             and (:search is null or lower(m.code) like lower(concat('%', :search, '%'))
             or lower(m.name) like lower(concat('%', :search, '%'))
             or lower(m.description) like lower(concat('%', :search, '%')))
@@ -40,11 +43,18 @@ public interface MaintenanceRegulationRepository extends JpaRepository<Maintenan
             """, countQuery = """
             select count(*) from maintenance_regulations m where
             m.is_deleted = false
+            and (:equipmentTypeId is null or m.equipment_type_id = cast(:equipmentTypeId as uuid))
+            and (:active is null or m.is_active = cast(:active as boolean))
+            and (:category is null or m.maintenance_kind = cast(:category as varchar))
             and (:search is null or lower(m.code) like lower(concat('%', :search, '%'))
             or lower(m.name) like lower(concat('%', :search, '%'))
             or lower(m.description) like lower(concat('%', :search, '%')))
             """)
-    Page<MaintenanceRegulation> searchPaginated(@Param("search") String search, Pageable pageable);
+    Page<MaintenanceRegulation> searchPaginated(@Param("equipmentTypeId") UUID equipmentTypeId,
+                                                @Param("active") Boolean active,
+                                                @Param("category") String category,
+                                                @Param("search") String search,
+                                                Pageable pageable);
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM maintenance_regulations WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
@@ -61,4 +71,17 @@ public interface MaintenanceRegulationRepository extends JpaRepository<Maintenan
 
     @Query(value = "SELECT * FROM maintenance_regulations WHERE equipment_type_id = :equipmentTypeId AND is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<MaintenanceRegulation> findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(@Param("equipmentTypeId") UUID equipmentTypeId);
+
+    @Query("""
+            select r
+            from MaintenanceRegulation r
+            where r.isDeleted = false
+              and r.equipmentTypeId in :equipmentTypeIds
+              and (:active is null or r.active = :active)
+            order by r.updatedAt desc
+            """)
+    List<MaintenanceRegulation> findAllByEquipmentTypeIdInAndOptionalActive(
+            @Param("equipmentTypeIds") Collection<UUID> equipmentTypeIds,
+            @Param("active") Boolean active
+    );
 }

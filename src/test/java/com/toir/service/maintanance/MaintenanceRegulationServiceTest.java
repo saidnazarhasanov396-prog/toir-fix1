@@ -2,9 +2,13 @@ package com.toir.service.maintanance;
 
 import com.toir.repository.equipment.EquipmentTypeRepository;
 
+import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentType;
+import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
 import com.toir.entity.maintenance.MaintenanceTemplate;
@@ -14,6 +18,8 @@ import com.toir.enums.MaintenanceRegulationConditionOperator;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
@@ -30,6 +36,7 @@ import org.springframework.http.HttpStatus;
 import java.time.Year;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,6 +50,12 @@ class MaintenanceRegulationServiceTest {
 
     @Mock
     MaintenanceRegulationRepository repository;
+
+    @Mock
+    EquipmentRepository equipmentRepository;
+
+    @Mock
+    MaintenanceOperationRepository operationRepository;
 
     @Mock
     AuditBuilderService auditBuilderService;
@@ -61,6 +74,79 @@ class MaintenanceRegulationServiceTest {
 
     @InjectMocks
     MaintenanceRegulationService service;
+
+    @Test
+    void searchWithEquipmentTypeValidatesAndFilters() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), equipmentTypeId, "MR-2026-0001", true);
+        when(equipmentTypeRepository.existsByIdAndIsDeletedFalse(equipmentTypeId)).thenReturn(true);
+        when(repository.searchPaginated(eq(equipmentTypeId), eq(true), eq("PREVENTIVE"), eq("pump"), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(regulation)));
+
+        var page = service.search(0, 20, "pump", equipmentTypeId, true, "PREVENTIVE");
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().getFirst().equipmentTypeId()).isEqualTo(equipmentTypeId);
+        verify(repository).searchPaginated(eq(equipmentTypeId), eq(true), eq("PREVENTIVE"), eq("pump"), any());
+    }
+
+    @Test
+    void searchWithUnknownEquipmentTypeReturns404() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        when(equipmentTypeRepository.existsByIdAndIsDeletedFalse(equipmentTypeId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.search(0, 20, null, equipmentTypeId, null, null))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
+
+        verify(repository, never()).searchPaginated(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void equipmentWithRegulationsGroupsRegulationsByEquipmentType() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        EquipmentType type = new EquipmentType();
+        type.setId(typeId);
+        type.setName("Pump");
+        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, "MR-2026-0001", true);
+        regulation.setTemplateId(templateId);
+        MaintenanceTemplate template = template(templateId, typeId, MaintenanceKind.PREVENTIVE, true);
+        MaintenanceOperation operation = new MaintenanceOperation();
+        operation.setTemplate(template);
+        operation.setRequiredSkill("Mechanic");
+        operation.setSafetyNotes("Lockout");
+        operation.setToolsRequired("Wrench");
+        operation.setSparePartsRequired("Seal kit");
+        operation.setConsumablesRequired("Grease");
+
+        when(equipmentTypeRepository.existsByIdAndIsDeletedFalse(typeId)).thenReturn(true);
+        when(equipmentRepository.findAllForMaintenanceRegulations(typeId)).thenReturn(List.of(equipment));
+        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of(type));
+        when(repository.findAllByEquipmentTypeIdInAndOptionalActive(Set.of(typeId), true)).thenReturn(List.of(regulation));
+        when(operationRepository.findAllByTemplateIdInAndIsDeletedFalse(Set.of(templateId))).thenReturn(List.of(operation));
+
+        var page = service.equipmentWithRegulations(typeId, true, null, null);
+
+        assertThat(page.getContent()).hasSize(1);
+        EquipmentWithRegulationsDto dto = page.getContent().getFirst();
+        assertThat(dto.equipmentId()).isEqualTo(equipmentId);
+        assertThat(dto.equipmentTypeName()).isEqualTo("Pump");
+        assertThat(dto.regulations()).hasSize(1);
+        assertThat(dto.regulations().getFirst().requiredSkill()).isEqualTo("Mechanic");
+        assertThat(dto.regulations().getFirst().sparePartsRequired()).isEqualTo("Seal kit");
+    }
+
+    @Test
+    void equipmentWithRegulationsRejectsPartialPagination() {
+        assertThatThrownBy(() -> service.equipmentWithRegulations(null, null, 0, null))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Both page and size");
+                });
+    }
 
     @Test
     void createWithoutCodeGeneratesCode() {
@@ -422,5 +508,31 @@ class MaintenanceRegulationServiceTest {
         template.setMaintenanceKind(kind);
         template.setActive(active);
         return template;
+    }
+
+    private MaintenanceRegulation regulation(UUID id, UUID typeId, String code, boolean active) {
+        MaintenanceRegulation regulation = new MaintenanceRegulation();
+        regulation.setId(id);
+        regulation.setCode(code);
+        regulation.setName("Monthly pump regulation");
+        regulation.setDescription("Regulation description");
+        regulation.setEquipmentTypeId(typeId);
+        regulation.setMaintenanceKind(MaintenanceKind.PREVENTIVE);
+        regulation.setNormativeLaborHours(3.0);
+        regulation.setActive(active);
+        regulation.setPeriodicityUnit(PeriodicityUnit.MONTH);
+        regulation.setPeriodicityValue(1);
+        regulation.setRequiresShutdown(false);
+        return regulation;
+    }
+
+    private Equipment equipment(UUID id, UUID typeId) {
+        Equipment equipment = new Equipment();
+        equipment.setId(id);
+        equipment.setCode("EQ-2026-0001");
+        equipment.setName("Pump A");
+        equipment.setInventoryNumber("INV-1");
+        equipment.setEquipmentTypeId(typeId);
+        return equipment;
     }
 }
