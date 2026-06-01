@@ -9,3 +9,6 @@ target/
 .vscode
 src/main/java/com/toir/Main.java
 uploads/
+
+/docs/
+/logs/
