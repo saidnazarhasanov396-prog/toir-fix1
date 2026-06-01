@@ -2,6 +2,7 @@ package com.toir.controller;
 import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
+import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.ApprovalService;
 import com.toir.util.PaginationUtils;
@@ -36,6 +37,9 @@ public class ApprovalController {
             @RequestParam(required = false, defaultValue = "false") boolean pendingOnly,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        if ((documentType == null) != (documentId == null)) {
+            throw RestException.badRequest("documentType and documentId must be provided together");
+        }
         if (documentType != null && documentId != null) {
             return ResponseEntity.ok(PaginationUtils.page(service.listByDocument(documentType, documentId), page, size));
         }
@@ -45,7 +49,7 @@ public class ApprovalController {
         if (pendingOnly) {
             return ResponseEntity.ok(PaginationUtils.page(service.pending(), page, size));
         }
-        return ResponseEntity.ok(PaginationUtils.page(service.pending(), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(service.listAll(), page, size));
     }
 
     @GetMapping("/{id}")

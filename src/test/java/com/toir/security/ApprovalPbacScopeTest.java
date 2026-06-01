@@ -128,6 +128,20 @@ class ApprovalPbacScopeTest {
     }
 
     @Test
+    void listByDocumentNormalizesDocumentTypeBeforeQuerying() {
+        UUID documentId = UUID.randomUUID();
+        ApprovalRequest approval = approval(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), documentId);
+        when(requestRepository.findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse("WORK_ORDER", documentId))
+                .thenReturn(List.of(approval));
+        when(approvalScopeService.canReadApproval(approval)).thenReturn(true);
+
+        var result = service.listByDocument("work-order", documentId);
+
+        assertThat(result).hasSize(1);
+        verify(requestRepository).findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse("WORK_ORDER", documentId);
+    }
+
+    @Test
     void createValidatesRequesterAndDocumentScope() {
         CreateApprovalRequest request = createRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
         when(requestRepository.save(any())).thenAnswer(invocation -> {
