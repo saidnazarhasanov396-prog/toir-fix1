@@ -207,6 +207,7 @@ public class MaintenanceRegulationService {
                                     regulation,
                                     operationSummaryByTemplateId.get(regulation.getTemplateId())
                             ))
+                            .filter(Objects::nonNull)
                             .toList();
                     return new EquipmentWithRegulationsDto(
                             item.getId(),
@@ -226,6 +227,7 @@ public class MaintenanceRegulationService {
         }
         return operationRepository.findAllByTemplateIdInAndIsDeletedFalse(templateIds)
                 .stream()
+                .filter(operation -> operation.getTemplate() != null && operation.getTemplate().getId() != null)
                 .collect(Collectors.groupingBy(operation -> operation.getTemplate().getId()))
                 .entrySet()
                 .stream()

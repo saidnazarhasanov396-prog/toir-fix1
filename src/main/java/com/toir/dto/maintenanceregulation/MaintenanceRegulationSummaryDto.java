@@ -18,6 +18,9 @@ public record MaintenanceRegulationSummaryDto(
 ) {
     public static MaintenanceRegulationSummaryDto from(MaintenanceRegulation regulation,
                                                        OperationSummary operationSummary) {
+        if (regulation == null) {
+            return null;
+        }
         return new MaintenanceRegulationSummaryDto(
                 regulation.getId(),
                 regulation.getCode(),
@@ -34,6 +37,9 @@ public record MaintenanceRegulationSummaryDto(
     }
 
     private static Integer durationHours(MaintenanceRegulation regulation) {
+        if (regulation == null) {
+            return null;
+        }
         double hours = regulation.getNormativeLaborHours();
         return hours <= 0 ? null : (int) Math.ceil(hours);
     }
