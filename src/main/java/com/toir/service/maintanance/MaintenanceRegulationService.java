@@ -30,6 +30,7 @@ import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -38,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Year;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -48,6 +50,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MaintenanceRegulationService {
 
     private final MaintenanceRegulationRepository repository;
@@ -92,16 +95,24 @@ public class MaintenanceRegulationService {
                                                                       Boolean active,
                                                                       Integer page,
                                                                       Integer size) {
-        validateEquipmentTypeIfProvided(equipmentTypeId);
-        List<EquipmentWithRegulationsDto> items = equipmentWithRegulations(equipmentTypeId, active);
-        if (page == null && size == null) {
-            int pageSize = PaginationUtils.pageSizeFromList(0, items.size());
-            return new PageImpl<>(items, PaginationUtils.pageRequest(0, pageSize), items.size());
+        try {
+            log.info("Loading equipment maintenance regulations equipmentTypeId={}, active={}, page={}, size={}",
+                    equipmentTypeId, active, page, size);
+            validateEquipmentTypeIfProvided(equipmentTypeId);
+            List<EquipmentWithRegulationsDto> items = equipmentWithRegulations(equipmentTypeId, active);
+            if (page == null && size == null) {
+                int pageSize = PaginationUtils.pageSizeFromList(0, items.size());
+                return new PageImpl<>(items, PaginationUtils.pageRequest(0, pageSize), items.size());
+            }
+            if (page == null || size == null) {
+                throw RestException.badRequest("Both page and size must be provided for paginated equipment regulation list");
+            }
+            return PaginationUtils.page(items, page, size);
+        } catch (RuntimeException ex) {
+            log.error("Failed to load equipment maintenance regulations equipmentTypeId={}, active={}, page={}, size={}",
+                    equipmentTypeId, active, page, size, ex);
+            throw ex;
         }
-        if (page == null || size == null) {
-            throw RestException.badRequest("Both page and size must be provided for paginated equipment regulation list");
-        }
-        return PaginationUtils.page(items, page, size);
     }
 
     @Transactional(readOnly = true)
@@ -177,11 +188,20 @@ public class MaintenanceRegulationService {
     }
 
     private List<EquipmentWithRegulationsDto> equipmentWithRegulations(UUID equipmentTypeId, Boolean active) {
-        List<Equipment> equipment = equipmentRepository.findAllForMaintenanceRegulations(equipmentTypeId);
-        if (equipment == null || equipment.isEmpty()) {
+        List<Equipment> equipment = safeList(equipmentRepository.findAllForMaintenanceRegulations(equipmentTypeId));
+        log.info("Loaded {} equipment rows for maintenance regulations", equipment.size());
+        if (equipment.isEmpty()) {
             return List.of();
         }
 
+        Map<UUID, Equipment> equipmentById = equipment.stream()
+                .filter(item -> item != null && item.getId() != null)
+                .collect(Collectors.toMap(
+                        Equipment::getId,
+                        item -> item,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
         Set<UUID> equipmentTypeIds = equipment.stream()
                 .filter(Objects::nonNull)
                 .map(Equipment::getEquipmentTypeId)
@@ -194,14 +214,11 @@ public class MaintenanceRegulationService {
                         .stream()
                         .filter(Objects::nonNull)
                         .collect(Collectors.toMap(EquipmentType::getId, type -> type, (left, right) -> left));
-        Set<UUID> equipmentIds = equipment.stream()
-                .filter(Objects::nonNull)
-                .map(Equipment::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+        Set<UUID> equipmentIds = equipmentById.keySet();
         List<EquipmentMaintenanceRule> rules = equipmentIds.isEmpty()
                 ? List.of()
                 : safeList(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(equipmentIds, active));
+        log.info("Loaded {} equipment maintenance rules for {} equipment rows", rules.size(), equipmentIds.size());
         Set<UUID> regulationIds = rules.stream()
                 .filter(Objects::nonNull)
                 .map(EquipmentMaintenanceRule::getBaseRegulationId)
@@ -210,23 +227,20 @@ public class MaintenanceRegulationService {
         List<MaintenanceRegulation> connectedRegulations = regulationIds.isEmpty()
                 ? List.of()
                 : safeList(repository.findAllByIdInAndIsDeletedFalse(regulationIds));
+        log.info("Loaded {} maintenance regulations for {} rule base regulation ids",
+                connectedRegulations.size(), regulationIds.size());
         Map<UUID, MaintenanceRegulation> regulationById = connectedRegulations.stream()
                 .filter(regulation -> regulation != null && (active == null || regulation.isActive() == active))
                 .collect(Collectors.toMap(MaintenanceRegulation::getId, regulation -> regulation, (left, right) -> left));
         Map<UUID, List<MaintenanceRegulation>> regulationsByEquipmentId =
-                rules.stream()
-                        .filter(rule -> rule != null && rule.getEquipmentId() != null)
-                        .filter(rule -> regulationById.containsKey(rule.getBaseRegulationId()))
-                        .collect(Collectors.groupingBy(
-                                EquipmentMaintenanceRule::getEquipmentId,
-                                Collectors.mapping(rule -> regulationById.get(rule.getBaseRegulationId()), Collectors.toList())
-                        ));
+                regulationsByEquipmentId(rules, regulationById, equipmentById.keySet());
         Map<UUID, MaintenanceRegulationSummaryDto.OperationSummary> operationSummaryByTemplateId =
                 operationSummaryByTemplateId(regulationsByEquipmentId.values().stream()
                         .flatMap(Collection::stream)
                         .map(MaintenanceRegulation::getTemplateId)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toSet()));
+        log.info("Mapping {} equipment rows with related maintenance regulations", equipment.size());
 
         return equipment.stream()
                 .filter(Objects::nonNull)
@@ -250,8 +264,35 @@ public class MaintenanceRegulationService {
                             regulations
                     );
                 })
-                .filter(item -> !item.regulations().isEmpty())
                 .toList();
+    }
+
+    private Map<UUID, List<MaintenanceRegulation>> regulationsByEquipmentId(
+            List<EquipmentMaintenanceRule> rules,
+            Map<UUID, MaintenanceRegulation> regulationById,
+            Set<UUID> equipmentIds) {
+        Map<UUID, LinkedHashMap<UUID, MaintenanceRegulation>> grouped = new LinkedHashMap<>();
+        for (EquipmentMaintenanceRule rule : rules) {
+            if (rule == null || rule.getEquipmentId() == null || rule.getBaseRegulationId() == null) {
+                continue;
+            }
+            if (!equipmentIds.contains(rule.getEquipmentId())) {
+                continue;
+            }
+            MaintenanceRegulation regulation = regulationById.get(rule.getBaseRegulationId());
+            if (regulation == null || regulation.getId() == null) {
+                continue;
+            }
+            grouped.computeIfAbsent(rule.getEquipmentId(), ignored -> new LinkedHashMap<>())
+                    .putIfAbsent(regulation.getId(), regulation);
+        }
+        return grouped.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> List.copyOf(entry.getValue().values()),
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
     }
 
     private Map<UUID, MaintenanceRegulationSummaryDto.OperationSummary> operationSummaryByTemplateId(Set<UUID> templateIds) {
