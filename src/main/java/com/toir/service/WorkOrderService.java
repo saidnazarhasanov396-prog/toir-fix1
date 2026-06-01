@@ -226,7 +226,7 @@ public class WorkOrderService {
                 entity,
                 saved);
 
-        return toDto(entity);
+        return toDto(saved);
     }
 
     @Transactional
