@@ -1,11 +1,15 @@
 package com.toir.service.maintanance;
 
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
+import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationSummaryDto;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -14,8 +18,10 @@ import com.toir.enums.MaintenanceRegulationConditionOperator;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.exception.RestException;
 import com.toir.entity.equipment.EquipmentType;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
@@ -24,10 +30,12 @@ import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Year;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -42,9 +50,11 @@ public class MaintenanceRegulationService {
 
     private final MaintenanceRegulationRepository repository;
     private final MaintenanceRegulationAttributeConditionRepository conditionRepository;
+    private final EquipmentRepository equipmentRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
     private final MaintenanceTemplateRepository templateRepository;
+    private final MaintenanceOperationRepository operationRepository;
     private final AuditBuilderService auditBuilderService;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
     private static final String CLIENT_CODE_REJECT_MESSAGE =
@@ -57,12 +67,38 @@ public class MaintenanceRegulationService {
     }
 
     @Transactional(readOnly = true)
-    public Page<MaintenanceRegulationDto> search(int page, int pageSize, String search) {
+    public Page<MaintenanceRegulationDto> search(int page,
+                                                 int pageSize,
+                                                 String search,
+                                                 UUID equipmentTypeId,
+                                                 Boolean active,
+                                                 String category) {
+        validateEquipmentTypeIfProvided(equipmentTypeId);
         var pageable = PaginationUtils.pageRequest(page, pageSize);
         return repository.searchPaginated(
+                equipmentTypeId,
+                active,
+                blankToNull(category),
                 search,
                 pageable
         ).map(this::toDto);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EquipmentWithRegulationsDto> equipmentWithRegulations(UUID equipmentTypeId,
+                                                                      Boolean active,
+                                                                      Integer page,
+                                                                      Integer size) {
+        validateEquipmentTypeIfProvided(equipmentTypeId);
+        List<EquipmentWithRegulationsDto> items = equipmentWithRegulations(equipmentTypeId, active);
+        if (page == null && size == null) {
+            int pageSize = PaginationUtils.pageSizeFromList(0, items.size());
+            return new PageImpl<>(items, PaginationUtils.pageRequest(0, pageSize), items.size());
+        }
+        if (page == null || size == null) {
+            throw RestException.badRequest("Both page and size must be provided for paginated equipment regulation list");
+        }
+        return PaginationUtils.page(items, page, size);
     }
 
     @Transactional(readOnly = true)
@@ -135,6 +171,94 @@ public class MaintenanceRegulationService {
     private MaintenanceRegulation getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Maintenance regulation not found: " + id));
+    }
+
+    private List<EquipmentWithRegulationsDto> equipmentWithRegulations(UUID equipmentTypeId, Boolean active) {
+        List<Equipment> equipment = equipmentRepository.findAllForMaintenanceRegulations(equipmentTypeId);
+        if (equipment.isEmpty()) {
+            return List.of();
+        }
+
+        Set<UUID> equipmentTypeIds = equipment.stream()
+                .map(Equipment::getEquipmentTypeId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, EquipmentType> typeById = equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(equipmentTypeIds)
+                .stream()
+                .collect(Collectors.toMap(EquipmentType::getId, type -> type, (left, right) -> left));
+        Map<UUID, List<MaintenanceRegulation>> regulationsByTypeId =
+                repository.findAllByEquipmentTypeIdInAndOptionalActive(equipmentTypeIds, active)
+                        .stream()
+                        .collect(Collectors.groupingBy(MaintenanceRegulation::getEquipmentTypeId));
+        Map<UUID, MaintenanceRegulationSummaryDto.OperationSummary> operationSummaryByTemplateId =
+                operationSummaryByTemplateId(regulationsByTypeId.values().stream()
+                        .flatMap(Collection::stream)
+                        .map(MaintenanceRegulation::getTemplateId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet()));
+
+        return equipment.stream()
+                .map(item -> {
+                    EquipmentType type = typeById.get(item.getEquipmentTypeId());
+                    List<MaintenanceRegulationSummaryDto> regulations = regulationsByTypeId
+                            .getOrDefault(item.getEquipmentTypeId(), List.of())
+                            .stream()
+                            .map(regulation -> MaintenanceRegulationSummaryDto.from(
+                                    regulation,
+                                    operationSummaryByTemplateId.get(regulation.getTemplateId())
+                            ))
+                            .toList();
+                    return new EquipmentWithRegulationsDto(
+                            item.getId(),
+                            item.getName(),
+                            item.getCode(),
+                            item.getEquipmentTypeId(),
+                            type == null ? null : type.getName(),
+                            regulations
+                    );
+                })
+                .toList();
+    }
+
+    private Map<UUID, MaintenanceRegulationSummaryDto.OperationSummary> operationSummaryByTemplateId(Set<UUID> templateIds) {
+        if (templateIds.isEmpty()) {
+            return Map.of();
+        }
+        return operationRepository.findAllByTemplateIdInAndIsDeletedFalse(templateIds)
+                .stream()
+                .collect(Collectors.groupingBy(operation -> operation.getTemplate().getId()))
+                .entrySet()
+                .stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> new MaintenanceRegulationSummaryDto.OperationSummary(
+                                joinDistinct(entry.getValue(), MaintenanceOperation::getRequiredSkill),
+                                joinDistinct(entry.getValue(), MaintenanceOperation::getSafetyNotes),
+                                joinDistinct(entry.getValue(), MaintenanceOperation::getToolsRequired),
+                                joinDistinct(entry.getValue(), MaintenanceOperation::getSparePartsRequired),
+                                joinDistinct(entry.getValue(), MaintenanceOperation::getConsumablesRequired)
+                        )
+                ));
+    }
+
+    private String joinDistinct(List<MaintenanceOperation> operations,
+                                java.util.function.Function<MaintenanceOperation, String> getter) {
+        String joined = operations.stream()
+                .map(getter)
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .distinct()
+                .collect(Collectors.joining("; "));
+        return joined.isBlank() ? null : joined;
+    }
+
+    private void validateEquipmentTypeIfProvided(UUID equipmentTypeId) {
+        if (equipmentTypeId == null) {
+            return;
+        }
+        if (!equipmentTypeRepository.existsByIdAndIsDeletedFalse(equipmentTypeId)) {
+            throw RestException.notFound("Equipment type not found: " + equipmentTypeId);
+        }
     }
 
     private void applyMutableFields(MaintenanceRegulation entity, MaintenanceRegulationRequest request) {
@@ -236,6 +360,10 @@ public class MaintenanceRegulationService {
         if (code != null && !code.isBlank()) {
             throw RestException.badRequest(CLIENT_CODE_REJECT_MESSAGE);
         }
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private MaintenanceRegulation saveWithGeneratedCode(MaintenanceRegulationRequest request) {

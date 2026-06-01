@@ -59,6 +59,15 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
     @Query(value = "SELECT * FROM equipment WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Equipment> findAllByDepartmentIdAndIsDeletedFalse(@Param("departmentId") UUID departmentId);
 
+    @Query("""
+            select e
+            from Equipment e
+            where e.isDeleted = false
+              and (:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId)
+            order by e.updatedAt desc
+            """)
+    List<Equipment> findAllForMaintenanceRegulations(@Param("equipmentTypeId") UUID equipmentTypeId);
+
     @Query(value = "SELECT * FROM equipment WHERE parent_id = :parentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Equipment> findAllByParentIdAndIsDeletedFalse(@Param("parentId") UUID parentId);
 

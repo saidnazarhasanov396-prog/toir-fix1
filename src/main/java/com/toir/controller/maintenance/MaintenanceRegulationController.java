@@ -1,4 +1,5 @@
 package com.toir.controller.maintenance;
+import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import com.toir.service.maintanance.MaintenanceRegulationService;
@@ -24,9 +25,22 @@ public class MaintenanceRegulationController {
     public ResponseEntity<Page<MaintenanceRegulationDto>> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
-            @RequestParam(required = false) String search
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) UUID equipmentTypeId,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(required = false) String category
     ) {
-        return ResponseEntity.ok(service.search(page, size, search));
+        return ResponseEntity.ok(service.search(page, size, search, equipmentTypeId, active, category));
+    }
+
+    @GetMapping("/equipment")
+    public ResponseEntity<Page<EquipmentWithRegulationsDto>> equipmentWithRegulations(
+            @RequestParam(required = false) UUID equipmentTypeId,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size
+    ) {
+        return ResponseEntity.ok(service.equipmentWithRegulations(equipmentTypeId, active, page, size));
     }
 
     @GetMapping("/{id}")
