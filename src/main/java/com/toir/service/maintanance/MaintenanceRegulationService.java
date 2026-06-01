@@ -264,6 +264,7 @@ public class MaintenanceRegulationService {
                             regulations
                     );
                 })
+                .filter(item -> item.regulations() != null && !item.regulations().isEmpty())
                 .toList();
     }
 
