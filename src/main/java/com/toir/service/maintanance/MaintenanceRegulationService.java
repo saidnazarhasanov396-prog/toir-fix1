@@ -241,7 +241,7 @@ public class MaintenanceRegulationService {
                         .map(MaintenanceRegulation::getTemplateId)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toSet()));
-        log.info("Mapping {} equipment rows with related maintenance regulations", equipment.size());
+        log.info("Mapping {} equipment rows with related maintenance regulations: ", equipment.size());
 
         return equipment.stream()
                 .filter(Objects::nonNull)
