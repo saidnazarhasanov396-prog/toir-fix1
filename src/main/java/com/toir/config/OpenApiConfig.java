@@ -28,7 +28,7 @@ public class OpenApiConfig {
     private final UserRepository userRepository;
     private final JwtService jwtService;
 
-    @Value("${app.openapi.prod-url:https://api-toir-uran.tenzorsoft.uz}")
+    @Value("${app.openapi.prod-url:https://api-toir.tenzorsoft.uz}")
     private String prodUrl;
 
     @Value("${app.openapi.dev-url:http://localhost:8080}")
