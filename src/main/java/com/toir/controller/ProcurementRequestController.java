@@ -72,7 +72,7 @@ public class ProcurementRequestController {
         approvalService.createOrReuseApprovalForDocument(
                 "PROCUREMENT_REQUEST",
                 id,
-                approverId,
+                null,
                 approverId,
                 "PROCUREMENT_APPROVER",
                 "Procurement request approval: " + current.number(),

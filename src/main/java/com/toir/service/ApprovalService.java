@@ -56,7 +56,7 @@ public class ApprovalService {
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> listByDocument(String documentType, UUID documentId) {
-        return requestRepository.findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse(documentType, documentId).stream()
+        return requestRepository.findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse(normalizeDocumentType(documentType), documentId).stream()
                 .filter(approvalScopeService::canReadApproval)
                 .map(ApprovalRequestDto::from).toList();
     }
@@ -64,6 +64,13 @@ public class ApprovalService {
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> pending() {
         return requestRepository.findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalStatus.PENDING).stream()
+                .filter(approvalScopeService::canReadApproval)
+                .map(ApprovalRequestDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ApprovalRequestDto> listAll() {
+        return requestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(approvalScopeService::canReadApproval)
                 .map(ApprovalRequestDto::from).toList();
     }
