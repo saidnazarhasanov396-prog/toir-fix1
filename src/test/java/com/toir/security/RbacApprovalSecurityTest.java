@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -84,6 +86,40 @@ class RbacApprovalSecurityTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/approvals/{id}", approvalId))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = APPROVAL_READ)
+    void listWithPendingOnlyFalseReadsAllApprovals() throws Exception {
+        when(approvalService.listAll()).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/approvals?pendingOnly=false&page=0&size=20"))
+                .andExpect(status().isOk());
+
+        verify(approvalService).listAll();
+    }
+
+    @Test
+    @WithMockUser(authorities = APPROVAL_READ)
+    void listWithDocumentFilterRequiresDocumentTypeAndDocumentId() throws Exception {
+        UUID documentId = UUID.randomUUID();
+
+        mockMvc.perform(get("/api/v1/approvals?documentType=WORK_ORDER&page=0&size=20"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/approvals?documentId={documentId}&page=0&size=20", documentId))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(authorities = APPROVAL_READ)
+    void listWithDocumentTypeAndDocumentIdUsesDocumentFilter() throws Exception {
+        UUID documentId = UUID.randomUUID();
+        when(approvalService.listByDocument("WORK_ORDER", documentId)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/approvals?documentType=WORK_ORDER&documentId={documentId}&page=0&size=20", documentId))
+                .andExpect(status().isOk());
+
+        verify(approvalService).listByDocument(eq("WORK_ORDER"), eq(documentId));
     }
 
     @Test

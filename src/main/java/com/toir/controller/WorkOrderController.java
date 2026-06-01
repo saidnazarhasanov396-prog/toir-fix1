@@ -96,7 +96,7 @@ public class WorkOrderController {
         approvalService.createOrReuseApprovalForDocument(
                 "WORK_ORDER",
                 id,
-                approverId,
+                null,
                 approverId,
                 "WORK_ORDER_APPROVER",
                 "Work order approval: " + workOrder.getNumber(),
