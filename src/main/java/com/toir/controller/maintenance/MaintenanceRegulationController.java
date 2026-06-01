@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/maintenance-regulations")
 @Tag(name = "maintenance-regulations")
 @RequiredArgsConstructor
+@Slf4j
 public class MaintenanceRegulationController {
 
     private final MaintenanceRegulationService service;
@@ -40,6 +42,8 @@ public class MaintenanceRegulationController {
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size
     ) {
+        log.info("Entering GET /api/v1/maintenance-regulations/equipment equipmentTypeId={}, active={}, page={}, size={}",
+                equipmentTypeId, active, page, size);
         return ResponseEntity.ok(service.equipmentWithRegulations(equipmentTypeId, active, page, size));
     }
 
