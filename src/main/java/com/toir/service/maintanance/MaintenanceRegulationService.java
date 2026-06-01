@@ -7,6 +7,7 @@ import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditio
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationSummaryDto;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceOperation;
@@ -21,6 +22,7 @@ import com.toir.entity.equipment.EquipmentType;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
@@ -51,6 +53,7 @@ public class MaintenanceRegulationService {
     private final MaintenanceRegulationRepository repository;
     private final MaintenanceRegulationAttributeConditionRepository conditionRepository;
     private final EquipmentRepository equipmentRepository;
+    private final EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
     private final MaintenanceTemplateRepository templateRepository;
@@ -191,15 +194,35 @@ public class MaintenanceRegulationService {
                         .stream()
                         .filter(Objects::nonNull)
                         .collect(Collectors.toMap(EquipmentType::getId, type -> type, (left, right) -> left));
-        List<MaintenanceRegulation> regulations = equipmentTypeIds.isEmpty()
+        Set<UUID> equipmentIds = equipment.stream()
+                .filter(Objects::nonNull)
+                .map(Equipment::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        List<EquipmentMaintenanceRule> rules = equipmentIds.isEmpty()
                 ? List.of()
-                : safeList(repository.findAllByEquipmentTypeIdInAndOptionalActive(equipmentTypeIds, active));
-        Map<UUID, List<MaintenanceRegulation>> regulationsByTypeId =
-                regulations.stream()
-                        .filter(regulation -> regulation != null && regulation.getEquipmentTypeId() != null)
-                        .collect(Collectors.groupingBy(MaintenanceRegulation::getEquipmentTypeId));
+                : safeList(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(equipmentIds, active));
+        Set<UUID> regulationIds = rules.stream()
+                .filter(Objects::nonNull)
+                .map(EquipmentMaintenanceRule::getBaseRegulationId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        List<MaintenanceRegulation> connectedRegulations = regulationIds.isEmpty()
+                ? List.of()
+                : safeList(repository.findAllByIdInAndIsDeletedFalse(regulationIds));
+        Map<UUID, MaintenanceRegulation> regulationById = connectedRegulations.stream()
+                .filter(regulation -> regulation != null && (active == null || regulation.isActive() == active))
+                .collect(Collectors.toMap(MaintenanceRegulation::getId, regulation -> regulation, (left, right) -> left));
+        Map<UUID, List<MaintenanceRegulation>> regulationsByEquipmentId =
+                rules.stream()
+                        .filter(rule -> rule != null && rule.getEquipmentId() != null)
+                        .filter(rule -> regulationById.containsKey(rule.getBaseRegulationId()))
+                        .collect(Collectors.groupingBy(
+                                EquipmentMaintenanceRule::getEquipmentId,
+                                Collectors.mapping(rule -> regulationById.get(rule.getBaseRegulationId()), Collectors.toList())
+                        ));
         Map<UUID, MaintenanceRegulationSummaryDto.OperationSummary> operationSummaryByTemplateId =
-                operationSummaryByTemplateId(regulationsByTypeId.values().stream()
+                operationSummaryByTemplateId(regulationsByEquipmentId.values().stream()
                         .flatMap(Collection::stream)
                         .map(MaintenanceRegulation::getTemplateId)
                         .filter(Objects::nonNull)
@@ -209,8 +232,8 @@ public class MaintenanceRegulationService {
                 .filter(Objects::nonNull)
                 .map(item -> {
                     EquipmentType type = typeById.get(item.getEquipmentTypeId());
-                    List<MaintenanceRegulationSummaryDto> regulations1 = regulationsByTypeId
-                            .getOrDefault(item.getEquipmentTypeId(), List.of())
+                    List<MaintenanceRegulationSummaryDto> regulations = regulationsByEquipmentId
+                            .getOrDefault(item.getId(), List.of())
                             .stream()
                             .map(regulation -> MaintenanceRegulationSummaryDto.from(
                                     regulation,
@@ -224,9 +247,10 @@ public class MaintenanceRegulationService {
                             item.getCode(),
                             item.getEquipmentTypeId(),
                             type == null ? null : type.getName(),
-                            regulations1
+                            regulations
                     );
                 })
+                .filter(item -> !item.regulations().isEmpty())
                 .toList();
     }
 

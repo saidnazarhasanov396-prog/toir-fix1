@@ -8,6 +8,7 @@ import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
+import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
@@ -19,6 +20,7 @@ import com.toir.enums.PeriodicityUnit;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
@@ -53,6 +55,9 @@ class MaintenanceRegulationServiceTest {
 
     @Mock
     EquipmentRepository equipmentRepository;
+
+    @Mock
+    EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
 
     @Mock
     MaintenanceOperationRepository operationRepository;
@@ -103,7 +108,7 @@ class MaintenanceRegulationServiceTest {
     }
 
     @Test
-    void equipmentWithRegulationsGroupsRegulationsByEquipmentType() {
+    void equipmentWithRegulationsGroupsRulesByEquipment() {
         UUID equipmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
         UUID templateId = UUID.randomUUID();
@@ -113,6 +118,7 @@ class MaintenanceRegulationServiceTest {
         type.setName("Pump");
         MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, "MR-2026-0001", true);
         regulation.setTemplateId(templateId);
+        EquipmentMaintenanceRule rule = rule(UUID.randomUUID(), equipmentId, regulation.getId(), templateId, true);
         MaintenanceTemplate template = template(templateId, typeId, MaintenanceKind.PREVENTIVE, true);
         MaintenanceOperation operation = new MaintenanceOperation();
         operation.setTemplate(template);
@@ -125,7 +131,9 @@ class MaintenanceRegulationServiceTest {
         when(equipmentTypeRepository.existsByIdAndIsDeletedFalse(typeId)).thenReturn(true);
         when(equipmentRepository.findAllForMaintenanceRegulations(typeId)).thenReturn(List.of(equipment));
         when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of(type));
-        when(repository.findAllByEquipmentTypeIdInAndOptionalActive(Set.of(typeId), true)).thenReturn(List.of(regulation));
+        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), true))
+                .thenReturn(List.of(rule));
+        when(repository.findAllByIdInAndIsDeletedFalse(Set.of(regulation.getId()))).thenReturn(List.of(regulation));
         when(operationRepository.findAllByTemplateIdInAndIsDeletedFalse(Set.of(templateId))).thenReturn(List.of(operation));
 
         var page = service.equipmentWithRegulations(typeId, true, null, null);
@@ -135,26 +143,24 @@ class MaintenanceRegulationServiceTest {
         assertThat(dto.equipmentId()).isEqualTo(equipmentId);
         assertThat(dto.equipmentTypeName()).isEqualTo("Pump");
         assertThat(dto.regulations()).hasSize(1);
+        assertThat(dto.regulations().getFirst().id()).isEqualTo(regulation.getId());
         assertThat(dto.regulations().getFirst().requiredSkill()).isEqualTo("Mechanic");
         assertThat(dto.regulations().getFirst().sparePartsRequired()).isEqualTo("Seal kit");
     }
 
     @Test
-    void equipmentWithRegulationsHandlesEquipmentWithoutType() {
+    void equipmentWithRegulationsReturnsEmptyWhenEquipmentHasNoConnectedRegulations() {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, null);
         when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
+        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null))
+                .thenReturn(List.of());
 
         var page = service.equipmentWithRegulations(null, null, null, null);
 
-        assertThat(page.getContent()).hasSize(1);
-        EquipmentWithRegulationsDto dto = page.getContent().getFirst();
-        assertThat(dto.equipmentId()).isEqualTo(equipmentId);
-        assertThat(dto.equipmentTypeId()).isNull();
-        assertThat(dto.equipmentTypeName()).isNull();
-        assertThat(dto.regulations()).isEmpty();
+        assertThat(page.getContent()).isEmpty();
         verify(equipmentTypeRepository, never()).findAllByIdInAndIsDeletedFalse(any());
-        verify(repository, never()).findAllByEquipmentTypeIdInAndOptionalActive(any(), any());
+        verify(equipmentMaintenanceRuleRepository).findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null);
     }
 
     @Test
@@ -552,5 +558,26 @@ class MaintenanceRegulationServiceTest {
         equipment.setInventoryNumber("INV-1");
         equipment.setEquipmentTypeId(typeId);
         return equipment;
+    }
+
+    private EquipmentMaintenanceRule rule(UUID id,
+                                          UUID equipmentId,
+                                          UUID baseRegulationId,
+                                          UUID templateId,
+                                          boolean active) {
+        EquipmentMaintenanceRule rule = new EquipmentMaintenanceRule();
+        rule.setId(id);
+        rule.setEquipmentId(equipmentId);
+        rule.setBaseRegulationId(baseRegulationId);
+        rule.setTemplateId(templateId);
+        rule.setCode("EMR-2026-0001");
+        rule.setName("Monthly pump regulation override");
+        rule.setMaintenanceKind(MaintenanceKind.PREVENTIVE);
+        rule.setNormativeLaborHours(3.0);
+        rule.setActive(active);
+        rule.setPeriodicityUnit(PeriodicityUnit.MONTH);
+        rule.setPeriodicityValue(1);
+        rule.setRequiresShutdown(false);
+        return rule;
     }
 }
