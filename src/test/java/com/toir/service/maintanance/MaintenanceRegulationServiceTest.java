@@ -149,7 +149,7 @@ class MaintenanceRegulationServiceTest {
     }
 
     @Test
-    void equipmentWithRegulationsReturnsEmptyWhenEquipmentHasNoConnectedRegulations() {
+    void equipmentWithRegulationsReturnsEquipmentWithoutTypeAndEmptyRegulations() {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, null);
         when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
@@ -158,9 +158,65 @@ class MaintenanceRegulationServiceTest {
 
         var page = service.equipmentWithRegulations(null, null, null, null);
 
-        assertThat(page.getContent()).isEmpty();
+        assertThat(page.getContent()).hasSize(1);
+        EquipmentWithRegulationsDto dto = page.getContent().getFirst();
+        assertThat(dto.equipmentId()).isEqualTo(equipmentId);
+        assertThat(dto.equipmentTypeId()).isNull();
+        assertThat(dto.equipmentTypeName()).isNull();
+        assertThat(dto.regulations()).isEmpty();
         verify(equipmentTypeRepository, never()).findAllByIdInAndIsDeletedFalse(any());
         verify(equipmentMaintenanceRuleRepository).findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null);
+    }
+
+    @Test
+    void equipmentWithRegulationsHandlesTypedEquipmentWithoutRegulations() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        EquipmentType type = new EquipmentType();
+        type.setId(typeId);
+        type.setName("Pump");
+
+        when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
+        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of(type));
+        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null))
+                .thenReturn(List.of());
+
+        var page = service.equipmentWithRegulations(null, null, null, null);
+
+        assertThat(page.getContent()).isEmpty();
+        verify(equipmentMaintenanceRuleRepository).findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null);
+    }
+
+    @Test
+    void equipmentWithRegulationsHandlesRegulationWithoutTemplate() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        EquipmentType type = new EquipmentType();
+        type.setId(typeId);
+        type.setName("Pump");
+        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, "MR-2026-0001", true);
+        regulation.setTemplateId(null);
+        EquipmentMaintenanceRule rule = rule(UUID.randomUUID(), equipmentId, regulation.getId(), null, true);
+
+        when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
+        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of(type));
+        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null))
+                .thenReturn(List.of(rule));
+        when(repository.findAllByIdInAndIsDeletedFalse(Set.of(regulation.getId()))).thenReturn(List.of(regulation));
+
+        var page = service.equipmentWithRegulations(null, null, null, null);
+
+        assertThat(page.getContent()).hasSize(1);
+        EquipmentWithRegulationsDto dto = page.getContent().getFirst();
+        assertThat(dto.equipmentId()).isEqualTo(equipmentId);
+        assertThat(dto.equipmentTypeId()).isEqualTo(typeId);
+        assertThat(dto.equipmentTypeName()).isEqualTo("Pump");
+        assertThat(dto.regulations()).hasSize(1);
+        assertThat(dto.regulations().getFirst().id()).isEqualTo(regulation.getId());
+        assertThat(dto.regulations().getFirst().requiredSkill()).isNull();
+        verify(operationRepository, never()).findAllByTemplateIdInAndIsDeletedFalse(any());
     }
 
     @Test

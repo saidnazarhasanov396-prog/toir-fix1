@@ -38,6 +38,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Year;
+import java.util.Collections;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -245,13 +246,18 @@ public class MaintenanceRegulationService {
         return equipment.stream()
                 .filter(Objects::nonNull)
                 .map(item -> {
-                    EquipmentType type = typeById.get(item.getEquipmentTypeId());
-                    List<MaintenanceRegulationSummaryDto> regulations = regulationsByEquipmentId
-                            .getOrDefault(item.getId(), List.of())
+                    UUID itemEquipmentTypeId = item.getEquipmentTypeId();
+                    EquipmentType type = itemEquipmentTypeId == null ? null : typeById.get(itemEquipmentTypeId);
+                    List<MaintenanceRegulation> matchedRegulations = item.getId() == null
+                            ? Collections.emptyList()
+                            : regulationsByEquipmentId.getOrDefault(item.getId(), Collections.emptyList());
+                    log.debug("Matched maintenance regulations for equipmentId={}, equipmentTypeId={}, regulationCount={}",
+                            item.getId(), itemEquipmentTypeId, matchedRegulations.size());
+                    List<MaintenanceRegulationSummaryDto> regulations = matchedRegulations
                             .stream()
                             .map(regulation -> MaintenanceRegulationSummaryDto.from(
                                     regulation,
-                                    operationSummaryByTemplateId.get(regulation.getTemplateId())
+                                    operationSummary(regulation, operationSummaryByTemplateId)
                             ))
                             .filter(Objects::nonNull)
                             .toList();
@@ -259,13 +265,22 @@ public class MaintenanceRegulationService {
                             item.getId(),
                             item.getName(),
                             item.getCode(),
-                            item.getEquipmentTypeId(),
+                            itemEquipmentTypeId,
                             type == null ? null : type.getName(),
                             regulations
                     );
                 })
-                .filter(item -> item.regulations() != null && !item.regulations().isEmpty())
+                .filter(item -> item.equipmentTypeId() == null || (item.regulations() != null && !item.regulations().isEmpty()))
                 .toList();
+    }
+
+    private MaintenanceRegulationSummaryDto.OperationSummary operationSummary(
+            MaintenanceRegulation regulation,
+            Map<UUID, MaintenanceRegulationSummaryDto.OperationSummary> operationSummaryByTemplateId) {
+        if (regulation == null || regulation.getTemplateId() == null) {
+            return null;
+        }
+        return operationSummaryByTemplateId.get(regulation.getTemplateId());
     }
 
     private Map<UUID, List<MaintenanceRegulation>> regulationsByEquipmentId(
