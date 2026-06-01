@@ -15,7 +15,6 @@ import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.security.ScopeAccessService;
-import com.toir.service.ApprovalService;
 import com.toir.service.WorkOrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,9 +55,6 @@ class WorkOrderControllerContractTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
-    @Mock
-    ApprovalService approvalService;
-
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -67,7 +63,7 @@ class WorkOrderControllerContractTest {
         lenient().when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
         lenient().when(repository.findByIdAndIsDeletedFalse(any(UUID.class)))
                 .thenAnswer(invocation -> Optional.of(workOrderEntity(invocation.getArgument(0), UUID.randomUUID())));
-        mockMvc = MockMvcBuilders.standaloneSetup(new WorkOrderController(service, approvalService, repository, scopeAccessService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new WorkOrderController(service, repository, scopeAccessService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -222,6 +218,42 @@ class WorkOrderControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.operationsCount").value(2))
                 .andExpect(jsonPath("$.materialsCount").value(4));
+    }
+
+    @Test
+    void approveReturnsUpdatedApprovedWorkOrder() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        WorkOrderDto response = workOrderDto(
+                workOrderId,
+                WorkOrderStatus.APPROVED,
+                null,
+                null
+        );
+        when(service.approve(workOrderId, approverId)).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/work-orders/{id}/approve", workOrderId)
+                        .param("approverId", approverId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(workOrderId.toString()))
+                .andExpect(jsonPath("$.status").value("APPROVED"));
+
+        verify(service).approve(workOrderId, approverId);
+    }
+
+    @Test
+    void approveAlreadyApprovedWorkOrderReturns400() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrderEntity(workOrderId, UUID.randomUUID(), WorkOrderStatus.APPROVED)));
+        when(service.approve(workOrderId, approverId))
+                .thenThrow(RestException.badRequest("Only DRAFT/PLANNED work orders can be approved"));
+
+        mockMvc.perform(post("/api/v1/work-orders/{id}/approve", workOrderId)
+                        .param("approverId", approverId.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Only DRAFT/PLANNED work orders can be approved"));
     }
 
     @Test
@@ -489,13 +521,17 @@ class WorkOrderControllerContractTest {
     }
 
     private WorkOrder workOrderEntity(UUID id, UUID departmentId) {
+        return workOrderEntity(id, departmentId, WorkOrderStatus.PLANNED);
+    }
+
+    private WorkOrder workOrderEntity(UUID id, UUID departmentId, WorkOrderStatus status) {
         WorkOrder workOrder = new WorkOrder();
         workOrder.setId(id);
         workOrder.setNumber("WO-2026-1001");
         workOrder.setTitle("Planned repair");
         workOrder.setEquipmentId(UUID.randomUUID());
         workOrder.setDepartmentId(departmentId);
-        workOrder.setStatus(WorkOrderStatus.PLANNED);
+        workOrder.setStatus(status);
         workOrder.setType(WorkOrderType.PLANNED);
         workOrder.setWorkType(WorkType.REPAIR);
         workOrder.setPriority(PriorityLevel.MEDIUM);

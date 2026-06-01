@@ -11,7 +11,6 @@ import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.security.ScopeAccessService;
-import com.toir.service.ApprovalService;
 import com.toir.service.WorkOrderService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,7 +32,6 @@ import org.springframework.web.bind.annotation.*;
 public class WorkOrderController {
 
     private final WorkOrderService service;
-    private final ApprovalService approvalService;
     private final WorkOrderRepository repository;
     private final ScopeAccessService scopeAccessService;
 
@@ -90,18 +88,7 @@ public class WorkOrderController {
     public ResponseEntity<WorkOrderDto> approve(@PathVariable UUID id, @RequestParam UUID approverId) {
         WorkOrder workOrder = workOrderOrThrow(id);
         assertCanAccessWorkOrder(workOrder);
-        if (workOrder.getStatus() != WorkOrderStatus.DRAFT && workOrder.getStatus() != WorkOrderStatus.PLANNED) {
-            throw RestException.badRequest("Only DRAFT/PLANNED work orders can be approved");
-        }
-        approvalService.createOrReuseApprovalForDocument(
-                "WORK_ORDER",
-                id,
-                null,
-                approverId,
-                "WORK_ORDER_APPROVER",
-                "Work order approval: " + workOrder.getNumber(),
-                "Approval workflow request for work order " + workOrder.getNumber());
-        return ResponseEntity.ok(service.findById(id));
+        return ResponseEntity.ok(service.approve(id, approverId));
     }
 
     @PostMapping("/{id}/start")
