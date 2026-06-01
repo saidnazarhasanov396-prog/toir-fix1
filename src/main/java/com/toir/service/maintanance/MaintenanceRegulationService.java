@@ -175,20 +175,28 @@ public class MaintenanceRegulationService {
 
     private List<EquipmentWithRegulationsDto> equipmentWithRegulations(UUID equipmentTypeId, Boolean active) {
         List<Equipment> equipment = equipmentRepository.findAllForMaintenanceRegulations(equipmentTypeId);
-        if (equipment.isEmpty()) {
+        if (equipment == null || equipment.isEmpty()) {
             return List.of();
         }
 
         Set<UUID> equipmentTypeIds = equipment.stream()
+                .filter(Objects::nonNull)
                 .map(Equipment::getEquipmentTypeId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Map<UUID, EquipmentType> typeById = equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(equipmentTypeIds)
-                .stream()
-                .collect(Collectors.toMap(EquipmentType::getId, type -> type, (left, right) -> left));
-        Map<UUID, List<MaintenanceRegulation>> regulationsByTypeId =
-                repository.findAllByEquipmentTypeIdInAndOptionalActive(equipmentTypeIds, active)
+        List<EquipmentType> equipmentTypes = equipmentTypeIds.isEmpty()
+                ? List.of()
+                : safeList(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(equipmentTypeIds));
+        Map<UUID, EquipmentType> typeById = equipmentTypes
                         .stream()
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toMap(EquipmentType::getId, type -> type, (left, right) -> left));
+        List<MaintenanceRegulation> regulations = equipmentTypeIds.isEmpty()
+                ? List.of()
+                : safeList(repository.findAllByEquipmentTypeIdInAndOptionalActive(equipmentTypeIds, active));
+        Map<UUID, List<MaintenanceRegulation>> regulationsByTypeId =
+                regulations.stream()
+                        .filter(regulation -> regulation != null && regulation.getEquipmentTypeId() != null)
                         .collect(Collectors.groupingBy(MaintenanceRegulation::getEquipmentTypeId));
         Map<UUID, MaintenanceRegulationSummaryDto.OperationSummary> operationSummaryByTemplateId =
                 operationSummaryByTemplateId(regulationsByTypeId.values().stream()
@@ -198,15 +206,17 @@ public class MaintenanceRegulationService {
                         .collect(Collectors.toSet()));
 
         return equipment.stream()
+                .filter(Objects::nonNull)
                 .map(item -> {
                     EquipmentType type = typeById.get(item.getEquipmentTypeId());
-                    List<MaintenanceRegulationSummaryDto> regulations = regulationsByTypeId
+                    List<MaintenanceRegulationSummaryDto> regulations1 = regulationsByTypeId
                             .getOrDefault(item.getEquipmentTypeId(), List.of())
                             .stream()
                             .map(regulation -> MaintenanceRegulationSummaryDto.from(
                                     regulation,
                                     operationSummaryByTemplateId.get(regulation.getTemplateId())
                             ))
+                            .filter(Objects::nonNull)
                             .toList();
                     return new EquipmentWithRegulationsDto(
                             item.getId(),
@@ -214,7 +224,7 @@ public class MaintenanceRegulationService {
                             item.getCode(),
                             item.getEquipmentTypeId(),
                             type == null ? null : type.getName(),
-                            regulations
+                            regulations1
                     );
                 })
                 .toList();
@@ -224,8 +234,10 @@ public class MaintenanceRegulationService {
         if (templateIds.isEmpty()) {
             return Map.of();
         }
-        return operationRepository.findAllByTemplateIdInAndIsDeletedFalse(templateIds)
+        return safeList(operationRepository.findAllByTemplateIdInAndIsDeletedFalse(templateIds))
                 .stream()
+                .filter(Objects::nonNull)
+                .filter(operation -> operation.getTemplate() != null && operation.getTemplate().getId() != null)
                 .collect(Collectors.groupingBy(operation -> operation.getTemplate().getId()))
                 .entrySet()
                 .stream()
@@ -250,6 +262,10 @@ public class MaintenanceRegulationService {
                 .distinct()
                 .collect(Collectors.joining("; "));
         return joined.isBlank() ? null : joined;
+    }
+
+    private <T> List<T> safeList(List<T> values) {
+        return values == null ? List.of() : values;
     }
 
     private void validateEquipmentTypeIfProvided(UUID equipmentTypeId) {
