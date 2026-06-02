@@ -21,21 +21,21 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "vehicle_documents")
+@Table(name = "equipment_documents")
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class VehicleDocument {
+public class EquipmentDocument {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "vehicle_details_id", nullable = false)
-    private VehicleDetails vehicleDetails;
+    @JoinColumn(name = "equipment_id", nullable = false)
+    private Equipment equipment;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "file_id", nullable = false)

@@ -19,7 +19,8 @@ public record EquipmentDetailDto(
         List<WorkOrderShortDto> workOrders,
         List<DowntimeEventShortDto> downtimeEvents,
         List<EquipmentAttributeValueDto> attributes,
-        List<EquipmentManualAttributeDto> manualAttributes
+        List<EquipmentManualAttributeDto> manualAttributes,
+        List<EquipmentDocumentDto> documents
 ) {
     public EquipmentDetailDto(
             EquipmentDto equipment,
@@ -29,7 +30,19 @@ public record EquipmentDetailDto(
             List<DowntimeEventShortDto> downtimeEvents,
             List<EquipmentAttributeValueDto> attributes
     ) {
-        this(equipment, repairRequests, defects, workOrders, downtimeEvents, attributes, List.of());
+        this(equipment, repairRequests, defects, workOrders, downtimeEvents, attributes, List.of(), List.of());
+    }
+
+    public EquipmentDetailDto(
+            EquipmentDto equipment,
+            List<RepairRequestShortDto> repairRequests,
+            List<DefectShortDto> defects,
+            List<WorkOrderShortDto> workOrders,
+            List<DowntimeEventShortDto> downtimeEvents,
+            List<EquipmentAttributeValueDto> attributes,
+            List<EquipmentManualAttributeDto> manualAttributes
+    ) {
+        this(equipment, repairRequests, defects, workOrders, downtimeEvents, attributes, manualAttributes, List.of());
     }
 
     public EquipmentDetailDto(
@@ -39,7 +52,7 @@ public record EquipmentDetailDto(
             List<WorkOrderShortDto> workOrders,
             List<DowntimeEventShortDto> downtimeEvents
     ) {
-        this(equipment, repairRequests, defects, workOrders, downtimeEvents, List.of(), List.of());
+        this(equipment, repairRequests, defects, workOrders, downtimeEvents, List.of(), List.of(), List.of());
     }
 
     public EquipmentDetailDto {
@@ -50,6 +63,7 @@ public record EquipmentDetailDto(
         downtimeEvents = downtimeEvents == null ? List.of() : List.copyOf(downtimeEvents);
         attributes = attributes == null ? List.of() : List.copyOf(attributes);
         manualAttributes = manualAttributes == null ? List.of() : List.copyOf(manualAttributes);
+        documents = documents == null ? List.of() : List.copyOf(documents);
     }
 
     public record RepairRequestShortDto(

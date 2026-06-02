@@ -210,7 +210,7 @@ class VehicleControllerContractTest {
                         .file(new MockMultipartFile("document", "vehicle-passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.vehicleDetails.document.id").value(fileId.toString()))
-                .andExpect(jsonPath("$.vehicleDetails.document.downloadUrl").value("/api/files/" + fileId + "/download"));
+                .andExpect(jsonPath("$.vehicleDetails.document.downloadUrl").value(org.hamcrest.Matchers.nullValue()));
 
         verify(service).attachDocument(eq(equipmentId), any(), eq(currentUserId));
     }
@@ -222,34 +222,38 @@ class VehicleControllerContractTest {
         UUID firstFileId = UUID.randomUUID();
         UUID secondDocumentId = UUID.randomUUID();
         UUID secondFileId = UUID.randomUUID();
-        when(service.attachDocuments(eq(equipmentId), any(), eq("TECHNICAL"), any()))
+        when(service.attachDocuments(eq(equipmentId), any(), eq(List.of("Technical Passport", "Insurance Document")), eq("TECHNICAL"), any()))
                 .thenReturn(List.of(
-                        vehicleDocument(firstDocumentId, firstFileId, "passport.pdf", "TECHNICAL"),
-                        vehicleDocument(secondDocumentId, secondFileId, "insurance.pdf", "TECHNICAL")
+                        vehicleDocument(firstDocumentId, firstFileId, "passport.pdf", "TECHNICAL", "Technical Passport"),
+                        vehicleDocument(secondDocumentId, secondFileId, "insurance.pdf", "TECHNICAL", "Insurance Document")
                 ));
 
         mockMvc.perform(multipart("/api/v1/vehicles/{equipmentId}/documents", equipmentId)
                         .file(new MockMultipartFile("files", "passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
                         .file(new MockMultipartFile("files", "insurance.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .param("documentNames", "Technical Passport", "Insurance Document")
                         .param("documentType", "TECHNICAL"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$[0].id").value(firstDocumentId.toString()))
                 .andExpect(jsonPath("$[0].fileId").value(firstFileId.toString()))
                 .andExpect(jsonPath("$[0].documentType").value("TECHNICAL"))
+                .andExpect(jsonPath("$[0].documentName").value("Technical Passport"))
                 .andExpect(jsonPath("$[1].id").value(secondDocumentId.toString()))
-                .andExpect(jsonPath("$[1].fileId").value(secondFileId.toString()));
+                .andExpect(jsonPath("$[1].fileId").value(secondFileId.toString()))
+                .andExpect(jsonPath("$[1].documentName").value("Insurance Document"));
 
-        verify(service).attachDocuments(eq(equipmentId), any(), eq("TECHNICAL"), any());
+        verify(service).attachDocuments(eq(equipmentId), any(), eq(List.of("Technical Passport", "Insurance Document")), eq("TECHNICAL"), any());
     }
 
     @Test
     void attachDocumentsUnauthorizedReturnsForbidden() throws Exception {
         UUID equipmentId = UUID.randomUUID();
-        when(service.attachDocuments(eq(equipmentId), any(), isNull(), any()))
+        when(service.attachDocuments(eq(equipmentId), any(), eq(List.of("Technical Passport")), isNull(), any()))
                 .thenThrow(RestException.forbidden("Vehicle access denied"));
 
         mockMvc.perform(multipart("/api/v1/vehicles/{equipmentId}/documents", equipmentId)
-                        .file(new MockMultipartFile("files", "vehicle-passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes())))
+                        .file(new MockMultipartFile("files", "vehicle-passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .param("documentNames", "Technical Passport"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("Vehicle access denied"));
     }
@@ -257,11 +261,12 @@ class VehicleControllerContractTest {
     @Test
     void attachDocumentsInvalidFilePropagatesValidationError() throws Exception {
         UUID equipmentId = UUID.randomUUID();
-        when(service.attachDocuments(eq(equipmentId), any(), isNull(), any()))
+        when(service.attachDocuments(eq(equipmentId), any(), eq(List.of("Suspicious File")), isNull(), any()))
                 .thenThrow(new RestException("File type is not allowed", HttpStatus.UNSUPPORTED_MEDIA_TYPE));
 
         mockMvc.perform(multipart("/api/v1/vehicles/{equipmentId}/documents", equipmentId)
-                        .file(new MockMultipartFile("files", "bad.exe", "application/octet-stream", "MZ".getBytes())))
+                        .file(new MockMultipartFile("files", "bad.exe", "application/octet-stream", "MZ".getBytes()))
+                        .param("documentNames", "Suspicious File"))
                 .andExpect(status().isUnsupportedMediaType())
                 .andExpect(jsonPath("$.message").value("File type is not allowed"));
     }
@@ -322,13 +327,14 @@ class VehicleControllerContractTest {
         UUID documentId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
         when(service.getDocuments(eq(equipmentId), any()))
-                .thenReturn(List.of(vehicleDocument(documentId, fileId, "vehicle-passport.pdf", "TECHNICAL")));
+                .thenReturn(List.of(vehicleDocument(documentId, fileId, "vehicle-passport.pdf", "TECHNICAL", "Technical Passport")));
 
         mockMvc.perform(get("/api/v1/vehicles/{equipmentId}/documents", equipmentId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(documentId.toString()))
                 .andExpect(jsonPath("$[0].fileId").value(fileId.toString()))
-                .andExpect(jsonPath("$[0].documentType").value("TECHNICAL"));
+                .andExpect(jsonPath("$[0].documentType").value("TECHNICAL"))
+                .andExpect(jsonPath("$[0].documentName").value("Technical Passport"));
     }
 
     @Test
@@ -409,27 +415,51 @@ class VehicleControllerContractTest {
         return new VehicleDetailDto.DocumentRef(
                 fileId,
                 "vehicle-passport.pdf",
+                "vehicle-passport.pdf",
                 "application/pdf",
                 123L,
-                "/api/files/" + fileId + "/download",
-                "/api/files/" + fileId + "/presigned-url"
+                null,
+                null
         );
     }
 
     private VehicleDocumentDto vehicleDocument(UUID documentId, UUID fileId, String originalName, String documentType) {
-        return vehicleDocument(UUID.randomUUID(), documentId, fileId, originalName, documentType);
+        return vehicleDocument(UUID.randomUUID(), documentId, fileId, originalName, documentType, originalName);
+    }
+
+    private VehicleDocumentDto vehicleDocument(
+            UUID documentId,
+            UUID fileId,
+            String originalName,
+            String documentType,
+            String documentName
+    ) {
+        return vehicleDocument(UUID.randomUUID(), documentId, fileId, originalName, documentType, documentName);
     }
 
     private VehicleDocumentDto vehicleDocument(UUID equipmentId, UUID documentId, UUID fileId, String originalName, String documentType) {
+        return vehicleDocument(equipmentId, documentId, fileId, originalName, documentType, originalName);
+    }
+
+    private VehicleDocumentDto vehicleDocument(
+            UUID equipmentId,
+            UUID documentId,
+            UUID fileId,
+            String originalName,
+            String documentType,
+            String documentName
+    ) {
         return new VehicleDocumentDto(
                 documentId,
                 fileId,
                 documentType,
+                documentName,
                 originalName,
                 "application/pdf",
                 123L,
-                "/api/files/" + fileId + "/download",
+                "/api/v1/vehicles/" + equipmentId + "/documents/" + documentId + "/download",
                 "/api/v1/vehicles/" + equipmentId + "/documents/" + documentId + "/presigned-url",
+                LocalDateTime.now(),
                 LocalDateTime.now()
         );
     }

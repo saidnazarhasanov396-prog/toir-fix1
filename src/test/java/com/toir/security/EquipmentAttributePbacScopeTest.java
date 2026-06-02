@@ -70,7 +70,7 @@ class EquipmentAttributePbacScopeTest {
         mockMvc.perform(get("/api/v1/equipment/{equipmentId}/attributes", equipmentId))
                 .andExpect(status().isOk());
 
-        verify(scopeAccessService).assertCanAccessDepartment(departmentId);
+        verify(scopeAccessService).assertCanAccessEquipmentScope(null, departmentId);
     }
 
     @Test
@@ -85,7 +85,7 @@ class EquipmentAttributePbacScopeTest {
                         .content("[]"))
                 .andExpect(status().isOk());
 
-        verify(scopeAccessService).assertCanAccessDepartment(departmentId);
+        verify(scopeAccessService).assertCanAccessEquipmentScope(null, departmentId);
     }
 
     @Test
@@ -99,7 +99,7 @@ class EquipmentAttributePbacScopeTest {
         mockMvc.perform(get("/api/v1/equipment/{equipmentId}/attributes/history", equipmentId))
                 .andExpect(status().isOk());
 
-        verify(scopeAccessService).assertCanAccessDepartment(departmentId);
+        verify(scopeAccessService).assertCanAccessEquipmentScope(null, departmentId);
     }
 
     @Test
@@ -108,7 +108,7 @@ class EquipmentAttributePbacScopeTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
                 .thenReturn(Optional.of(equipment(equipmentId, departmentId)));
         doThrow(new AccessDeniedException("Access denied by data scope"))
-                .when(scopeAccessService).assertCanAccessDepartment(departmentId);
+                .when(scopeAccessService).assertCanAccessEquipmentScope(null, departmentId);
 
         mockMvc.perform(get("/api/v1/equipment/{equipmentId}/attributes", equipmentId))
                 .andExpect(status().isForbidden());
@@ -122,7 +122,7 @@ class EquipmentAttributePbacScopeTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
                 .thenReturn(Optional.of(equipment(equipmentId, departmentId)));
         doThrow(new AccessDeniedException("Access denied by data scope"))
-                .when(scopeAccessService).assertCanAccessDepartment(departmentId);
+                .when(scopeAccessService).assertCanAccessEquipmentScope(null, departmentId);
 
         mockMvc.perform(post("/api/v1/equipment/{equipmentId}/attributes", equipmentId)
                         .contentType("application/json")
@@ -141,6 +141,36 @@ class EquipmentAttributePbacScopeTest {
 
         mockMvc.perform(get("/api/v1/equipment/{equipmentId}/attributes", equipmentId))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void equipmentAttributeReadAllowsOutsideEquipmentByResponsibleDepartment() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID responsibleDepartmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, null);
+        equipment.setResponsibleDepartmentId(responsibleDepartmentId);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(equipment));
+        when(service.findValues(equipmentId)).thenReturn(List.of(value(equipmentId)));
+
+        mockMvc.perform(get("/api/v1/equipment/{equipmentId}/attributes", equipmentId))
+                .andExpect(status().isOk());
+
+        verify(scopeAccessService).assertCanAccessEquipmentScope(responsibleDepartmentId, null);
+    }
+
+    @Test
+    void equipmentAttributeReadDeniedWhenNoResponsibleOrPhysicalDepartment() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(equipment(equipmentId, null)));
+        doThrow(new AccessDeniedException("Access denied by data scope"))
+                .when(scopeAccessService).assertCanAccessEquipmentScope(null, null);
+
+        mockMvc.perform(get("/api/v1/equipment/{equipmentId}/attributes", equipmentId))
+                .andExpect(status().isForbidden());
+
+        verify(service, never()).findValues(equipmentId);
     }
 
     private Equipment equipment(UUID equipmentId, UUID departmentId) {

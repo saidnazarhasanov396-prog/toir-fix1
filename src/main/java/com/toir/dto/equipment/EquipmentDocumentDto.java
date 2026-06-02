@@ -1,12 +1,12 @@
-package com.toir.dto.vehicle;
+package com.toir.dto.equipment;
 
 import com.toir.entity.UploadedFile;
-import com.toir.entity.equipment.VehicleDocument;
+import com.toir.entity.equipment.EquipmentDocument;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-public record VehicleDocumentDto(
+public record EquipmentDocumentDto(
         UUID id,
         UUID fileId,
         String documentType,
@@ -19,12 +19,12 @@ public record VehicleDocumentDto(
         LocalDateTime createdAt,
         LocalDateTime uploadedAt
 ) {
-    public static VehicleDocumentDto from(UUID equipmentId, VehicleDocument document) {
+    public static EquipmentDocumentDto from(UUID equipmentId, EquipmentDocument document) {
         if (document == null || document.getFile() == null || Boolean.TRUE.equals(document.getFile().getDeleted())) {
             return null;
         }
         UploadedFile file = document.getFile();
-        return new VehicleDocumentDto(
+        return new EquipmentDocumentDto(
                 document.getId(),
                 file.getId(),
                 document.getDocumentType(),
@@ -32,8 +32,8 @@ public record VehicleDocumentDto(
                 file.getOriginalName(),
                 file.getContentType(),
                 file.getSize(),
-                "/api/v1/vehicles/" + equipmentId + "/documents/" + document.getId() + "/download",
-                "/api/v1/vehicles/" + equipmentId + "/documents/" + document.getId() + "/presigned-url",
+                "/api/v1/equipment/" + equipmentId + "/documents/" + document.getId() + "/download",
+                "/api/v1/equipment/" + equipmentId + "/documents/" + document.getId() + "/presigned-url",
                 document.getCreatedAt(),
                 document.getCreatedAt()
         );

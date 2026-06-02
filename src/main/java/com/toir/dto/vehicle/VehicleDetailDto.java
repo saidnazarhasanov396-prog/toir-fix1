@@ -65,6 +65,7 @@ public record VehicleDetailDto(
 
     public record DocumentRef(
             UUID id,
+            String documentName,
             String originalName,
             String contentType,
             Long size,
@@ -78,10 +79,11 @@ public record VehicleDetailDto(
             return new DocumentRef(
                     file.getId(),
                     file.getOriginalName(),
+                    file.getOriginalName(),
                     file.getContentType(),
                     file.getSize(),
-                    "/api/files/" + file.getId() + "/download",
-                    "/api/files/" + file.getId() + "/presigned-url"
+                    null,
+                    null
             );
         }
     }
@@ -156,6 +158,7 @@ public record VehicleDetailDto(
         }
         return new DocumentRef(
                 document.id(),
+                document.documentName(),
                 document.originalName(),
                 document.contentType(),
                 document.size(),

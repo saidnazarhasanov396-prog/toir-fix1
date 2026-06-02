@@ -79,6 +79,35 @@ class ScopeAccessServiceTest {
     }
 
     @Test
+    void equipmentScopeUsesResponsibleDepartmentBeforePhysicalDepartment() {
+        UUID ownDepartment = UUID.randomUUID();
+        UUID physicalDepartment = UUID.randomUUID();
+        authenticate(user(UUID.randomUUID(), ownDepartment, "VIEWER", List.of()), List.of(PermissionConstants.READ_LEGACY));
+        ScopeAccessService service = service();
+
+        assertThat(service.canAccessEquipmentScope(ownDepartment, physicalDepartment)).isTrue();
+        assertThat(service.canAccessEquipmentScope(physicalDepartment, ownDepartment)).isFalse();
+    }
+
+    @Test
+    void equipmentScopeFallsBackToPhysicalDepartmentForOldRows() {
+        UUID ownDepartment = UUID.randomUUID();
+        authenticate(user(UUID.randomUUID(), ownDepartment, "VIEWER", List.of()), List.of(PermissionConstants.READ_LEGACY));
+
+        assertThat(service().canAccessEquipmentScope(null, ownDepartment)).isTrue();
+        assertThat(service().canAccessEquipmentScope(null, UUID.randomUUID())).isFalse();
+    }
+
+    @Test
+    void equipmentScopeDeniesNullScopeForNonAdmin() {
+        authenticate(user(UUID.randomUUID(), UUID.randomUUID(), "VIEWER", List.of()), List.of(PermissionConstants.READ_LEGACY));
+
+        assertThat(service().canAccessEquipmentScope(null, null)).isFalse();
+        assertThatThrownBy(() -> service().assertCanAccessEquipmentScope(null, null))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
     void nonAdminRequestedDepartmentIsOverriddenToOwnDepartment() {
         UUID ownDepartment = UUID.randomUUID();
         UUID requestedDepartment = UUID.randomUUID();

@@ -293,7 +293,10 @@ public class AnalyticsService {
     public RcaEquipmentResponse rcaEquipment(UUID equipmentId) {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> com.toir.exception.RestException.notFound("Equipment not found: " + equipmentId));
-        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
+        scopeAccessService.assertCanAccessEquipmentScope(
+                equipment.getResponsibleDepartmentId(),
+                equipment.getDepartmentId()
+        );
         List<Defect> defects = defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
         Map<String, Long> topCauses = defects.stream()
                 .filter(d -> d.getRootCause() != null)
@@ -419,17 +422,17 @@ public class AnalyticsService {
 
     private boolean isEquipmentInDepartment(Map<UUID, Equipment> equipById, UUID equipmentId, UUID departmentId) {
         Equipment equipment = equipById.get(equipmentId);
-        return equipment != null && departmentId.equals(equipment.getDepartmentId());
+        return equipment != null && departmentId.equals(equipmentScopeDepartmentId(equipment));
     }
 
     private void assertCanAccessEquipmentAnalytics(Equipment equipment) {
-        UUID requestedDepartmentId = equipment.getDepartmentId();
+        UUID requestedDepartmentId = equipmentScopeDepartmentId(equipment);
         if (requestedDepartmentId == null) {
             if (scopeAccessService.isScopeAdmin()) {
-                logEquipmentAnalyticsScopeDecision(equipment, "allowed: scope admin and equipment has no department");
+                logEquipmentAnalyticsScopeDecision(equipment, "allowed: scope admin and equipment has no scope department");
                 return;
             }
-            logEquipmentAnalyticsScopeDecision(equipment, "denied: equipment has no department and user is not scope admin");
+            logEquipmentAnalyticsScopeDecision(equipment, "denied: equipment has no scope department and user is not scope admin");
             throw new AccessDeniedException("Access denied by equipment analytics department scope");
         }
 
@@ -440,6 +443,12 @@ public class AnalyticsService {
             logEquipmentAnalyticsScopeDecision(equipment, "denied: requested equipment department is outside user scope");
             throw ex;
         }
+    }
+
+    private UUID equipmentScopeDepartmentId(Equipment equipment) {
+        return equipment.getResponsibleDepartmentId() != null
+                ? equipment.getResponsibleDepartmentId()
+                : equipment.getDepartmentId();
     }
 
     private void logEquipmentAnalyticsScopeDecision(Equipment equipment, String reason) {
@@ -460,7 +469,7 @@ public class AnalyticsService {
                 authorities,
                 scopeAccessService.currentDepartmentIdOrNull(),
                 equipment.getId(),
-                equipment.getDepartmentId(),
+                equipmentScopeDepartmentId(equipment),
                 reason
         );
     }

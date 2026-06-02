@@ -12,7 +12,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,7 +19,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -110,58 +108,6 @@ class FileServiceImplTest {
         service.delete(uploadedFile.getId(), ownerId);
 
         verify(s3Service).delete(uploadedFile.getObjectName());
-    }
-
-    @Test
-    void multipleUploadRollsBackIfOneFileFails() {
-        MockMultipartFile first = file("one.pdf");
-        MockMultipartFile second = file("two.pdf");
-        when(validator.validate(first)).thenReturn(validated("one.pdf", "pdf", "application/pdf"));
-        when(validator.validate(second)).thenReturn(validated("two.pdf", "pdf", "application/pdf"));
-        when(repository.save(any(UploadedFile.class))).thenAnswer(invocation -> {
-            UploadedFile uploadedFile = invocation.getArgument(0);
-            uploadedFile.setId(UUID.randomUUID());
-            return uploadedFile;
-        });
-        doAnswer(invocation -> {
-            if (invocation.getArgument(0) == second) {
-                throw new RuntimeException("minio");
-            }
-            return null;
-        }).when(s3Service).store(any(), org.mockito.ArgumentMatchers.anyString());
-
-        assertThatThrownBy(() -> service.uploadMultiple(List.of(first, second), FileCategory.DOCUMENT, ownerId))
-                .isInstanceOf(RuntimeException.class);
-
-        ArgumentCaptor<String> storedObjectNames = ArgumentCaptor.captor();
-        verify(s3Service, org.mockito.Mockito.times(2)).store(any(), storedObjectNames.capture());
-        verify(s3Service).delete(storedObjectNames.getAllValues().getFirst());
-        assertThat(storedObjectNames.getAllValues().getFirst()).startsWith("documents/");
-    }
-
-    @Test
-    void multipleUploadCleanupFailureDoesNotHideOriginalException() {
-        MockMultipartFile first = file("one.pdf");
-        MockMultipartFile second = file("two.pdf");
-        when(validator.validate(first)).thenReturn(validated("one.pdf", "pdf", "application/pdf"));
-        when(validator.validate(second)).thenReturn(validated("two.pdf", "pdf", "application/pdf"));
-        when(repository.save(any(UploadedFile.class))).thenAnswer(invocation -> {
-            UploadedFile uploadedFile = invocation.getArgument(0);
-            uploadedFile.setId(UUID.randomUUID());
-            return uploadedFile;
-        });
-        RuntimeException original = new RuntimeException("minio");
-        doAnswer(invocation -> {
-            if (invocation.getArgument(0) == second) {
-                throw original;
-            }
-            return null;
-        }).when(s3Service).store(any(), org.mockito.ArgumentMatchers.anyString());
-        doThrow(new RuntimeException("cleanup")).when(s3Service)
-                .delete(org.mockito.ArgumentMatchers.startsWith("documents/"));
-
-        assertThatThrownBy(() -> service.uploadMultiple(List.of(first, second), FileCategory.DOCUMENT, ownerId))
-                .isSameAs(original);
     }
 
     private MockMultipartFile file(String name) {

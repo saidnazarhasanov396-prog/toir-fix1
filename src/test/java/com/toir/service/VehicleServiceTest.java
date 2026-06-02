@@ -1116,8 +1116,8 @@ class VehicleServiceTest {
         VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
         MockMultipartFile firstDocument = document("files", "passport.pdf");
         MockMultipartFile secondDocument = document("files", "insurance.pdf");
-        VehicleDocument firstVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(firstFileId, currentUserId), "TECHNICAL");
-        VehicleDocument secondVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(secondFileId, currentUserId), "TECHNICAL");
+        VehicleDocument firstVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(firstFileId, currentUserId), "TECHNICAL", "Technical Passport");
+        VehicleDocument secondVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(secondFileId, currentUserId), "TECHNICAL", "Insurance Document");
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
@@ -1130,6 +1130,7 @@ class VehicleServiceTest {
         List<VehicleDocumentDto> result = service.attachDocuments(
                 equipmentId,
                 List.of(firstDocument, secondDocument),
+                List.of(" Technical Passport ", "Insurance Document"),
                 "TECHNICAL",
                 authenticatedUser(currentUserId, equipment.getDepartmentId())
         );
@@ -1137,7 +1138,12 @@ class VehicleServiceTest {
         assertThat(result).hasSize(2);
         assertThat(result).extracting(VehicleDocumentDto::fileId).containsExactly(firstFileId, secondFileId);
         assertThat(result).extracting(VehicleDocumentDto::documentType).containsExactly("TECHNICAL", "TECHNICAL");
-        verify(vehicleDocumentRepository).saveAllAndFlush(anyList());
+        assertThat(result).extracting(VehicleDocumentDto::documentName).containsExactly("Technical Passport", "Insurance Document");
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<VehicleDocument>> documentsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(vehicleDocumentRepository).saveAllAndFlush(documentsCaptor.capture());
+        assertThat(documentsCaptor.getValue()).extracting(VehicleDocument::getDocumentName)
+                .containsExactly("Technical Passport", "Insurance Document");
     }
 
     @Test
@@ -1149,6 +1155,7 @@ class VehicleServiceTest {
         assertThatThrownBy(() -> service.attachDocuments(
                 equipmentId,
                 List.of(document()),
+                List.of("Technical Passport"),
                 null,
                 authenticatedUser(UUID.randomUUID(), UUID.randomUUID())))
                 .isInstanceOf(RestException.class)
@@ -1172,6 +1179,7 @@ class VehicleServiceTest {
         assertThatThrownBy(() -> service.attachDocuments(
                 equipmentId,
                 List.of(document()),
+                List.of("Technical Passport"),
                 null,
                 authenticatedUser(UUID.randomUUID(), userDepartmentId)))
                 .isInstanceOf(RestException.class)
@@ -1191,10 +1199,71 @@ class VehicleServiceTest {
         assertThatThrownBy(() -> service.attachDocuments(
                 equipmentId,
                 List.of(),
+                List.of(),
                 null,
                 authenticatedUser(currentUserId, equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("At least one vehicle document file is required");
+
+        verify(fileService, never()).upload(any(), any(), any());
+    }
+
+    @Test
+    void attachDocumentsRejectsMissingDocumentNames() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.attachDocuments(
+                equipmentId,
+                List.of(document()),
+                null,
+                null,
+                authenticatedUser(currentUserId, equipment.getDepartmentId())))
+                .isInstanceOf(RestException.class)
+                .hasMessage("documentNames are required for vehicle document uploads");
+
+        verify(fileService, never()).upload(any(), any(), any());
+    }
+
+    @Test
+    void attachDocumentsRejectsBlankDocumentName() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.attachDocuments(
+                equipmentId,
+                List.of(document()),
+                List.of(" "),
+                null,
+                authenticatedUser(currentUserId, equipment.getDepartmentId())))
+                .isInstanceOf(RestException.class)
+                .hasMessage("documentNames[0] must not be blank");
+
+        verify(fileService, never()).upload(any(), any(), any());
+    }
+
+    @Test
+    void attachDocumentsRejectsDocumentNameCountMismatch() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.attachDocuments(
+                equipmentId,
+                List.of(document("files", "passport.pdf"), document("files", "insurance.pdf")),
+                List.of("Technical Passport"),
+                null,
+                authenticatedUser(currentUserId, equipment.getDepartmentId())))
+                .isInstanceOf(RestException.class)
+                .hasMessage("files and documentNames must have the same length");
 
         verify(fileService, never()).upload(any(), any(), any());
     }
@@ -1218,6 +1287,7 @@ class VehicleServiceTest {
         assertThatThrownBy(() -> service.attachDocuments(
                 equipmentId,
                 List.of(firstDocument, secondDocument),
+                List.of("Technical Passport", "Insurance Document"),
                 null,
                 authenticatedUser(currentUserId, equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
@@ -1248,6 +1318,7 @@ class VehicleServiceTest {
         assertThatThrownBy(() -> service.attachDocuments(
                 equipmentId,
                 List.of(firstDocument, secondDocument),
+                List.of("Technical Passport", "Insurance Document"),
                 null,
                 authenticatedUser(currentUserId, equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
@@ -1265,8 +1336,8 @@ class VehicleServiceTest {
         UUID secondFileId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
         VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
-        VehicleDocument first = vehicleDocument(UUID.randomUUID(), details, uploadedFile(firstFileId, currentUserId, "passport.pdf"), "TECHNICAL");
-        VehicleDocument second = vehicleDocument(UUID.randomUUID(), details, uploadedFile(secondFileId, currentUserId, "insurance.pdf"), "TECHNICAL");
+        VehicleDocument first = vehicleDocument(UUID.randomUUID(), details, uploadedFile(firstFileId, currentUserId, "passport.pdf"), "TECHNICAL", "Technical Passport");
+        VehicleDocument second = vehicleDocument(UUID.randomUUID(), details, uploadedFile(secondFileId, currentUserId, "insurance.pdf"), "TECHNICAL", "Insurance Document");
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDocumentRepository.findAllByEquipmentId(equipmentId))
@@ -1275,6 +1346,7 @@ class VehicleServiceTest {
         List<VehicleDocumentDto> result = service.getDocuments(equipmentId, authenticatedUser(currentUserId, equipment.getDepartmentId()));
 
         assertThat(result).extracting(VehicleDocumentDto::fileId).containsExactly(firstFileId, secondFileId);
+        assertThat(result).extracting(VehicleDocumentDto::documentName).containsExactly("Technical Passport", "Insurance Document");
         verify(fileService).getMetadata(firstFileId, currentUserId);
         verify(fileService).getMetadata(secondFileId, currentUserId);
     }
@@ -1688,10 +1760,21 @@ class VehicleServiceTest {
     }
 
     private static VehicleDocument vehicleDocument(UUID id, VehicleDetails details, UploadedFile file, String documentType) {
+        return vehicleDocument(id, details, file, documentType, file == null ? "Vehicle document" : file.getOriginalName());
+    }
+
+    private static VehicleDocument vehicleDocument(
+            UUID id,
+            VehicleDetails details,
+            UploadedFile file,
+            String documentType,
+            String documentName
+    ) {
         VehicleDocument document = VehicleDocument.builder()
                 .vehicleDetails(details)
                 .file(file)
                 .documentType(documentType)
+                .documentName(documentName)
                 .createdAt(LocalDateTime.now())
                 .build();
         document.setId(id);

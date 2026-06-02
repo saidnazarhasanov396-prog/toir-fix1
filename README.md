@@ -102,7 +102,7 @@ Warning: universal `truncate`/`drop` operations are for local/demo reset only an
 | `budget`, `actualcost`, `costcategory` | Budgets, lines, actual costs with review |
 | `downtime`, `reliability` | Downtime events, MTBF/MTTR metrics |
 | `notification` | User notifications |
-| `file`, `technicaldocument` | File uploads + technical passport documents |
+| `technicaldocument` | Technical passport documents |
 | `auditlog` | Audit trail, wired into login |
 | `dashboard` | KPI summary |
 

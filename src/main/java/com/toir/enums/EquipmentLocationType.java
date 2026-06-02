@@ -1,7 +1,7 @@
 package com.toir.enums;
 
-public enum PlacementTargetType {
-    WAREHOUSE,
+public enum EquipmentLocationType {
     DEPARTMENT,
+    WAREHOUSE,
     OUTSIDE_FACILITY
 }

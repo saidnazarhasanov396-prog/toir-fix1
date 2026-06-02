@@ -21,7 +21,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -177,13 +176,10 @@ public class EquipmentAttributeController {
     }
 
     private void assertCanAccessEquipment(Equipment equipment) {
-        if (equipment.getDepartmentId() == null) {
-            if (!scopeAccessService.isScopeAdmin()) {
-                throw new AccessDeniedException("Access denied by equipment department scope");
-            }
-            return;
-        }
-        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
+        scopeAccessService.assertCanAccessEquipmentScope(
+                equipment.getResponsibleDepartmentId(),
+                equipment.getDepartmentId()
+        );
     }
 
     private void validateBatchRequest(List<EquipmentAttributeDefinitionRequest> request) {

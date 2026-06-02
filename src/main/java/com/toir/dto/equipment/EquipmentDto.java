@@ -2,6 +2,7 @@ package com.toir.dto.equipment;
 
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
+import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.PlacementType;
 import com.toir.enums.WarehouseEquipmentStatus;
@@ -84,8 +85,27 @@ public record EquipmentDto(
             Ref department,
             Ref warehouse,
             WarehouseEquipmentStatus warehouseStatus,
-            Ref location
-    ) {}
+            Ref location,
+            UUID responsibleDepartmentId,
+            EquipmentOutsideReason outsideReason,
+            String outsideTakenBy,
+            UUID outsideRecipientUserId,
+            LocalDate outsideStartedDate,
+            LocalDate outsideExpectedReturnDate,
+            String outsideDestination,
+            String outsideReasonNote,
+            boolean overdue
+    ) {
+        public PlacementRef(
+                PlacementType type,
+                Ref department,
+                Ref warehouse,
+                WarehouseEquipmentStatus warehouseStatus,
+                Ref location
+        ) {
+            this(type, department, warehouse, warehouseStatus, location, null, null, null, null, null, null, null, null, false);
+        }
+    }
 
     public static EquipmentDto from(Equipment e) {
         return from(e, null, null, null, null, null, null);
