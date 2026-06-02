@@ -10,12 +10,14 @@ public record VehicleDocumentDto(
         UUID id,
         UUID fileId,
         String documentType,
+        String documentName,
         String originalName,
         String contentType,
         Long size,
         String downloadUrl,
         String presignedUrlEndpoint,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        LocalDateTime uploadedAt
 ) {
     public static VehicleDocumentDto from(UUID equipmentId, VehicleDocument document) {
         if (document == null || document.getFile() == null || Boolean.TRUE.equals(document.getFile().getDeleted())) {
@@ -26,11 +28,13 @@ public record VehicleDocumentDto(
                 document.getId(),
                 file.getId(),
                 document.getDocumentType(),
+                document.getDocumentName(),
                 file.getOriginalName(),
                 file.getContentType(),
                 file.getSize(),
                 "/api/files/" + file.getId() + "/download",
                 "/api/v1/vehicles/" + equipmentId + "/documents/" + document.getId() + "/presigned-url",
+                document.getCreatedAt(),
                 document.getCreatedAt()
         );
     }

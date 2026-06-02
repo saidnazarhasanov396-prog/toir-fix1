@@ -44,6 +44,9 @@ public class VehicleDocument {
     @Column(name = "document_type", length = 64)
     private String documentType;
 
+    @Column(name = "document_name", nullable = false, length = 255)
+    private String documentName;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

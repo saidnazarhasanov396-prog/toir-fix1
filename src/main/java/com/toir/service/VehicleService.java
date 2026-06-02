@@ -217,7 +217,7 @@ public class VehicleService {
 
     @Transactional
     public VehicleDetailDto attachDocument(UUID equipmentId, MultipartFile document, UUID currentUserId) {
-        attachDocuments(equipmentId, List.of(document), null, authenticatedUser(currentUserId));
+        attachDocuments(equipmentId, List.of(document), List.of(legacyDocumentName(document)), null, authenticatedUser(currentUserId));
         return findByEquipmentId(equipmentId);
     }
 
@@ -225,6 +225,7 @@ public class VehicleService {
     public List<VehicleDocumentDto> attachDocuments(
             UUID equipmentId,
             List<MultipartFile> files,
+            List<String> documentNames,
             String documentType,
             AuthenticatedUser user
     ) {
@@ -234,13 +235,15 @@ public class VehicleService {
         if (files == null || files.isEmpty()) {
             throw RestException.badRequest("At least one vehicle document file is required");
         }
+        List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
         VehicleDetails details = findVehicleDetails(equipmentId);
         String normalizedDocumentType = normalizeDocumentType(documentType);
 
         List<UUID> uploadedFileIds = new ArrayList<>();
         try {
             List<VehicleDocument> documents = new ArrayList<>(files.size());
-            for (MultipartFile file : files) {
+            for (int i = 0; i < files.size(); i++) {
+                MultipartFile file = files.get(i);
                 UploadFileResponse uploaded = fileService.upload(file, FileCategory.VEHICLE_DOCUMENT, currentUserId);
                 uploadedFileIds.add(uploaded.id());
                 UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
@@ -249,6 +252,7 @@ public class VehicleService {
                         .vehicleDetails(details)
                         .file(uploadedFile)
                         .documentType(normalizedDocumentType)
+                        .documentName(normalizedDocumentNames.get(i))
                         .build());
             }
 
@@ -467,10 +471,12 @@ public class VehicleService {
                 file.getId(),
                 null,
                 file.getOriginalName(),
+                file.getOriginalName(),
                 file.getContentType(),
                 file.getSize(),
                 "/api/files/" + file.getId() + "/download",
                 "/api/v1/vehicles/" + equipmentId + "/document/presigned-url",
+                file.getCreatedAt(),
                 file.getCreatedAt()
         );
     }
@@ -495,6 +501,35 @@ public class VehicleService {
             throw RestException.badRequest("documentType must be 64 characters or fewer");
         }
         return trimmed;
+    }
+
+    private String legacyDocumentName(MultipartFile document) {
+        if (document != null && document.getOriginalFilename() != null && !document.getOriginalFilename().isBlank()) {
+            return document.getOriginalFilename().trim();
+        }
+        return "Vehicle document";
+    }
+
+    private List<String> normalizeDocumentNames(List<MultipartFile> files, List<String> documentNames) {
+        if (documentNames == null || documentNames.isEmpty()) {
+            throw RestException.badRequest("documentNames are required for vehicle document uploads");
+        }
+        if (documentNames.size() != files.size()) {
+            throw RestException.badRequest("files and documentNames must have the same length");
+        }
+        List<String> normalized = new ArrayList<>(documentNames.size());
+        for (int i = 0; i < documentNames.size(); i++) {
+            String documentName = documentNames.get(i);
+            if (documentName == null || documentName.isBlank()) {
+                throw RestException.badRequest("documentNames[" + i + "] must not be blank");
+            }
+            String trimmed = documentName.trim();
+            if (trimmed.length() > 255) {
+                throw RestException.badRequest("documentNames[" + i + "] must be 255 characters or fewer");
+            }
+            normalized.add(trimmed);
+        }
+        return normalized;
     }
 
     private void validateUniqueCreate(VehicleRequest request) {

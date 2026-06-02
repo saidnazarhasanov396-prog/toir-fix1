@@ -15,6 +15,8 @@ import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.VehicleService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -118,15 +120,19 @@ public class VehicleController {
 
     @PostMapping(value = "/{equipmentId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    @Operation(summary = "Attach vehicle documents with matching client-provided document names")
     public ResponseEntity<List<VehicleDocumentDto>> attachDocuments(
             @PathVariable UUID equipmentId,
+            @Parameter(description = "Document files. Must have the same item count as documentNames.")
             @RequestParam("files") List<MultipartFile> files,
+            @Parameter(description = "Document names/titles in the same order as files.")
+            @RequestParam(value = "documentNames", required = false) List<String> documentNames,
             @RequestParam(required = false) String documentType,
             @CurrentUser AuthenticatedUser user
     ) {
         assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(service.attachDocuments(equipmentId, files, documentType, user));
+                .body(service.attachDocuments(equipmentId, files, documentNames, documentType, user));
     }
 
     @GetMapping("/{equipmentId}/documents")
