@@ -508,7 +508,6 @@ class EquipmentControllerContractTest {
         EquipmentDto.Ref locationRef = new EquipmentDto.Ref(locationId, "LOC-001", "Main Workshop");
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, locationId, locationRef);
 
-        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
@@ -527,7 +526,6 @@ class EquipmentControllerContractTest {
         UUID equipmentTypeId = UUID.randomUUID();
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, null, null);
 
-        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
@@ -545,7 +543,6 @@ class EquipmentControllerContractTest {
         UUID missingLocationId = UUID.randomUUID();
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, missingLocationId, null);
 
-        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
@@ -573,7 +570,6 @@ class EquipmentControllerContractTest {
         );
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, departmentId, locationId, locationRef, departmentRef, placement);
 
-        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
@@ -601,7 +597,6 @@ class EquipmentControllerContractTest {
         );
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, warehouseId, warehouseRef, null, placement);
 
-        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
@@ -770,7 +765,6 @@ class EquipmentControllerContractTest {
         );
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, null, null, null, placement);
 
-        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
@@ -785,7 +779,6 @@ class EquipmentControllerContractTest {
 
     @Test
     void listShouldSupportBusinessSearchByCode() throws Exception {
-        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, null, null, null, null, null, false, false, "EQ-2026-0012", 0, 20))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
@@ -803,7 +796,6 @@ class EquipmentControllerContractTest {
 
     @Test
     void listShouldSupportBusinessSearchByNameAndReturnEmptyPage() throws Exception {
-        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, null, null, null, null, null, false, false, "compressor", 0, 20))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
