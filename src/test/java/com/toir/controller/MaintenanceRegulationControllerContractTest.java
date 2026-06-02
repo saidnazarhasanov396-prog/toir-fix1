@@ -117,6 +117,28 @@ class MaintenanceRegulationControllerContractTest {
     }
 
     @Test
+    void equipmentWithRegulationsReturnsEquipmentWithoutType() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        EquipmentWithRegulationsDto dto = new EquipmentWithRegulationsDto(
+                equipmentId,
+                "Pump A",
+                "EQ-2026-0001",
+                null,
+                null,
+                List.of()
+        );
+        when(service.equipmentWithRegulations(isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/maintenance-regulations/equipment"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.content[0].equipmentTypeId").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.content[0].equipmentTypeName").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.content[0].regulations").isEmpty());
+    }
+
+    @Test
     void createWithoutCodeReturnsGeneratedCode() throws Exception {
         UUID id = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();

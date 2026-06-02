@@ -25,6 +25,19 @@ public interface EquipmentMaintenanceRuleRepository extends JpaRepository<Equipm
     @Query(value = "SELECT * FROM equipment_maintenance_rules WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<EquipmentMaintenanceRule> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
+    @Query("""
+            select r
+            from EquipmentMaintenanceRule r
+            where r.isDeleted = false
+              and r.equipmentId in :equipmentIds
+              and (:active is null or r.active = :active)
+            order by r.updatedAt desc
+            """)
+    List<EquipmentMaintenanceRule> findAllByEquipmentIdInAndOptionalActive(
+            @Param("equipmentIds") Collection<UUID> equipmentIds,
+            @Param("active") Boolean active
+    );
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM equipment_maintenance_rules WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
