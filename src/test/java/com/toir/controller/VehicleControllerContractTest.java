@@ -210,7 +210,7 @@ class VehicleControllerContractTest {
                         .file(new MockMultipartFile("document", "vehicle-passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.vehicleDetails.document.id").value(fileId.toString()))
-                .andExpect(jsonPath("$.vehicleDetails.document.downloadUrl").value("/api/files/" + fileId + "/download"));
+                .andExpect(jsonPath("$.vehicleDetails.document.downloadUrl").value(org.hamcrest.Matchers.nullValue()));
 
         verify(service).attachDocument(eq(equipmentId), any(), eq(currentUserId));
     }
@@ -418,8 +418,8 @@ class VehicleControllerContractTest {
                 "vehicle-passport.pdf",
                 "application/pdf",
                 123L,
-                "/api/files/" + fileId + "/download",
-                "/api/files/" + fileId + "/presigned-url"
+                null,
+                null
         );
     }
 
@@ -457,7 +457,7 @@ class VehicleControllerContractTest {
                 originalName,
                 "application/pdf",
                 123L,
-                "/api/files/" + fileId + "/download",
+                "/api/v1/vehicles/" + equipmentId + "/documents/" + documentId + "/download",
                 "/api/v1/vehicles/" + equipmentId + "/documents/" + documentId + "/presigned-url",
                 LocalDateTime.now(),
                 LocalDateTime.now()

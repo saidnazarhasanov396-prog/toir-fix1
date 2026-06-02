@@ -1,26 +1,37 @@
 package com.toir.controller.equipment;
 import com.toir.dto.equipment.*;
+import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1/equipment")
@@ -119,6 +130,86 @@ public class EquipmentController {
             scopeAccessService.assertCanAccessDepartment(request.departmentId());
         }
         return ResponseEntity.ok(service.update(id, request));
+    }
+
+    @PostMapping(value = "/{id}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    @Operation(summary = "Attach equipment documents with matching client-provided document names")
+    public ResponseEntity<List<EquipmentDocumentDto>> attachDocuments(
+            @PathVariable UUID id,
+            @Parameter(description = "Document files. Must have the same item count as documentNames.")
+            @RequestParam("files") List<MultipartFile> files,
+            @Parameter(description = "Document names/titles in the same order as files.")
+            @RequestParam(value = "documentNames", required = false) List<String> documentNames,
+            @RequestParam(required = false) String documentType,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.attachDocuments(id, files, documentNames, documentType, user));
+    }
+
+    @GetMapping("/{id}/documents")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<List<EquipmentDocumentDto>> getDocuments(
+            @PathVariable UUID id,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.ok(service.getDocuments(id, user));
+    }
+
+    @GetMapping("/{id}/documents/{documentId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<EquipmentDocumentDto> getDocument(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.ok(service.getDocument(id, documentId, user));
+    }
+
+    @GetMapping("/{id}/documents/{documentId}/presigned-url")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<PresignedUrlResponse> getDocumentPresignedUrl(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.ok(service.getDocumentPresignedUrl(id, documentId, user));
+    }
+
+    @GetMapping("/{id}/documents/{documentId}/download")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Resource> downloadDocument(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        EquipmentDocumentDto document = service.getDocument(id, documentId, user);
+        Resource resource = service.downloadDocument(id, documentId, user);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(document.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(document.originalName(), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .body(resource);
+    }
+
+    @DeleteMapping("/{id}/documents/{documentId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    public ResponseEntity<Void> deleteDocument(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        service.deleteDocument(id, documentId, user);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}/status")

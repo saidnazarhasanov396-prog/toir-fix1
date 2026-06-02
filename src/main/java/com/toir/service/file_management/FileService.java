@@ -7,13 +7,10 @@ import com.toir.enums.FileCategory;
 import org.springframework.core.io.Resource;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
 import java.util.UUID;
 
 public interface FileService {
     UploadFileResponse upload(MultipartFile file, FileCategory category, UUID currentUserId);
-
-    List<UploadFileResponse> uploadMultiple(List<MultipartFile> files, FileCategory category, UUID currentUserId);
 
     FileResponse getMetadata(UUID fileId, UUID currentUserId);
 
