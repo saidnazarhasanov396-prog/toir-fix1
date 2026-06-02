@@ -13,13 +13,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.CollectionUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -64,46 +61,6 @@ public class FileServiceImpl implements FileService {
         } catch (RuntimeException e) {
             rollbackObject(objectName);
             throw e;
-        }
-    }
-
-    @Override
-    @Transactional
-    public List<UploadFileResponse> uploadMultiple(List<MultipartFile> files, FileCategory category, UUID currentUserId) {
-        assertCurrentUser(currentUserId);
-        if (CollectionUtils.isEmpty(files)) {
-            throw RestException.restThrow(ErrorType.INVALID_FILE);
-        }
-
-        List<String> uploadedObjects = new ArrayList<>();
-        List<UploadFileResponse> responses = new ArrayList<>();
-        try {
-            for (MultipartFile file : files) {
-                FileCategory safeCategory = category != null ? category : FileCategory.OTHER;
-                FileValidator.ValidatedFile validated = fileValidator.validate(file);
-                String storedName = UUID.randomUUID() + "." + validated.extension();
-                String objectName = buildObjectName(safeCategory, storedName);
-                s3Service.store(file, objectName);
-                uploadedObjects.add(objectName);
-
-                UploadedFile saved = uploadedFileRepository.save(UploadedFile.builder()
-                        .originalName(validated.originalName())
-                        .storedName(storedName)
-                        .objectName(objectName)
-                        .url(null)
-                        .contentType(validated.contentType())
-                        .extension(validated.extension())
-                        .size(validated.size())
-                        .uploadedBy(currentUserId)
-                        .category(safeCategory)
-                        .deleted(false)
-                        .build());
-                responses.add(UploadFileResponse.from(saved));
-            }
-            return responses;
-        } catch (RuntimeException originalException) {
-            rollbackUploadedObjects(uploadedObjects);
-            throw originalException;
         }
     }
 
@@ -176,9 +133,4 @@ public class FileServiceImpl implements FileService {
         }
     }
 
-    private void rollbackUploadedObjects(List<String> objectNames) {
-        for (String objectName : objectNames) {
-            rollbackObject(objectName);
-        }
-    }
 }

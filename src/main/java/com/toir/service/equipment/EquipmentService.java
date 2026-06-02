@@ -1,6 +1,9 @@
 package com.toir.service.equipment;
 
 import com.toir.dto.equipment.*;
+import com.toir.dto.file.PresignedUrlResponse;
+import com.toir.dto.file.UploadFileResponse;
+import com.toir.entity.UploadedFile;
 import com.toir.repository.equipment.EquipmentStatsProjection;
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.entity.Department;
@@ -17,6 +20,7 @@ import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.AuditAction;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.FileCategory;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
 import com.toir.enums.WarehouseEquipmentStatus;
@@ -31,16 +35,23 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
+import com.toir.repository.equipment.EquipmentDocumentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.security.AuthenticatedUser;
+import com.toir.service.file_management.FileService;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Year;
 import java.util.*;
@@ -49,6 +60,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EquipmentService {
 
     private final EquipmentRepository repository;
@@ -67,6 +79,9 @@ public class EquipmentService {
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final AuditBuilderService auditBuilderService;
+    private final FileService fileService;
+    private final UploadedFileRepository uploadedFileRepository;
+    private final EquipmentDocumentRepository equipmentDocumentRepository;
     private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
 
@@ -195,8 +210,98 @@ public class EquipmentService {
                 workOrders,
                 downtimeEvents,
                 equipmentAttributeService == null ? List.of() : equipmentAttributeService.findValues(id),
-                equipmentManualAttributeService == null ? List.of() : equipmentManualAttributeService.list(id)
+                equipmentManualAttributeService == null ? List.of() : equipmentManualAttributeService.list(id),
+                equipmentDocuments(id)
         );
+    }
+
+    @Transactional
+    public List<EquipmentDocumentDto> attachDocuments(
+            UUID equipmentId,
+            List<MultipartFile> files,
+            List<String> documentNames,
+            String documentType,
+            AuthenticatedUser user
+    ) {
+        UUID currentUserId = currentUserId(user);
+        Equipment equipment = getOrThrow(equipmentId);
+        if (files == null || files.isEmpty()) {
+            throw RestException.badRequest("At least one equipment document file is required");
+        }
+        List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
+        String normalizedDocumentType = normalizeDocumentType(documentType);
+
+        List<UUID> uploadedFileIds = new ArrayList<>();
+        try {
+            List<com.toir.entity.equipment.EquipmentDocument> documents = new ArrayList<>(files.size());
+            for (int i = 0; i < files.size(); i++) {
+                MultipartFile file = files.get(i);
+                UploadFileResponse uploaded = fileService.upload(file, FileCategory.EQUIPMENT_DOCUMENT, currentUserId);
+                uploadedFileIds.add(uploaded.id());
+                UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
+                        .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
+                documents.add(com.toir.entity.equipment.EquipmentDocument.builder()
+                        .equipment(equipment)
+                        .file(uploadedFile)
+                        .documentType(normalizedDocumentType)
+                        .documentName(normalizedDocumentNames.get(i))
+                        .build());
+            }
+
+            return equipmentDocumentRepository.saveAllAndFlush(documents).stream()
+                    .map(document -> EquipmentDocumentDto.from(equipmentId, document))
+                    .filter(Objects::nonNull)
+                    .toList();
+        } catch (RuntimeException e) {
+            cleanupUploadedFiles(uploadedFileIds, currentUserId);
+            if (e instanceof RestException restException) {
+                throw restException;
+            }
+            throw RestException.conflict("Could not attach equipment documents");
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<EquipmentDocumentDto> getDocuments(UUID equipmentId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        getOrThrow(equipmentId);
+        return equipmentDocumentRepository.findAllByEquipmentId(equipmentId)
+                .stream()
+                .map(document -> toDocumentDtoWithMetadata(equipmentId, document, currentUserId))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public EquipmentDocumentDto getDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        getOrThrow(equipmentId);
+        com.toir.entity.equipment.EquipmentDocument document = findEquipmentDocument(equipmentId, documentId);
+        return toDocumentDtoWithMetadata(equipmentId, document, currentUserId);
+    }
+
+    @Transactional(readOnly = true)
+    public PresignedUrlResponse getDocumentPresignedUrl(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        getOrThrow(equipmentId);
+        com.toir.entity.equipment.EquipmentDocument document = findEquipmentDocument(equipmentId, documentId);
+        return fileService.getPresignedUrl(document.getFile().getId(), currentUserId);
+    }
+
+    @Transactional(readOnly = true)
+    public Resource downloadDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        getOrThrow(equipmentId);
+        com.toir.entity.equipment.EquipmentDocument document = findEquipmentDocument(equipmentId, documentId);
+        return fileService.download(document.getFile().getId(), currentUserId);
+    }
+
+    @Transactional
+    public void deleteDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        getOrThrow(equipmentId);
+        com.toir.entity.equipment.EquipmentDocument document = findEquipmentDocument(equipmentId, documentId);
+        equipmentDocumentRepository.delete(document);
+        fileService.delete(document.getFile().getId(), currentUserId);
     }
 
     @Transactional(readOnly = true)
@@ -582,6 +687,85 @@ public class EquipmentService {
             throw RestException.badRequest("warehouseStatus must be null when targetType is DEPARTMENT");
         }
         validateDepartmentExists(request.departmentId());
+    }
+
+    private List<EquipmentDocumentDto> equipmentDocuments(UUID equipmentId) {
+        if (equipmentDocumentRepository == null) {
+            return List.of();
+        }
+        return equipmentDocumentRepository.findAllByEquipmentId(equipmentId)
+                .stream()
+                .map(document -> EquipmentDocumentDto.from(equipmentId, document))
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private com.toir.entity.equipment.EquipmentDocument findEquipmentDocument(UUID equipmentId, UUID documentId) {
+        return equipmentDocumentRepository.findByIdAndEquipmentId(documentId, equipmentId)
+                .orElseThrow(() -> RestException.notFound("Equipment document not found: " + documentId));
+    }
+
+    private EquipmentDocumentDto toDocumentDtoWithMetadata(
+            UUID equipmentId,
+            com.toir.entity.equipment.EquipmentDocument document,
+            UUID currentUserId
+    ) {
+        fileService.getMetadata(document.getFile().getId(), currentUserId);
+        return EquipmentDocumentDto.from(equipmentId, document);
+    }
+
+    private void cleanupUploadedFiles(List<UUID> fileIds, UUID currentUserId) {
+        for (UUID fileId : fileIds) {
+            deleteDocumentQuietly(fileId, currentUserId);
+        }
+    }
+
+    private void deleteDocumentQuietly(UUID fileId, UUID currentUserId) {
+        try {
+            fileService.delete(fileId, currentUserId);
+        } catch (RuntimeException e) {
+            log.warn("Failed to cleanup equipment document file '{}': {}", fileId, e.getMessage());
+        }
+    }
+
+    private UUID currentUserId(AuthenticatedUser user) {
+        if (user == null || user.id() == null || user.id().isBlank()) {
+            throw RestException.unauthorized("Authenticated user is required");
+        }
+        return UUID.fromString(user.id());
+    }
+
+    private String normalizeDocumentType(String documentType) {
+        if (documentType == null || documentType.isBlank()) {
+            return null;
+        }
+        String trimmed = documentType.trim();
+        if (trimmed.length() > 64) {
+            throw RestException.badRequest("documentType must be 64 characters or fewer");
+        }
+        return trimmed;
+    }
+
+    private List<String> normalizeDocumentNames(List<MultipartFile> files, List<String> documentNames) {
+        if (documentNames == null || documentNames.isEmpty()) {
+            throw RestException.badRequest("documentNames are required for equipment document uploads");
+        }
+        if (documentNames.size() != files.size()) {
+            throw RestException.badRequest("files and documentNames must have the same length");
+        }
+        List<String> normalized = new ArrayList<>(documentNames.size());
+        for (int i = 0; i < documentNames.size(); i++) {
+            String documentName = documentNames.get(i);
+            if (documentName == null || documentName.isBlank()) {
+                throw RestException.badRequest("documentNames[" + i + "] must not be blank");
+            }
+            String trimmed = documentName.trim();
+            if (trimmed.length() > 255) {
+                throw RestException.badRequest("documentNames[" + i + "] must be 255 characters or fewer");
+            }
+            normalized.add(trimmed);
+        }
+        return normalized;
     }
 
     private WarehouseEquipmentStatus resolveWarehousePlacementStatus(WarehouseEquipmentStatus warehouseStatus) {

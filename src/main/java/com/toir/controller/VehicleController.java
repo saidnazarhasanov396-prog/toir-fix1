@@ -19,13 +19,17 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -167,6 +171,25 @@ public class VehicleController {
         return ResponseEntity.ok(service.getDocumentPresignedUrl(equipmentId, documentId, user));
     }
 
+    @GetMapping("/{equipmentId}/documents/{documentId}/download")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Resource> downloadDocument(
+            @PathVariable UUID equipmentId,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
+        VehicleDocumentDto document = service.getDocument(equipmentId, documentId, user);
+        Resource resource = service.downloadDocument(equipmentId, documentId, user);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(document.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(document.originalName(), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .body(resource);
+    }
+
     @DeleteMapping("/{equipmentId}/documents/{documentId}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<Void> deleteDocument(
@@ -197,6 +220,25 @@ public class VehicleController {
     ) {
         assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.ok(service.getDocumentPresignedUrl(equipmentId, currentUserId(user)));
+    }
+
+    @GetMapping("/{equipmentId}/document/download")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Resource> downloadDocument(
+            @PathVariable UUID equipmentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
+        UUID currentUserId = currentUserId(user);
+        VehicleDocumentDto document = service.getDocument(equipmentId, currentUserId);
+        Resource resource = service.downloadDocument(equipmentId, currentUserId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(document.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(document.originalName(), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .body(resource);
     }
 
     @DeleteMapping("/{equipmentId}/document")

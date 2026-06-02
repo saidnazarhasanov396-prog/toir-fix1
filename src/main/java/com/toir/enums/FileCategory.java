@@ -6,6 +6,7 @@ public enum FileCategory {
     CONTRACT("contracts"),
     PRODUCT_IMAGE("product-images"),
     VEHICLE_DOCUMENT("vehicle-documents"),
+    EQUIPMENT_DOCUMENT("equipment-documents"),
     CHAT_ATTACHMENT("chat-attachments"),
     DOCUMENT("documents"),
     OTHER("other");

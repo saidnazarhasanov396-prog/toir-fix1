@@ -33,6 +33,7 @@ import com.toir.service.file_management.FileService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -318,6 +319,15 @@ public class VehicleService {
     }
 
     @Transactional(readOnly = true)
+    public Resource downloadDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
+        VehicleDocument document = findVehicleDocument(equipmentId, documentId);
+        return fileService.download(document.getFile().getId(), currentUserId);
+    }
+
+    @Transactional(readOnly = true)
     public PresignedUrlResponse getDocumentPresignedUrl(UUID equipmentId, UUID currentUserId) {
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
@@ -333,6 +343,24 @@ public class VehicleService {
             throw RestException.notFound("Vehicle document not found: " + equipmentId);
         }
         return fileService.getPresignedUrl(documentFile.getId(), currentUserId);
+    }
+
+    @Transactional(readOnly = true)
+    public Resource downloadDocument(UUID equipmentId, UUID currentUserId) {
+        Equipment equipment = findVehicleEquipment(equipmentId);
+        enforceVehicleAccess(equipment);
+        Optional<VehicleDocument> latestDocument = vehicleDocumentRepository.findAllByEquipmentId(equipmentId)
+                .stream()
+                .findFirst();
+        if (latestDocument.isPresent()) {
+            return fileService.download(latestDocument.get().getFile().getId(), currentUserId);
+        }
+        VehicleDetails details = findVehicleDetails(equipmentId);
+        UploadedFile documentFile = details.getDocumentFile();
+        if (documentFile == null || Boolean.TRUE.equals(documentFile.getDeleted())) {
+            throw RestException.notFound("Vehicle document not found: " + equipmentId);
+        }
+        return fileService.download(documentFile.getId(), currentUserId);
     }
 
     @Transactional
@@ -474,7 +502,7 @@ public class VehicleService {
                 file.getOriginalName(),
                 file.getContentType(),
                 file.getSize(),
-                "/api/files/" + file.getId() + "/download",
+                "/api/v1/vehicles/" + equipmentId + "/document/download",
                 "/api/v1/vehicles/" + equipmentId + "/document/presigned-url",
                 file.getCreatedAt(),
                 file.getCreatedAt()

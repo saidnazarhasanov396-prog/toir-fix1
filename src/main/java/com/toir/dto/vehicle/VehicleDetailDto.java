@@ -82,8 +82,8 @@ public record VehicleDetailDto(
                     file.getOriginalName(),
                     file.getContentType(),
                     file.getSize(),
-                    "/api/files/" + file.getId() + "/download",
-                    "/api/files/" + file.getId() + "/presigned-url"
+                    null,
+                    null
             );
         }
     }
