@@ -69,6 +69,29 @@ public class ApprovalService {
     }
 
     @Transactional(readOnly = true)
+    public List<ApprovalRequestDto> search(String documentType,
+                                           UUID documentId,
+                                           UUID requesterId,
+                                           ApprovalStatus status,
+                                           String search) {
+        String normalizedDocumentType = StringUtils.hasText(documentType) ? normalizeDocumentType(documentType) : null;
+        String normalizedSearch = StringUtils.hasText(search)
+                ? search.trim().toLowerCase(Locale.ROOT)
+                : null;
+
+        return requestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(request -> normalizedDocumentType == null
+                        || normalizedDocumentType.equals(request.getDocumentType()))
+                .filter(request -> documentId == null || documentId.equals(request.getDocumentId()))
+                .filter(request -> requesterId == null || requesterId.equals(request.getRequesterId()))
+                .filter(request -> status == null || status == request.getStatus())
+                .filter(request -> normalizedSearch == null || matchesSearch(request, normalizedSearch))
+                .filter(approvalScopeService::canReadApproval)
+                .map(ApprovalRequestDto::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<ApprovalRequestDto> listAll() {
         return requestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(approvalScopeService::canReadApproval)
@@ -421,6 +444,20 @@ public class ApprovalService {
                 .replace('-', '_')
                 .replace(' ', '_')
                 .toUpperCase(Locale.ROOT);
+    }
+
+    private boolean matchesSearch(ApprovalRequest request, String search) {
+        return containsIgnoreCase(request.getDocumentType(), search)
+                || containsIgnoreCase(request.getTitle(), search)
+                || containsIgnoreCase(request.getDescription(), search)
+                || containsIgnoreCase(request.getStatus().name(), search)
+                || request.getSteps().stream().anyMatch(step ->
+                        containsIgnoreCase(step.getComment(), search)
+                                || containsIgnoreCase(step.getApproverRole(), search));
+    }
+
+    private boolean containsIgnoreCase(String value, String search) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(search);
     }
 
     private ApprovalRequest getOrThrow(UUID id) {

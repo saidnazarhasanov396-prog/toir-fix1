@@ -2,6 +2,7 @@ package com.toir.security;
 
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
+import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.entity.maintenance.WorkOrder;
@@ -116,15 +117,58 @@ class ApprovalPbacScopeTest {
     void queueFiltersOutOutOfScopeApprovalsForNonAdmin() {
         ApprovalRequest allowed = approval(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
         ApprovalRequest denied = approval(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
-        when(requestRepository.findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalStatus.PENDING))
+        when(requestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
                 .thenReturn(List.of(allowed, denied));
         when(approvalScopeService.canReadApproval(allowed)).thenReturn(true);
         when(approvalScopeService.canReadApproval(denied)).thenReturn(false);
 
-        var result = service.pending();
+        var result = service.search(null, null, null, ApprovalStatus.PENDING, null);
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().id()).isEqualTo(allowed.getId());
+    }
+
+    @Test
+    void searchCombinesDocumentRequesterStatusAndSearchFilters() {
+        UUID documentId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        ApprovalRequest match = approval(UUID.randomUUID(), requesterId, UUID.randomUUID(), documentId);
+        match.setTitle("Pump replacement approval");
+        ApprovalRequest wrongStatus = approval(UUID.randomUUID(), requesterId, UUID.randomUUID(), documentId);
+        wrongStatus.setStatus(ApprovalStatus.APPROVED);
+        ApprovalRequest wrongRequester = approval(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), documentId);
+        ApprovalRequest wrongDocument = approval(UUID.randomUUID(), requesterId, UUID.randomUUID(), UUID.randomUUID());
+        when(requestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(match, wrongStatus, wrongRequester, wrongDocument));
+        when(approvalScopeService.canReadApproval(match)).thenReturn(true);
+
+        var result = service.search("work-order", documentId, requesterId, ApprovalStatus.PENDING, "pump");
+
+        assertThat(result).extracting(ApprovalRequestDto::id).containsExactly(match.getId());
+    }
+
+    @Test
+    void searchMatchesDescriptionStatusAndStepFields() {
+        ApprovalRequest descriptionMatch = approval(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+        descriptionMatch.setDescription("Urgent safety review");
+        ApprovalRequest statusMatch = approval(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+        statusMatch.setStatus(ApprovalStatus.CANCELLED);
+        ApprovalRequest stepCommentMatch = approval(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+        stepCommentMatch.getSteps().getFirst().setComment("Pump inspection comment");
+        ApprovalRequest stepRoleMatch = approval(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+        stepRoleMatch.getSteps().getFirst().setApproverRole("CHIEF_MECHANIC");
+        when(requestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(descriptionMatch, statusMatch, stepCommentMatch, stepRoleMatch));
+        when(approvalScopeService.canReadApproval(any())).thenReturn(true);
+
+        assertThat(service.search(null, null, null, null, "safety")).extracting(ApprovalRequestDto::id)
+                .containsExactly(descriptionMatch.getId());
+        assertThat(service.search(null, null, null, null, "cancelled")).extracting(ApprovalRequestDto::id)
+                .containsExactly(statusMatch.getId());
+        assertThat(service.search(null, null, null, null, "inspection")).extracting(ApprovalRequestDto::id)
+                .containsExactly(stepCommentMatch.getId());
+        assertThat(service.search(null, null, null, null, "mechanic")).extracting(ApprovalRequestDto::id)
+                .containsExactly(stepRoleMatch.getId());
     }
 
     @Test
