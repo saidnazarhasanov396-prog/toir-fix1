@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -70,12 +69,9 @@ public class EquipmentScanCompatibilityController {
     }
 
     private void assertCanAccessEquipment(Equipment equipment) {
-        if (equipment.getDepartmentId() == null) {
-            if (!scopeAccessService.isScopeAdmin()) {
-                throw new AccessDeniedException("Access denied by equipment department scope");
-            }
-            return;
-        }
-        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
+        scopeAccessService.assertCanAccessEquipmentScope(
+                equipment.getResponsibleDepartmentId(),
+                equipment.getDepartmentId()
+        );
     }
 }

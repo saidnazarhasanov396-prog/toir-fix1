@@ -34,8 +34,39 @@ public record EquipmentCreateRequest(
         String description,
         @NotNull @Positive Long averageOperatingLifeHours,
         List<EquipmentAttributeValueRequest> attributes,
-        List<EquipmentManualAttributeRequest> manualAttributes
+        List<EquipmentManualAttributeRequest> manualAttributes,
+        EquipmentLocationRequest location
 ) {
+        public EquipmentCreateRequest(
+                String code,
+                String name,
+                String inventoryNumber,
+                String technicalNumber,
+                String serialNumber,
+                String model,
+                UUID equipmentTypeId,
+                UUID departmentId,
+                UUID warehouseId,
+                UUID locationId,
+                UUID parentId,
+                UUID criticalityClassId,
+                UUID responsibleId,
+                String manufacturer,
+                EquipmentStatus status,
+                EquipmentCategory category,
+                LocalDate commissionedAt,
+                LocalDate warrantyUntil,
+                String description,
+                Long averageOperatingLifeHours,
+                List<EquipmentAttributeValueRequest> attributes,
+                List<EquipmentManualAttributeRequest> manualAttributes
+        ) {
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                        departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
+                        manufacturer, status, category, commissionedAt, warrantyUntil, description,
+                        averageOperatingLifeHours, attributes, manualAttributes, null);
+        }
+
         public EquipmentCreateRequest(
                 String code,
                 String name,
@@ -62,7 +93,7 @@ public record EquipmentCreateRequest(
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
                         manufacturer, status, category, commissionedAt, warrantyUntil, description,
-                        averageOperatingLifeHours, attributes, null);
+                        averageOperatingLifeHours, attributes, null, null);
         }
 
         public EquipmentCreateRequest(
@@ -89,7 +120,7 @@ public record EquipmentCreateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
-                        manufacturer, status, category, commissionedAt, warrantyUntil, description, null, attributes, null);
+                        manufacturer, status, category, commissionedAt, warrantyUntil, description, null, attributes, null, null);
         }
 
         public EquipmentCreateRequest(
@@ -117,7 +148,7 @@ public record EquipmentCreateRequest(
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
                         manufacturer, status, category, commissionedAt, warrantyUntil, description,
-                        averageOperatingLifeHours, null, null);
+                        averageOperatingLifeHours, null, null, null);
         }
 
         public EquipmentCreateRequest(
@@ -143,6 +174,6 @@ public record EquipmentCreateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
-                        manufacturer, status, category, commissionedAt, warrantyUntil, description, null, null, null);
+                        manufacturer, status, category, commissionedAt, warrantyUntil, description, null, null, null, null);
         }
 }

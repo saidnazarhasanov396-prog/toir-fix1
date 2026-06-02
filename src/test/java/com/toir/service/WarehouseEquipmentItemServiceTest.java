@@ -107,6 +107,28 @@ class WarehouseEquipmentItemServiceTest {
     }
 
     @Test
+    void assignUsesResponsibleDepartmentWhenPhysicalDepartmentIsNull() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID responsibleDepartmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setResponsibleDepartmentId(responsibleDepartmentId);
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(activeWarehouse(warehouseId)));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId)).thenReturn(Optional.empty());
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.assign(
+                warehouseId,
+                new WarehouseEquipmentAssignRequest(equipmentId, WarehouseEquipmentStatus.AVAILABLE)
+        );
+
+        verify(scopeAccessService).assertCanAccessEquipmentScope(responsibleDepartmentId, null);
+    }
+
+    @Test
     void assignDefaultsStatusToAvailableWhenNull() {
         UUID warehouseId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
@@ -622,7 +644,7 @@ class WarehouseEquipmentItemServiceTest {
         assertThat(secondSave.isDeleted()).isFalse();
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
         assertThat(equipment.getDepartmentId()).isNull();
-        assertThat(equipment.getLocationId()).isEqualTo(targetWarehouseId);
+        assertThat(equipment.getLocationId()).isNull();
         verify(equipmentRepository).save(equipment);
     }
 
@@ -659,7 +681,7 @@ class WarehouseEquipmentItemServiceTest {
         assertThat(result.warehouseId()).isEqualTo(warehouseId);
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
         assertThat(equipment.getDepartmentId()).isNull();
-        assertThat(equipment.getLocationId()).isEqualTo(warehouseId);
+        assertThat(equipment.getLocationId()).isNull();
         verify(warehouseEquipmentItemRepository).save(existing);
         verify(warehouseEquipmentItemRepository, never()).flush();
         verify(equipmentRepository).save(equipment);
@@ -697,7 +719,7 @@ class WarehouseEquipmentItemServiceTest {
         assertThat(saved.isDeleted()).isFalse();
         assertThat(result.status()).isEqualTo(WarehouseEquipmentStatus.OUT_OF_SERVICE);
         assertThat(equipment.getDepartmentId()).isNull();
-        assertThat(equipment.getLocationId()).isEqualTo(targetWarehouseId);
+        assertThat(equipment.getLocationId()).isNull();
         verify(warehouseEquipmentItemRepository, never()).flush();
         verify(equipmentRepository).save(equipment);
     }

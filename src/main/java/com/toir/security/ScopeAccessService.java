@@ -90,6 +90,20 @@ public class ScopeAccessService {
         }
     }
 
+    public boolean canAccessEquipmentScope(UUID responsibleDepartmentId, UUID physicalDepartmentId) {
+        if (isScopeAdmin()) {
+            return true;
+        }
+        UUID scopeDepartmentId = responsibleDepartmentId != null ? responsibleDepartmentId : physicalDepartmentId;
+        return canAccessDepartment(scopeDepartmentId);
+    }
+
+    public void assertCanAccessEquipmentScope(UUID responsibleDepartmentId, UUID physicalDepartmentId) {
+        if (!canAccessEquipmentScope(responsibleDepartmentId, physicalDepartmentId)) {
+            throwAccessDenied();
+        }
+    }
+
     public Optional<UUID> currentEmployeeId() {
         UUID userId = currentUserIdOrNull();
         if (userId == null) {

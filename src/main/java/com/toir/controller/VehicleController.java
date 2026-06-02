@@ -279,13 +279,10 @@ public class VehicleController {
     }
 
     private void assertCanAccessVehicleEquipment(Equipment equipment) {
-        if (equipment.getDepartmentId() == null) {
-            if (!scopeAccessService.isScopeAdmin()) {
-                throw new AccessDeniedException("Access denied by vehicle department scope");
-            }
-            return;
-        }
-        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
+        scopeAccessService.assertCanAccessEquipmentScope(
+                equipment.getResponsibleDepartmentId(),
+                equipment.getDepartmentId()
+        );
     }
 
     private UUID currentUserId(AuthenticatedUser user) {

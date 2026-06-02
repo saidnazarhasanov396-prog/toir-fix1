@@ -11,6 +11,7 @@ import com.toir.entity.DowntimeEvent;
 import com.toir.entity.Location;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentLocationHistory;
 import com.toir.entity.equipment.EquipmentPassport;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.maintenance.WorkOrder;
@@ -19,6 +20,8 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.AuditAction;
 import com.toir.enums.EquipmentCategory;
+import com.toir.enums.EquipmentLocationType;
+import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
 import com.toir.enums.PlacementType;
@@ -34,13 +37,16 @@ import com.toir.repository.LocationRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentDocumentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.security.AuthenticatedUser;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.util.AuditBuilderService;
@@ -53,6 +59,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.Year;
 import java.util.*;
 import java.util.function.Function;
@@ -70,6 +78,7 @@ public class EquipmentService {
     private final EquipmentPassportRepository passportRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
+    private final EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final DefectRepository defectRepository;
     private final WorkOrderRepository workOrderRepository;
@@ -78,10 +87,13 @@ public class EquipmentService {
     private final EquipmentManualAttributeService equipmentManualAttributeService;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+    private final EquipmentLocationValidator equipmentLocationValidator;
     private final AuditBuilderService auditBuilderService;
     private final FileService fileService;
     private final UploadedFileRepository uploadedFileRepository;
     private final EquipmentDocumentRepository equipmentDocumentRepository;
+    private final UserRepository userRepository;
+    private final ScopeAccessService scopeAccessService;
     private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
 
@@ -92,6 +104,58 @@ public class EquipmentService {
                                      EquipmentStatus status,
                                      EquipmentCategory category,
                                      UUID warehouseId,
+                                     boolean availableForReplacement,
+                                     String search,
+                                     int page,
+                                     int pageSize) {
+        if (!availableForReplacement) {
+            String searchPattern = null;
+            if (search != null && !search.isBlank()) {
+                searchPattern = "%" + search.trim().toLowerCase() + "%";
+            }
+            return enrich(repository.search(
+                    departmentId,
+                    equipmentTypeId,
+                    status,
+                    category,
+                    searchPattern,
+                    PaginationUtils.pageRequest(page, pageSize)
+            ));
+        }
+        String searchPattern = null;
+        if (search != null && !search.isBlank()) {
+            searchPattern = "%" + search.trim().toLowerCase() + "%";
+        }
+        if (warehouseId == null) {
+            throw RestException.badRequest("warehouseId is required when availableForReplacement is true");
+        }
+        warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
+                .orElseThrow(() -> RestException.notFound("Warehouse not found: " + warehouseId));
+        Page<Equipment> items = repository.searchAvailableForReplacement(
+                warehouseId,
+                WarehouseEquipmentStatus.AVAILABLE,
+                WorkType.REPLACEMENT,
+                FINAL_WORK_ORDER_STATUSES,
+                departmentId,
+                equipmentTypeId,
+                status,
+                category,
+                searchPattern,
+                PaginationUtils.pageRequest(page, pageSize)
+        );
+        return enrich(items);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EquipmentDto> search(UUID scopeDepartmentId,
+                                     UUID departmentId,
+                                     UUID equipmentTypeId,
+                                     EquipmentStatus status,
+                                     EquipmentCategory category,
+                                     UUID warehouseId,
+                                     EquipmentLocationType locationType,
+                                     EquipmentOutsideReason outsideReason,
+                                     boolean overdueOnly,
                                      boolean availableForReplacement,
                                      String search,
                                      int page,
@@ -110,9 +174,10 @@ public class EquipmentService {
             items = repository.searchAvailableForReplacement(
                     warehouseId,
                     WarehouseEquipmentStatus.AVAILABLE,
+                    EquipmentLocationType.WAREHOUSE,
                     WorkType.REPLACEMENT,
                     FINAL_WORK_ORDER_STATUSES,
-                    departmentId,
+                    scopeDepartmentId,
                     equipmentTypeId,
                     status,
                     category,
@@ -121,10 +186,16 @@ public class EquipmentService {
             );
         } else {
             items = repository.search(
+                    scopeDepartmentId,
                     departmentId,
                     equipmentTypeId,
                     status,
                     category,
+                    locationType,
+                    warehouseId,
+                    outsideReason,
+                    overdueOnly,
+                    LocalDate.now(),
                     searchPattern,
                     PaginationUtils.pageRequest(page, pageSize)
             );
@@ -312,11 +383,16 @@ public class EquipmentService {
 
     @Transactional
     public EquipmentDto create(EquipmentCreateRequest request) {
+        EquipmentLocationRequest location = equipmentLocationValidator.resolveCreateLocation(
+                request.departmentId(),
+                request.warehouseId(),
+                request.locationId(),
+                request.location()
+        );
         validateClientProvidedCode(request.code());
         validateAverageOperatingLifeForCreate(request.averageOperatingLifeHours());
-        validateCreatePlacement(request.departmentId(), request.warehouseId());
-        validateDepartmentExists(request.departmentId());
-        validateWarehouseExists(request.warehouseId());
+        assertCanAccessLocationBeforePersistence(location);
+        validateLocationReferences(location);
         if (repository.existsByInventoryNumberAndIsDeletedFalse(request.inventoryNumber())) {
             throw RestException.conflict("Inventory number already exists: " + request.inventoryNumber());
         }
@@ -324,6 +400,7 @@ public class EquipmentService {
         Equipment entity = new Equipment();
         entity.setCode(nextCode());
         apply(entity, request);
+        applyLocation(entity, location);
         Equipment saved = repository.save(entity);
         if (equipmentAttributeService != null) {
             equipmentAttributeService.upsertValues(
@@ -337,19 +414,20 @@ public class EquipmentService {
                     new com.toir.dto.equipmentmanualattribute.BulkEquipmentManualAttributeRequest(request.manualAttributes())
             );
         }
-        if (request.warehouseId() != null) {
+        if (location.locationType() == EquipmentLocationType.WAREHOUSE) {
             warehouseEquipmentItemService.assign(
-                    request.warehouseId(),
-                    new WarehouseEquipmentAssignRequest(saved.getId(), null)
+                    location.warehouseId(),
+                    new WarehouseEquipmentAssignRequest(saved.getId(), resolveWarehousePlacementStatus(location.warehouseStatus()))
             );
         }
+        writeLocationHistory(saved, null, snapshotLocation(saved), null);
 
         auditBuilderService.log(
                 "equipment",
                 saved.getId().toString(),
                 com.toir.enums.AuditAction.CREATE,
                 com.toir.enums.AuditModule.EQUIPMENT,
-                "Оборудование создано: код=%s, наименование=%s".formatted(saved.getCode(), saved.getName()),
+                "Equipment created with location: %s".formatted(saved.getCurrentLocationType()),
                 null,
                 saved
         );
@@ -359,15 +437,26 @@ public class EquipmentService {
     @Transactional
     public EquipmentDto update(UUID id, EquipmentUpdateRequest request) {
         Equipment entity = getOrThrow(id);
+        LocationSnapshot from = snapshotLocation(entity);
+        EquipmentLocationRequest location = resolveUpdateLocation(request);
         validateClientProvidedCode(request.code());
         validateNoDirectStatusChange(entity, request.status());
         validateAverageOperatingLifeForUpdate(request.averageOperatingLifeHours());
-        validateDepartmentExists(request.departmentId());
+        if (location != null) {
+            assertCanAccessLocationBeforePersistence(location);
+            validateLocationReferences(location);
+        } else {
+            validateDepartmentExists(request.departmentId());
+        }
 
         boolean equipmentTypeChanged = isEquipmentTypeChanged(entity.getEquipmentTypeId(), request.equipmentTypeId());
         validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
 
         applyForUpdate(entity, request);
+        if (location != null) {
+            syncWarehouseInventoryForUpdate(entity, location);
+            applyLocation(entity, location);
+        }
         validateParent(entity.getId(), entity.getParentId());
 
         Equipment saved = repository.save(entity);
@@ -379,6 +468,11 @@ public class EquipmentService {
                     saved.getId(),
                     new com.toir.dto.equipmentmanualattribute.BulkEquipmentManualAttributeRequest(request.manualAttributes())
             );
+        }
+        if (location != null) {
+            LocationSnapshot to = snapshotLocation(saved);
+            writeLocationHistory(saved, from, to, null);
+            auditLocationChange(saved, from, to, to);
         }
 
         auditBuilderService.log(
@@ -395,11 +489,29 @@ public class EquipmentService {
     @Transactional
     public EquipmentDto updatePlacement(UUID id, EquipmentPlacementRequest request) {
         Equipment equipment = getOrThrow(id);
-        validatePlacementRequest(request);
-        if (request.targetType() == PlacementTargetType.WAREHOUSE) {
-            return moveToWarehouse(equipment, request);
+        EquipmentLocationRequest target = resolvePlacementLocation(request);
+        validateLocationReferences(target);
+        assertCanAccessLocationBeforePersistence(target);
+        LocationSnapshot from = snapshotLocation(equipment);
+
+        if (target.locationType() == EquipmentLocationType.WAREHOUSE) {
+            warehouseEquipmentItemService.transferEquipmentToWarehouse(
+                    equipment.getId(),
+                    target.warehouseId(),
+                    resolveWarehousePlacementStatus(target.warehouseStatus())
+            );
+        } else if (target.locationType() == EquipmentLocationType.DEPARTMENT) {
+            syncDepartmentPlacement(equipment, target.departmentId());
+        } else {
+            closeActiveWarehouseItemIfPresent(equipment);
         }
-        return moveToDepartment(equipment, request);
+
+        applyLocation(equipment, target);
+        Equipment saved = repository.save(equipment);
+        LocationSnapshot to = snapshotLocation(saved);
+        writeLocationHistory(saved, from, to, request.note());
+        auditLocationChange(saved, from, to, to);
+        return enrich(List.of(saved)).getFirst();
     }
 
     @Transactional
@@ -423,7 +535,11 @@ public class EquipmentService {
     }
 
     Equipment getOrThrow(UUID id) {
-        return repository.findByIdAndIsDeletedFalse(id)
+        Optional<Equipment> equipment = repository.findByIdAndIsDeletedFalse(id);
+        if (equipment == null) {
+            throw RestException.notFound("Equipment not found: " + id);
+        }
+        return equipment
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
     }
 
@@ -442,6 +558,7 @@ public class EquipmentService {
         Set<UUID> locIds = collectIds(items, Equipment::getLocationId);
         Set<UUID> typeIds = collectIds(items, Equipment::getEquipmentTypeId);
         Set<UUID> parentIds = collectIds(items, Equipment::getParentId);
+        Set<UUID> currentWarehouseIds = collectIds(items, Equipment::getCurrentWarehouseId);
         Set<UUID> equipmentIds = items.stream().map(Equipment::getId).collect(Collectors.toSet());
 
         Map<UUID, Department> deptMap = byId(departmentRepository.findAllByIdInAndIsDeletedFalse(deptIds), Department::getId);
@@ -454,6 +571,7 @@ public class EquipmentService {
                 WarehouseEquipmentItem::getEquipmentId
         );
         Set<UUID> warehouseIdsToLoad = new HashSet<>(unresolvedLocIds);
+        warehouseIdsToLoad.addAll(currentWarehouseIds);
         warehouseIdsToLoad.addAll(
                 activeWarehouseItemMap.values().stream()
                         .map(WarehouseEquipmentItem::getWarehouseId)
@@ -475,7 +593,7 @@ public class EquipmentService {
                     EquipmentDto.Ref locationRef = locRef(e.getLocationId(), locMap, warehouseMap);
                     WarehouseEquipmentItem activeWarehouseItem = activeWarehouseItemMap.get(e.getId());
                     EquipmentDto.Ref warehouseRef = warehouseRef(
-                            activeWarehouseItem == null ? null : warehouseMap.get(activeWarehouseItem.getWarehouseId())
+                            resolvePlacementWarehouse(e, activeWarehouseItem, warehouseMap)
                     );
                     EquipmentDto.PlacementRef placement = placementRef(
                             e,
@@ -549,11 +667,78 @@ public class EquipmentService {
                 p.getPassportNumber(), p.getPowerKw(), p.getVoltageV(), p.getPressureBar());
     }
 
+    private static Warehouse resolvePlacementWarehouse(Equipment equipment,
+                                                       WarehouseEquipmentItem activeWarehouseItem,
+                                                       Map<UUID, Warehouse> warehouseMap) {
+        if (equipment.getCurrentLocationType() == EquipmentLocationType.WAREHOUSE) {
+            return warehouseMap.get(equipment.getCurrentWarehouseId());
+        }
+        return activeWarehouseItem == null ? null : warehouseMap.get(activeWarehouseItem.getWarehouseId());
+    }
+
     private static EquipmentDto.PlacementRef placementRef(Equipment equipment,
                                                           EquipmentDto.Ref departmentRef,
                                                           EquipmentDto.Ref warehouseRef,
                                                           WarehouseEquipmentItem activeWarehouseItem,
                                                           EquipmentDto.Ref locationRef) {
+        if (equipment.getCurrentLocationType() == EquipmentLocationType.DEPARTMENT) {
+            return new EquipmentDto.PlacementRef(
+                    PlacementType.DEPARTMENT,
+                    departmentRef,
+                    activeWarehouseItem == null ? null : warehouseRef,
+                    activeWarehouseItem == null ? null : activeWarehouseItem.getStatus(),
+                    locationRef,
+                    equipment.getResponsibleDepartmentId(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false
+            );
+        }
+
+        if (equipment.getCurrentLocationType() == EquipmentLocationType.WAREHOUSE) {
+            return new EquipmentDto.PlacementRef(
+                    PlacementType.WAREHOUSE,
+                    null,
+                    warehouseRef,
+                    activeWarehouseItem == null ? null : activeWarehouseItem.getStatus(),
+                    locationRef,
+                    equipment.getResponsibleDepartmentId(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false
+            );
+        }
+
+        if (equipment.getCurrentLocationType() == EquipmentLocationType.OUTSIDE_FACILITY) {
+            LocalDate expectedReturnDate = equipment.getOutsideExpectedReturnDate();
+            return new EquipmentDto.PlacementRef(
+                    PlacementType.OUTSIDE_FACILITY,
+                    null,
+                    null,
+                    null,
+                    null,
+                    equipment.getResponsibleDepartmentId(),
+                    equipment.getOutsideReason(),
+                    equipment.getOutsideTakenBy(),
+                    equipment.getOutsideRecipientUserId(),
+                    equipment.getOutsideStartedDate(),
+                    expectedReturnDate,
+                    equipment.getOutsideDestination(),
+                    equipment.getOutsideReasonNote(),
+                    expectedReturnDate != null && expectedReturnDate.isBefore(LocalDate.now())
+            );
+        }
+
         if (equipment.getDepartmentId() != null) {
             if (activeWarehouseItem == null) {
                 return new EquipmentDto.PlacementRef(
@@ -620,23 +805,58 @@ public class EquipmentService {
         entity.setDescription(request.description());
     }
 
-    private EquipmentDto moveToWarehouse(Equipment equipment, EquipmentPlacementRequest request) {
-        WarehouseEquipmentStatus targetStatus = resolveWarehousePlacementStatus(request.warehouseStatus());
-        warehouseEquipmentItemService.transferEquipmentToWarehouse(
-                equipment.getId(),
-                request.warehouseId(),
-                targetStatus
-        );
-        equipment.setDepartmentId(null);
-        equipment.setLocationId(request.warehouseId());
-        Equipment saved = repository.save(equipment);
-        return enrich(List.of(saved)).getFirst();
+    private EquipmentLocationRequest resolveUpdateLocation(EquipmentUpdateRequest request) {
+        if (request.location() != null) {
+            return equipmentLocationValidator.validateAndNormalize(request.location());
+        }
+        if (request.departmentId() != null) {
+            return equipmentLocationValidator.validateAndNormalize(new EquipmentLocationRequest(
+                    EquipmentLocationType.DEPARTMENT,
+                    request.departmentId(),
+                    null,
+                    request.locationId(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            ));
+        }
+        return null;
     }
 
-    private EquipmentDto moveToDepartment(Equipment equipment, EquipmentPlacementRequest request) {
-        UUID departmentId = request.departmentId();
-        WarehouseEquipmentItem activeWarehouseItem = warehouseEquipmentItemRepository.findActiveByEquipmentId(equipment.getId())
-                .orElseThrow(() -> RestException.badRequest("Active warehouse assignment is required for DEPARTMENT target"));
+    private EquipmentLocationRequest resolvePlacementLocation(EquipmentPlacementRequest request) {
+        if (request == null) {
+            throw RestException.badRequest("Placement request is required");
+        }
+        if (request.targetLocation() != null) {
+            return equipmentLocationValidator.validateAndNormalize(request.targetLocation());
+        }
+        if (request.targetType() == PlacementTargetType.OUTSIDE_FACILITY) {
+            throw RestException.badRequest("targetLocation is required when targetType is OUTSIDE_FACILITY");
+        }
+        return equipmentLocationValidator.resolvePlacementLocation(
+                request.targetType(),
+                request.departmentId(),
+                request.warehouseId(),
+                request.warehouseStatus(),
+                null
+        );
+    }
+
+    private void syncDepartmentPlacement(Equipment equipment, UUID departmentId) {
+        Optional<WarehouseEquipmentItem> activeItem = warehouseEquipmentItemRepository.findActiveByEquipmentId(equipment.getId());
+        if (activeItem == null || activeItem.isEmpty()) {
+            if (equipment.getCurrentLocationType() == EquipmentLocationType.WAREHOUSE || equipment.getCurrentWarehouseId() != null) {
+                throw RestException.badRequest("Active warehouse assignment is required for DEPARTMENT target");
+            }
+            return;
+        }
+        WarehouseEquipmentItem activeWarehouseItem = activeItem.get();
         if (activeWarehouseItem.getStatus() == WarehouseEquipmentStatus.OUT_OF_SERVICE) {
             throw RestException.badRequest("OUT_OF_SERVICE equipment cannot be installed directly");
         }
@@ -646,48 +866,266 @@ public class EquipmentService {
                 WarehouseEquipmentStatus.INSTALLED,
                 departmentId
         );
-        equipment.setDepartmentId(departmentId);
-        if (Objects.equals(equipment.getLocationId(), activeWarehouseItem.getWarehouseId())) {
-            equipment.setLocationId(null);
-        }
-        Equipment saved = repository.save(equipment);
-        return enrich(List.of(saved)).getFirst();
     }
 
-    private void validatePlacementRequest(EquipmentPlacementRequest request) {
-        if (request == null) {
-            throw RestException.badRequest("Placement request is required");
-        }
-        if (request.targetType() == null) {
-            throw RestException.badRequest("targetType is required");
-        }
-        if (request.warehouseId() != null && request.departmentId() != null) {
-            throw RestException.badRequest("warehouseId and departmentId cannot both be provided");
-        }
-
-        if (request.targetType() == PlacementTargetType.WAREHOUSE) {
-            if (request.warehouseId() == null) {
-                throw RestException.badRequest("warehouseId is required when targetType is WAREHOUSE");
-            }
-            if (request.departmentId() != null) {
-                throw RestException.badRequest("departmentId must be null when targetType is WAREHOUSE");
-            }
-            resolveWarehousePlacementStatus(request.warehouseStatus());
-            validateWarehouseExists(request.warehouseId());
+    private void markActiveWarehouseItemInstalledIfPresent(Equipment equipment, UUID departmentId) {
+        Optional<WarehouseEquipmentItem> activeItem = warehouseEquipmentItemRepository.findActiveByEquipmentId(equipment.getId());
+        if (activeItem == null) {
             return;
         }
-
-        if (request.departmentId() == null) {
-            throw RestException.badRequest("departmentId is required when targetType is DEPARTMENT");
-        }
-        if (request.warehouseId() != null) {
-            throw RestException.badRequest("warehouseId must be null when targetType is DEPARTMENT");
-        }
-        if (request.warehouseStatus() != null) {
-            throw RestException.badRequest("warehouseStatus must be null when targetType is DEPARTMENT");
-        }
-        validateDepartmentExists(request.departmentId());
+        activeItem.ifPresent(item -> {
+            if (item.getStatus() == WarehouseEquipmentStatus.OUT_OF_SERVICE) {
+                throw RestException.badRequest("OUT_OF_SERVICE equipment cannot be installed directly");
+            }
+            warehouseEquipmentItemService.updateStatus(
+                    item.getWarehouseId(),
+                    equipment.getId(),
+                    WarehouseEquipmentStatus.INSTALLED,
+                    departmentId
+            );
+        });
     }
+
+    private void closeActiveWarehouseItemIfPresent(Equipment equipment) {
+        Optional<WarehouseEquipmentItem> activeItem = warehouseEquipmentItemRepository.findActiveByEquipmentId(equipment.getId());
+        if (activeItem != null) {
+            activeItem.ifPresent(item -> warehouseEquipmentItemService.remove(item.getWarehouseId(), equipment.getId()));
+        }
+    }
+
+    private void syncWarehouseInventoryForUpdate(Equipment equipment, EquipmentLocationRequest location) {
+        if (location.locationType() == EquipmentLocationType.WAREHOUSE) {
+            warehouseEquipmentItemService.transferEquipmentToWarehouse(
+                    equipment.getId(),
+                    location.warehouseId(),
+                    resolveWarehousePlacementStatus(location.warehouseStatus())
+            );
+        } else if (location.locationType() == EquipmentLocationType.DEPARTMENT) {
+            markActiveWarehouseItemInstalledIfPresent(equipment, location.departmentId());
+        } else {
+            closeActiveWarehouseItemIfPresent(equipment);
+        }
+    }
+
+    private void applyLocation(Equipment equipment, EquipmentLocationRequest location) {
+        switch (location.locationType()) {
+            case DEPARTMENT -> applyDepartmentLocation(equipment, location);
+            case WAREHOUSE -> applyWarehouseLocation(equipment, location);
+            case OUTSIDE_FACILITY -> applyOutsideLocation(equipment, location);
+        }
+    }
+
+    private void applyDepartmentLocation(Equipment equipment, EquipmentLocationRequest location) {
+        equipment.setCurrentLocationType(EquipmentLocationType.DEPARTMENT);
+        equipment.setDepartmentId(location.departmentId());
+        equipment.setLocationId(location.locationId());
+        equipment.setCurrentWarehouseId(null);
+        equipment.setResponsibleDepartmentId(
+                location.responsibleDepartmentId() != null ? location.responsibleDepartmentId() : location.departmentId()
+        );
+        clearOutsideFields(equipment);
+    }
+
+    private void applyWarehouseLocation(Equipment equipment, EquipmentLocationRequest location) {
+        UUID previousDepartmentId = equipment.getDepartmentId();
+        Warehouse warehouse = warehouseRepository.findByIdAndIsDeletedFalse(location.warehouseId())
+                .orElseThrow(() -> RestException.notFound("Warehouse not found: " + location.warehouseId()));
+        equipment.setCurrentLocationType(EquipmentLocationType.WAREHOUSE);
+        equipment.setDepartmentId(null);
+        equipment.setCurrentWarehouseId(location.warehouseId());
+        equipment.setResponsibleDepartmentId(resolveResponsibleDepartmentId(
+                location.responsibleDepartmentId(),
+                equipment.getResponsibleDepartmentId(),
+                previousDepartmentId,
+                warehouse.getDepartmentId()
+        ));
+        equipment.setLocationId(warehouse.getLocationId());
+        clearOutsideFields(equipment);
+    }
+
+    private void applyOutsideLocation(Equipment equipment, EquipmentLocationRequest location) {
+        UUID previousDepartmentId = equipment.getDepartmentId();
+        equipment.setCurrentLocationType(EquipmentLocationType.OUTSIDE_FACILITY);
+        equipment.setDepartmentId(null);
+        equipment.setCurrentWarehouseId(null);
+        equipment.setLocationId(null);
+        equipment.setResponsibleDepartmentId(resolveResponsibleDepartmentId(
+                location.responsibleDepartmentId(),
+                equipment.getResponsibleDepartmentId(),
+                previousDepartmentId,
+                null
+        ));
+        equipment.setOutsideReason(location.outsideReason());
+        equipment.setOutsideTakenBy(location.outsideTakenBy());
+        equipment.setOutsideRecipientUserId(location.outsideRecipientUserId());
+        equipment.setOutsideStartedDate(location.outsideStartedDate() != null ? location.outsideStartedDate() : LocalDate.now());
+        equipment.setOutsideExpectedReturnDate(location.outsideExpectedReturnDate());
+        equipment.setOutsideDestination(location.outsideDestination());
+        equipment.setOutsideReasonNote(location.outsideReasonNote());
+    }
+
+    private void clearOutsideFields(Equipment equipment) {
+        equipment.setOutsideReason(null);
+        equipment.setOutsideTakenBy(null);
+        equipment.setOutsideRecipientUserId(null);
+        equipment.setOutsideStartedDate(null);
+        equipment.setOutsideExpectedReturnDate(null);
+        equipment.setOutsideDestination(null);
+        equipment.setOutsideReasonNote(null);
+    }
+
+    private UUID resolveResponsibleDepartmentId(UUID requested,
+                                                UUID existingResponsible,
+                                                UUID previousDepartment,
+                                                UUID warehouseDepartment) {
+        UUID responsibleDepartmentId = requested != null
+                ? requested
+                : firstNonNull(existingResponsible, previousDepartment, warehouseDepartment, scopeAccessService.currentDepartmentIdOrNull());
+        if (responsibleDepartmentId == null) {
+            throw RestException.badRequest("responsibleDepartmentId is required for equipment location");
+        }
+        validateDepartmentExists(responsibleDepartmentId);
+        assertDepartmentAccessIfAuthenticated(responsibleDepartmentId);
+        return responsibleDepartmentId;
+    }
+
+    @SafeVarargs
+    private final <T> T firstNonNull(T... values) {
+        for (T value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private void validateLocationReferences(EquipmentLocationRequest location) {
+        if (location.locationType() == EquipmentLocationType.DEPARTMENT) {
+            validateDepartmentExists(location.departmentId());
+            assertDepartmentAccessIfAuthenticated(location.departmentId());
+        } else if (location.locationType() == EquipmentLocationType.WAREHOUSE) {
+            resolveWarehousePlacementStatus(location.warehouseStatus());
+            validateWarehouseExists(location.warehouseId());
+        } else if (location.outsideRecipientUserId() != null) {
+            userRepository.findByIdAndIsDeletedFalse(location.outsideRecipientUserId())
+                    .orElseThrow(() -> RestException.notFound("User not found: " + location.outsideRecipientUserId()));
+        }
+        validateDepartmentExists(location.responsibleDepartmentId());
+        assertDepartmentAccessIfAuthenticated(location.responsibleDepartmentId());
+    }
+
+    private void assertCanAccessLocationBeforePersistence(EquipmentLocationRequest location) {
+        if (location.locationType() == EquipmentLocationType.DEPARTMENT) {
+            scopeAccessService.assertCanAccessEquipmentScope(
+                    location.responsibleDepartmentId(),
+                    location.departmentId()
+            );
+            return;
+        }
+        UUID responsibleDepartmentId = location.responsibleDepartmentId();
+        if (location.locationType() == EquipmentLocationType.WAREHOUSE) {
+            Optional<Warehouse> warehouseResult = warehouseRepository.findByIdAndIsDeletedFalse(location.warehouseId());
+            if (warehouseResult == null) {
+                throw RestException.notFound("Warehouse not found: " + location.warehouseId());
+            }
+            Warehouse warehouse = warehouseResult
+                    .orElseThrow(() -> RestException.notFound("Warehouse not found: " + location.warehouseId()));
+            responsibleDepartmentId = firstNonNull(
+                    responsibleDepartmentId,
+                    warehouse.getDepartmentId(),
+                    scopeAccessService.currentDepartmentIdOrNull()
+            );
+        } else {
+            responsibleDepartmentId = firstNonNull(
+                    responsibleDepartmentId,
+                    scopeAccessService.currentDepartmentIdOrNull()
+            );
+        }
+        scopeAccessService.assertCanAccessEquipmentScope(responsibleDepartmentId, null);
+    }
+
+    private void assertDepartmentAccessIfAuthenticated(UUID departmentId) {
+        Optional<AuthenticatedUser> currentUser = scopeAccessService.currentUser();
+        if (departmentId != null && currentUser != null && currentUser.isPresent()) {
+            scopeAccessService.assertCanAccessDepartment(departmentId);
+        }
+    }
+
+    private LocationSnapshot snapshotLocation(Equipment equipment) {
+        return new LocationSnapshot(
+                equipment.getCurrentLocationType(),
+                equipment.getDepartmentId(),
+                equipment.getCurrentWarehouseId(),
+                equipment.getOutsideReason(),
+                equipment.getOutsideTakenBy(),
+                equipment.getOutsideRecipientUserId(),
+                equipment.getOutsideStartedDate(),
+                equipment.getOutsideExpectedReturnDate(),
+                equipment.getOutsideDestination(),
+                equipment.getOutsideReasonNote(),
+                equipment.getResponsibleDepartmentId()
+        );
+    }
+
+    private void writeLocationHistory(Equipment equipment,
+                                      LocationSnapshot from,
+                                      LocationSnapshot to,
+                                      String note) {
+        EquipmentLocationHistory history = EquipmentLocationHistory.builder()
+                .equipmentId(equipment.getId())
+                .fromLocationType(from == null ? null : from.locationType())
+                .fromDepartmentId(from == null ? null : from.departmentId())
+                .fromWarehouseId(from == null ? null : from.warehouseId())
+                .fromOutsideReason(from == null ? null : from.outsideReason())
+                .fromOutsideTakenBy(from == null ? null : from.outsideTakenBy())
+                .fromOutsideRecipientUserId(from == null ? null : from.outsideRecipientUserId())
+                .fromOutsideStartedDate(from == null ? null : from.outsideStartedDate())
+                .fromOutsideExpectedReturnDate(from == null ? null : from.outsideExpectedReturnDate())
+                .fromOutsideDestination(from == null ? null : from.outsideDestination())
+                .fromOutsideReasonNote(from == null ? null : from.outsideReasonNote())
+                .toLocationType(to.locationType())
+                .toDepartmentId(to.departmentId())
+                .toWarehouseId(to.warehouseId())
+                .toOutsideReason(to.outsideReason())
+                .toOutsideTakenBy(to.outsideTakenBy())
+                .toOutsideRecipientUserId(to.outsideRecipientUserId())
+                .toOutsideStartedDate(to.outsideStartedDate())
+                .toOutsideExpectedReturnDate(to.outsideExpectedReturnDate())
+                .toOutsideDestination(to.outsideDestination())
+                .toOutsideReasonNote(to.outsideReasonNote())
+                .responsibleDepartmentId(to.responsibleDepartmentId())
+                .changedBy(scopeAccessService.currentUserIdOrNull())
+                .changedAt(Instant.now())
+                .note(note)
+                .build();
+        equipmentLocationHistoryRepository.save(history);
+    }
+
+    private void auditLocationChange(Equipment equipment, LocationSnapshot from, LocationSnapshot to, Object newSnapshot) {
+        auditBuilderService.log(
+                "equipment",
+                equipment.getId().toString(),
+                AuditAction.UPDATE,
+                com.toir.enums.AuditModule.EQUIPMENT,
+                "Equipment location changed: %s -> %s".formatted(from.locationType(), to.locationType()),
+                from,
+                newSnapshot
+        );
+    }
+
+    private record LocationSnapshot(
+            EquipmentLocationType locationType,
+            UUID departmentId,
+            UUID warehouseId,
+            EquipmentOutsideReason outsideReason,
+            String outsideTakenBy,
+            UUID outsideRecipientUserId,
+            LocalDate outsideStartedDate,
+            LocalDate outsideExpectedReturnDate,
+            String outsideDestination,
+            String outsideReasonNote,
+            UUID responsibleDepartmentId
+    ) {}
 
     private List<EquipmentDocumentDto> equipmentDocuments(UUID equipmentId) {
         if (equipmentDocumentRepository == null) {

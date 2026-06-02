@@ -3,6 +3,7 @@ package com.toir.service.equipment;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentCreateRequest;
 import com.toir.dto.equipment.EquipmentDetailDto;
+import com.toir.dto.equipment.EquipmentLocationRequest;
 import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.equipment.EquipmentUpdateRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
@@ -15,6 +16,7 @@ import com.toir.entity.DowntimeEvent;
 import com.toir.entity.Location;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentLocationHistory;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
@@ -23,6 +25,8 @@ import com.toir.enums.DefectStatus;
 import com.toir.enums.DowntimeType;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentAttributeDataType;
+import com.toir.enums.EquipmentLocationType;
+import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
@@ -39,17 +43,22 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -59,6 +68,7 @@ import com.toir.repository.equipment.EquipmentStatsProjection;
 
 import java.time.Year;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -72,6 +82,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -93,6 +104,9 @@ class EquipmentServiceTest {
 
     @Mock
     EquipmentPassportRepository passportRepository;
+
+    @Mock
+    EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
 
     @Mock
     WarehouseRepository warehouseRepository;
@@ -124,8 +138,23 @@ class EquipmentServiceTest {
     @Mock
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
+    @Spy
+    EquipmentLocationValidator equipmentLocationValidator;
+
     @Mock
     AuditBuilderService auditBuilderService;
+
+    @Mock
+    UserRepository userRepository;
+
+    @Mock
+    ScopeAccessService scopeAccessService;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(departmentRepository.findByIdAndIsDeletedFalse(any()))
+                .thenAnswer(invocation -> Optional.of(department(invocation.getArgument(0))));
+    }
 
     @InjectMocks
     EquipmentService service;
@@ -1035,11 +1064,15 @@ class EquipmentServiceTest {
     @Test
     void createWithWarehouseIdOnlyCreatesEquipmentAndAssignsAvailableWarehouseItem() {
         UUID warehouseId = UUID.randomUUID();
+        UUID warehouseDepartmentId = UUID.randomUUID();
         EquipmentCreateRequest request = createRequest(null, "INV-NEW-2", null, warehouseId);
         String expectedCode = stubCreateFlow("INV-NEW-2");
         Warehouse warehouse = new Warehouse();
         warehouse.setId(warehouseId);
+        warehouse.setDepartmentId(warehouseDepartmentId);
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(departmentRepository.findByIdAndIsDeletedFalse(warehouseDepartmentId))
+                .thenReturn(Optional.of(department(warehouseDepartmentId)));
         when(warehouseEquipmentItemService.assign(eq(warehouseId), any(WarehouseEquipmentAssignRequest.class)))
                 .thenReturn(new WarehouseEquipmentItemDto(
                         UUID.randomUUID(),
@@ -1057,41 +1090,139 @@ class EquipmentServiceTest {
         verify(repository).save(entityCaptor.capture());
         Equipment saved = entityCaptor.getValue();
         assertThat(saved.getDepartmentId()).isNull();
+        assertThat(saved.getCurrentLocationType()).isEqualTo(EquipmentLocationType.WAREHOUSE);
+        assertThat(saved.getCurrentWarehouseId()).isEqualTo(warehouseId);
+        assertThat(saved.getResponsibleDepartmentId()).isEqualTo(warehouseDepartmentId);
 
         ArgumentCaptor<WarehouseEquipmentAssignRequest> assignCaptor =
                 ArgumentCaptor.forClass(WarehouseEquipmentAssignRequest.class);
         verify(warehouseEquipmentItemService).assign(eq(warehouseId), assignCaptor.capture());
         assertThat(assignCaptor.getValue().equipmentId()).isEqualTo(saved.getId());
-        assertThat(assignCaptor.getValue().status()).isNull();
+        assertThat(assignCaptor.getValue().status()).isEqualTo(WarehouseEquipmentStatus.AVAILABLE);
     }
 
     @Test
-    void createWithBothCreatesEquipmentAndWarehouseAssignment() {
+    void createWithBothDepartmentAndWarehouseRejected() {
         UUID departmentId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
         EquipmentCreateRequest request = createRequest(null, "INV-NEW-3", departmentId, warehouseId);
-        stubCreateFlow("INV-NEW-3");
-        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
-                .thenReturn(Optional.of(department(departmentId)));
-        Warehouse warehouse = new Warehouse();
-        warehouse.setId(warehouseId);
-        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
-        when(warehouseEquipmentItemService.assign(eq(warehouseId), any(WarehouseEquipmentAssignRequest.class)))
-                .thenReturn(new WarehouseEquipmentItemDto(
-                        UUID.randomUUID(),
-                        warehouseId,
-                        UUID.randomUUID(),
-                        WarehouseEquipmentStatus.AVAILABLE,
-                        true,
-                        Instant.now()
-                ));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("departmentId and warehouseId cannot both be provided");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createWithOldDepartmentPayloadSetsCurrentLocationAndWritesHistory() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequest(null, "INV-LOC-DEP", departmentId, null);
+        EquipmentLocationRequest resolved = new EquipmentLocationRequest(
+                EquipmentLocationType.DEPARTMENT,
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        stubCreateFlow("INV-LOC-DEP");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
 
         service.create(request);
 
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
-        assertThat(entityCaptor.getValue().getDepartmentId()).isEqualTo(departmentId);
-        verify(warehouseEquipmentItemService).assign(eq(warehouseId), any(WarehouseEquipmentAssignRequest.class));
+        Equipment saved = entityCaptor.getValue();
+        assertThat(saved.getCurrentLocationType()).isEqualTo(EquipmentLocationType.DEPARTMENT);
+        assertThat(saved.getDepartmentId()).isEqualTo(departmentId);
+        assertThat(saved.getCurrentWarehouseId()).isNull();
+        assertThat(saved.getResponsibleDepartmentId()).isEqualTo(departmentId);
+        verify(equipmentLocationHistoryRepository).save(any(EquipmentLocationHistory.class));
+    }
+
+    @Test
+    void createWithNestedOutsidePayloadSetsOutsideFields() {
+        UUID responsibleDepartmentId = UUID.randomUUID();
+        EquipmentLocationRequest requestLocation = new EquipmentLocationRequest(
+                EquipmentLocationType.OUTSIDE_FACILITY,
+                null,
+                null,
+                null,
+                responsibleDepartmentId,
+                EquipmentOutsideReason.SERVICE,
+                "Technician",
+                null,
+                null,
+                LocalDate.now().plusDays(10),
+                "Service center",
+                null,
+                null
+        );
+        EquipmentLocationRequest normalized = new EquipmentLocationRequest(
+                EquipmentLocationType.OUTSIDE_FACILITY,
+                null,
+                null,
+                null,
+                responsibleDepartmentId,
+                EquipmentOutsideReason.SERVICE,
+                "Technician",
+                null,
+                LocalDate.now(),
+                LocalDate.now().plusDays(10),
+                "Service center",
+                null,
+                null
+        );
+        EquipmentCreateRequest request = new EquipmentCreateRequest(
+                null,
+                "Compressor",
+                "INV-LOC-OUT",
+                "TN-1",
+                "SN-1",
+                "Model X",
+                UUID.randomUUID(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "ACME",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                "test",
+                10_000L,
+                null,
+                null,
+                requestLocation
+        );
+        stubCreateFlow("INV-LOC-OUT");
+        when(departmentRepository.findByIdAndIsDeletedFalse(responsibleDepartmentId))
+                .thenReturn(Optional.of(department(responsibleDepartmentId)));
+
+        service.create(request);
+
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        Equipment saved = entityCaptor.getValue();
+        assertThat(saved.getCurrentLocationType()).isEqualTo(EquipmentLocationType.OUTSIDE_FACILITY);
+        assertThat(saved.getDepartmentId()).isNull();
+        assertThat(saved.getCurrentWarehouseId()).isNull();
+        assertThat(saved.getOutsideReason()).isEqualTo(EquipmentOutsideReason.SERVICE);
+        assertThat(saved.getOutsideStartedDate()).isEqualTo(normalized.outsideStartedDate());
+        assertThat(saved.getOutsideDestination()).isEqualTo("Service center");
+        assertThat(saved.getResponsibleDepartmentId()).isEqualTo(responsibleDepartmentId);
+        verify(equipmentLocationHistoryRepository).save(any(EquipmentLocationHistory.class));
     }
 
     @Test
@@ -1145,11 +1276,15 @@ class EquipmentServiceTest {
     @Test
     void assignmentFailureShouldPropagateAndSkipAuditLogging() {
         UUID warehouseId = UUID.randomUUID();
+        UUID warehouseDepartmentId = UUID.randomUUID();
         EquipmentCreateRequest request = createRequest(null, "INV-NEW-8", null, warehouseId);
         stubCreateFlowWithoutEnrichment("INV-NEW-8");
         Warehouse warehouse = new Warehouse();
         warehouse.setId(warehouseId);
+        warehouse.setDepartmentId(warehouseDepartmentId);
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(departmentRepository.findByIdAndIsDeletedFalse(warehouseDepartmentId))
+                .thenReturn(Optional.of(department(warehouseDepartmentId)));
         when(warehouseEquipmentItemService.assign(eq(warehouseId), any(WarehouseEquipmentAssignRequest.class)))
                 .thenThrow(RestException.conflict("Equipment is already assigned to another warehouse"));
 
@@ -1370,7 +1505,7 @@ class EquipmentServiceTest {
         );
 
         assertThat(updated.departmentId()).isNull();
-        assertThat(updated.locationId()).isEqualTo(warehouseId);
+        assertThat(updated.locationId()).isNull();
         verify(warehouseEquipmentItemService).transferEquipmentToWarehouse(
                 equipmentId,
                 warehouseId,
@@ -1408,7 +1543,7 @@ class EquipmentServiceTest {
         );
 
         assertThat(updated.departmentId()).isNull();
-        assertThat(updated.locationId()).isEqualTo(warehouseId);
+        assertThat(updated.locationId()).isNull();
         verify(warehouseEquipmentItemService).transferEquipmentToWarehouse(
                 equipmentId,
                 warehouseId,
@@ -1616,6 +1751,61 @@ class EquipmentServiceTest {
         ))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("warehouseStatus for WAREHOUSE target must be AVAILABLE or OUT_OF_SERVICE");
+    }
+
+    @Test
+    void moveDepartmentEquipmentToOutsideFacilitySetsOutsideFieldsAndWritesHistory() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID responsibleDepartmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-OUTSIDE");
+        equipment.setId(equipmentId);
+        equipment.setDepartmentId(responsibleDepartmentId);
+
+        EquipmentLocationRequest targetLocation = new EquipmentLocationRequest(
+                EquipmentLocationType.OUTSIDE_FACILITY,
+                null,
+                null,
+                null,
+                responsibleDepartmentId,
+                EquipmentOutsideReason.BUSINESS_TRIP,
+                "Toshmat",
+                null,
+                LocalDate.of(2026, 6, 2),
+                LocalDate.of(2026, 6, 10),
+                "Toshkent",
+                null,
+                null
+        );
+
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+
+        EquipmentDto updated = service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(null, null, null, null, targetLocation, "Vaqtincha berildi")
+        );
+
+        assertThat(updated.departmentId()).isNull();
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        Equipment saved = entityCaptor.getValue();
+        assertThat(saved.getCurrentLocationType()).isEqualTo(EquipmentLocationType.OUTSIDE_FACILITY);
+        assertThat(saved.getDepartmentId()).isNull();
+        assertThat(saved.getCurrentWarehouseId()).isNull();
+        assertThat(saved.getOutsideReason()).isEqualTo(EquipmentOutsideReason.BUSINESS_TRIP);
+        assertThat(saved.getOutsideTakenBy()).isEqualTo("Toshmat");
+        assertThat(saved.getOutsideDestination()).isEqualTo("Toshkent");
+        verify(equipmentLocationHistoryRepository).save(any(EquipmentLocationHistory.class));
+        verify(auditBuilderService).log(
+                eq("equipment"),
+                eq(equipmentId.toString()),
+                eq(com.toir.enums.AuditAction.UPDATE),
+                eq(com.toir.enums.AuditModule.EQUIPMENT),
+                eq("Equipment location changed: null -> OUTSIDE_FACILITY"),
+                any(),
+                any()
+        );
     }
 
     @Test
