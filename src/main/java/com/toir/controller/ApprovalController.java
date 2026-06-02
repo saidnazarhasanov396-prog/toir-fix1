@@ -1,4 +1,5 @@
 package com.toir.controller;
+
 import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
@@ -8,15 +9,14 @@ import com.toir.service.ApprovalService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import java.util.List;
-import java.util.UUID;
-
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/approvals")
@@ -40,7 +40,7 @@ public class ApprovalController {
         if ((documentType == null) != (documentId == null)) {
             throw RestException.badRequest("documentType and documentId must be provided together");
         }
-        if (documentType != null && documentId != null) {
+        if (documentType != null) {
             return ResponseEntity.ok(PaginationUtils.page(service.listByDocument(documentType, documentId), page, size));
         }
         if (requesterId != null) {
