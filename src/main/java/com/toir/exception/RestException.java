@@ -1,8 +1,10 @@
 package com.toir.exception;
 
 import com.toir.enums.ErrorType;
+import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
+@Getter
 public class RestException extends RuntimeException {
 
     private final HttpStatus status;
@@ -10,10 +12,6 @@ public class RestException extends RuntimeException {
     public RestException(String message, HttpStatus status) {
         super(message);
         this.status = status;
-    }
-
-    public HttpStatus getStatus() {
-        return status;
     }
 
     public static RestException badRequest(String message) {
