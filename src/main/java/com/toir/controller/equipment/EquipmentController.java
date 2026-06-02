@@ -126,6 +126,7 @@ public class EquipmentController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_CREATE')")
     public ResponseEntity<EquipmentDto> create(@Valid @RequestBody EquipmentCreateRequest request) {
         if (request.departmentId() != null) {
+            scopeAccessService.assertCanAccessEquipmentScope(null, request.departmentId());
             scopeAccessService.assertCanAccessDepartment(request.departmentId());
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));

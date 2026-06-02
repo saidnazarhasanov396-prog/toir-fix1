@@ -71,7 +71,7 @@ public class EquipmentLocationValidator {
                     null
             ));
         }
-        throw RestException.badRequest("departmentId, warehouseId or location is required");
+        throw RestException.badRequest("departmentId or warehouseId is required");
     }
 
     public EquipmentLocationRequest resolvePlacementLocation(
@@ -85,7 +85,19 @@ public class EquipmentLocationValidator {
             return validateAndNormalize(targetLocation);
         }
         if (targetType == null) {
-            throw RestException.badRequest("targetType or targetLocation is required");
+            throw RestException.badRequest("targetType is required when targetLocation is not provided");
+        }
+        if (departmentId != null && warehouseId != null) {
+            throw RestException.badRequest("warehouseId and departmentId cannot both be provided");
+        }
+        if (targetType == PlacementTargetType.DEPARTMENT && warehouseStatus != null) {
+            throw RestException.badRequest("warehouseStatus must be null when targetType is DEPARTMENT");
+        }
+        if (targetType == PlacementTargetType.WAREHOUSE
+                && warehouseStatus != null
+                && warehouseStatus != WarehouseEquipmentStatus.AVAILABLE
+                && warehouseStatus != WarehouseEquipmentStatus.OUT_OF_SERVICE) {
+            throw RestException.badRequest("warehouseStatus for WAREHOUSE target must be AVAILABLE or OUT_OF_SERVICE");
         }
         EquipmentLocationType locationType = switch (targetType) {
             case DEPARTMENT -> EquipmentLocationType.DEPARTMENT;
