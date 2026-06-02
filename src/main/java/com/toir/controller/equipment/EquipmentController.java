@@ -3,6 +3,8 @@ import com.toir.dto.equipment.*;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
+import com.toir.enums.EquipmentLocationType;
+import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -52,6 +54,9 @@ public class EquipmentController {
             @RequestParam(required = false) EquipmentStatus status,
             @RequestParam(required = false) EquipmentCategory category,
             @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) EquipmentLocationType locationType,
+            @RequestParam(required = false) EquipmentOutsideReason outsideReason,
+            @RequestParam(defaultValue = "false") boolean overdueOnly,
             @RequestParam(defaultValue = "false") boolean availableForReplacement,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
@@ -60,11 +65,15 @@ public class EquipmentController {
         int safePage = Math.max(0, page);
         int safePageSize = Math.max(1, size);
         return ResponseEntity.ok(service.search(
-                scopedDepartment(departmentId),
+                scopedDepartment(),
+                departmentId,
                 equipmentTypeId,
                 status,
                 category,
                 warehouseId,
+                locationType,
+                outsideReason,
+                overdueOnly,
                 availableForReplacement,
                 search,
                 safePage,
@@ -278,12 +287,20 @@ public class EquipmentController {
     }
 
     private void assertCanAccessEquipment(Equipment equipment) {
-        if (equipment.getDepartmentId() == null) {
-            if (!scopeAccessService.isScopeAdmin()) {
-                throw new AccessDeniedException("Access denied by equipment department scope");
-            }
-            return;
+        scopeAccessService.assertCanAccessEquipmentScope(
+                equipment.getResponsibleDepartmentId(),
+                equipment.getDepartmentId()
+        );
+    }
+
+    private UUID scopedDepartment() {
+        if (scopeAccessService.isScopeAdmin()) {
+            return null;
         }
-        scopeAccessService.assertCanAccessDepartment(equipment.getDepartmentId());
+        UUID currentDepartmentId = scopeAccessService.currentDepartmentIdOrNull();
+        if (currentDepartmentId == null) {
+            throw new AccessDeniedException("Access denied by equipment department scope");
+        }
+        return currentDepartmentId;
     }
 }

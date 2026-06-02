@@ -31,8 +31,38 @@ public record EquipmentUpdateRequest(
         String description,
         @Positive Long averageOperatingLifeHours,
         List<EquipmentAttributeValueRequest> attributes,
-        List<EquipmentManualAttributeRequest> manualAttributes
+        List<EquipmentManualAttributeRequest> manualAttributes,
+        EquipmentLocationRequest location
 ) {
+        public EquipmentUpdateRequest(
+                String code,
+                String name,
+                String inventoryNumber,
+                String technicalNumber,
+                String serialNumber,
+                String model,
+                UUID equipmentTypeId,
+                UUID departmentId,
+                UUID locationId,
+                UUID parentId,
+                UUID criticalityClassId,
+                UUID responsibleId,
+                String manufacturer,
+                EquipmentStatus status,
+                EquipmentCategory category,
+                LocalDate commissionedAt,
+                LocalDate warrantyUntil,
+                String description,
+                Long averageOperatingLifeHours,
+                List<EquipmentAttributeValueRequest> attributes,
+                List<EquipmentManualAttributeRequest> manualAttributes
+        ) {
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                        departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
+                        status, category, commissionedAt, warrantyUntil, description, averageOperatingLifeHours,
+                        attributes, manualAttributes, null);
+        }
+
         public EquipmentUpdateRequest(
                 String code,
                 String name,
@@ -56,7 +86,7 @@ public record EquipmentUpdateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
-                        status, category, commissionedAt, warrantyUntil, description, null, attributes, null);
+                        status, category, commissionedAt, warrantyUntil, description, null, attributes, null, null);
         }
 
         public EquipmentUpdateRequest(
@@ -82,7 +112,7 @@ public record EquipmentUpdateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
-                        status, category, commissionedAt, warrantyUntil, description, averageOperatingLifeHours, null, null);
+                        status, category, commissionedAt, warrantyUntil, description, averageOperatingLifeHours, null, null, null);
         }
 
         public EquipmentUpdateRequest(
@@ -107,6 +137,6 @@ public record EquipmentUpdateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
-                        status, category, commissionedAt, warrantyUntil, description, null, null, null);
+                        status, category, commissionedAt, warrantyUntil, description, null, null, null, null);
         }
 }

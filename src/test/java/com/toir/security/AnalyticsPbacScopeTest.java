@@ -295,6 +295,20 @@ class AnalyticsPbacScopeTest {
     }
 
     @Test
+    void rcaEquipmentAllowsOutsideEquipmentByResponsibleDepartment() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID responsibleDepartmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, null);
+        equipment.setResponsibleDepartmentId(responsibleDepartmentId);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
+
+        analyticsService.rcaEquipment(equipmentId);
+
+        verify(scopeAccessService).assertCanAccessEquipmentScope(responsibleDepartmentId, null);
+    }
+
+    @Test
     void reliabilityListIsFilteredToCurrentDepartment() {
         UUID departmentA = UUID.randomUUID();
         UUID departmentB = UUID.randomUUID();

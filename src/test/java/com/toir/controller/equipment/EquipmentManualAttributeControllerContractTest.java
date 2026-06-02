@@ -107,6 +107,23 @@ class EquipmentManualAttributeControllerContractTest {
                 .andExpect(jsonPath("$[0].value").value("legacy value"));
     }
 
+    @Test
+    void manualAttributeReadAllowsEquipmentByResponsibleDepartmentWhenPhysicalDepartmentIsNull() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID responsibleDepartmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setDepartmentId(null);
+        equipment.setResponsibleDepartmentId(responsibleDepartmentId);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(service.list(equipmentId)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/equipment/{equipmentId}/manual-attributes", equipmentId))
+                .andExpect(status().isOk());
+
+        verify(scopeAccessService).assertCanAccessEquipmentScope(responsibleDepartmentId, null);
+    }
+
     private static Equipment equipment(UUID id) {
         Equipment equipment = new Equipment();
         equipment.setId(id);

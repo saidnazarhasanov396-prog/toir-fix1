@@ -45,10 +45,10 @@ public class WarehouseEquipmentItemService {
 
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found"));
-        if (equipment.getDepartmentId() != null && !scopeAccessService.isScopeAdmin()
-                && !scopeAccessService.canAccessDepartment(equipment.getDepartmentId())) {
-            throw new AccessDeniedException("Access denied by equipment department scope");
-        }
+        scopeAccessService.assertCanAccessEquipmentScope(
+                equipment.getResponsibleDepartmentId(),
+                equipment.getDepartmentId()
+        );
 
         warehouseEquipmentItemRepository.findActiveByEquipmentId(request.equipmentId())
                 .ifPresent(existing -> {
@@ -151,7 +151,6 @@ public class WarehouseEquipmentItemService {
                 .orElseThrow(() -> RestException.notFound("Equipment not found"));
 
         equipment.setDepartmentId(null);
-        equipment.setLocationId(targetWarehouseId);
         equipmentRepository.save(equipment);
 
         WarehouseEquipmentItem existing = warehouseEquipmentItemRepository.findActiveByEquipmentId(equipmentId).orElse(null);
