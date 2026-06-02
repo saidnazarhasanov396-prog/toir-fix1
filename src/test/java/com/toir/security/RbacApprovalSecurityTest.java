@@ -20,6 +20,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -79,7 +80,8 @@ class RbacApprovalSecurityTest {
     @WithMockUser(authorities = APPROVAL_READ)
     void approvalReadCanReadListAndDetail() throws Exception {
         UUID approvalId = UUID.randomUUID();
-        when(approvalService.pending()).thenReturn(List.of(approvalDto(approvalId)));
+        when(approvalService.search(isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of(approvalDto(approvalId)));
         when(approvalService.findById(approvalId)).thenReturn(approvalDto(approvalId));
 
         mockMvc.perform(get("/api/v1/approvals?page=0&size=1"))
@@ -90,13 +92,26 @@ class RbacApprovalSecurityTest {
 
     @Test
     @WithMockUser(authorities = APPROVAL_READ)
-    void listWithPendingOnlyFalseReadsAllApprovals() throws Exception {
-        when(approvalService.listAll()).thenReturn(List.of());
+    void listWithoutStatusReadsAllVisibleApprovals() throws Exception {
+        when(approvalService.search(isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/approvals?pendingOnly=false&page=0&size=20"))
+        mockMvc.perform(get("/api/v1/approvals?page=0&size=20"))
                 .andExpect(status().isOk());
 
-        verify(approvalService).listAll();
+        verify(approvalService).search(null, null, null, null, null);
+    }
+
+    @Test
+    @WithMockUser(authorities = APPROVAL_READ)
+    void listWithStatusUsesStatusFilter() throws Exception {
+        when(approvalService.search(isNull(), isNull(), isNull(), eq(ApprovalStatus.PENDING), isNull()))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/approvals?status=PENDING&page=0&size=20"))
+                .andExpect(status().isOk());
+
+        verify(approvalService).search(null, null, null, ApprovalStatus.PENDING, null);
     }
 
     @Test
@@ -112,20 +127,34 @@ class RbacApprovalSecurityTest {
 
     @Test
     @WithMockUser(authorities = APPROVAL_READ)
-    void listWithDocumentTypeAndDocumentIdUsesDocumentFilter() throws Exception {
+    void listWithDocumentTypeDocumentIdAndStatusCombinesFilters() throws Exception {
         UUID documentId = UUID.randomUUID();
-        when(approvalService.listByDocument("WORK_ORDER", documentId)).thenReturn(List.of());
+        when(approvalService.search(eq("WORK_ORDER"), eq(documentId), isNull(), eq(ApprovalStatus.PENDING), isNull()))
+                .thenReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/approvals?documentType=WORK_ORDER&documentId={documentId}&page=0&size=20", documentId))
+        mockMvc.perform(get("/api/v1/approvals?documentType=WORK_ORDER&documentId={documentId}&status=PENDING&page=0&size=20", documentId))
                 .andExpect(status().isOk());
 
-        verify(approvalService).listByDocument(eq("WORK_ORDER"), eq(documentId));
+        verify(approvalService).search("WORK_ORDER", documentId, null, ApprovalStatus.PENDING, null);
+    }
+
+    @Test
+    @WithMockUser(authorities = APPROVAL_READ)
+    void listWithSearchPassesSearchFilter() throws Exception {
+        when(approvalService.search(isNull(), isNull(), isNull(), isNull(), eq("pump")))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/approvals?search=pump&page=0&size=20"))
+                .andExpect(status().isOk());
+
+        verify(approvalService).search(null, null, null, null, "pump");
     }
 
     @Test
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void systemAdminCanReadApprovals() throws Exception {
-        when(approvalService.pending()).thenReturn(List.of());
+        when(approvalService.search(isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/approvals?page=0&size=1"))
                 .andExpect(status().isOk());
@@ -134,7 +163,8 @@ class RbacApprovalSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.WILDCARD)
     void wildcardCanReadApprovals() throws Exception {
-        when(approvalService.pending()).thenReturn(List.of());
+        when(approvalService.search(isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/approvals?page=0&size=1"))
                 .andExpect(status().isOk());
