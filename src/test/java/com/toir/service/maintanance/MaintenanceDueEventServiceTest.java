@@ -96,6 +96,29 @@ class MaintenanceDueEventServiceTest {
     }
 
     @Test
+    void saveEventResolvesOperationalIssueWhenStatusIsNoLongerOverdueOrBlocked() {
+        UUID eventId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceDueEvent event = event(eventId, equipmentId, MaintenanceDueStatus.DUE);
+        Equipment equipment = equipment(equipmentId, null, UUID.randomUUID());
+        when(repository.save(event)).thenReturn(event);
+
+        service.saveEvent(event, equipment);
+
+        verify(operationalIssueService).resolveOpen("MaintenanceDueEvent", eventId);
+        verify(operationalIssueService, never()).openOrUpdate(
+                any(OperationalIssueType.class),
+                any(NotificationSeverity.class),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
+    }
+
+    @Test
     void cancelOpenEventMarksItCancelledAndResolved() {
         UUID eventId = UUID.randomUUID();
         MaintenanceDueEvent event = event(eventId, UUID.randomUUID(), MaintenanceDueStatus.DUE);
@@ -109,6 +132,7 @@ class MaintenanceDueEventServiceTest {
         assertThat(result.getResolutionReason()).isEqualTo("manual override");
         assertThat(result.getResolvedAt()).isNotNull();
         verify(repository).save(event);
+        verify(operationalIssueService).resolveOpen("MaintenanceDueEvent", eventId);
     }
 
     @Test

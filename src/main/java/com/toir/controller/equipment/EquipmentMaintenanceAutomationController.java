@@ -19,7 +19,7 @@ public class EquipmentMaintenanceAutomationController {
     private final MaintenanceAutomationService automationService;
 
     @PostMapping("/recalculate")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_AUTOMATION_RUN') or hasAuthority('EQUIPMENT_UPDATE')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_AUTOMATION_RUN')")
     public ResponseEntity<Void> recalculate(@PathVariable UUID equipmentId) {
         automationService.evaluateEquipment(equipmentId, MaintenanceTriggerSource.MANUAL_RECALCULATION);
         return ResponseEntity.noContent().build();

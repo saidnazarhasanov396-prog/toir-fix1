@@ -33,7 +33,7 @@ public class MaintenanceDueEventController {
     private final ScopeAccessService scopeAccessService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_EVENT_READ') or hasAuthority('PPR_PLAN_READ')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_EVENT_READ')")
     public ResponseEntity<Page<MaintenanceDueEventDto>> list(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) UUID departmentId,
@@ -59,13 +59,13 @@ public class MaintenanceDueEventController {
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_EVENT_APPROVE') or hasAuthority('PPR_TASK_APPROVE')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_EVENT_APPROVE')")
     public ResponseEntity<MaintenanceDueEventDto> approve(@PathVariable UUID id, @CurrentUser AuthenticatedUser user) {
         return ResponseEntity.ok(automationService.approveDueEvent(id, currentUserId(user)));
     }
 
     @PostMapping("/{id}/cancel")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_EVENT_CANCEL') or hasAuthority('PPR_TASK_CANCEL')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_EVENT_CANCEL')")
     public ResponseEntity<MaintenanceDueEventDto> cancel(@PathVariable UUID id,
                                                          @RequestBody(required = false) CancelMaintenanceDueEventRequest request) {
         return ResponseEntity.ok(service.toDto(service.cancel(id, request == null ? null : request.reason())));

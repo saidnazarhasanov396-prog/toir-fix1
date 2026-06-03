@@ -31,6 +31,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.security.SecurityAccessService;
 import com.toir.service.WorkOrderService;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -47,8 +48,11 @@ import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -68,6 +72,8 @@ public class MaintenanceAutomationService {
     private final WorkOrderService workOrderService;
     private final UserRepository userRepository;
     private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
+    private final SecurityAccessService securityAccessService;
+    private final MaintenanceAutomationNotificationService notificationService;
 
     @Transactional
     public EvaluationResult evaluateEquipment(UUID equipmentId, MaintenanceTriggerSource source) {
@@ -82,13 +88,25 @@ public class MaintenanceAutomationService {
         int suppressed = 0;
         int tasks = 0;
         int workOrders = 0;
+        int rulesChecked = rules.size();
+        int eventsCreated = 0;
+        int eventsUpdated = 0;
+        int notifications = 0;
+        int failures = 0;
         for (EquipmentMaintenanceEffectiveRule rule : rules) {
             try {
-                MaintenanceDueEvent event = evaluate(equipment, rule, source, null);
+                EvaluationOutcome outcome = evaluate(equipment, rule, source, null);
+                MaintenanceDueEvent event = outcome.event();
                 if (event == null) {
                     continue;
                 }
                 createdOrUpdated++;
+                if (outcome.created()) {
+                    eventsCreated++;
+                } else {
+                    eventsUpdated++;
+                }
+                notifications += outcome.notificationsCreated();
                 if (event.getDueStatus() == MaintenanceDueStatus.BLOCKED) {
                     blocked++;
                 }
@@ -102,11 +120,15 @@ public class MaintenanceAutomationService {
                     workOrders++;
                 }
             } catch (RuntimeException ex) {
+                failures++;
                 log.warn("Maintenance automation failed equipmentId={} regulationId={} ruleId={}",
                         equipmentId, rule.regulationId(), rule.equipmentMaintenanceRuleId(), ex);
             }
         }
-        return new EvaluationResult(1, createdOrUpdated, blocked, suppressed, tasks, workOrders);
+        log.info("maintenance_automation_evaluation equipmentId={} source={} rulesChecked={} events={} eventsCreated={} eventsUpdated={} blocked={} suppressed={} tasks={} workOrders={} notifications={} failures={}",
+                equipmentId, source, rulesChecked, createdOrUpdated, eventsCreated, eventsUpdated, blocked, suppressed, tasks, workOrders, notifications, failures);
+        return new EvaluationResult(1, createdOrUpdated, blocked, suppressed, tasks, workOrders,
+                rulesChecked, eventsCreated, eventsUpdated, notifications, failures);
     }
 
     @Transactional
@@ -119,6 +141,11 @@ public class MaintenanceAutomationService {
         int suppressed = 0;
         int tasks = 0;
         int workOrders = 0;
+        int rulesChecked = 0;
+        int eventsCreated = 0;
+        int eventsUpdated = 0;
+        int notifications = 0;
+        int failures = 0;
         for (Equipment item : equipment) {
             if (item.getStatus() == EquipmentStatus.DECOMMISSIONED) {
                 continue;
@@ -128,12 +155,20 @@ public class MaintenanceAutomationService {
                         .stream()
                         .filter(rule -> Objects.equals(rule.regulationId(), regulationId))
                         .toList();
+                rulesChecked += rules.size();
                 for (EquipmentMaintenanceEffectiveRule rule : rules) {
-                    MaintenanceDueEvent event = evaluate(item, rule, source, null);
+                    EvaluationOutcome outcome = evaluate(item, rule, source, null);
+                    MaintenanceDueEvent event = outcome.event();
                     if (event == null) {
                         continue;
                     }
                     events++;
+                    if (outcome.created()) {
+                        eventsCreated++;
+                    } else {
+                        eventsUpdated++;
+                    }
+                    notifications += outcome.notificationsCreated();
                     if (event.getDueStatus() == MaintenanceDueStatus.BLOCKED) {
                         blocked++;
                     }
@@ -148,10 +183,12 @@ public class MaintenanceAutomationService {
                     }
                 }
             } catch (RuntimeException ex) {
+                failures++;
                 log.warn("Maintenance automation failed equipmentId={} regulationId={}", item.getId(), regulationId, ex);
             }
         }
-        return new EvaluationResult(equipment.size(), events, blocked, suppressed, tasks, workOrders);
+        return new EvaluationResult(equipment.size(), events, blocked, suppressed, tasks, workOrders,
+                rulesChecked, eventsCreated, eventsUpdated, notifications, failures);
     }
 
     @Transactional
@@ -162,20 +199,39 @@ public class MaintenanceAutomationService {
         int suppressed = 0;
         int tasks = 0;
         int workOrders = 0;
+        int rulesChecked = 0;
+        int eventsCreated = 0;
+        int eventsUpdated = 0;
+        int notifications = 0;
+        int failures = 0;
         List<Equipment> equipment = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         for (Equipment item : equipment) {
             if (item.getStatus() == EquipmentStatus.DECOMMISSIONED) {
                 continue;
             }
-            EvaluationResult result = evaluateEquipment(item.getId(), MaintenanceTriggerSource.CALENDAR_JOB);
-            checked += result.checkedEquipment();
-            events += result.events();
-            blocked += result.blockedEvents();
-            suppressed += result.suppressed();
-            tasks += result.tasksCreated();
-            workOrders += result.workOrdersCreated();
+            try {
+                EvaluationResult result = evaluateEquipment(item.getId(), MaintenanceTriggerSource.CALENDAR_JOB);
+                checked += result.checkedEquipment();
+                events += result.events();
+                blocked += result.blockedEvents();
+                suppressed += result.suppressed();
+                tasks += result.tasksCreated();
+                workOrders += result.workOrdersCreated();
+                rulesChecked += result.rulesChecked();
+                eventsCreated += result.eventsCreated();
+                eventsUpdated += result.eventsUpdated();
+                notifications += result.notificationsCreated();
+                failures += result.failures();
+            } catch (RuntimeException ex) {
+                failures++;
+                log.warn("maintenance_automation_equipment_batch_failed equipmentId={} source={}",
+                        item.getId(), MaintenanceTriggerSource.CALENDAR_JOB, ex);
+            }
         }
-        return new EvaluationResult(checked, events, blocked, suppressed, tasks, workOrders);
+        log.info("maintenance_automation_nightly_summary equipmentChecked={} rulesChecked={} events={} eventsCreated={} eventsUpdated={} blocked={} suppressed={} tasks={} workOrders={} notifications={} failures={}",
+                checked, rulesChecked, events, eventsCreated, eventsUpdated, blocked, suppressed, tasks, workOrders, notifications, failures);
+        return new EvaluationResult(checked, events, blocked, suppressed, tasks, workOrders,
+                rulesChecked, eventsCreated, eventsUpdated, notifications, failures);
     }
 
     @Transactional
@@ -189,12 +245,19 @@ public class MaintenanceAutomationService {
             return eventService.toDto(event);
         }
         EquipmentMaintenanceEffectiveRule rule = effectiveRule(event);
+        enforceApprovalAuthority(rule);
+        Equipment equipment = equipment(event);
         if (rule.automationAction() == AutomationAction.CREATE_TASK
                 || rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
             createTask(event, rule, userId);
         } else {
-            createWorkOrder(event, rule, userId);
+            WorkOrderDto workOrder = createWorkOrder(event, rule, userId);
+            if (workOrder != null) {
+                notificationService.notifyWorkOrderCreated(event, rule, equipment);
+            }
         }
+        log.info("maintenance_due_event_approved eventId={} equipmentId={} regulationId={} ruleId={} userId={} status={}",
+                eventId, event.getEquipmentId(), event.getRegulationId(), event.getEquipmentMaintenanceRuleId(), userId, event.getStatus());
         return eventService.toDto(eventRepository.save(event));
     }
 
@@ -205,26 +268,29 @@ public class MaintenanceAutomationService {
             return blockedEventDto(event);
         }
         EquipmentMaintenanceEffectiveRule rule = effectiveRule(event);
-        createWorkOrder(event, rule, userId);
+        WorkOrderDto workOrder = createWorkOrder(event, rule, userId);
+        if (workOrder != null) {
+            notificationService.notifyWorkOrderCreated(event, rule, equipment(event));
+        }
         return eventService.toDto(eventRepository.save(event));
     }
 
-    private MaintenanceDueEvent evaluate(Equipment equipment,
-                                         EquipmentMaintenanceEffectiveRule rule,
-                                         MaintenanceTriggerSource source,
-                                         UUID userId) {
+    private EvaluationOutcome evaluate(Equipment equipment,
+                                       EquipmentMaintenanceEffectiveRule rule,
+                                       MaintenanceTriggerSource source,
+                                       UUID userId) {
         if (!rule.applicable() || !rule.active()) {
-            return null;
+            return EvaluationOutcome.none();
         }
         if (rule.triggerPolicy() != null && rule.triggerPolicy().name().equals("MANUAL")) {
-            return null;
+            return EvaluationOutcome.none();
         }
         if (source == MaintenanceTriggerSource.METER_READING && !rule.hasMeterTrigger()) {
-            return null;
+            return EvaluationOutcome.none();
         }
         MaintenanceDueCalculationDto due = dueCalculationService.calculate(rule);
         if (!shouldCreateEvent(due.status())) {
-            return null;
+            return EvaluationOutcome.none();
         }
         String cycleKey = cycleKey(equipment.getId(), rule, due);
         MaintenanceDueEvent event = eventRepository
@@ -251,20 +317,27 @@ public class MaintenanceAutomationService {
         }
         if (isDuplicateSuppressed(rule, event)) {
             event.setStatus(MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE);
-            return eventService.saveEvent(event, equipment);
+            return new EvaluationOutcome(eventService.saveEvent(event, equipment), isNew, 0);
         }
         event = eventService.saveEvent(event, equipment);
+        int notifications = notificationService.notifyEventStatus(event, rule, equipment);
+        if (event.getStatus() == MaintenanceDueEventStatus.AWAITING_APPROVAL) {
+            notifications += notificationService.notifyRequiresApproval(event, rule, equipment);
+        }
         if (due.status() == MaintenanceDueStatus.BLOCKED
                 || rule.automationAction() == AutomationAction.TRACK_ONLY
                 || rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
-            return event;
+            return new EvaluationOutcome(event, isNew, notifications);
         }
         if (rule.automationAction() == AutomationAction.CREATE_TASK) {
             createTask(event, rule, userId);
         } else if (rule.automationAction() == AutomationAction.CREATE_WORK_ORDER) {
-            createWorkOrder(event, rule, userId);
+            WorkOrderDto workOrder = createWorkOrder(event, rule, userId);
+            if (workOrder != null) {
+                notifications += notificationService.notifyWorkOrderCreated(event, rule, equipment);
+            }
         }
-        return eventRepository.save(event);
+        return new EvaluationOutcome(eventRepository.save(event), isNew, notifications);
     }
 
     private boolean shouldCreateEvent(MaintenanceDueStatus status) {
@@ -436,6 +509,21 @@ public class MaintenanceAutomationService {
                 .orElseThrow(() -> RestException.notFound("Maintenance regulation not found: " + event.getRegulationId()));
     }
 
+    private void enforceApprovalAuthority(EquipmentMaintenanceEffectiveRule rule) {
+        requireApprovalAuthority(rule.approvalPermission());
+        requireApprovalAuthority(rule.approvalRole());
+    }
+
+    private void requireApprovalAuthority(String permissionOrRole) {
+        if (!StringUtils.hasText(permissionOrRole)) {
+            return;
+        }
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (!securityAccessService.hasPermission(authentication, permissionOrRole)) {
+            throw new AccessDeniedException("Missing approval permission: " + permissionOrRole);
+        }
+    }
+
     private UUID effectiveUserId(UUID userId) {
         if (userId != null) {
             return userId;
@@ -567,14 +655,39 @@ public class MaintenanceAutomationService {
         return base + "; " + addition;
     }
 
+    private record EvaluationOutcome(
+            MaintenanceDueEvent event,
+            boolean created,
+            int notificationsCreated
+    ) {
+        private static EvaluationOutcome none() {
+            return new EvaluationOutcome(null, false, 0);
+        }
+    }
+
     public record EvaluationResult(
             int checkedEquipment,
             int events,
             int blockedEvents,
             int suppressed,
             int tasksCreated,
-            int workOrdersCreated
+            int workOrdersCreated,
+            int rulesChecked,
+            int eventsCreated,
+            int eventsUpdated,
+            int notificationsCreated,
+            int failures
     ) {
+        public EvaluationResult(int checkedEquipment,
+                                int events,
+                                int blockedEvents,
+                                int suppressed,
+                                int tasksCreated,
+                                int workOrdersCreated) {
+            this(checkedEquipment, events, blockedEvents, suppressed, tasksCreated, workOrdersCreated,
+                    0, 0, 0, 0, 0);
+        }
+
         public EvaluationResult(int checkedEquipment,
                                 int events,
                                 int suppressed,
@@ -586,8 +699,9 @@ public class MaintenanceAutomationService {
         @Override
         public String toString() {
             return String.format(Locale.ROOT,
-                    "checked=%d events=%d blocked=%d suppressed=%d tasks=%d workOrders=%d",
-                    checkedEquipment, events, blockedEvents, suppressed, tasksCreated, workOrdersCreated);
+                    "checked=%d rules=%d events=%d created=%d updated=%d blocked=%d suppressed=%d tasks=%d workOrders=%d notifications=%d failures=%d",
+                    checkedEquipment, rulesChecked, events, eventsCreated, eventsUpdated, blockedEvents, suppressed,
+                    tasksCreated, workOrdersCreated, notificationsCreated, failures);
         }
     }
 }

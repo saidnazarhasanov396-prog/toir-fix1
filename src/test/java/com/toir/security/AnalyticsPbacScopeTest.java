@@ -5,6 +5,8 @@ import com.toir.entity.ReliabilityMetric;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.MaintenanceDueEventStatus;
+import com.toir.enums.MaintenanceDueStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CalibrationRecordRepository;
 import com.toir.repository.ConditionReadingRepository;
@@ -22,6 +24,7 @@ import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
@@ -69,6 +72,7 @@ class AnalyticsPbacScopeTest {
     ConditionReadingRepository conditionReadingRepository;
     UserCertificationRepository userCertificationRepository;
     CalibrationRecordRepository calibrationRecordRepository;
+    MaintenanceDueEventRepository maintenanceDueEventRepository;
     UserRepository userRepository;
     ScopeAccessService scopeAccessService;
     DashboardService dashboardService;
@@ -100,6 +104,7 @@ class AnalyticsPbacScopeTest {
         conditionReadingRepository = mock(ConditionReadingRepository.class);
         userCertificationRepository = mock(UserCertificationRepository.class);
         calibrationRecordRepository = mock(CalibrationRecordRepository.class);
+        maintenanceDueEventRepository = mock(MaintenanceDueEventRepository.class);
         userRepository = mock(UserRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
 
@@ -123,6 +128,7 @@ class AnalyticsPbacScopeTest {
                 conditionReadingRepository,
                 userCertificationRepository,
                 calibrationRecordRepository,
+                maintenanceDueEventRepository,
                 userRepository,
                 scopeAccessService
         );
@@ -196,6 +202,25 @@ class AnalyticsPbacScopeTest {
 
         verify(repairRequestRepository).search(null, departmentB, null);
         verify(workOrderRepository).search(null, departmentB, null);
+    }
+
+    @Test
+    void dashboardIncludesMaintenanceDueEventCounts() {
+        UUID departmentId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(maintenanceDueEventRepository.countByDueStatusAndDepartment(MaintenanceDueStatus.UPCOMING, departmentId)).thenReturn(2L);
+        when(maintenanceDueEventRepository.countByDueStatusAndDepartment(MaintenanceDueStatus.DUE, departmentId)).thenReturn(3L);
+        when(maintenanceDueEventRepository.countByDueStatusAndDepartment(MaintenanceDueStatus.OVERDUE, departmentId)).thenReturn(4L);
+        when(maintenanceDueEventRepository.countByDueStatusAndDepartment(MaintenanceDueStatus.BLOCKED, departmentId)).thenReturn(5L);
+        when(maintenanceDueEventRepository.countByStatusAndDepartment(MaintenanceDueEventStatus.AWAITING_APPROVAL, departmentId)).thenReturn(6L);
+
+        var overview = dashboardService.overview(departmentId);
+
+        assertThat(overview.maintenanceDueCounts().upcoming()).isEqualTo(2);
+        assertThat(overview.maintenanceDueCounts().due()).isEqualTo(3);
+        assertThat(overview.maintenanceDueCounts().overdue()).isEqualTo(4);
+        assertThat(overview.maintenanceDueCounts().blocked()).isEqualTo(5);
+        assertThat(overview.maintenanceDueCounts().awaitingApproval()).isEqualTo(6);
     }
 
     @Test

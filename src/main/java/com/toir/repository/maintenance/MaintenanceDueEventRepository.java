@@ -1,7 +1,9 @@
 package com.toir.repository.maintenance;
 
 import com.toir.entity.maintenance.MaintenanceDueEvent;
+import com.toir.entity.equipment.Equipment;
 import com.toir.enums.MaintenanceDueEventStatus;
+import com.toir.enums.MaintenanceDueStatus;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -72,4 +74,38 @@ public interface MaintenanceDueEventRepository extends JpaRepository<Maintenance
                                               @Param("regulationId") UUID regulationId,
                                               @Param("ruleId") UUID ruleId,
                                               @Param("statuses") Collection<MaintenanceDueEventStatus> statuses);
+
+    long countByDueStatusAndIsDeletedFalse(MaintenanceDueStatus dueStatus);
+
+    long countByStatusAndIsDeletedFalse(MaintenanceDueEventStatus status);
+
+    @Query("""
+            select count(e)
+            from MaintenanceDueEvent e, Equipment equipment
+            where e.isDeleted = false
+              and equipment.isDeleted = false
+              and equipment.id = e.equipmentId
+              and e.dueStatus = :dueStatus
+              and (
+                    :departmentId is null
+                 or coalesce(equipment.responsibleDepartmentId, equipment.departmentId) = :departmentId
+              )
+            """)
+    long countByDueStatusAndDepartment(@Param("dueStatus") MaintenanceDueStatus dueStatus,
+                                       @Param("departmentId") UUID departmentId);
+
+    @Query("""
+            select count(e)
+            from MaintenanceDueEvent e, Equipment equipment
+            where e.isDeleted = false
+              and equipment.isDeleted = false
+              and equipment.id = e.equipmentId
+              and e.status = :status
+              and (
+                    :departmentId is null
+                 or coalesce(equipment.responsibleDepartmentId, equipment.departmentId) = :departmentId
+              )
+            """)
+    long countByStatusAndDepartment(@Param("status") MaintenanceDueEventStatus status,
+                                    @Param("departmentId") UUID departmentId);
 }

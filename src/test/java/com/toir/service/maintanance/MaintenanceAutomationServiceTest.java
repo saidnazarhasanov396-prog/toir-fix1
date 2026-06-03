@@ -28,11 +28,13 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.security.SecurityAccessService;
 import com.toir.service.WorkOrderService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.Test;
@@ -41,9 +43,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -86,8 +93,19 @@ class MaintenanceAutomationServiceTest {
     @Mock
     UserRepository userRepository;
 
+    @Mock
+    SecurityAccessService securityAccessService;
+
+    @Mock
+    MaintenanceAutomationNotificationService notificationService;
+
     @InjectMocks
     MaintenanceAutomationService service;
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void evaluateEquipmentCreatesDueEventFirstForTrackOnlyPolicy() {
@@ -304,6 +322,60 @@ class MaintenanceAutomationServiceTest {
         verify(regulationRepository, never()).findByIdAndIsDeletedFalse(any());
         verify(pprTaskRepository, never()).save(any());
         verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void approveDueEventEnforcesRegulationApprovalPermission() {
+        UUID eventId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        MaintenanceDueEvent event = new MaintenanceDueEvent();
+        ReflectionTestUtils.setField(event, "id", eventId);
+        event.setEquipmentId(equipmentId);
+        event.setRegulationId(regulationId);
+        event.setDueStatus(MaintenanceDueStatus.DUE);
+        event.setStatus(MaintenanceDueEventStatus.AWAITING_APPROVAL);
+        event.setCycleKey("cycle");
+        MaintenanceRegulation regulation = regulation(regulationId, typeId, AutomationAction.CREATE_WORK_ORDER);
+        regulation.setApprovalPermission("MAINTENANCE_MANAGER");
+        EquipmentMaintenanceEffectiveRule rule = EquipmentMaintenanceEffectiveRule.fromRegulation(equipmentId, regulation);
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                "approver",
+                "n/a",
+                List.of(new SimpleGrantedAuthority("MAINTENANCE_EVENT_APPROVE"))
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        when(eventService.getOrThrow(eventId)).thenReturn(event);
+        when(effectiveRuleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(rule));
+        when(securityAccessService.hasPermission(authentication, "MAINTENANCE_MANAGER")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.approveDueEvent(eventId, UUID.randomUUID()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("MAINTENANCE_MANAGER");
+
+        verify(workOrderService, never()).create(any());
+        verify(pprTaskRepository, never()).save(any());
+        verify(eventRepository, never()).save(any());
+    }
+
+    @Test
+    void evaluateAllCalendarRulesContinuesAfterEquipmentFailure() {
+        UUID failedEquipmentId = UUID.randomUUID();
+        UUID okEquipmentId = UUID.randomUUID();
+        Equipment failedEquipment = equipment(failedEquipmentId, UUID.randomUUID());
+        Equipment okEquipment = equipment(okEquipmentId, UUID.randomUUID());
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(failedEquipment, okEquipment));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(failedEquipmentId)).thenThrow(new IllegalStateException("broken equipment"));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(okEquipmentId)).thenReturn(Optional.of(okEquipment));
+        when(effectiveRuleResolver.resolveApplicable(okEquipmentId)).thenReturn(List.of());
+
+        var result = service.evaluateAllCalendarRules();
+
+        assertThat(result.checkedEquipment()).isEqualTo(1);
+        assertThat(result.failures()).isEqualTo(1);
+        verify(effectiveRuleResolver).resolveApplicable(okEquipmentId);
     }
 
     @Test

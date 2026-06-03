@@ -2,6 +2,8 @@ package com.toir.service;
 
 import com.toir.dto.ops.OpsMetricsResponse;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.MaintenanceDueEventStatus;
+import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.RequestStatus;
@@ -18,6 +20,7 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.inspection.InspectionRoundRepository;
 import com.toir.repository.inspection.InspectionRouteRepository;
+import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserCertificationRepository;
@@ -45,6 +48,7 @@ public class OpsMetricsService {
     private final InspectionRoundRepository inspectionRoundRepository;
     private final RcmSnapshotRepository rcmSnapshotRepository;
     private final NotificationRepository notificationRepository;
+    private final MaintenanceDueEventRepository maintenanceDueEventRepository;
     private final WebhookEventLogRepository webhookEventLogRepository;
 
     @Transactional(readOnly = true)
@@ -74,7 +78,12 @@ public class OpsMetricsService {
                 inspectionRoundRepository.countByIsDeletedFalse(),
                 rcmSnapshotRepository.countByIsDeletedFalse(),
                 notificationRepository.countByIsDeletedFalse(),
-                webhookEventLogRepository.countByIsDeletedFalse()
+                webhookEventLogRepository.countByIsDeletedFalse(),
+                maintenanceDueEventRepository.countByDueStatusAndIsDeletedFalse(MaintenanceDueStatus.UPCOMING),
+                maintenanceDueEventRepository.countByDueStatusAndIsDeletedFalse(MaintenanceDueStatus.DUE),
+                maintenanceDueEventRepository.countByDueStatusAndIsDeletedFalse(MaintenanceDueStatus.OVERDUE),
+                maintenanceDueEventRepository.countByDueStatusAndIsDeletedFalse(MaintenanceDueStatus.BLOCKED),
+                maintenanceDueEventRepository.countByStatusAndIsDeletedFalse(MaintenanceDueEventStatus.AWAITING_APPROVAL)
         );
         return new OpsMetricsSnapshot(Instant.now(), counts, conditionWarnings);
     }
