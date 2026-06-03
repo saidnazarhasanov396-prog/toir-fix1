@@ -24,6 +24,7 @@ import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.service.maintanance.MaintenanceDueCalculationService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +48,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PprGeneratorService {
 
     private final PprPlanRepository planRepository;
@@ -72,12 +74,16 @@ public class PprGeneratorService {
         PprPlan plan = planRepository.findByIdAndIsDeletedFalse(planId)
                 .orElseThrow(() -> RestException.notFound("PPR plan not found: " + planId));
         if (!PLAN_TASK_GENERATION_STATUSES.contains(plan.getStatus())) {
+            log.info("PPR generation rejected: planId={} planCode={} status={} reason={}",
+                    plan.getId(), plan.getCode(), plan.getStatus(), "SKIP_STATUS");
             throw RestException.badRequest("PPR tasks can be generated only for DRAFT or GENERATED plans");
         }
 
         LocalDate planStart = plan.getStartDate();
         LocalDate planEnd = plan.getEndDate();
         if (planStart == null || planEnd == null) {
+            log.info("PPR generation rejected: planId={} planCode={} startDate={} endDate={} reason={}",
+                    plan.getId(), plan.getCode(), planStart, planEnd, "SKIP_MISSING_DATE");
             throw RestException.badRequest("PPR plan date range is required before generating tasks");
         }
         return generateForPlanFixed(plan, planStart, planEnd);
@@ -86,7 +92,7 @@ public class PprGeneratorService {
         YearMonth planMonth = YearMonth.from(planStart);
         boolean dueStatusRequired = plan.getScheduleType() == PprScheduleType.OPERATING_HOURS;
         TargetContext targetContext = targetContext(plan);
-        GenerationTracker tracker = new GenerationTracker();
+        GenerationTracker tracker = new GenerationTracker(generationPlanFields(plan));
 
         List<MaintenanceRegulation> regulations = eligibleRegulations(plan, planMonth, targetContext, tracker);
         List<EquipmentMaintenanceRule> individualRules = eligibleRules(plan, planMonth, targetContext, tracker);
@@ -98,6 +104,12 @@ public class PprGeneratorService {
                 loadConditionsByRegulationId(regulations);
 
         List<Equipment> allEquipment = activeEquipment(tracker);
+        tracker.candidateCounts(new GenerationCandidateCounts(
+                activeRegulationsCount(),
+                activeRulesCount(),
+                allEquipment.size(),
+                matchingEquipmentCount(plan, targetContext, allEquipment)
+        ));
         AttributeIndex attributeIndex = loadAttributeIndex(allEquipment);
 
         List<PprTask> existingTasks = taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
@@ -166,7 +178,7 @@ public class PprGeneratorService {
                 created++;
                 existingCodes.add(saved.getCode());
                 existingSignatures.add(signature);
-                tracker.created(saved.getId());
+                tracker.created(saved.getId(), saved.getCode());
             }
         }
 
@@ -216,7 +228,7 @@ public class PprGeneratorService {
             created++;
             existingCodes.add(saved.getCode());
             existingSignatures.add(signature);
-            tracker.created(saved.getId());
+            tracker.created(saved.getId(), saved.getCode());
         }
 
         if (created > 0 && plan.getStatus() == PlanStatus.DRAFT) {
@@ -233,7 +245,7 @@ public class PprGeneratorService {
             );
         }
 
-        return tracker.result(plan.getId(), created);
+        return tracker.result(plan, created);
     }
 
     private List<MaintenanceRegulation> eligibleRegulations(PprPlan plan,
@@ -298,6 +310,25 @@ public class PprGeneratorService {
             equipment.add(item);
         }
         return equipment;
+    }
+
+    private long activeRegulationsCount() {
+        return regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(MaintenanceRegulation::isActive)
+                .count();
+    }
+
+    private long activeRulesCount() {
+        return equipmentMaintenanceRuleRepository.findAllActive().stream()
+                .filter(EquipmentMaintenanceRule::isActive)
+                .count();
+    }
+
+    private long matchingEquipmentCount(PprPlan plan, TargetContext targetContext, List<Equipment> allEquipment) {
+        return allEquipment.stream()
+                .filter(equipment -> plan.getDepartmentId() == null || plan.getDepartmentId().equals(equipment.getDepartmentId()))
+                .filter(targetContext::matchesEquipment)
+                .count();
     }
 
     private PprTask saveGeneratedTask(PprPlan plan,
@@ -716,6 +747,33 @@ public class PprGeneratorService {
         return new TargetContext(equipmentIds, equipmentTypeIds, regulationIds);
     }
 
+    private GenerationPlanFields generationPlanFields(PprPlan plan) {
+        List<GenerationPlanTarget> targets = plan.getTargets() == null
+                ? List.of()
+                : plan.getTargets().stream()
+                .filter(Objects::nonNull)
+                .filter(target -> !target.isDeleted())
+                .map(target -> new GenerationPlanTarget(
+                        target.getTargetType(),
+                        target.getEquipmentId(),
+                        target.getEquipmentTypeId(),
+                        target.getRegulationId()
+                ))
+                .toList();
+        return new GenerationPlanFields(
+                plan.getId(),
+                plan.getCode(),
+                plan.getStatus(),
+                plan.getDepartmentId(),
+                plan.getPprType(),
+                plan.getScheduleType(),
+                plan.getFrequency(),
+                plan.getStartDate(),
+                plan.getEndDate(),
+                targets
+        );
+    }
+
     private Map<UUID, List<MaintenanceRegulationAttributeCondition>> loadConditionsByRegulationId(
             List<MaintenanceRegulation> regulations) {
         if (regulations.isEmpty()) {
@@ -942,25 +1000,99 @@ public class PprGeneratorService {
     }
 
     private static class GenerationTracker {
+        private final GenerationPlanFields planFields;
         private final Map<String, Integer> skippedReasons = new LinkedHashMap<>();
         private final List<UUID> createdTaskIds = new ArrayList<>();
+        private final List<String> createdTaskCodes = new ArrayList<>();
+        private GenerationCandidateCounts candidateCounts;
+
+        private GenerationTracker(GenerationPlanFields planFields) {
+            this.planFields = planFields;
+        }
 
         void skip(SkipReason reason) {
             skippedReasons.merge(reason.name(), 1, Integer::sum);
         }
 
-        void created(UUID taskId) {
+        void candidateCounts(GenerationCandidateCounts counts) {
+            this.candidateCounts = counts;
+        }
+
+        void created(UUID taskId, String taskCode) {
             if (taskId != null) {
                 createdTaskIds.add(taskId);
             }
+            if (taskCode != null && !taskCode.isBlank()) {
+                createdTaskCodes.add(taskCode);
+            }
         }
 
-        GenerationResult result(UUID planId, int created) {
+        GenerationResult result(PprPlan plan, int created) {
             int skipped = skippedReasons.values().stream().mapToInt(Integer::intValue).sum();
             String message = created > 0
                     ? "Generated %d PPR task(s).".formatted(created)
                     : "No PPR tasks were generated. Skipped candidates: %d. Reasons: %s".formatted(skipped, skippedReasons);
-            return new GenerationResult(planId, created, skipped, List.copyOf(createdTaskIds), Map.copyOf(skippedReasons), message);
+            Map<String, Integer> diagnosticReasons = diagnosticSkippedReasons(skippedReasons);
+            GenerationDiagnostics diagnostics = new GenerationDiagnostics(
+                    true,
+                    planFields,
+                    candidateCounts,
+                    created,
+                    skipped,
+                    List.copyOf(createdTaskIds),
+                    List.copyOf(createdTaskCodes),
+                    diagnosticReasons,
+                    message
+            );
+            log.info(
+                    "PPR generation diagnostics: planId={} planCode={} status={} departmentId={} pprType={} scheduleType={} frequency={} startDate={} endDate={} created={} skipped={} createdTaskIds={} createdTaskCodes={} skippedReasons={} message={}",
+                    plan.getId(),
+                    plan.getCode(),
+                    plan.getStatus(),
+                    plan.getDepartmentId(),
+                    plan.getPprType(),
+                    plan.getScheduleType(),
+                    plan.getFrequency(),
+                    plan.getStartDate(),
+                    plan.getEndDate(),
+                    created,
+                    skipped,
+                    createdTaskIds,
+                    createdTaskCodes,
+                    diagnosticReasons,
+                    message
+            );
+            return new GenerationResult(
+                    plan.getId(),
+                    created,
+                    skipped,
+                    List.copyOf(createdTaskIds),
+                    List.copyOf(createdTaskCodes),
+                    Map.copyOf(skippedReasons),
+                    message,
+                    diagnostics
+            );
+        }
+
+        private Map<String, Integer> diagnosticSkippedReasons(Map<String, Integer> source) {
+            Map<String, Integer> reasons = new LinkedHashMap<>();
+            reasons.put("SKIP_STATUS", 0);
+            reasons.put("SKIP_MISSING_DATE", 0);
+            reasons.put("SKIP_INACTIVE_REGULATION", source.getOrDefault(SkipReason.SKIP_INACTIVE_REGULATION.name(), 0));
+            reasons.put("SKIP_INACTIVE_RULE", source.getOrDefault(SkipReason.SKIP_INACTIVE_RULE.name(), 0));
+            reasons.put("SKIP_DECOMMISSIONED_EQUIPMENT", source.getOrDefault(SkipReason.SKIP_DECOMMISSIONED_EQUIPMENT.name(), 0));
+            reasons.put("SKIP_DEPARTMENT_MISMATCH", source.getOrDefault(SkipReason.SKIP_DEPARTMENT.name(), 0));
+            reasons.put("SKIP_TARGET_MISMATCH", source.getOrDefault(SkipReason.SKIP_TARGET.name(), 0));
+            reasons.put("SKIP_REGULATION_TARGET_MISMATCH", source.getOrDefault(SkipReason.SKIP_TARGET.name(), 0));
+            reasons.put("SKIP_EQUIPMENT_TYPE_MISMATCH", source.getOrDefault(SkipReason.SKIP_EQUIPMENT_TYPE.name(), 0));
+            reasons.put("SKIP_ATTRIBUTE_CONDITION", source.getOrDefault(SkipReason.SKIP_ATTRIBUTE_CONDITION.name(), 0));
+            reasons.put("SKIP_SCHEDULE_TYPE_MISMATCH", source.getOrDefault(SkipReason.SKIP_SCHEDULE_TYPE.name(), 0));
+            reasons.put("SKIP_FREQUENCY_MISMATCH", source.getOrDefault(SkipReason.SKIP_FREQUENCY.name(), 0));
+            reasons.put("SKIP_PERIODICITY_MISMATCH", source.getOrDefault(SkipReason.SKIP_PERIODICITY.name(), 0));
+            reasons.put("SKIP_OPERATING_HOURS_NOT_DUE", source.getOrDefault(SkipReason.SKIP_NOT_DUE.name(), 0));
+            reasons.put("SKIP_DUPLICATE_SIGNATURE", source.getOrDefault(SkipReason.SKIP_DUPLICATE_SIGNATURE.name(), 0));
+            reasons.put("SKIP_DUPLICATE_CODE", 0);
+            return reasons;
         }
     }
 
@@ -969,13 +1101,54 @@ public class PprGeneratorService {
             int created,
             int skipped,
             List<UUID> createdTaskIds,
+            List<String> createdTaskCodes,
             Map<String, Integer> skippedReasons,
-            String message
+            String message,
+            GenerationDiagnostics generationDiagnostics
     ) {
         public GenerationResult(UUID planId, int created, int skipped) {
-            this(planId, created, skipped, List.of(), Map.of(), null);
+            this(planId, created, skipped, List.of(), List.of(), Map.of(), null, null);
         }
     }
+
+    public record GenerationDiagnostics(
+            boolean generateForPlanCalled,
+            GenerationPlanFields planFields,
+            GenerationCandidateCounts candidateCounts,
+            int createdCount,
+            int skippedCount,
+            List<UUID> createdTaskIds,
+            List<String> createdTaskCodes,
+            Map<String, Integer> skippedReasons,
+            String message
+    ) {}
+
+    public record GenerationPlanFields(
+            UUID planId,
+            String planCode,
+            PlanStatus status,
+            UUID departmentId,
+            PprType pprType,
+            PprScheduleType scheduleType,
+            PprFrequency frequency,
+            LocalDate startDate,
+            LocalDate endDate,
+            List<GenerationPlanTarget> targets
+    ) {}
+
+    public record GenerationPlanTarget(
+            PprTargetType targetType,
+            UUID equipmentId,
+            UUID equipmentTypeId,
+            UUID regulationId
+    ) {}
+
+    public record GenerationCandidateCounts(
+            long activeRegulationsCount,
+            long activeEquipmentMaintenanceRulesCount,
+            long activeEquipmentCount,
+            long matchingEquipmentCount
+    ) {}
 
     public record WorkOrderGenerationResult(
             UUID planId,
