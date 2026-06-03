@@ -87,8 +87,11 @@ public class MaintenanceDueCalculationService {
                 anchorRepository.findLatestAnchor(equipmentId, regulationId, ruleId);
         Instant lastPerformedAt = anchor.map(MaintenanceCompletionAnchor::getPerformedAt).orElse(null);
 
-        TriggerSignal calendarSignal = calendarSignal(anchor.orElse(null), periodicityUnit, periodicityValue,
-                toleranceDays, effectiveRecalculationPolicy);
+        boolean meterTriggerConfigured = meterType != null && meterInterval != null && meterInterval > 0;
+        TriggerSignal calendarSignal = meterTriggerConfigured
+                ? TriggerSignal.notConfigured()
+                : calendarSignal(anchor.orElse(null), periodicityUnit, periodicityValue,
+                        toleranceDays, effectiveRecalculationPolicy);
         TriggerSignal meterSignal = meterSignal(equipmentId, anchor.orElse(null), meterType, meterInterval);
         if (meterSignal.status() == MaintenanceDueStatus.BLOCKED) {
             return dto(equipmentId, regulationId, ruleId, MaintenanceDueStatus.BLOCKED,
@@ -194,13 +197,10 @@ public class MaintenanceDueCalculationService {
         double anchorValue;
         double elapsed;
         if (anchor == null) {
-            elapsed = meter.getCurrentValue() % interval;
-            if (meter.getCurrentValue() >= interval && Double.compare(elapsed, 0.0) == 0) {
-                elapsed = interval;
-            }
-            anchorValue = meter.getCurrentValue() - elapsed;
+            anchorValue = 0.0;
+            elapsed = Math.max(0.0, meter.getCurrentValue() - anchorValue);
         } else {
-            anchorValue = anchorMeterValue(anchor, meterType).orElse(meter.getCurrentValue());
+            anchorValue = anchorMeterValue(anchor, meterType).orElse(0.0);
             elapsed = Math.max(0.0, meter.getCurrentValue() - anchorValue);
         }
         double remaining = Math.max(0.0, interval - elapsed);

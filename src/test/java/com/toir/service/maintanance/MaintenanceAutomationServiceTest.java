@@ -14,6 +14,7 @@ import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MaintenanceTriggerSource;
+import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
@@ -30,6 +31,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -90,10 +93,11 @@ class MaintenanceAutomationServiceTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(regulationRepository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(typeId)).thenReturn(List.of(regulation));
         when(dueCalculationService.calculate(equipmentId, regulation)).thenReturn(due(equipmentId, regulation.getId()));
-        when(eventRepository.findByCycleKeyAndIsDeletedFalse(any())).thenReturn(Optional.empty());
+        when(eventRepository.findByEquipmentIdAndRegulationIdAndCycleKeyAndIsDeletedFalse(
+                eq(equipmentId), eq(regulation.getId()), any())).thenReturn(Optional.empty());
         when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
 
-        var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
+        var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
 
         assertThat(result.events()).isEqualTo(1);
         assertThat(result.tasksCreated()).isZero();
@@ -101,8 +105,27 @@ class MaintenanceAutomationServiceTest {
         ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
         verify(eventService).saveEvent(eventCaptor.capture(), eq(equipment));
         assertThat(eventCaptor.getValue().getStatus()).isEqualTo(MaintenanceDueEventStatus.DETECTED);
-        assertThat(eventCaptor.getValue().getTriggerSource()).isEqualTo(MaintenanceTriggerSource.METER_READING);
+        assertThat(eventCaptor.getValue().getTriggerSource()).isEqualTo(MaintenanceTriggerSource.CALENDAR_JOB);
         verify(pprTaskRepository, never()).save(any());
+        verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void meterReadingSkipsCalendarOnlyRegulations() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, AutomationAction.TRACK_ONLY);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(regulationRepository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(typeId)).thenReturn(List.of(regulation));
+
+        var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
+
+        assertThat(result.events()).isZero();
+        assertThat(result.tasksCreated()).isZero();
+        assertThat(result.workOrdersCreated()).isZero();
+        verify(dueCalculationService, never()).calculate(any(), any(MaintenanceRegulation.class));
+        verify(eventService, never()).saveEvent(any(), any());
         verify(workOrderService, never()).create(any());
     }
 
@@ -116,7 +139,8 @@ class MaintenanceAutomationServiceTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(regulationRepository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(typeId)).thenReturn(List.of(regulation));
         when(dueCalculationService.calculate(equipmentId, regulation)).thenReturn(due(equipmentId, regulation.getId()));
-        when(eventRepository.findByCycleKeyAndIsDeletedFalse(any())).thenReturn(Optional.empty());
+        when(eventRepository.findByEquipmentIdAndRegulationIdAndCycleKeyAndIsDeletedFalse(
+                eq(equipmentId), eq(regulation.getId()), any())).thenReturn(Optional.empty());
         when(pprTaskRepository.existsOpenByCycleKey(any())).thenReturn(true);
         when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
 
@@ -127,6 +151,149 @@ class MaintenanceAutomationServiceTest {
         ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
         verify(eventService).saveEvent(eventCaptor.capture(), eq(equipment));
         assertThat(eventCaptor.getValue().getStatus()).isEqualTo(MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE);
+        verify(pprTaskRepository, never()).save(any());
+        verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void blockedEventStaysDetectedAndDoesNotCreateDownstreamActions() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, AutomationAction.CREATE_WORK_ORDER);
+        regulation.setRequiresApproval(true);
+        regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        regulation.setTriggerMeterInterval(500.0);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(regulationRepository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(typeId)).thenReturn(List.of(regulation));
+        when(dueCalculationService.calculate(equipmentId, regulation)).thenReturn(blockedDue(equipmentId, regulation.getId()));
+        when(eventRepository.findByEquipmentIdAndRegulationIdAndCycleKeyAndIsDeletedFalse(
+                eq(equipmentId), eq(regulation.getId()), any())).thenReturn(Optional.empty());
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+
+        var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
+
+        assertThat(result.events()).isEqualTo(1);
+        assertThat(result.tasksCreated()).isZero();
+        assertThat(result.workOrdersCreated()).isZero();
+        ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
+        verify(eventService).saveEvent(eventCaptor.capture(), eq(equipment));
+        assertThat(eventCaptor.getValue().getDueStatus()).isEqualTo(MaintenanceDueStatus.BLOCKED);
+        assertThat(eventCaptor.getValue().getStatus()).isEqualTo(MaintenanceDueEventStatus.DETECTED);
+        verify(pprTaskRepository, never()).save(any());
+        verify(workOrderService, never()).create(any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "520.0, METER:ENGINE_HOURS:500",
+            "999.0, METER:ENGINE_HOURS:500",
+            "1000.0, METER:ENGINE_HOURS:1000"
+    })
+    void meterReadingCycleKeyUsesStableMeterBucket(double currentValue, String expectedCycleKey) {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, AutomationAction.TRACK_ONLY);
+        regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        regulation.setTriggerMeterInterval(500.0);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(regulationRepository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(typeId)).thenReturn(List.of(regulation));
+        when(dueCalculationService.calculate(equipmentId, regulation)).thenReturn(meterDue(equipmentId, regulation.getId(), currentValue));
+        when(eventRepository.findByEquipmentIdAndRegulationIdAndCycleKeyAndIsDeletedFalse(
+                eq(equipmentId), eq(regulation.getId()), any())).thenReturn(Optional.empty());
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+
+        service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
+
+        ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
+        verify(eventService).saveEvent(eventCaptor.capture(), eq(equipment));
+        MaintenanceDueEvent event = eventCaptor.getValue();
+        assertThat(event.getCycleKey()).isEqualTo(expectedCycleKey);
+        assertThat(event.getCycleKey()).doesNotContain("CALENDAR");
+        assertThat(event.getCycleKey()).doesNotMatch(".*\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*");
+        assertThat(event.getMeterType()).isEqualTo(MeterType.ENGINE_HOURS);
+        assertThat(event.getMeterCurrentValue()).isEqualTo(currentValue);
+        assertThat(event.getMeterInterval()).isEqualTo(500.0);
+        assertThat(event.getMeterAnchorValue()).isZero();
+        assertThat(event.getMeterRemaining()).isZero();
+    }
+
+    @Test
+    void duplicateMeterReadingInSameIntervalUpdatesExistingDueEvent() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        MaintenanceRegulation regulation = regulation(regulationId, typeId, AutomationAction.TRACK_ONLY);
+        regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        regulation.setTriggerMeterInterval(500.0);
+        MaintenanceDueEvent existing = new MaintenanceDueEvent();
+        ReflectionTestUtils.setField(existing, "id", UUID.randomUUID());
+        existing.setEquipmentId(equipmentId);
+        existing.setRegulationId(regulationId);
+        existing.setCycleKey("METER:ENGINE_HOURS:500");
+        existing.setStatus(MaintenanceDueEventStatus.DETECTED);
+        existing.setDueStatus(MaintenanceDueStatus.DUE);
+        existing.setTriggerSource(MaintenanceTriggerSource.METER_READING);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(regulationRepository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(typeId)).thenReturn(List.of(regulation));
+        when(dueCalculationService.calculate(equipmentId, regulation)).thenReturn(
+                meterDue(equipmentId, regulationId, 520.0),
+                meterDue(equipmentId, regulationId, 999.0)
+        );
+        when(eventRepository.findByEquipmentIdAndRegulationIdAndCycleKeyAndIsDeletedFalse(
+                eq(equipmentId), eq(regulation.getId()), any())).thenReturn(Optional.empty(), Optional.of(existing));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+
+        service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
+        service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
+
+        ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
+        verify(eventService, org.mockito.Mockito.times(2)).saveEvent(eventCaptor.capture(), eq(equipment));
+        assertThat(eventCaptor.getAllValues()).hasSize(2);
+        assertThat(eventCaptor.getAllValues().get(0).getId()).isNotEqualTo(existing.getId());
+        assertThat(eventCaptor.getAllValues().get(1).getId()).isEqualTo(existing.getId());
+        assertThat(eventCaptor.getAllValues().get(1).getCycleKey()).isEqualTo("METER:ENGINE_HOURS:500");
+        verify(workOrderService, never()).create(any());
+        verify(pprTaskRepository, never()).save(any());
+    }
+
+    @Test
+    void approveBlockedEventNormalizesStatusWithoutCreatingActions() {
+        UUID eventId = UUID.randomUUID();
+        MaintenanceDueEvent event = new MaintenanceDueEvent();
+        ReflectionTestUtils.setField(event, "id", eventId);
+        event.setDueStatus(MaintenanceDueStatus.BLOCKED);
+        event.setStatus(MaintenanceDueEventStatus.AWAITING_APPROVAL);
+        when(eventService.getOrThrow(eventId)).thenReturn(event);
+        when(eventRepository.save(event)).thenReturn(event);
+        when(eventService.toDto(event)).thenReturn(null);
+
+        service.approveDueEvent(eventId, UUID.randomUUID());
+
+        assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.DETECTED);
+        verify(eventRepository).save(event);
+        verify(regulationRepository, never()).findByIdAndIsDeletedFalse(any());
+        verify(pprTaskRepository, never()).save(any());
+        verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void createWorkOrderFromBlockedEventDoesNotCreateWorkOrder() {
+        UUID eventId = UUID.randomUUID();
+        MaintenanceDueEvent event = new MaintenanceDueEvent();
+        ReflectionTestUtils.setField(event, "id", eventId);
+        event.setDueStatus(MaintenanceDueStatus.BLOCKED);
+        event.setStatus(MaintenanceDueEventStatus.DETECTED);
+        when(eventService.getOrThrow(eventId)).thenReturn(event);
+        when(eventService.toDto(event)).thenReturn(null);
+
+        service.createWorkOrderFromEvent(eventId, UUID.randomUUID());
+
+        assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.DETECTED);
+        verify(regulationRepository, never()).findByIdAndIsDeletedFalse(any());
         verify(pprTaskRepository, never()).save(any());
         verify(workOrderService, never()).create(any());
     }
@@ -143,7 +310,8 @@ class MaintenanceAutomationServiceTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(regulationRepository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(typeId)).thenReturn(List.of(regulation));
         when(dueCalculationService.calculate(equipmentId, regulation)).thenReturn(due(equipmentId, regulation.getId()));
-        when(eventRepository.findByCycleKeyAndIsDeletedFalse(any())).thenReturn(Optional.empty());
+        when(eventRepository.findByEquipmentIdAndRegulationIdAndCycleKeyAndIsDeletedFalse(
+                eq(equipmentId), eq(regulation.getId()), any())).thenReturn(Optional.empty());
         when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
         when(workOrderRepository.countByIsDeletedFalse()).thenReturn(0L);
         when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
@@ -235,6 +403,52 @@ class MaintenanceAutomationServiceTest {
                 null,
                 null,
                 "due by calendar"
+        );
+    }
+
+    private MaintenanceDueCalculationDto blockedDue(UUID equipmentId, UUID regulationId) {
+        return new MaintenanceDueCalculationDto(
+                equipmentId,
+                regulationId,
+                null,
+                MaintenanceDueStatus.BLOCKED,
+                false,
+                false,
+                null,
+                null,
+                null,
+                MeterType.ENGINE_HOURS,
+                520.0,
+                520.0,
+                0.0,
+                500.0,
+                500.0,
+                0.0,
+                0.0,
+                "Required active meter is missing: ENGINE_HOURS"
+        );
+    }
+
+    private MaintenanceDueCalculationDto meterDue(UUID equipmentId, UUID regulationId, double currentValue) {
+        return new MaintenanceDueCalculationDto(
+                equipmentId,
+                regulationId,
+                null,
+                MaintenanceDueStatus.DUE,
+                false,
+                true,
+                null,
+                null,
+                null,
+                MeterType.ENGINE_HOURS,
+                currentValue,
+                currentValue,
+                0.0,
+                500.0,
+                500.0,
+                0.0,
+                0.0,
+                "Meter trigger due"
         );
     }
 

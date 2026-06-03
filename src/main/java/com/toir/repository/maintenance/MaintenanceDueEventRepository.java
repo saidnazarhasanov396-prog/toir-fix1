@@ -18,7 +18,10 @@ public interface MaintenanceDueEventRepository extends JpaRepository<Maintenance
 
     Optional<MaintenanceDueEvent> findByIdAndIsDeletedFalse(UUID id);
 
-    Optional<MaintenanceDueEvent> findByCycleKeyAndIsDeletedFalse(String cycleKey);
+    Optional<MaintenanceDueEvent> findByEquipmentIdAndRegulationIdAndCycleKeyAndIsDeletedFalse(
+            UUID equipmentId,
+            UUID regulationId,
+            String cycleKey);
 
     List<MaintenanceDueEvent> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
