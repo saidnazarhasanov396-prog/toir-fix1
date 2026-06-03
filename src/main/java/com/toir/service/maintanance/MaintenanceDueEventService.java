@@ -6,6 +6,7 @@ import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
+import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.OperationalIssueType;
 import com.toir.exception.RestException;
@@ -17,6 +18,7 @@ import com.toir.util.PaginationUtils;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -123,6 +125,7 @@ public class MaintenanceDueEventService {
 
     @Transactional
     public MaintenanceDueEvent saveEvent(MaintenanceDueEvent event, Equipment equipment) {
+        normalizeMeterDueStatus(event);
         MaintenanceDueEvent saved = repository.save(event);
         syncOperationalIssue(saved, equipment);
         return saved;
@@ -237,6 +240,42 @@ public class MaintenanceDueEventService {
                 "Maintenance due: " + event.getCycleKey(),
                 event.getExplanation()
         );
+    }
+
+    private void normalizeMeterDueStatus(MaintenanceDueEvent event) {
+        if (!meterDominant(event)) {
+            return;
+        }
+        int remaining = BigDecimal.valueOf(event.getMeterRemaining()).compareTo(BigDecimal.ZERO);
+        if (remaining < 0) {
+            event.setDueStatus(MaintenanceDueStatus.OVERDUE);
+            event.setExplanation(replaceMeterExplanation(event.getExplanation(), "Meter trigger overdue"));
+        } else if (remaining == 0) {
+            event.setDueStatus(MaintenanceDueStatus.DUE);
+            event.setExplanation(replaceMeterExplanation(event.getExplanation(), "Meter trigger due"));
+        }
+    }
+
+    private boolean meterDominant(MaintenanceDueEvent event) {
+        if (event.getMeterType() == null || event.getMeterRemaining() == null) {
+            return false;
+        }
+        if (event.getTriggerSource() == MaintenanceTriggerSource.METER_READING) {
+            return true;
+        }
+        String explanation = event.getExplanation();
+        return explanation == null || explanation.isBlank() || explanation.startsWith("Meter trigger");
+    }
+
+    private String replaceMeterExplanation(String explanation, String replacement) {
+        if (explanation == null || explanation.isBlank()) {
+            return replacement;
+        }
+        return explanation
+                .replace("Meter trigger overdue", replacement)
+                .replace("Meter trigger upcoming", replacement)
+                .replace("Meter trigger not due", replacement)
+                .replace("Meter trigger due", replacement);
     }
 
     public static Collection<MaintenanceDueEventStatus> openStatuses() {

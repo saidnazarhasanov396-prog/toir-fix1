@@ -732,6 +732,8 @@ class MaintenanceAutomationServiceTest {
     }
 
     private MaintenanceDueCalculationDto meterDue(UUID equipmentId, UUID regulationId, double currentValue) {
+        double interval = 500.0;
+        double nextMeterDueValue = Math.floor(currentValue / interval) * interval;
         return new MaintenanceDueCalculationDto(
                 equipmentId,
                 regulationId,
@@ -746,8 +748,8 @@ class MaintenanceAutomationServiceTest {
                 currentValue,
                 currentValue,
                 0.0,
-                500.0,
-                500.0,
+                interval,
+                nextMeterDueValue,
                 0.0,
                 0.0,
                 "Meter trigger due"
@@ -759,6 +761,7 @@ class MaintenanceAutomationServiceTest {
                                                       UUID ruleId,
                                                       double currentValue,
                                                       double interval) {
+        double nextMeterDueValue = Math.floor(currentValue / interval) * interval;
         return new MaintenanceDueCalculationDto(
                 equipmentId,
                 regulationId,
@@ -774,7 +777,7 @@ class MaintenanceAutomationServiceTest {
                 currentValue,
                 0.0,
                 interval,
-                interval,
+                nextMeterDueValue,
                 0.0,
                 0.0,
                 "Meter trigger due"

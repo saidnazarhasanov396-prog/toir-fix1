@@ -561,7 +561,9 @@ public class MaintenanceAutomationService {
                 && due.meterInterval() > 0
                 && due.meterCurrentValue() != null) {
             String scope = cycleScope(equipmentId, rule);
-            double cycleBucket = Math.floor(due.meterCurrentValue() / due.meterInterval()) * due.meterInterval();
+            double cycleBucket = due.nextMeterDueValue() != null
+                    ? due.nextMeterDueValue()
+                    : Math.floor(due.meterCurrentValue() / due.meterInterval()) * due.meterInterval();
             return "%s:METER:%s:%s".formatted(scope, due.meterType().name(), formatCycleBucket(cycleBucket));
         }
         if (due.nextDueAt() != null) {

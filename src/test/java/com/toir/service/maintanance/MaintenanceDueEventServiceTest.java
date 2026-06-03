@@ -119,6 +119,39 @@ class MaintenanceDueEventServiceTest {
     }
 
     @Test
+    void saveEventNormalizesMeterExactThresholdBeforeOperationalIssueSync() {
+        UUID eventId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceDueEvent event = event(eventId, equipmentId, MaintenanceDueStatus.OVERDUE);
+        event.setTriggerSource(MaintenanceTriggerSource.METER_READING);
+        event.setMeterType(com.toir.enums.MeterType.MILEAGE_KM);
+        event.setMeterCurrentValue(13000.0);
+        event.setMeterAnchorValue(0.0);
+        event.setMeterInterval(1000.0);
+        event.setMeterRemaining(0.0);
+        event.setExplanation("Calendar trigger not due from regulation created; Meter trigger overdue");
+        Equipment equipment = equipment(equipmentId, null, UUID.randomUUID());
+        when(repository.save(event)).thenReturn(event);
+
+        service.saveEvent(event, equipment);
+
+        assertThat(event.getDueStatus()).isEqualTo(MaintenanceDueStatus.DUE);
+        assertThat(event.getExplanation()).contains("Meter trigger due");
+        assertThat(event.getExplanation()).doesNotContain("Meter trigger overdue");
+        verify(operationalIssueService).resolveOpen("MaintenanceDueEvent", eventId);
+        verify(operationalIssueService, never()).openOrUpdate(
+                any(OperationalIssueType.class),
+                any(NotificationSeverity.class),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
+    }
+
+    @Test
     void cancelOpenEventMarksItCancelledAndResolved() {
         UUID eventId = UUID.randomUUID();
         MaintenanceDueEvent event = event(eventId, UUID.randomUUID(), MaintenanceDueStatus.DUE);
@@ -193,6 +226,28 @@ class MaintenanceDueEventServiceTest {
         ArgumentCaptor<java.util.Collection<UUID>> captor = ArgumentCaptor.forClass(java.util.Collection.class);
         verify(equipmentRepository).findAllByIdInAndIsDeletedFalse(captor.capture());
         assertThat(captor.getValue()).isEmpty();
+    }
+
+    @Test
+    void toDtoNormalizesMeterEventAtExactThresholdAsDue() {
+        UUID eventId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceDueEvent event = event(eventId, equipmentId, MaintenanceDueStatus.OVERDUE);
+        event.setTriggerSource(MaintenanceTriggerSource.METER_READING);
+        event.setMeterType(com.toir.enums.MeterType.MILEAGE_KM);
+        event.setMeterCurrentValue(13000.0);
+        event.setMeterAnchorValue(0.0);
+        event.setMeterInterval(1000.0);
+        event.setMeterRemaining(0.0);
+        event.setExplanation("Meter trigger overdue; Calendar trigger not due from regulation created");
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.empty());
+
+        var dto = service.toDto(event);
+
+        assertThat(dto.dueStatus()).isEqualTo(MaintenanceDueStatus.DUE);
+        assertThat(dto.meterRemaining()).isZero();
+        assertThat(dto.explanation()).contains("Meter trigger due");
+        assertThat(dto.explanation()).doesNotContain("Meter trigger overdue");
     }
 
     private MaintenanceDueEvent event(UUID id, UUID equipmentId, MaintenanceDueStatus dueStatus) {
