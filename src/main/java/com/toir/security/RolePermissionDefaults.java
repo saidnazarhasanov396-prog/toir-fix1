@@ -252,7 +252,9 @@ public final class RolePermissionDefaults {
                 PermissionConstants.WORK_ORDER_START,
                 PermissionConstants.WORK_ORDER_COMPLETE,
                 PermissionConstants.NOTIFICATION_READ,
-                PermissionConstants.NOTIFICATION_MARK_READ
+                PermissionConstants.NOTIFICATION_MARK_READ,
+                PermissionConstants.OPERATIONAL_ISSUE_READ,
+                PermissionConstants.OPERATIONAL_ISSUE_RESOLVE
         ));
         defaults.put("STOREKEEPER", List.of(
                 PermissionConstants.READ_LEGACY,
