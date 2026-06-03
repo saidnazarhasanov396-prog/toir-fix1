@@ -15,6 +15,7 @@ import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.VehicleService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -141,12 +142,14 @@ public class VehicleController {
 
     @GetMapping("/{equipmentId}/documents")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
-    public ResponseEntity<List<VehicleDocumentDto>> getDocuments(
+    public ResponseEntity<Page<VehicleDocumentDto>> getDocuments(
             @PathVariable UUID equipmentId,
-            @CurrentUser AuthenticatedUser user
+            @CurrentUser AuthenticatedUser user,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
         assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
-        return ResponseEntity.ok(service.getDocuments(equipmentId, user));
+        return ResponseEntity.ok(PaginationUtils.page(service.getDocuments(equipmentId, user), page, size));
     }
 
     @GetMapping("/{equipmentId}/documents/{documentId}")

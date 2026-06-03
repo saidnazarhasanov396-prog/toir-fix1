@@ -7,6 +7,7 @@ import com.toir.entity.equipment.MeterReading;
 import com.toir.entity.users.User;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.MeterType;
 import com.toir.exception.RestException;
 import com.toir.repository.MeterReadingRepository;
@@ -14,6 +15,7 @@ import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +43,7 @@ public class MeterService {
     private final UserRepository userRepository;
     private final AuditBuilderService auditBuilderService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+    private final MaintenanceAutomationService maintenanceAutomationService;
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listByEquipment(UUID equipmentId) {
@@ -202,6 +205,12 @@ public class MeterService {
                 meter,
                 savedMeter
         );
+
+        try {
+            maintenanceAutomationService.evaluateEquipment(meter.getEquipmentId(), MaintenanceTriggerSource.METER_READING);
+        } catch (RuntimeException ex) {
+            // Meter reading is the source of truth; automation failures are recorded separately and must not lose readings.
+        }
 
         return enrichReading(saved);
     }

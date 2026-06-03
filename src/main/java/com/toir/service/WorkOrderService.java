@@ -180,6 +180,8 @@ public class WorkOrderService {
         entity.setRepairRequestId(request.repairRequestId());
         entity.setDefectId(request.defectId());
         entity.setPprTaskId(request.pprTaskId());
+        entity.setMaintenanceDueEventId(request.maintenanceDueEventId());
+        entity.setCycleKey(request.cycleKey());
         entity.setContractorId(request.contractorId());
         entity.setType(request.type());
         entity.setWorkType(effectiveWorkType);

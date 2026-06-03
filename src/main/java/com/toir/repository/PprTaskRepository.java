@@ -36,6 +36,17 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM ppr_tasks WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM ppr_tasks
+                WHERE cycle_key = :cycleKey
+                  AND status NOT IN ('COMPLETED', 'CANCELLED')
+                  AND is_deleted = false
+            )
+            """, nativeQuery = true)
+    boolean existsOpenByCycleKey(@Param("cycleKey") String cycleKey);
+
     @Query(value = "SELECT COUNT(*) FROM ppr_tasks WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 

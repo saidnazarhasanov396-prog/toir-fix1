@@ -802,6 +802,9 @@ public class EquipmentService {
         entity.setCommissionedAt(request.commissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil());
         entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours());
+        entity.setOperationStartDate(request.operationStartDate());
+        entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths());
+        entity.setExpectedLifetimeYears(request.expectedLifetimeYears());
         entity.setDescription(request.description());
     }
 
@@ -1303,6 +1306,15 @@ public class EquipmentService {
         entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours() != null
                 ? request.averageOperatingLifeHours()
                 : entity.getAverageOperatingLifeHours());
+        entity.setOperationStartDate(request.operationStartDate() != null
+                ? request.operationStartDate()
+                : entity.getOperationStartDate());
+        entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths() != null
+                ? request.expectedLifetimeMonths()
+                : entity.getExpectedLifetimeMonths());
+        entity.setExpectedLifetimeYears(request.expectedLifetimeYears() != null
+                ? request.expectedLifetimeYears()
+                : entity.getExpectedLifetimeYears());
         entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
     }
 

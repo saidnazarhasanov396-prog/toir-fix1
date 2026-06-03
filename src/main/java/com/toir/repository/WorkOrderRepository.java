@@ -37,6 +37,17 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM work_orders WHERE ppr_task_id = cast(:pprTaskId as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByPprTaskIdAndIsDeletedFalse(@Param("pprTaskId") UUID pprTaskId);
 
+    @Query(value = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM work_orders
+                WHERE cycle_key = :cycleKey
+                  AND status NOT IN ('COMPLETED', 'CLOSED', 'CANCELLED')
+                  AND is_deleted = false
+            )
+            """, nativeQuery = true)
+    boolean existsOpenByCycleKey(@Param("cycleKey") String cycleKey);
+
     @Query(value = "SELECT COUNT(*) FROM work_orders WHERE status = :status AND is_deleted = false", nativeQuery = true)
     long countByStatusAndIsDeletedFalse(@Param("status") String status);
 
@@ -83,6 +94,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
                 nullif(to_jsonb(w)->>'repair_request_id', '')::uuid as repair_request_id,
                 nullif(to_jsonb(w)->>'defect_id', '')::uuid as defect_id,
                 w.ppr_task_id,
+                nullif(to_jsonb(w)->>'maintenance_due_event_id', '')::uuid as maintenance_due_event_id,
+                to_jsonb(w)->>'cycle_key' as cycle_key,
                 w.contractor_id,
                 nullif(to_jsonb(w)->>'warehouse_id', '')::uuid as warehouse_id,
                 nullif(to_jsonb(w)->>'replacement_equipment_id', '')::uuid as replacement_equipment_id,

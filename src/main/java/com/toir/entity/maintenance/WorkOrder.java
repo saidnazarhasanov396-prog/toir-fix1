@@ -46,6 +46,12 @@ public class WorkOrder extends BaseEntity {
     @Column(name = "ppr_task_id")
     private UUID pprTaskId;
 
+    @Column(name = "maintenance_due_event_id")
+    private UUID maintenanceDueEventId;
+
+    @Column(name = "cycle_key")
+    private String cycleKey;
+
     @Column(name = "contractor_id")
     private UUID contractorId;
 

@@ -1,13 +1,15 @@
 package com.toir.controller.maintenance;
 import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationImpactDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationPreviewDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
+import com.toir.service.maintanance.MaintenanceImpactService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -17,11 +19,22 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/maintenance-regulations")
 @Tag(name = "maintenance-regulations")
-@RequiredArgsConstructor
 @Slf4j
 public class MaintenanceRegulationController {
 
     private final MaintenanceRegulationService service;
+    private final MaintenanceImpactService impactService;
+
+    public MaintenanceRegulationController(MaintenanceRegulationService service,
+                                           MaintenanceImpactService impactService) {
+        this.service = service;
+        this.impactService = impactService;
+    }
+
+    public MaintenanceRegulationController(MaintenanceRegulationService service) {
+        this.service = service;
+        this.impactService = null;
+    }
 
     @GetMapping
     public ResponseEntity<Page<MaintenanceRegulationDto>> list(
@@ -49,6 +62,22 @@ public class MaintenanceRegulationController {
 
     @GetMapping("/{id:[0-9a-fA-F-]{36}}")
     public ResponseEntity<MaintenanceRegulationDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
+
+    @PostMapping("/preview")
+    public ResponseEntity<MaintenanceRegulationPreviewDto> preview(@Valid @RequestBody MaintenanceRegulationRequest request) {
+        if (impactService == null) {
+            throw new IllegalStateException("Maintenance impact service is not configured");
+        }
+        return ResponseEntity.ok(impactService.preview(request));
+    }
+
+    @GetMapping("/{id:[0-9a-fA-F-]{36}}/impact")
+    public ResponseEntity<MaintenanceRegulationImpactDto> impact(@PathVariable UUID id) {
+        if (impactService == null) {
+            throw new IllegalStateException("Maintenance impact service is not configured");
+        }
+        return ResponseEntity.ok(impactService.impact(id));
+    }
 
     @PostMapping
     public ResponseEntity<MaintenanceRegulationDto> create(@Valid @RequestBody MaintenanceRegulationRequest request) {
