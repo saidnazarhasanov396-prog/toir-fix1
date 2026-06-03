@@ -220,16 +220,20 @@ public class OperationalIssueScannerService {
                 issueService.resolveOpen("MaintenanceDueEvent", item.getId());
                 continue;
             }
+            if (item.getDueStatus() != MaintenanceDueStatus.OVERDUE
+                    && item.getDueStatus() != MaintenanceDueStatus.BLOCKED) {
+                issueService.resolveOpen("MaintenanceDueEvent", item.getId());
+                continue;
+            }
             Equipment equipment = equipment(item.getEquipmentId()).orElse(null);
             OperationalIssueType type = switch (item.getDueStatus()) {
                 case OVERDUE -> OperationalIssueType.MAINTENANCE_OVERDUE;
                 case BLOCKED -> OperationalIssueType.MISSING_METERS;
-                default -> OperationalIssueType.MAINTENANCE_DUE;
+                default -> throw new IllegalStateException("Unsupported maintenance issue status: " + item.getDueStatus());
             };
             NotificationSeverity severity = switch (item.getDueStatus()) {
                 case OVERDUE, BLOCKED -> NotificationSeverity.CRITICAL;
-                case DUE -> NotificationSeverity.WARNING;
-                default -> NotificationSeverity.INFO;
+                default -> throw new IllegalStateException("Unsupported maintenance issue status: " + item.getDueStatus());
             };
             count += open(
                     type,

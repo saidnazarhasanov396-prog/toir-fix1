@@ -8,6 +8,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
+import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -42,6 +43,9 @@ public class MaintenanceImpactService {
         probe.setTriggerMeterInterval(request.triggerMeterInterval());
         probe.setTriggerPolicy(request.triggerPolicy());
         probe.setRecalculationPolicy(request.recalculationPolicy());
+        probe.setInitialSchedulePolicy(request.initialSchedulePolicy() == null
+                ? MaintenanceInitialSchedulePolicy.FROM_OPERATION_START
+                : request.initialSchedulePolicy());
         probe.setAutomationAction(request.automationAction() == null
                 ? AutomationAction.REQUIRE_APPROVAL
                 : request.automationAction());

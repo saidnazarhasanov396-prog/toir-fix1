@@ -124,7 +124,7 @@ public class MaintenanceDueEventService {
     @Transactional
     public MaintenanceDueEvent saveEvent(MaintenanceDueEvent event, Equipment equipment) {
         MaintenanceDueEvent saved = repository.save(event);
-        openIssue(saved, equipment);
+        syncOperationalIssue(saved, equipment);
         return saved;
     }
 
@@ -138,7 +138,28 @@ public class MaintenanceDueEventService {
         event.setStatus(MaintenanceDueEventStatus.CANCELLED);
         event.setResolvedAt(Instant.now());
         event.setResolutionReason(reason);
-        return repository.save(event);
+        MaintenanceDueEvent saved = repository.save(event);
+        operationalIssueService.resolveOpen("MaintenanceDueEvent", event.getId());
+        return saved;
+    }
+
+    @Transactional
+    public MaintenanceDueEvent completeFromWorkOrder(UUID id, String reason) {
+        return completeFromWorkOrder(getOrThrow(id), reason);
+    }
+
+    @Transactional
+    public MaintenanceDueEvent completeFromWorkOrder(MaintenanceDueEvent event, String reason) {
+        if (event.getStatus() == MaintenanceDueEventStatus.COMPLETED) {
+            operationalIssueService.resolveOpen("MaintenanceDueEvent", event.getId());
+            return event;
+        }
+        event.setStatus(MaintenanceDueEventStatus.COMPLETED);
+        event.setResolvedAt(Instant.now());
+        event.setResolutionReason(reason);
+        MaintenanceDueEvent saved = repository.save(event);
+        operationalIssueService.resolveOpen("MaintenanceDueEvent", event.getId());
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -190,16 +211,20 @@ public class MaintenanceDueEventService {
         });
     }
 
-    private void openIssue(MaintenanceDueEvent event, Equipment equipment) {
+    private void syncOperationalIssue(MaintenanceDueEvent event, Equipment equipment) {
+        if (event.getDueStatus() != MaintenanceDueStatus.OVERDUE
+                && event.getDueStatus() != MaintenanceDueStatus.BLOCKED) {
+            operationalIssueService.resolveOpen("MaintenanceDueEvent", event.getId());
+            return;
+        }
         OperationalIssueType type = switch (event.getDueStatus()) {
             case OVERDUE -> OperationalIssueType.MAINTENANCE_OVERDUE;
             case BLOCKED -> OperationalIssueType.MISSING_METERS;
-            default -> OperationalIssueType.MAINTENANCE_DUE;
+            default -> throw new IllegalStateException("Unsupported issue due status: " + event.getDueStatus());
         };
         NotificationSeverity severity = switch (event.getDueStatus()) {
             case OVERDUE, BLOCKED -> NotificationSeverity.CRITICAL;
-            case DUE -> NotificationSeverity.WARNING;
-            default -> NotificationSeverity.INFO;
+            default -> throw new IllegalStateException("Unsupported issue due status: " + event.getDueStatus());
         };
         operationalIssueService.openOrUpdate(
                 type,

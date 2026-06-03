@@ -47,6 +47,11 @@ public class PrometheusMetricsController {
         gauge(sb, "toir_rcm_snapshots", "RCM snapshots captured", counts.rcmSnapshots());
         gauge(sb, "toir_notifications_total", "Notifications in the system", counts.notifications());
         gauge(sb, "toir_webhook_deliveries", "Webhook delivery log entries", counts.webhookDeliveries());
+        gauge(sb, "toir_maintenance_upcoming", "Maintenance due events currently upcoming", counts.maintenanceUpcoming());
+        gauge(sb, "toir_maintenance_due", "Maintenance due events currently due", counts.maintenanceDue());
+        gauge(sb, "toir_maintenance_overdue", "Maintenance due events currently overdue", counts.maintenanceOverdue());
+        gauge(sb, "toir_maintenance_blocked", "Maintenance due events currently blocked", counts.maintenanceBlocked());
+        gauge(sb, "toir_maintenance_awaiting_approval", "Maintenance due events awaiting approval", counts.maintenanceAwaitingApproval());
 
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_PLAIN)

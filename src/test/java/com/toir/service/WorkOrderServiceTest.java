@@ -12,6 +12,8 @@ import com.toir.entity.PprTask;
 import com.toir.entity.SafetyPermit;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
+import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderTask;
@@ -19,6 +21,10 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.EquipmentNodeType;
+import com.toir.enums.MaintenanceDueEventStatus;
+import com.toir.enums.MaintenanceDueStatus;
+import com.toir.enums.MaintenanceTriggerSource;
+import com.toir.enums.MeterType;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.PprTaskStatus;
@@ -48,6 +54,8 @@ import com.toir.repository.projection.WorkOrderCountProjection;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.maintanance.MaintenanceAutomationService;
+import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +63,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -70,6 +79,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -131,6 +141,15 @@ class WorkOrderServiceTest {
 
     @Mock
     MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
+
+    @Mock
+    MaintenanceDueEventService maintenanceDueEventService;
+
+    @Mock
+    ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
+
+    @Mock
+    MaintenanceAutomationService maintenanceAutomationService;
 
     @Mock
     ObjectMapper objectMapper;
@@ -1479,6 +1498,144 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void completeAutoWorkOrderCreatesAnchorFromDueEventAndTriggersRecalculationOnce() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID dueEventId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        UUID ruleId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setEquipmentId(equipmentId);
+        workOrder.setMaintenanceDueEventId(dueEventId);
+        workOrder.setCycleKey("EQ:RULE:METER:ENGINE_HOURS:500");
+        MaintenanceDueEvent event = dueEvent(dueEventId, equipmentId, regulationId, ruleId);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(maintenanceDueEventService.getOrThrow(dueEventId)).thenReturn(event);
+        when(maintenanceCompletionAnchorRepository.findByMaintenanceDueEventIdAndIsDeletedFalse(dueEventId))
+                .thenReturn(Optional.empty());
+        when(maintenanceCompletionAnchorRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.empty());
+        when(maintenanceCompletionAnchorRepository.save(any(MaintenanceCompletionAnchor.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(objectMapper.writeValueAsString(any()))
+                .thenReturn("[{\"meterType\":\"ENGINE_HOURS\",\"value\":520.0}]");
+        when(maintenanceDueEventService.completeFromWorkOrder(event, "Work order completed"))
+                .thenReturn(event);
+        when(maintenanceAutomationServiceProvider.getIfAvailable()).thenReturn(maintenanceAutomationService);
+        when(maintenanceAutomationService.evaluateEquipment(equipmentId, MaintenanceTriggerSource.WORK_ORDER_COMPLETED))
+                .thenReturn(new MaintenanceAutomationService.EvaluationResult(1, 0, 0, 0, 0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
+
+        assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
+        ArgumentCaptor<MaintenanceCompletionAnchor> anchorCaptor =
+                ArgumentCaptor.forClass(MaintenanceCompletionAnchor.class);
+        verify(maintenanceCompletionAnchorRepository).save(anchorCaptor.capture());
+        MaintenanceCompletionAnchor anchor = anchorCaptor.getValue();
+        assertThat(anchor.getEquipmentId()).isEqualTo(equipmentId);
+        assertThat(anchor.getRegulationId()).isEqualTo(regulationId);
+        assertThat(anchor.getEquipmentMaintenanceRuleId()).isEqualTo(ruleId);
+        assertThat(anchor.getSource()).isEqualTo("WORK_ORDER");
+        assertThat(anchor.getWorkOrderId()).isEqualTo(workOrderId);
+        assertThat(anchor.getMaintenanceDueEventId()).isEqualTo(dueEventId);
+        assertThat(anchor.getPerformedAt()).isEqualTo(workOrder.getCompletedAt());
+        assertThat(anchor.getPlannedDueAt()).isEqualTo(event.getDueAt());
+        assertThat(anchor.getPlannedMeterValue()).isEqualByComparingTo("500.0");
+        assertThat(anchor.getMeterSnapshots()).contains("ENGINE_HOURS").contains("520.0");
+        verify(maintenanceDueEventService).completeFromWorkOrder(event, "Work order completed");
+        verify(maintenanceAutomationService, times(1))
+                .evaluateEquipment(equipmentId, MaintenanceTriggerSource.WORK_ORDER_COMPLETED);
+    }
+
+    @Test
+    void completeAutoWorkOrderReusesExistingDueEventAnchor() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID dueEventId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setEquipmentId(equipmentId);
+        workOrder.setMaintenanceDueEventId(dueEventId);
+        MaintenanceDueEvent event = dueEvent(dueEventId, equipmentId, UUID.randomUUID(), UUID.randomUUID());
+        MaintenanceCompletionAnchor existing = new MaintenanceCompletionAnchor();
+        ReflectionTestUtils.setField(existing, "id", UUID.randomUUID());
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(maintenanceDueEventService.getOrThrow(dueEventId)).thenReturn(event);
+        when(maintenanceCompletionAnchorRepository.findByMaintenanceDueEventIdAndIsDeletedFalse(dueEventId))
+                .thenReturn(Optional.of(existing));
+        when(maintenanceCompletionAnchorRepository.save(any(MaintenanceCompletionAnchor.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(objectMapper.writeValueAsString(any()))
+                .thenReturn("[{\"meterType\":\"ENGINE_HOURS\",\"value\":520.0}]");
+        when(maintenanceDueEventService.completeFromWorkOrder(event, "Work order completed"))
+                .thenReturn(event);
+        stubLifecycleDtoLookups(workOrder);
+
+        service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
+
+        ArgumentCaptor<MaintenanceCompletionAnchor> anchorCaptor =
+                ArgumentCaptor.forClass(MaintenanceCompletionAnchor.class);
+        verify(maintenanceCompletionAnchorRepository, times(1)).save(anchorCaptor.capture());
+        assertThat(anchorCaptor.getValue()).isSameAs(existing);
+        assertThat(existing.getMaintenanceDueEventId()).isEqualTo(dueEventId);
+        assertThat(existing.getWorkOrderId()).isEqualTo(workOrderId);
+    }
+
+    @Test
+    void manualWorkOrderWithoutEventCompletesWithoutMaintenanceAnchor() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
+
+        assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
+        verify(maintenanceCompletionAnchorRepository, never()).save(any(MaintenanceCompletionAnchor.class));
+        verifyNoInteractions(maintenanceDueEventService, maintenanceAutomationServiceProvider);
+    }
+
+    @Test
+    void manualRegulatedWorkOrderStillCreatesCompletionAnchor() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(maintenanceCompletionAnchorRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.empty());
+        when(maintenanceCompletionAnchorRepository.save(any(MaintenanceCompletionAnchor.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        service.complete(workOrderId, new CompleteWorkOrderRequest(
+                "done",
+                "summary",
+                null,
+                regulationId,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        ArgumentCaptor<MaintenanceCompletionAnchor> anchorCaptor =
+                ArgumentCaptor.forClass(MaintenanceCompletionAnchor.class);
+        verify(maintenanceCompletionAnchorRepository).save(anchorCaptor.capture());
+        assertThat(anchorCaptor.getValue().getRegulationId()).isEqualTo(regulationId);
+        assertThat(anchorCaptor.getValue().getMaintenanceDueEventId()).isNull();
+        verifyNoInteractions(maintenanceDueEventService, maintenanceAutomationServiceProvider);
+    }
+
+    @Test
     void completeFromApprovedShouldSucceed() {
         UUID workOrderId = UUID.randomUUID();
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
@@ -2101,6 +2258,26 @@ class WorkOrderServiceTest {
         workOrder.setWarehouseId(warehouseId);
         workOrder.setReplacementEquipmentId(replacementEquipmentId);
         return workOrder;
+    }
+
+    private MaintenanceDueEvent dueEvent(UUID id, UUID equipmentId, UUID regulationId, UUID ruleId) {
+        MaintenanceDueEvent event = new MaintenanceDueEvent();
+        ReflectionTestUtils.setField(event, "id", id);
+        event.setEquipmentId(equipmentId);
+        event.setRegulationId(regulationId);
+        event.setEquipmentMaintenanceRuleId(ruleId);
+        event.setStatus(MaintenanceDueEventStatus.WORK_ORDER_CREATED);
+        event.setDueStatus(MaintenanceDueStatus.DUE);
+        event.setTriggerSource(MaintenanceTriggerSource.METER_READING);
+        event.setCycleKey("EQ:RULE:METER:ENGINE_HOURS:500");
+        event.setDueAt(java.time.Instant.parse("2026-06-03T10:00:00Z"));
+        event.setDetectedAt(java.time.Instant.parse("2026-06-03T09:55:00Z"));
+        event.setMeterType(MeterType.ENGINE_HOURS);
+        event.setMeterAnchorValue(0.0);
+        event.setMeterInterval(500.0);
+        event.setMeterCurrentValue(520.0);
+        event.setMeterRemaining(0.0);
+        return event;
     }
 
     private WarehouseEquipmentItem warehouseItem(UUID warehouseId, UUID equipmentId, WarehouseEquipmentStatus status) {

@@ -11,6 +11,10 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface MaintenanceCompletionAnchorRepository extends JpaRepository<MaintenanceCompletionAnchor, UUID> {
 
+    Optional<MaintenanceCompletionAnchor> findByWorkOrderIdAndIsDeletedFalse(UUID workOrderId);
+
+    Optional<MaintenanceCompletionAnchor> findByMaintenanceDueEventIdAndIsDeletedFalse(UUID maintenanceDueEventId);
+
     @Query(value = """
             SELECT *
             FROM maintenance_completion_anchors

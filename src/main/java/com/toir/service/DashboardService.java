@@ -16,6 +16,8 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.enums.ContractorWorkStatus;
 import com.toir.dto.dashboard.DashboardOverview.*;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.MaintenanceDueEventStatus;
+import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.ReservationStatus;
@@ -28,6 +30,7 @@ import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
@@ -70,6 +73,7 @@ public class DashboardService {
     private final ConditionReadingRepository conditionReadingRepository;
     private final UserCertificationRepository userCertificationRepository;
     private final CalibrationRecordRepository calibrationRecordRepository;
+    private final MaintenanceDueEventRepository maintenanceDueEventRepository;
     private final UserRepository userRepository;
     private final ScopeAccessService scopeAccessService;
 
@@ -403,10 +407,22 @@ public class DashboardService {
                 .filter(Objects::nonNull)
                 .toList();
 
+        MaintenanceDueCounts maintenanceDueCounts = maintenanceDueCounts(departmentId);
+
         return new DashboardOverview(
                 counters, planFact, kpis, topProblem, downtimeByEq, latestDowntimes, latestMovements,
                 contractorLoad, List.of(), List.of(),
-                List.of(), lowStockItems, repeatedDefects, maintenanceKpis);
+                List.of(), lowStockItems, repeatedDefects, maintenanceKpis, maintenanceDueCounts);
+    }
+
+    private MaintenanceDueCounts maintenanceDueCounts(UUID departmentId) {
+        return new MaintenanceDueCounts(
+                maintenanceDueEventRepository.countByDueStatusAndDepartment(MaintenanceDueStatus.UPCOMING, departmentId),
+                maintenanceDueEventRepository.countByDueStatusAndDepartment(MaintenanceDueStatus.DUE, departmentId),
+                maintenanceDueEventRepository.countByDueStatusAndDepartment(MaintenanceDueStatus.OVERDUE, departmentId),
+                maintenanceDueEventRepository.countByDueStatusAndDepartment(MaintenanceDueStatus.BLOCKED, departmentId),
+                maintenanceDueEventRepository.countByStatusAndDepartment(MaintenanceDueEventStatus.AWAITING_APPROVAL, departmentId)
+        );
     }
 
     private UUID scopedDepartment(UUID requestedDepartmentId) {

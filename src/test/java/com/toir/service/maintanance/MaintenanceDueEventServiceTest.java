@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -95,6 +96,29 @@ class MaintenanceDueEventServiceTest {
     }
 
     @Test
+    void saveEventResolvesOperationalIssueWhenStatusIsNoLongerOverdueOrBlocked() {
+        UUID eventId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceDueEvent event = event(eventId, equipmentId, MaintenanceDueStatus.DUE);
+        Equipment equipment = equipment(equipmentId, null, UUID.randomUUID());
+        when(repository.save(event)).thenReturn(event);
+
+        service.saveEvent(event, equipment);
+
+        verify(operationalIssueService).resolveOpen("MaintenanceDueEvent", eventId);
+        verify(operationalIssueService, never()).openOrUpdate(
+                any(OperationalIssueType.class),
+                any(NotificationSeverity.class),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
+    }
+
+    @Test
     void cancelOpenEventMarksItCancelledAndResolved() {
         UUID eventId = UUID.randomUUID();
         MaintenanceDueEvent event = event(eventId, UUID.randomUUID(), MaintenanceDueStatus.DUE);
@@ -108,6 +132,7 @@ class MaintenanceDueEventServiceTest {
         assertThat(result.getResolutionReason()).isEqualTo("manual override");
         assertThat(result.getResolvedAt()).isNotNull();
         verify(repository).save(event);
+        verify(operationalIssueService).resolveOpen("MaintenanceDueEvent", eventId);
     }
 
     @Test
@@ -120,6 +145,39 @@ class MaintenanceDueEventServiceTest {
         assertThatThrownBy(() -> service.cancel(eventId, "too late"))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("already closed");
+    }
+
+    @Test
+    void completeFromWorkOrderMarksEventCompletedAndResolvesOperationalIssue() {
+        UUID eventId = UUID.randomUUID();
+        MaintenanceDueEvent event = event(eventId, UUID.randomUUID(), MaintenanceDueStatus.DUE);
+        event.setStatus(MaintenanceDueEventStatus.WORK_ORDER_CREATED);
+        when(repository.save(event)).thenReturn(event);
+
+        MaintenanceDueEvent result = service.completeFromWorkOrder(event, "Work order completed");
+
+        assertThat(result.getStatus()).isEqualTo(MaintenanceDueEventStatus.COMPLETED);
+        assertThat(result.getResolutionReason()).isEqualTo("Work order completed");
+        assertThat(result.getResolvedAt()).isNotNull();
+        verify(repository).save(event);
+        verify(operationalIssueService).resolveOpen("MaintenanceDueEvent", eventId);
+    }
+
+    @Test
+    void completeFromWorkOrderAlreadyCompletedEventIsIdempotent() {
+        UUID eventId = UUID.randomUUID();
+        Instant resolvedAt = Instant.parse("2026-06-03T12:00:00Z");
+        MaintenanceDueEvent event = event(eventId, UUID.randomUUID(), MaintenanceDueStatus.DUE);
+        event.setStatus(MaintenanceDueEventStatus.COMPLETED);
+        event.setResolvedAt(resolvedAt);
+        event.setResolutionReason("Work order completed");
+
+        MaintenanceDueEvent result = service.completeFromWorkOrder(event, "Work order completed");
+
+        assertThat(result.getStatus()).isEqualTo(MaintenanceDueEventStatus.COMPLETED);
+        assertThat(result.getResolvedAt()).isEqualTo(resolvedAt);
+        verify(repository, never()).save(any(MaintenanceDueEvent.class));
+        verify(operationalIssueService).resolveOpen("MaintenanceDueEvent", eventId);
     }
 
     @Test
