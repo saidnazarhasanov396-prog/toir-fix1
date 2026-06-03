@@ -11,6 +11,7 @@ import com.toir.enums.MaintenanceRegulationConditionOperator;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
+import com.toir.service.maintanance.MaintenanceImpactService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -42,11 +43,14 @@ class MaintenanceRegulationControllerContractTest {
     @Mock
     MaintenanceRegulationService service;
 
+    @Mock
+    MaintenanceImpactService impactService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new MaintenanceRegulationController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new MaintenanceRegulationController(service, impactService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
