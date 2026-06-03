@@ -25,6 +25,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -123,8 +124,10 @@ class MaintenanceDueEventServiceTest {
 
     @Test
     void searchForEmptyPageDoesNotRequireReferenceLookups() {
-        when(repository.search(eq(null), eq(null), eq(null), eq(null), eq(null), eq(null), eq(null), org.mockito.ArgumentMatchers.any()))
-                .thenReturn(org.springframework.data.domain.Page.empty());
+        when(repository.findAll(
+                any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class)
+        )).thenReturn(org.springframework.data.domain.Page.<MaintenanceDueEvent>empty());
 
         var result = service.search(null, null, null, null, null, null, null, 0, 20);
 

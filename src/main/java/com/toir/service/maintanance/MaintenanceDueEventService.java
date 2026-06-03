@@ -14,7 +14,11 @@ import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.service.OperationalIssueService;
 import com.toir.util.PaginationUtils;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +27,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,17 +59,66 @@ public class MaintenanceDueEventService {
                                                Instant to,
                                                int page,
                                                int size) {
-        Page<MaintenanceDueEvent> result = repository.search(
-                equipmentId,
-                departmentId,
-                regulationId,
-                status,
-                dueStatus,
-                from,
-                to,
-                PaginationUtils.pageRequest(page, size)
+        Page<MaintenanceDueEvent> result = repository.findAll(
+                searchSpecification(
+                        equipmentId,
+                        departmentId,
+                        regulationId,
+                        status,
+                        dueStatus,
+                        from,
+                        to
+                ),
+                PaginationUtils.pageRequest(page, size).withSort(
+                        Sort.by(Sort.Direction.DESC, "detectedAt")
+                                .and(Sort.by(Sort.Direction.DESC, "updatedAt"))
+                )
         );
         return toDtoPage(result);
+    }
+
+    private static Specification<MaintenanceDueEvent> searchSpecification(UUID equipmentId,
+                                                                          UUID departmentId,
+                                                                          UUID regulationId,
+                                                                          MaintenanceDueEventStatus status,
+                                                                          MaintenanceDueStatus dueStatus,
+                                                                          Instant from,
+                                                                          Instant to) {
+        return (event, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            Root<Equipment> equipment = query.from(Equipment.class);
+
+            predicates.add(cb.isFalse(event.get("isDeleted")));
+            predicates.add(cb.isFalse(equipment.get("isDeleted")));
+            predicates.add(cb.equal(equipment.get("id"), event.get("equipmentId")));
+
+            if (equipmentId != null) {
+                predicates.add(cb.equal(event.get("equipmentId"), equipmentId));
+            }
+            if (departmentId != null) {
+                CriteriaBuilder.Coalesce<UUID> department = cb.coalesce();
+                department.value(equipment.get("responsibleDepartmentId"));
+                department.value(equipment.get("departmentId"));
+                predicates.add(cb.equal(department, departmentId));
+            }
+            if (regulationId != null) {
+                predicates.add(cb.equal(event.get("regulationId"), regulationId));
+            }
+            if (status != null) {
+                predicates.add(cb.equal(event.get("status"), status));
+            }
+            if (dueStatus != null) {
+                predicates.add(cb.equal(event.get("dueStatus"), dueStatus));
+            }
+            if (from != null) {
+                predicates.add(cb.greaterThanOrEqualTo(event.get("dueAt"), from));
+            }
+            if (to != null) {
+                predicates.add(cb.lessThanOrEqualTo(event.get("dueAt"), to));
+            }
+
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
     }
 
     @Transactional

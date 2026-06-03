@@ -362,6 +362,48 @@ class PprPlanControllerContractTest {
     }
 
     @Test
+    void createPlanDefaultsMissingDepartmentForNormalScopedUser() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID createdById = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(departmentId);
+        PprPlanDto plan = new PprPlanDto(
+                planId,
+                "PPR-2026-0001",
+                "Scoped plan",
+                PlanStatus.DRAFT,
+                departmentId,
+                "Mechanical",
+                createdById,
+                null,
+                null,
+                List.of(),
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30)
+        );
+        when(service.create(any())).thenReturn(plan);
+
+        mockMvc.perform(post("/api/v1/ppr-plans")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Scoped plan",
+                                  "fromDate": "2026-06-01",
+                                  "toDate": "2026-06-30",
+                                  "createdById": "%s"
+                                }
+                                """.formatted(createdById)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.departmentId").value(departmentId.toString()));
+
+        ArgumentCaptor<PprPlanRequest> requestCaptor = ArgumentCaptor.forClass(PprPlanRequest.class);
+        verify(service).create(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().departmentId()).isEqualTo(departmentId);
+        verify(scopeAccessService).assertCanAccessDepartment(departmentId);
+    }
+
+    @Test
     void createPlanAcceptsPhase1ContractFields() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();

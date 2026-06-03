@@ -160,9 +160,15 @@ public class PprPlanService {
 
         PprPlanDto dto = toDto(reloadPlan(saved.getId()));
         if (generationResult.created() == 0) {
-            return dto.withGenerationMessage("PPR plan was created, but no PPR tasks were generated. Check plan targets, schedule, frequency, equipment status, and maintenance due conditions.");
+            String message = generationResult.message() != null
+                    ? generationResult.message()
+                    : "PPR plan was created, but no PPR tasks were generated. Check plan targets, schedule, frequency, equipment status, and maintenance due conditions.";
+            return dto.withGenerationMessage(message);
         }
-        return dto.withGenerationMessage("PPR plan was created and %d PPR task(s) were generated.".formatted(generationResult.created()));
+        String message = generationResult.message() != null
+                ? generationResult.message()
+                : "PPR plan was created and %d PPR task(s) were generated.".formatted(generationResult.created());
+        return dto.withGenerationMessage(message);
     }
 
     @Transactional
