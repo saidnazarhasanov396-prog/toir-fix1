@@ -17,8 +17,39 @@ public record EquipmentDocumentDto(
         String downloadUrl,
         String presignedUrlEndpoint,
         LocalDateTime createdAt,
-        LocalDateTime uploadedAt
+        LocalDateTime uploadedAt,
+        UUID equipmentId,
+        String title,
+        String type,
+        LocalDateTime documentDate,
+        FileRef file
 ) {
+    public record FileRef(
+            UUID id,
+            String fileName,
+            String originalName,
+            String mimeType,
+            Long sizeBytes,
+            String downloadUrl
+    ) {}
+
+    public EquipmentDocumentDto(
+            UUID id,
+            UUID fileId,
+            String documentType,
+            String documentName,
+            String originalName,
+            String contentType,
+            Long size,
+            String downloadUrl,
+            String presignedUrlEndpoint,
+            LocalDateTime createdAt,
+            LocalDateTime uploadedAt
+    ) {
+        this(id, fileId, documentType, documentName, originalName, contentType, size, downloadUrl,
+                presignedUrlEndpoint, createdAt, uploadedAt, null, documentName, documentType, createdAt, null);
+    }
+
     public static EquipmentDocumentDto from(UUID equipmentId, EquipmentDocument document) {
         if (document == null || document.getFile() == null || Boolean.TRUE.equals(document.getFile().getDeleted())) {
             return null;
@@ -35,7 +66,19 @@ public record EquipmentDocumentDto(
                 "/api/v1/equipment/" + equipmentId + "/documents/" + document.getId() + "/download",
                 "/api/v1/equipment/" + equipmentId + "/documents/" + document.getId() + "/presigned-url",
                 document.getCreatedAt(),
-                document.getCreatedAt()
+                document.getCreatedAt(),
+                equipmentId,
+                document.getDocumentName(),
+                document.getDocumentType(),
+                document.getCreatedAt(),
+                new FileRef(
+                        file.getId(),
+                        file.getStoredName(),
+                        file.getOriginalName(),
+                        file.getContentType(),
+                        file.getSize(),
+                        "/api/v1/equipment/" + equipmentId + "/documents/" + document.getId() + "/download"
+                )
         );
     }
 }

@@ -33,6 +33,12 @@ public class PprTask extends BaseEntity {
     @Column(name = "equipment_id")
     private UUID equipmentId;
 
+    @Column(name = "maintenance_due_event_id")
+    private UUID maintenanceDueEventId;
+
+    @Column(name = "cycle_key")
+    private String cycleKey;
+
     @Column(nullable = false)
     private String title;
 

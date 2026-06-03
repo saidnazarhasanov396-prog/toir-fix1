@@ -1,10 +1,13 @@
 package com.toir.dto.maintenanceregulation;
 
+import com.toir.enums.AutomationAction;
+import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
+import com.toir.enums.PriorityLevel;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -30,6 +33,16 @@ public record MaintenanceRegulationRequest(
         Double triggerMeterInterval,
         MaintenanceTriggerPolicy triggerPolicy,
         MaintenanceRecalculationPolicy recalculationPolicy,
+        AutomationAction automationAction,
+        DuplicatePolicy duplicatePolicy,
+        Integer leadTimeDays,
+        Double leadMeterPercent,
+        UUID defaultDepartmentId,
+        UUID defaultResponsibleId,
+        PriorityLevel defaultPriority,
+        Boolean requiresApproval,
+        String approvalRole,
+        String approvalPermission,
         List<MaintenanceRegulationAttributeConditionRequest> attributeConditions
 ) {
         public MaintenanceRegulationRequest(
@@ -50,7 +63,8 @@ public record MaintenanceRegulationRequest(
         ) {
                 this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours, active,
                         periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
-                        triggerMeterInterval, null, null, null);
+                        triggerMeterInterval, null, null, null, null, null, null, null, null, null, null, null,
+                        null, null);
         }
 
         public MaintenanceRegulationRequest(
@@ -72,6 +86,7 @@ public record MaintenanceRegulationRequest(
         ) {
                 this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours, active,
                         periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
-                        triggerMeterInterval, null, null, attributeConditions);
+                        triggerMeterInterval, null, null, null, null, null, null, null, null, null, null, null, null,
+                        attributeConditions);
         }
 }

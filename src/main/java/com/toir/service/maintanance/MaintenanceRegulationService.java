@@ -14,6 +14,8 @@ import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.AutomationAction;
+import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceRegulationConditionOperator;
 import com.toir.enums.MaintenanceTriggerPolicy;
@@ -376,6 +378,23 @@ public class MaintenanceRegulationService {
         entity.setRecalculationPolicy(request.recalculationPolicy() == null
                 ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
                 : request.recalculationPolicy());
+        entity.setAutomationAction(request.automationAction() == null
+                ? AutomationAction.REQUIRE_APPROVAL
+                : request.automationAction());
+        entity.setDuplicatePolicy(request.duplicatePolicy() == null
+                ? DuplicatePolicy.ONE_ITEM_PER_CYCLE
+                : request.duplicatePolicy());
+        entity.setLeadTimeDays(request.leadTimeDays());
+        entity.setLeadMeterPercent(request.leadMeterPercent());
+        entity.setDefaultDepartmentId(request.defaultDepartmentId());
+        entity.setDefaultResponsibleId(request.defaultResponsibleId());
+        entity.setDefaultPriority(request.defaultPriority());
+        entity.setRequiresApproval(request.requiresApproval() != null
+                ? request.requiresApproval()
+                : entity.getAutomationAction() == AutomationAction.REQUIRE_APPROVAL);
+        entity.setApprovalRole(blankToNull(request.approvalRole()));
+        entity.setApprovalPermission(blankToNull(request.approvalPermission()));
+        validateAutomationTemplate(entity);
     }
 
     private void replaceConditions(UUID regulationId,
@@ -543,6 +562,14 @@ public class MaintenanceRegulationService {
             throw RestException.badRequest("Maintenance template must be active");
         }
         return templateId;
+    }
+
+    private void validateAutomationTemplate(MaintenanceRegulation entity) {
+        AutomationAction action = entity.getAutomationAction();
+        if ((action == AutomationAction.CREATE_TASK || action == AutomationAction.CREATE_WORK_ORDER)
+                && entity.getTemplateId() == null) {
+            throw RestException.badRequest("templateId is required for automatic task or work order creation");
+        }
     }
 
     private List<MaintenanceRegulationDto> toDtoList(List<MaintenanceRegulation> regulations) {

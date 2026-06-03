@@ -32,6 +32,9 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
     @Query(value = "SELECT COUNT(*) > 0 FROM ppr_plans WHERE code = :code AND is_deleted = false", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
+    @Query(value = "SELECT * FROM ppr_plans WHERE code = :code AND is_deleted = false LIMIT 1", nativeQuery = true)
+    Optional<PprPlan> findByCodeAndIsDeletedFalse(@Param("code") String code);
+
     @Query(value = """
             SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
             FROM ppr_plans
