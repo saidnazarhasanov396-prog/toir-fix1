@@ -141,6 +141,25 @@ public class MaintenanceDueEventService {
         return repository.save(event);
     }
 
+    @Transactional
+    public MaintenanceDueEvent completeFromWorkOrder(UUID id, String reason) {
+        return completeFromWorkOrder(getOrThrow(id), reason);
+    }
+
+    @Transactional
+    public MaintenanceDueEvent completeFromWorkOrder(MaintenanceDueEvent event, String reason) {
+        if (event.getStatus() == MaintenanceDueEventStatus.COMPLETED) {
+            operationalIssueService.resolveOpen("MaintenanceDueEvent", event.getId());
+            return event;
+        }
+        event.setStatus(MaintenanceDueEventStatus.COMPLETED);
+        event.setResolvedAt(Instant.now());
+        event.setResolutionReason(reason);
+        MaintenanceDueEvent saved = repository.save(event);
+        operationalIssueService.resolveOpen("MaintenanceDueEvent", event.getId());
+        return saved;
+    }
+
     @Transactional(readOnly = true)
     public MaintenanceDueEvent getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)

@@ -42,6 +42,9 @@ public class MaintenanceCompletionAnchor extends BaseEntity {
     @Column(name = "ppr_task_id")
     private UUID pprTaskId;
 
+    @Column(name = "maintenance_due_event_id")
+    private UUID maintenanceDueEventId;
+
     @Column(name = "performed_at", nullable = false)
     private Instant performedAt;
 
