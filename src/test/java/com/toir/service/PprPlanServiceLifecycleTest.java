@@ -28,6 +28,7 @@ import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -47,6 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -76,6 +78,9 @@ class PprPlanServiceLifecycleTest {
     MaintenanceRegulationRepository maintenanceRegulationRepository;
 
     @Mock
+    PprGeneratorService generatorService;
+
+    @Mock
     AuditBuilderService auditBuilderService;
 
     @Mock
@@ -86,6 +91,12 @@ class PprPlanServiceLifecycleTest {
 
     @InjectMocks
     PprPlanService service;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(generatorService.generateForPlan(any(UUID.class)))
+                .thenAnswer(invocation -> new PprGeneratorService.GenerationResult(invocation.getArgument(0), 0, 0));
+    }
 
     @Test
     void createPlanWithDateRangeDerivesLegacyYearMonth() {
@@ -136,6 +147,59 @@ class PprPlanServiceLifecycleTest {
         assertThat(result.frequency()).isNull();
         assertThat(result.scopeType()).isEqualTo(PprScopeType.DEPARTMENT);
         assertThat(result.targets()).isEmpty();
+    }
+
+    @Test
+    void createPlanAutomaticallyGeneratesTasksAndReturnsReloadedTaskCount() {
+        UUID createdById = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        String codePrefix = "PPR-" + Year.now().getValue() + "-";
+        String expectedCode = "PPR-" + Year.now().getValue() + "-0001";
+        PprTask generatedTask = task(UUID.randomUUID(), null, PprTaskStatus.PLANNED);
+
+        when(planRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(planRepository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
+        when(planRepository.saveAndFlush(any(PprPlan.class))).thenAnswer(invocation -> {
+            PprPlan plan = invocation.getArgument(0);
+            plan.setId(planId);
+            return plan;
+        });
+        when(generatorService.generateForPlan(planId))
+                .thenAnswer(invocation -> new PprGeneratorService.GenerationResult(planId, 1, 0));
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenAnswer(invocation -> {
+            PprPlan plan = new PprPlan();
+            plan.setId(planId);
+            plan.setCode(expectedCode);
+            plan.setName("Generated plan");
+            plan.setStartDate(LocalDate.of(2026, 6, 1));
+            plan.setEndDate(LocalDate.of(2026, 6, 30));
+            plan.setStatus(PlanStatus.GENERATED);
+            plan.setDepartmentId(departmentId);
+            plan.setCreatedById(createdById);
+            plan.setPprType(PprType.PREVENTIVE_MAINTENANCE);
+            plan.setScheduleType(PprScheduleType.CALENDAR);
+            plan.setScopeType(PprScopeType.DEPARTMENT);
+            generatedTask.setPlan(plan);
+            plan.setTasks(new ArrayList<>(List.of(generatedTask)));
+            plan.setTargets(new ArrayList<>());
+            return Optional.of(plan);
+        });
+
+        var result = service.create(new PprPlanRequest(
+                "Generated plan",
+                departmentId,
+                createdById,
+                null,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30)
+        ));
+
+        assertThat(result.status()).isEqualTo(PlanStatus.GENERATED);
+        assertThat(result.taskCount()).isEqualTo(1);
+        assertThat(result.tasks()).hasSize(1);
+        assertThat(result.generationMessage()).contains("1 PPR task");
+        verify(generatorService).generateForPlan(planId);
     }
 
     @Test

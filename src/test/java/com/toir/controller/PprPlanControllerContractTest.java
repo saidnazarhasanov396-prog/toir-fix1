@@ -319,20 +319,21 @@ class PprPlanControllerContractTest {
         UUID planId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         UUID createdById = UUID.randomUUID();
+        PprTaskDto generatedTask = taskDto(planId, UUID.randomUUID(), "Pump 17", UUID.randomUUID(), "Monthly PM");
         PprPlanDto plan = new PprPlanDto(
                 planId,
                 "PPR-2026-0001",
                 "Q2 plan",
-                PlanStatus.DRAFT,
+                PlanStatus.GENERATED,
                 departmentId,
                 "Mechanical",
                 createdById,
                 null,
                 null,
-                List.of(),
+                List.of(generatedTask),
                 LocalDate.of(2026, 4, 1),
                 LocalDate.of(2026, 6, 30)
-        );
+        ).withGenerationMessage("PPR plan was created and 1 PPR task(s) were generated.");
         when(service.create(any())).thenReturn(plan);
 
         mockMvc.perform(post("/api/v1/ppr-plans")
@@ -351,7 +352,11 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.year").doesNotExist())
                 .andExpect(jsonPath("$.month").doesNotExist())
                 .andExpect(jsonPath("$.fromDate").value("2026-04-01"))
-                .andExpect(jsonPath("$.toDate").value("2026-06-30"));
+                .andExpect(jsonPath("$.toDate").value("2026-06-30"))
+                .andExpect(jsonPath("$.status").value("GENERATED"))
+                .andExpect(jsonPath("$.taskCount").value(1))
+                .andExpect(jsonPath("$.tasks.length()").value(1))
+                .andExpect(jsonPath("$.generationMessage").value("PPR plan was created and 1 PPR task(s) were generated."));
 
         verify(service).create(any());
     }
@@ -364,17 +369,18 @@ class PprPlanControllerContractTest {
         UUID equipmentId = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
         UUID regulationId = UUID.randomUUID();
+        PprTaskDto generatedTask = taskDto(planId, equipmentId, "Pump 17", regulationId, "Monthly preventive");
         PprPlanDto plan = new PprPlanDto(
                 planId,
                 "PPR-2026-0002",
                 "Monthly preventive",
-                PlanStatus.DRAFT,
+                PlanStatus.GENERATED,
                 departmentId,
                 "Mechanical",
                 createdById,
                 null,
                 "phase1",
-                List.of(),
+                List.of(generatedTask),
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 30),
                 PprType.PREVENTIVE_MAINTENANCE,
@@ -383,7 +389,7 @@ class PprPlanControllerContractTest {
                 null,
                 PprScopeType.DEPARTMENT,
                 List.of()
-        );
+        ).withGenerationMessage("PPR plan was created and 1 PPR task(s) were generated.");
         when(service.create(any())).thenReturn(plan);
 
         mockMvc.perform(post("/api/v1/ppr-plans")
@@ -410,6 +416,8 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.scheduleType").value("CALENDAR"))
                 .andExpect(jsonPath("$.frequency").value("MONTHLY"))
                 .andExpect(jsonPath("$.scopeType").value("DEPARTMENT"))
+                .andExpect(jsonPath("$.status").value("GENERATED"))
+                .andExpect(jsonPath("$.taskCount").value(1))
                 .andExpect(jsonPath("$.targets").isArray());
 
         ArgumentCaptor<PprPlanRequest> captor = ArgumentCaptor.forClass(PprPlanRequest.class);

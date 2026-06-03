@@ -63,6 +63,7 @@ public class PprPlanService {
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
     private final MaintenanceRegulationRepository maintenanceRegulationRepository;
+    private final PprGeneratorService generatorService;
     private final AuditBuilderService auditBuilderService;
     private final AuditSerializationService auditSerializationService;
     private final EntityManager entityManager;
@@ -145,6 +146,7 @@ public class PprPlanService {
     @Transactional
     public PprPlanDto create(PprPlanRequest request) {
         PprPlan saved = saveWithGeneratedPlanCode(request);
+        PprGeneratorService.GenerationResult generationResult = generatorService.generateForPlan(saved.getId());
 
         auditBuilderService.log(
                 "ppr_plan",
@@ -156,7 +158,11 @@ public class PprPlanService {
                 saved
         );
 
-        return toDto(reloadPlan(saved.getId()));
+        PprPlanDto dto = toDto(reloadPlan(saved.getId()));
+        if (generationResult.created() == 0) {
+            return dto.withGenerationMessage("PPR plan was created, but no PPR tasks were generated. Check plan targets, schedule, frequency, equipment status, and maintenance due conditions.");
+        }
+        return dto.withGenerationMessage("PPR plan was created and %d PPR task(s) were generated.".formatted(generationResult.created()));
     }
 
     @Transactional
@@ -407,6 +413,7 @@ public class PprPlanService {
     private List<PprTask> collectTasks(List<PprPlan> plans) {
         return plans.stream()
                 .flatMap(plan -> plan.getTasks().stream())
+                .filter(task -> !task.isDeleted())
                 .toList();
     }
 
