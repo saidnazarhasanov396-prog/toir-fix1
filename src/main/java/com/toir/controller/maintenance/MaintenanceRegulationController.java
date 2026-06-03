@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -20,21 +21,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/maintenance-regulations")
 @Tag(name = "maintenance-regulations")
 @Slf4j
+@RequiredArgsConstructor
 public class MaintenanceRegulationController {
 
     private final MaintenanceRegulationService service;
     private final MaintenanceImpactService impactService;
-
-    public MaintenanceRegulationController(MaintenanceRegulationService service,
-                                           MaintenanceImpactService impactService) {
-        this.service = service;
-        this.impactService = impactService;
-    }
-
-    public MaintenanceRegulationController(MaintenanceRegulationService service) {
-        this.service = service;
-        this.impactService = null;
-    }
 
     @GetMapping
     public ResponseEntity<Page<MaintenanceRegulationDto>> list(
@@ -65,17 +56,11 @@ public class MaintenanceRegulationController {
 
     @PostMapping("/preview")
     public ResponseEntity<MaintenanceRegulationPreviewDto> preview(@Valid @RequestBody MaintenanceRegulationRequest request) {
-        if (impactService == null) {
-            throw new IllegalStateException("Maintenance impact service is not configured");
-        }
         return ResponseEntity.ok(impactService.preview(request));
     }
 
     @GetMapping("/{id:[0-9a-fA-F-]{36}}/impact")
     public ResponseEntity<MaintenanceRegulationImpactDto> impact(@PathVariable UUID id) {
-        if (impactService == null) {
-            throw new IllegalStateException("Maintenance impact service is not configured");
-        }
         return ResponseEntity.ok(impactService.impact(id));
     }
 
