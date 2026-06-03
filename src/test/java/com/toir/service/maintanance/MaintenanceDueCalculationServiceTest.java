@@ -145,6 +145,162 @@ class MaintenanceDueCalculationServiceTest {
     }
 
     @Test
+    void calendarDueTenDaysInFutureWithThreeDayLeadIsNotDue() {
+        ReflectionTestUtils.setField(service, "clock",
+                Clock.fixed(Instant.parse("2026-06-02T12:00:00Z"), ZoneOffset.UTC));
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setPeriodicityUnit(PeriodicityUnit.DAY);
+        regulation.setPeriodicityValue(10);
+        regulation.setLeadTimeDays(3);
+        MaintenanceCompletionAnchor anchor = anchor(equipmentId, regulation.getId(),
+                Instant.parse("2026-06-02T00:00:00Z"), 0.0);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.of(anchor));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.NOT_DUE);
+        assertThat(result.dueByCalendar()).isFalse();
+        assertThat(result.nextDueAt()).isEqualTo(Instant.parse("2026-06-12T00:00:00Z"));
+        assertThat(result.explanation()).contains("Calendar trigger not due");
+    }
+
+    @Test
+    void calendarDueTwoDaysInFutureWithThreeDayLeadIsUpcoming() {
+        ReflectionTestUtils.setField(service, "clock",
+                Clock.fixed(Instant.parse("2026-06-02T12:00:00Z"), ZoneOffset.UTC));
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setPeriodicityUnit(PeriodicityUnit.DAY);
+        regulation.setPeriodicityValue(2);
+        regulation.setLeadTimeDays(3);
+        MaintenanceCompletionAnchor anchor = anchor(equipmentId, regulation.getId(),
+                Instant.parse("2026-06-02T00:00:00Z"), 0.0);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.of(anchor));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.UPCOMING);
+        assertThat(result.dueByCalendar()).isTrue();
+        assertThat(result.nextDueAt()).isEqualTo(Instant.parse("2026-06-04T00:00:00Z"));
+    }
+
+    @Test
+    void calendarDueTodayIsDueNotOverdue() {
+        ReflectionTestUtils.setField(service, "clock",
+                Clock.fixed(Instant.parse("2026-06-02T12:00:00Z"), ZoneOffset.UTC));
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setPeriodicityUnit(PeriodicityUnit.DAY);
+        regulation.setPeriodicityValue(1);
+        MaintenanceCompletionAnchor anchor = anchor(equipmentId, regulation.getId(),
+                Instant.parse("2026-06-01T00:00:00Z"), 0.0);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.of(anchor));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.DUE);
+        assertThat(result.dueByCalendar()).isTrue();
+        assertThat(result.nextDueAt()).isEqualTo(Instant.parse("2026-06-02T00:00:00Z"));
+        assertThat(result.explanation()).doesNotContain("overdue");
+    }
+
+    @Test
+    void calendarDueYesterdayIsOverdue() {
+        ReflectionTestUtils.setField(service, "clock",
+                Clock.fixed(Instant.parse("2026-06-02T12:00:00Z"), ZoneOffset.UTC));
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setPeriodicityUnit(PeriodicityUnit.DAY);
+        regulation.setPeriodicityValue(1);
+        MaintenanceCompletionAnchor anchor = anchor(equipmentId, regulation.getId(),
+                Instant.parse("2026-05-31T00:00:00Z"), 0.0);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.of(anchor));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.OVERDUE);
+        assertThat(result.dueByCalendar()).isTrue();
+        assertThat(result.nextDueAt()).isEqualTo(Instant.parse("2026-06-01T00:00:00Z"));
+    }
+
+    @Test
+    void monthlyCalendarFromOperationStartWithFutureDueDateIsNotOverdue() {
+        ReflectionTestUtils.setField(service, "clock",
+                Clock.fixed(Instant.parse("2026-06-02T12:00:00Z"), ZoneOffset.UTC));
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_OPERATION_START);
+        regulation.setPeriodicityUnit(PeriodicityUnit.MONTH);
+        regulation.setPeriodicityValue(1);
+        regulation.setLeadTimeDays(3);
+        equipment(equipmentId, LocalDate.parse("2026-05-20"));
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.NOT_DUE);
+        assertThat(result.dueByCalendar()).isFalse();
+        assertThat(result.nextDueAt()).isEqualTo(Instant.parse("2026-06-20T00:00:00Z"));
+        assertThat(result.explanation()).doesNotContain("overdue");
+    }
+
+    @Test
+    void combinedPoliciesDoNotConvertFutureCalendarSignalToOverdue() {
+        ReflectionTestUtils.setField(service, "clock",
+                Clock.fixed(Instant.parse("2026-06-02T12:00:00Z"), ZoneOffset.UTC));
+
+        UUID anyEquipmentId = UUID.randomUUID();
+        MaintenanceRegulation anyRegulation = regulation(anyEquipmentId);
+        anyRegulation.setTriggerPolicy(MaintenanceTriggerPolicy.ANY);
+        anyRegulation.setPeriodicityUnit(PeriodicityUnit.DAY);
+        anyRegulation.setPeriodicityValue(10);
+        anyRegulation.setLeadTimeDays(3);
+        anyRegulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        anyRegulation.setTriggerMeterInterval(500.0);
+        MaintenanceCompletionAnchor anyAnchor = anchor(anyEquipmentId, anyRegulation.getId(),
+                Instant.parse("2026-06-02T00:00:00Z"), 0.0);
+        when(anchorRepository.findLatestAnchor(anyEquipmentId, anyRegulation.getId(), null))
+                .thenReturn(Optional.of(anyAnchor));
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(anyEquipmentId))
+                .thenReturn(java.util.List.of(meter(anyEquipmentId, MeterType.ENGINE_HOURS, 520.0)));
+
+        MaintenanceDueCalculationDto anyResult = service.calculate(anyEquipmentId, anyRegulation);
+
+        assertThat(anyResult.status()).isEqualTo(MaintenanceDueStatus.DUE);
+        assertThat(anyResult.dueByCalendar()).isFalse();
+        assertThat(anyResult.explanation()).contains("Calendar trigger not due");
+        assertThat(anyResult.explanation()).doesNotContain("Calendar trigger overdue");
+
+        UUID allEquipmentId = UUID.randomUUID();
+        MaintenanceRegulation allRegulation = regulation(allEquipmentId);
+        allRegulation.setTriggerPolicy(MaintenanceTriggerPolicy.ALL);
+        allRegulation.setPeriodicityUnit(PeriodicityUnit.DAY);
+        allRegulation.setPeriodicityValue(10);
+        allRegulation.setLeadTimeDays(3);
+        allRegulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        allRegulation.setTriggerMeterInterval(500.0);
+        MaintenanceCompletionAnchor allAnchor = anchor(allEquipmentId, allRegulation.getId(),
+                Instant.parse("2026-06-02T00:00:00Z"), 0.0);
+        when(anchorRepository.findLatestAnchor(allEquipmentId, allRegulation.getId(), null))
+                .thenReturn(Optional.of(allAnchor));
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(allEquipmentId))
+                .thenReturn(java.util.List.of(meter(allEquipmentId, MeterType.ENGINE_HOURS, 520.0)));
+
+        MaintenanceDueCalculationDto allResult = service.calculate(allEquipmentId, allRegulation);
+
+        assertThat(allResult.status()).isEqualTo(MaintenanceDueStatus.NOT_DUE);
+        assertThat(allResult.dueByCalendar()).isFalse();
+        assertThat(allResult.explanation()).contains("Calendar trigger not due");
+        assertThat(allResult.explanation()).doesNotContain("Calendar trigger overdue");
+    }
+
+    @Test
     void combinedAnyUsesMeterWhenMeterDueAndCalendarNotDue() {
         UUID equipmentId = UUID.randomUUID();
         MaintenanceRegulation regulation = regulation(equipmentId);
