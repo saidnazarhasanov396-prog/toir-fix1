@@ -12,6 +12,7 @@ import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
+import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MaintenanceTriggerSource;
@@ -178,6 +179,7 @@ class MaintenanceAutomationServiceTest {
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
 
         assertThat(result.events()).isEqualTo(1);
+        assertThat(result.blockedEvents()).isEqualTo(1);
         assertThat(result.tasksCreated()).isZero();
         assertThat(result.workOrdersCreated()).isZero();
         ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
@@ -464,7 +466,7 @@ class MaintenanceAutomationServiceTest {
         ReflectionTestUtils.setField(existing, "id", UUID.randomUUID());
         existing.setEquipmentId(equipmentId);
         existing.setRegulationId(regulationId);
-        existing.setCycleKey("%s:REG:%s:CALENDAR:BLOCKED:NO_ANCHOR".formatted(equipmentId, regulationId));
+        existing.setCycleKey("%s:%s:CALENDAR:BLOCKED:NO_ANCHOR".formatted(equipmentId, regulationId));
         existing.setStatus(MaintenanceDueEventStatus.DETECTED);
         existing.setDueStatus(MaintenanceDueStatus.BLOCKED);
         existing.setTriggerSource(MaintenanceTriggerSource.CALENDAR_JOB);
@@ -485,10 +487,88 @@ class MaintenanceAutomationServiceTest {
         ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
         verify(eventService, org.mockito.Mockito.times(2)).saveEvent(eventCaptor.capture(), eq(equipment));
         assertThat(eventCaptor.getAllValues().get(0).getCycleKey())
-                .isEqualTo("%s:REG:%s:CALENDAR:BLOCKED:NO_ANCHOR".formatted(equipmentId, regulationId));
+                .isEqualTo("%s:%s:CALENDAR:BLOCKED:NO_ANCHOR".formatted(equipmentId, regulationId));
         assertThat(eventCaptor.getAllValues().get(1).getCycleKey())
-                .isEqualTo("%s:REG:%s:CALENDAR:BLOCKED:NO_ANCHOR".formatted(equipmentId, regulationId));
+                .isEqualTo("%s:%s:CALENDAR:BLOCKED:NO_ANCHOR".formatted(equipmentId, regulationId));
         assertThat(eventCaptor.getAllValues().get(0).getCycleKey()).doesNotMatch(".*T\\d{2}:\\d{2}:\\d{2}.*");
+    }
+
+    @Test
+    void calendarCycleKeyUsesDueDateAndRepeatedRunUpdatesSameEvent() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        MaintenanceRegulation regulation = regulation(regulationId, typeId, AutomationAction.TRACK_ONLY);
+        MaintenanceDueEvent existing = new MaintenanceDueEvent();
+        ReflectionTestUtils.setField(existing, "id", UUID.randomUUID());
+        existing.setEquipmentId(equipmentId);
+        existing.setRegulationId(regulationId);
+        existing.setCycleKey("%s:%s:CALENDAR:2026-06-01".formatted(equipmentId, regulationId));
+        existing.setStatus(MaintenanceDueEventStatus.DETECTED);
+        existing.setDueStatus(MaintenanceDueStatus.DUE);
+        existing.setTriggerSource(MaintenanceTriggerSource.CALENDAR_JOB);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        mockEffectiveRules(equipmentId, regulation);
+        when(dueCalculationService.calculate(any(EquipmentMaintenanceEffectiveRule.class))).thenReturn(
+                calendarDue(equipmentId, regulationId),
+                calendarDue(equipmentId, regulationId)
+        );
+        when(eventRepository.findByScopeAndCycleKey(
+                eq(equipmentId), eq(regulationId), eq(null), any())).thenReturn(Optional.empty(), Optional.of(existing));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+
+        service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
+        service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
+
+        ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
+        verify(eventService, org.mockito.Mockito.times(2)).saveEvent(eventCaptor.capture(), eq(equipment));
+        assertThat(eventCaptor.getAllValues().get(0).getCycleKey())
+                .isEqualTo("%s:%s:CALENDAR:2026-06-01".formatted(equipmentId, regulationId));
+        assertThat(eventCaptor.getAllValues().get(1).getId()).isEqualTo(existing.getId());
+        assertThat(eventCaptor.getAllValues().get(0).getCycleKey()).doesNotMatch(".*T\\d{2}:\\d{2}:\\d{2}.*");
+    }
+
+    @Test
+    void calendarCreateWorkOrderPolicyDoesNotCreateDuplicateWorkOrdersForSameCycle() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        equipment.setResponsibleDepartmentId(departmentId);
+        MaintenanceRegulation regulation = regulation(regulationId, typeId, AutomationAction.CREATE_WORK_ORDER);
+        MaintenanceDueEvent existing = new MaintenanceDueEvent();
+        ReflectionTestUtils.setField(existing, "id", UUID.randomUUID());
+        existing.setEquipmentId(equipmentId);
+        existing.setRegulationId(regulationId);
+        existing.setCycleKey("%s:%s:CALENDAR:2026-06-01".formatted(equipmentId, regulationId));
+        existing.setStatus(MaintenanceDueEventStatus.WORK_ORDER_CREATED);
+        existing.setDueStatus(MaintenanceDueStatus.DUE);
+        existing.setTriggerSource(MaintenanceTriggerSource.CALENDAR_JOB);
+        existing.setCreatedWorkOrderId(workOrderId);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        mockEffectiveRules(equipmentId, regulation);
+        when(dueCalculationService.calculate(any(EquipmentMaintenanceEffectiveRule.class))).thenReturn(
+                calendarDue(equipmentId, regulationId),
+                calendarDue(equipmentId, regulationId)
+        );
+        when(eventRepository.findByScopeAndCycleKey(
+                eq(equipmentId), eq(regulationId), eq(null), any())).thenReturn(Optional.empty(), Optional.of(existing));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(workOrderRepository.countByIsDeletedFalse()).thenReturn(0L);
+        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderRepository.existsOpenByCycleKey(any())).thenReturn(false);
+        when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
+        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
+        service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
+
+        verify(workOrderService).create(any());
     }
 
     private MaintenanceDueEvent assignId(MaintenanceDueEvent event) {
@@ -525,6 +605,7 @@ class MaintenanceAutomationServiceTest {
         regulation.setPeriodicityUnit(PeriodicityUnit.MONTH);
         regulation.setPeriodicityValue(1);
         regulation.setTriggerPolicy(MaintenanceTriggerPolicy.ANY);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_OPERATION_START);
         regulation.setAutomationAction(action);
         regulation.setDuplicatePolicy(DuplicatePolicy.ONE_ITEM_PER_CYCLE);
         regulation.setDefaultPriority(PriorityLevel.HIGH);
@@ -647,7 +728,30 @@ class MaintenanceAutomationServiceTest {
                 null,
                 null,
                 null,
-                "Calendar trigger blocked: no anchor available"
+                "No completion anchor for calendar trigger."
+        );
+    }
+
+    private MaintenanceDueCalculationDto calendarDue(UUID equipmentId, UUID regulationId) {
+        return new MaintenanceDueCalculationDto(
+                equipmentId,
+                regulationId,
+                null,
+                MaintenanceDueStatus.DUE,
+                true,
+                false,
+                null,
+                Instant.parse("2026-06-01T00:00:00Z"),
+                Instant.parse("2026-06-01T00:00:00Z"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "Calendar trigger due"
         );
     }
 

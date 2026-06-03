@@ -2,14 +2,17 @@ package com.toir.service.maintanance;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.MaintenanceDueStatus;
+import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,8 +20,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,13 +39,18 @@ class MaintenanceDueCalculationServiceTest {
     EquipmentMeterRepository meterRepository;
 
     @Mock
+    EquipmentRepository equipmentRepository;
+
+    @Mock
     MaintenanceCompletionAnchorRepository anchorRepository;
 
     MaintenanceDueCalculationService service;
 
     @BeforeEach
     void setUp() {
-        service = new MaintenanceDueCalculationService(meterRepository, anchorRepository, new ObjectMapper());
+        service = new MaintenanceDueCalculationService(meterRepository, equipmentRepository, anchorRepository, new ObjectMapper());
+        ReflectionTestUtils.setField(service, "clock",
+                Clock.fixed(Instant.parse("2026-06-02T00:00:00Z"), ZoneOffset.UTC));
     }
 
     @Test
@@ -67,7 +79,7 @@ class MaintenanceDueCalculationServiceTest {
         assertThat(result.meterInterval()).isEqualTo(500.0);
         assertThat(result.meterAnchorValue()).isZero();
         assertThat(result.meterRemaining()).isZero();
-        assertThat(result.explanation()).contains("Calendar trigger blocked");
+        assertThat(result.explanation()).contains("Meter trigger due");
         assertThat(result.explanation()).doesNotContain("No completion anchor for calendar trigger");
     }
 
@@ -203,6 +215,7 @@ class MaintenanceDueCalculationServiceTest {
     void combinedAnyProceedsWhenCalendarBlockedButMeterDue() {
         UUID equipmentId = UUID.randomUUID();
         MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.BLOCKED);
         regulation.setTriggerPolicy(MaintenanceTriggerPolicy.ANY);
         regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
         regulation.setTriggerMeterInterval(500.0);
@@ -218,13 +231,14 @@ class MaintenanceDueCalculationServiceTest {
         assertThat(result.dueByMeter()).isTrue();
         assertThat(result.dueByCalendar()).isFalse();
         assertThat(result.explanation()).contains("Meter trigger due");
-        assertThat(result.explanation()).contains("Calendar trigger blocked");
+        assertThat(result.explanation()).contains("No completion anchor for calendar trigger.");
     }
 
     @Test
     void combinedAllBlocksWhenCalendarBlockedEvenIfMeterDue() {
         UUID equipmentId = UUID.randomUUID();
         MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.BLOCKED);
         regulation.setTriggerPolicy(MaintenanceTriggerPolicy.ALL);
         regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
         regulation.setTriggerMeterInterval(500.0);
@@ -239,7 +253,132 @@ class MaintenanceDueCalculationServiceTest {
         assertThat(result.status()).isEqualTo(MaintenanceDueStatus.BLOCKED);
         assertThat(result.dueByMeter()).isTrue();
         assertThat(result.dueByCalendar()).isFalse();
-        assertThat(result.explanation()).contains("Calendar trigger blocked");
+        assertThat(result.explanation()).contains("No completion anchor for calendar trigger.");
+    }
+
+    @Test
+    void calendarFirstRunFromOperationStartDateDoesNotBlock() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_OPERATION_START);
+        equipment(equipmentId, LocalDate.parse("2026-05-01"));
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isIn(MaintenanceDueStatus.DUE, MaintenanceDueStatus.OVERDUE);
+        assertThat(result.dueByCalendar()).isTrue();
+        assertThat(result.nextDueAt()).isEqualTo(Instant.parse("2026-06-01T00:00:00Z"));
+        assertThat(result.explanation()).doesNotContain("blocked");
+    }
+
+    @Test
+    void calendarFirstRunFromRegulationCreatedAt() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_REGULATION_CREATED);
+        regulation.setCreatedAt(Instant.parse("2026-05-10T12:00:00Z"));
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.NOT_DUE);
+        assertThat(result.nextDueAt()).isEqualTo(Instant.parse("2026-06-10T12:00:00Z"));
+        assertThat(result.explanation()).contains("regulation created");
+    }
+
+    @Test
+    void calendarRequireInitialAnchorBlocksWithoutDownstreamAnchorFallback() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.REQUIRE_INITIAL_ANCHOR);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.BLOCKED);
+        assertThat(result.dueByCalendar()).isFalse();
+        assertThat(result.nextDueAt()).isNull();
+        assertThat(result.explanation()).isEqualTo("Initial completion anchor is required for this calendar regulation.");
+    }
+
+    @Test
+    void calendarBlockedPolicyUsesNoAnchorExplanation() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.BLOCKED);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.BLOCKED);
+        assertThat(result.explanation()).isEqualTo("No completion anchor for calendar trigger.");
+    }
+
+    @Test
+    void calendarWithCompletionAnchorIgnoresOperationStartDateFallback() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_OPERATION_START);
+        MaintenanceCompletionAnchor anchor = anchor(
+                equipmentId,
+                regulation.getId(),
+                Instant.parse("2026-05-01T00:00:00Z"),
+                0.0
+        );
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.of(anchor));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.nextDueAt()).isEqualTo(Instant.parse("2026-06-01T00:00:00Z"));
+        assertThat(result.lastPerformedAt()).isEqualTo(anchor.getPerformedAt());
+    }
+
+    @Test
+    void combinedAllWithCalendarFallbackNotDueDoesNotBecomeDueWhenOnlyMeterIsDue() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_OPERATION_START);
+        regulation.setTriggerPolicy(MaintenanceTriggerPolicy.ALL);
+        regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        regulation.setTriggerMeterInterval(500.0);
+        equipment(equipmentId, LocalDate.parse("2026-05-20"));
+        EquipmentMeter meter = meter(equipmentId, MeterType.ENGINE_HOURS, 520.0);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(java.util.List.of(meter));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.NOT_DUE);
+        assertThat(result.dueByMeter()).isTrue();
+        assertThat(result.dueByCalendar()).isFalse();
+    }
+
+    @Test
+    void combinedAnyWithCalendarFallbackNotDueProceedsWhenMeterIsDue() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_OPERATION_START);
+        regulation.setTriggerPolicy(MaintenanceTriggerPolicy.ANY);
+        regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        regulation.setTriggerMeterInterval(500.0);
+        equipment(equipmentId, LocalDate.parse("2026-05-20"));
+        EquipmentMeter meter = meter(equipmentId, MeterType.ENGINE_HOURS, 520.0);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(java.util.List.of(meter));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.DUE);
+        assertThat(result.dueByMeter()).isTrue();
+        assertThat(result.dueByCalendar()).isFalse();
     }
 
     private MaintenanceRegulation regulation(UUID equipmentId) {
@@ -249,7 +388,17 @@ class MaintenanceDueCalculationServiceTest {
         regulation.setPeriodicityUnit(PeriodicityUnit.MONTH);
         regulation.setPeriodicityValue(1);
         regulation.setTriggerPolicy(MaintenanceTriggerPolicy.ANY);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_OPERATION_START);
+        regulation.setCreatedAt(Instant.parse("2026-05-20T00:00:00Z"));
         return regulation;
+    }
+
+    private Equipment equipment(UUID equipmentId, LocalDate operationStartDate) {
+        Equipment equipment = new Equipment();
+        ReflectionTestUtils.setField(equipment, "id", equipmentId);
+        equipment.setOperationStartDate(operationStartDate);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        return equipment;
     }
 
     private EquipmentMeter meter(UUID equipmentId, MeterType meterType, double currentValue) {

@@ -4,6 +4,7 @@ import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
+import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceRuleOrigin;
@@ -11,6 +12,7 @@ import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
+import java.time.Instant;
 import java.util.UUID;
 
 public record EquipmentMaintenanceEffectiveRule(
@@ -32,6 +34,8 @@ public record EquipmentMaintenanceEffectiveRule(
         Double triggerMeterInterval,
         MaintenanceTriggerPolicy triggerPolicy,
         MaintenanceRecalculationPolicy recalculationPolicy,
+        MaintenanceInitialSchedulePolicy initialSchedulePolicy,
+        Instant initialScheduleBaseAt,
         AutomationAction automationAction,
         DuplicatePolicy duplicatePolicy,
         Integer leadTimeDays,
@@ -83,6 +87,10 @@ public record EquipmentMaintenanceEffectiveRule(
                 regulation.getRecalculationPolicy() == null
                         ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
                         : regulation.getRecalculationPolicy(),
+                regulation.getInitialSchedulePolicy() == null
+                        ? MaintenanceInitialSchedulePolicy.FROM_OPERATION_START
+                        : regulation.getInitialSchedulePolicy(),
+                regulation.getCreatedAt(),
                 regulation.getAutomationAction() == null ? AutomationAction.REQUIRE_APPROVAL : regulation.getAutomationAction(),
                 regulation.getDuplicatePolicy() == null ? DuplicatePolicy.ONE_ITEM_PER_CYCLE : regulation.getDuplicatePolicy(),
                 regulation.getLeadTimeDays(),
@@ -124,6 +132,10 @@ public record EquipmentMaintenanceEffectiveRule(
                 override.getRecalculationPolicy() == null
                         ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
                         : override.getRecalculationPolicy(),
+                base.getInitialSchedulePolicy() == null
+                        ? MaintenanceInitialSchedulePolicy.FROM_OPERATION_START
+                        : base.getInitialSchedulePolicy(),
+                base.getCreatedAt(),
                 base.getAutomationAction() == null ? AutomationAction.REQUIRE_APPROVAL : base.getAutomationAction(),
                 base.getDuplicatePolicy() == null ? DuplicatePolicy.ONE_ITEM_PER_CYCLE : base.getDuplicatePolicy(),
                 base.getLeadTimeDays(),
@@ -164,6 +176,8 @@ public record EquipmentMaintenanceEffectiveRule(
                 effective.triggerMeterInterval(),
                 effective.triggerPolicy(),
                 effective.recalculationPolicy(),
+                effective.initialSchedulePolicy(),
+                effective.initialScheduleBaseAt(),
                 effective.automationAction(),
                 effective.duplicatePolicy(),
                 effective.leadTimeDays(),
@@ -203,6 +217,8 @@ public record EquipmentMaintenanceEffectiveRule(
                 rule.getRecalculationPolicy() == null
                         ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
                         : rule.getRecalculationPolicy(),
+                MaintenanceInitialSchedulePolicy.FROM_OPERATION_START,
+                rule.getCreatedAt(),
                 AutomationAction.REQUIRE_APPROVAL,
                 DuplicatePolicy.ONE_ITEM_PER_CYCLE,
                 null,

@@ -16,6 +16,7 @@ import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
+import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceRegulationConditionOperator;
 import com.toir.enums.MaintenanceTriggerPolicy;
@@ -378,6 +379,9 @@ public class MaintenanceRegulationService {
         entity.setRecalculationPolicy(request.recalculationPolicy() == null
                 ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
                 : request.recalculationPolicy());
+        entity.setInitialSchedulePolicy(request.initialSchedulePolicy() == null
+                ? MaintenanceInitialSchedulePolicy.FROM_OPERATION_START
+                : request.initialSchedulePolicy());
         entity.setAutomationAction(request.automationAction() == null
                 ? AutomationAction.REQUIRE_APPROVAL
                 : request.automationAction());

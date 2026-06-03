@@ -4,18 +4,24 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.MaintenanceDueStatus;
+import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,8 +37,10 @@ public class MaintenanceDueCalculationService {
     private static final double UPCOMING_RATIO = 0.05;
 
     private final EquipmentMeterRepository meterRepository;
+    private final EquipmentRepository equipmentRepository;
     private final MaintenanceCompletionAnchorRepository anchorRepository;
     private final ObjectMapper objectMapper;
+    private Clock clock = Clock.systemUTC();
 
     public MaintenanceDueCalculationDto calculate(UUID equipmentId, MaintenanceRegulation regulation) {
         return calculate(
@@ -46,6 +54,8 @@ public class MaintenanceDueCalculationService {
                 regulation.getTriggerMeterInterval(),
                 regulation.getTriggerPolicy(),
                 regulation.getRecalculationPolicy(),
+                regulation.getInitialSchedulePolicy(),
+                regulation.getCreatedAt(),
                 regulation.getLeadTimeDays(),
                 regulation.getLeadMeterPercent()
         );
@@ -63,6 +73,8 @@ public class MaintenanceDueCalculationService {
                 rule.getTriggerMeterInterval(),
                 rule.getTriggerPolicy(),
                 rule.getRecalculationPolicy(),
+                MaintenanceInitialSchedulePolicy.FROM_OPERATION_START,
+                rule.getCreatedAt(),
                 null,
                 null
         );
@@ -80,6 +92,8 @@ public class MaintenanceDueCalculationService {
                 rule.triggerMeterInterval(),
                 rule.triggerPolicy(),
                 rule.recalculationPolicy(),
+                rule.initialSchedulePolicy(),
+                rule.initialScheduleBaseAt(),
                 rule.leadTimeDays(),
                 rule.leadMeterPercent()
         );
@@ -95,6 +109,8 @@ public class MaintenanceDueCalculationService {
                                                   Double meterInterval,
                                                   MaintenanceTriggerPolicy triggerPolicy,
                                                   MaintenanceRecalculationPolicy recalculationPolicy,
+                                                  MaintenanceInitialSchedulePolicy initialSchedulePolicy,
+                                                  Instant initialScheduleBaseAt,
                                                   Integer leadTimeDays,
                                                   Double leadMeterPercent) {
         MaintenanceTriggerPolicy effectiveTriggerPolicy = triggerPolicy == null ? MaintenanceTriggerPolicy.ANY : triggerPolicy;
@@ -110,8 +126,8 @@ public class MaintenanceDueCalculationService {
                 anchorRepository.findLatestAnchor(equipmentId, regulationId, ruleId);
         Instant lastPerformedAt = anchor.map(MaintenanceCompletionAnchor::getPerformedAt).orElse(null);
 
-        TriggerSignal calendarSignal = calendarSignal(anchor.orElse(null), periodicityUnit, periodicityValue,
-                toleranceDays, leadTimeDays, effectiveRecalculationPolicy);
+        TriggerSignal calendarSignal = calendarSignal(equipmentId, anchor.orElse(null), periodicityUnit, periodicityValue,
+                toleranceDays, leadTimeDays, effectiveRecalculationPolicy, initialSchedulePolicy, initialScheduleBaseAt);
         TriggerSignal meterSignal = meterSignal(equipmentId, anchor.orElse(null), meterType, meterInterval);
 
         List<TriggerSignal> configured = new ArrayList<>();
@@ -133,44 +149,86 @@ public class MaintenanceDueCalculationService {
                 meterSignal.anchorValue(), meterInterval, meterSignal.remaining(), combined.explanation());
     }
 
-    private TriggerSignal calendarSignal(MaintenanceCompletionAnchor anchor,
+    private TriggerSignal calendarSignal(UUID equipmentId,
+                                         MaintenanceCompletionAnchor anchor,
                                          PeriodicityUnit unit,
                                          int value,
                                          Integer toleranceDays,
                                          Integer leadTimeDays,
-                                         MaintenanceRecalculationPolicy recalculationPolicy) {
+                                         MaintenanceRecalculationPolicy recalculationPolicy,
+                                         MaintenanceInitialSchedulePolicy initialSchedulePolicy,
+                                         Instant initialScheduleBaseAt) {
         if (unit == null || value <= 0) {
             return TriggerSignal.notConfigured();
         }
-        if (anchor == null) {
+        CalendarBase calendarBase = calendarBase(equipmentId, anchor, recalculationPolicy,
+                initialSchedulePolicy, initialScheduleBaseAt);
+        if (calendarBase.blocked()) {
             return TriggerSignal.configured(MaintenanceDueStatus.BLOCKED, null, null, null,
-                    "Calendar trigger blocked: no anchor available");
+                    calendarBase.explanation());
         }
-        Instant base = recalculationPolicy == MaintenanceRecalculationPolicy.FROM_PLANNED_DUE
-                && anchor.getPlannedDueAt() != null
-                ? anchor.getPlannedDueAt()
-                : anchor.getPerformedAt();
+        Instant base = calendarBase.base();
         if (base == null) {
             return TriggerSignal.configured(MaintenanceDueStatus.NOT_DUE, null, null, null,
                     "No calendar anchor date");
         }
         Instant nextDue = addPeriod(base, unit, value);
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         if (!now.isBefore(nextDue.plus(Math.max(0, toleranceDays == null ? 0 : toleranceDays), ChronoUnit.DAYS))) {
             return TriggerSignal.configured(MaintenanceDueStatus.OVERDUE, nextDue, null, null,
-                    "Calendar trigger overdue");
+                    "Calendar trigger overdue" + calendarBase.explanationSuffix());
         }
         if (!now.isBefore(nextDue)) {
             return TriggerSignal.configured(MaintenanceDueStatus.DUE, nextDue, null, null,
-                    "Calendar trigger due");
+                    "Calendar trigger due" + calendarBase.explanationSuffix());
         }
         long upcomingDays = Math.max(1, leadTimeDays == null ? toleranceDays == null ? 0 : toleranceDays : leadTimeDays);
         if (!now.isBefore(nextDue.minus(upcomingDays, ChronoUnit.DAYS))) {
             return TriggerSignal.configured(MaintenanceDueStatus.UPCOMING, nextDue, null, null,
-                    "Calendar trigger upcoming");
+                    "Calendar trigger upcoming" + calendarBase.explanationSuffix());
         }
         return TriggerSignal.configured(MaintenanceDueStatus.NOT_DUE, nextDue, null, null,
-                "Calendar trigger not due");
+                "Calendar trigger not due" + calendarBase.explanationSuffix());
+    }
+
+    private CalendarBase calendarBase(UUID equipmentId,
+                                      MaintenanceCompletionAnchor anchor,
+                                      MaintenanceRecalculationPolicy recalculationPolicy,
+                                      MaintenanceInitialSchedulePolicy initialSchedulePolicy,
+                                      Instant initialScheduleBaseAt) {
+        if (anchor != null) {
+            Instant base = recalculationPolicy == MaintenanceRecalculationPolicy.FROM_PLANNED_DUE
+                    && anchor.getPlannedDueAt() != null
+                    ? anchor.getPlannedDueAt()
+                    : anchor.getPerformedAt();
+            return CalendarBase.available(base, "");
+        }
+
+        MaintenanceInitialSchedulePolicy policy = initialSchedulePolicy == null
+                ? MaintenanceInitialSchedulePolicy.FROM_OPERATION_START
+                : initialSchedulePolicy;
+        if (policy == MaintenanceInitialSchedulePolicy.REQUIRE_INITIAL_ANCHOR) {
+            return CalendarBase.blocked("Initial completion anchor is required for this calendar regulation.");
+        }
+        if (policy == MaintenanceInitialSchedulePolicy.BLOCKED) {
+            return CalendarBase.blocked("No completion anchor for calendar trigger.");
+        }
+        if (policy == MaintenanceInitialSchedulePolicy.FROM_REGULATION_CREATED) {
+            return initialScheduleBaseAt == null
+                    ? CalendarBase.blocked("No completion anchor for calendar trigger.")
+                    : CalendarBase.available(initialScheduleBaseAt, " from regulation created");
+        }
+
+        Optional<Equipment> foundEquipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId);
+        Equipment equipment = foundEquipment == null ? null : foundEquipment.orElse(null);
+        LocalDate operationStartDate = equipment == null ? null : equipment.getOperationStartDate();
+        if (operationStartDate != null) {
+            return CalendarBase.available(operationStartDate.atStartOfDay().toInstant(ZoneOffset.UTC),
+                    " from operation start");
+        }
+        return initialScheduleBaseAt == null
+                ? CalendarBase.blocked("No completion anchor for calendar trigger.")
+                : CalendarBase.available(initialScheduleBaseAt, " from regulation created");
     }
 
     private TriggerSignal meterSignal(UUID equipmentId,
@@ -234,9 +292,9 @@ public class MaintenanceDueCalculationService {
         return switch (unit) {
             case DAY -> base.plus(value, ChronoUnit.DAYS);
             case WEEK -> base.plus(value * 7L, ChronoUnit.DAYS);
-            case MONTH -> base.plus(value * 30L, ChronoUnit.DAYS);
-            case QUARTER -> base.plus(value * 90L, ChronoUnit.DAYS);
-            case YEAR -> base.plus(value * 365L, ChronoUnit.DAYS);
+            case MONTH -> base.atZone(ZoneOffset.UTC).plusMonths(value).toInstant();
+            case QUARTER -> base.atZone(ZoneOffset.UTC).plusMonths(value * 3L).toInstant();
+            case YEAR -> base.atZone(ZoneOffset.UTC).plusYears(value).toInstant();
             case HOUR -> base.plus(value, ChronoUnit.HOURS);
         };
     }
@@ -380,4 +438,18 @@ public class MaintenanceDueCalculationService {
     }
 
     private record CombinedSignal(MaintenanceDueStatus status, String explanation) {}
+
+    private record CalendarBase(Instant base, boolean blocked, String explanation) {
+        static CalendarBase available(Instant base, String explanationSuffix) {
+            return new CalendarBase(base, false, explanationSuffix == null ? "" : explanationSuffix);
+        }
+
+        static CalendarBase blocked(String explanation) {
+            return new CalendarBase(null, true, explanation);
+        }
+
+        String explanationSuffix() {
+            return blocked || explanation == null || explanation.isBlank() ? "" : explanation;
+        }
+    }
 }

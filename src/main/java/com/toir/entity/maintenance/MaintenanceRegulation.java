@@ -2,6 +2,7 @@ package com.toir.entity.maintenance;
 import com.toir.entity.BaseEntity;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
+import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceTriggerPolicy;
@@ -75,6 +76,11 @@ public class MaintenanceRegulation extends BaseEntity {
     @Column(name = "recalculation_policy", nullable = false)
     private MaintenanceRecalculationPolicy recalculationPolicy =
             MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "initial_schedule_policy", nullable = false)
+    private MaintenanceInitialSchedulePolicy initialSchedulePolicy =
+            MaintenanceInitialSchedulePolicy.FROM_OPERATION_START;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "automation_action", nullable = false)

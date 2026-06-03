@@ -78,6 +78,7 @@ public class MaintenanceAutomationService {
         }
         List<EquipmentMaintenanceEffectiveRule> rules = effectiveRuleResolver.resolveApplicable(equipmentId);
         int createdOrUpdated = 0;
+        int blocked = 0;
         int suppressed = 0;
         int tasks = 0;
         int workOrders = 0;
@@ -88,6 +89,9 @@ public class MaintenanceAutomationService {
                     continue;
                 }
                 createdOrUpdated++;
+                if (event.getDueStatus() == MaintenanceDueStatus.BLOCKED) {
+                    blocked++;
+                }
                 if (event.getStatus() == MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE) {
                     suppressed++;
                 }
@@ -102,7 +106,7 @@ public class MaintenanceAutomationService {
                         equipmentId, rule.regulationId(), rule.equipmentMaintenanceRuleId(), ex);
             }
         }
-        return new EvaluationResult(1, createdOrUpdated, suppressed, tasks, workOrders);
+        return new EvaluationResult(1, createdOrUpdated, blocked, suppressed, tasks, workOrders);
     }
 
     @Transactional
@@ -111,6 +115,7 @@ public class MaintenanceAutomationService {
                 .orElseThrow(() -> RestException.notFound("Maintenance regulation not found: " + regulationId));
         List<Equipment> equipment = equipmentRepository.findAllForMaintenanceRegulations(regulation.getEquipmentTypeId());
         int events = 0;
+        int blocked = 0;
         int suppressed = 0;
         int tasks = 0;
         int workOrders = 0;
@@ -129,6 +134,9 @@ public class MaintenanceAutomationService {
                         continue;
                     }
                     events++;
+                    if (event.getDueStatus() == MaintenanceDueStatus.BLOCKED) {
+                        blocked++;
+                    }
                     if (event.getStatus() == MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE) {
                         suppressed++;
                     }
@@ -143,13 +151,14 @@ public class MaintenanceAutomationService {
                 log.warn("Maintenance automation failed equipmentId={} regulationId={}", item.getId(), regulationId, ex);
             }
         }
-        return new EvaluationResult(equipment.size(), events, suppressed, tasks, workOrders);
+        return new EvaluationResult(equipment.size(), events, blocked, suppressed, tasks, workOrders);
     }
 
     @Transactional
     public EvaluationResult evaluateAllCalendarRules() {
         int checked = 0;
         int events = 0;
+        int blocked = 0;
         int suppressed = 0;
         int tasks = 0;
         int workOrders = 0;
@@ -161,11 +170,12 @@ public class MaintenanceAutomationService {
             EvaluationResult result = evaluateEquipment(item.getId(), MaintenanceTriggerSource.CALENDAR_JOB);
             checked += result.checkedEquipment();
             events += result.events();
+            blocked += result.blockedEvents();
             suppressed += result.suppressed();
             tasks += result.tasksCreated();
             workOrders += result.workOrdersCreated();
         }
-        return new EvaluationResult(checked, events, suppressed, tasks, workOrders);
+        return new EvaluationResult(checked, events, blocked, suppressed, tasks, workOrders);
     }
 
     @Transactional
@@ -446,30 +456,31 @@ public class MaintenanceAutomationService {
     }
 
     private String cycleKey(UUID equipmentId, EquipmentMaintenanceEffectiveRule rule, MaintenanceDueCalculationDto due) {
-        String scope = cycleScope(equipmentId, rule);
         if (due.status() == MaintenanceDueStatus.BLOCKED) {
             String explanation = due.explanation() == null ? "" : due.explanation().toLowerCase(Locale.ROOT);
             if (explanation.contains("calendar")) {
-                return scope + ":CALENDAR:BLOCKED:NO_ANCHOR";
+                return calendarCycleScope(equipmentId, rule) + ":CALENDAR:BLOCKED:" + calendarBlockedReason(explanation);
             }
             if (due.meterType() != null) {
+                String scope = cycleScope(equipmentId, rule);
                 return "%s:METER:%s:BLOCKED:MISSING_METER".formatted(scope, due.meterType().name());
             }
-            return scope + ":CALENDAR:BLOCKED:UNKNOWN";
+            return calendarCycleScope(equipmentId, rule) + ":CALENDAR:BLOCKED:UNKNOWN";
         }
         if (due.dueByMeter()
                 && due.meterType() != null
                 && due.meterInterval() != null
                 && due.meterInterval() > 0
                 && due.meterCurrentValue() != null) {
+            String scope = cycleScope(equipmentId, rule);
             double cycleBucket = Math.floor(due.meterCurrentValue() / due.meterInterval()) * due.meterInterval();
             return "%s:METER:%s:%s".formatted(scope, due.meterType().name(), formatCycleBucket(cycleBucket));
         }
         if (due.nextDueAt() != null) {
             LocalDate dueDate = due.nextDueAt().atZone(ZoneOffset.UTC).toLocalDate();
-            return "%s:CALENDAR:%s".formatted(scope, dueDate);
+            return "%s:CALENDAR:%s".formatted(calendarCycleScope(equipmentId, rule), dueDate);
         }
-        return scope + ":CALENDAR:BLOCKED:NO_ANCHOR";
+        return calendarCycleScope(equipmentId, rule) + ":CALENDAR:BLOCKED:NO_ANCHOR";
     }
 
     private String cycleScope(UUID equipmentId, EquipmentMaintenanceEffectiveRule rule) {
@@ -477,6 +488,23 @@ public class MaintenanceAutomationService {
             return "%s:RULE:%s".formatted(equipmentId, rule.equipmentMaintenanceRuleId());
         }
         return "%s:REG:%s".formatted(equipmentId, rule.regulationId());
+    }
+
+    private String calendarCycleScope(UUID equipmentId, EquipmentMaintenanceEffectiveRule rule) {
+        UUID scopeId = rule.equipmentMaintenanceRuleId() != null
+                ? rule.equipmentMaintenanceRuleId()
+                : rule.regulationId();
+        return "%s:%s".formatted(equipmentId, scopeId);
+    }
+
+    private String calendarBlockedReason(String explanation) {
+        if (explanation.contains("initial completion anchor")) {
+            return "INITIAL_ANCHOR_REQUIRED";
+        }
+        if (explanation.contains("no completion anchor") || explanation.contains("no anchor")) {
+            return "NO_ANCHOR";
+        }
+        return "UNKNOWN";
     }
 
     private String formatCycleBucket(double value) {
@@ -542,15 +570,24 @@ public class MaintenanceAutomationService {
     public record EvaluationResult(
             int checkedEquipment,
             int events,
+            int blockedEvents,
             int suppressed,
             int tasksCreated,
             int workOrdersCreated
     ) {
+        public EvaluationResult(int checkedEquipment,
+                                int events,
+                                int suppressed,
+                                int tasksCreated,
+                                int workOrdersCreated) {
+            this(checkedEquipment, events, 0, suppressed, tasksCreated, workOrdersCreated);
+        }
+
         @Override
         public String toString() {
             return String.format(Locale.ROOT,
-                    "checked=%d events=%d suppressed=%d tasks=%d workOrders=%d",
-                    checkedEquipment, events, suppressed, tasksCreated, workOrdersCreated);
+                    "checked=%d events=%d blocked=%d suppressed=%d tasks=%d workOrders=%d",
+                    checkedEquipment, events, blockedEvents, suppressed, tasksCreated, workOrdersCreated);
         }
     }
 }
