@@ -171,6 +171,8 @@ public final class PermissionConstants {
     public static final String NOTIFICATION_MARK_READ = "NOTIFICATION_MARK_READ";
     public static final String NOTIFICATION_ADMIN = "NOTIFICATION_ADMIN";
     public static final String NOTIFICATION_UPDATE = "NOTIFICATION_UPDATE";
+    public static final String OPERATIONAL_ISSUE_READ = "OPERATIONAL_ISSUE_READ";
+    public static final String OPERATIONAL_ISSUE_RESOLVE = "OPERATIONAL_ISSUE_RESOLVE";
     public static final String ANALYTICS_READ = "ANALYTICS_READ";
     public static final String ANALYTICS_EXPORT = "ANALYTICS_EXPORT";
     public static final String INTEGRATION_READ = "INTEGRATION_READ";
