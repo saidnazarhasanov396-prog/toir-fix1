@@ -27,8 +27,35 @@ public record WorkOrderRequest(
         Instant startPlannedAt,
         Instant endPlannedAt,
         @NotNull UUID createdById,
-        String summary
+        String summary,
+        UUID maintenanceDueEventId,
+        String cycleKey
 ) {
+    public WorkOrderRequest(
+            @NotBlank String number,
+            @NotBlank String title,
+            @NotNull UUID equipmentId,
+            UUID equipmentNodeId,
+            @NotNull UUID departmentId,
+            UUID repairRequestId,
+            UUID defectId,
+            UUID pprTaskId,
+            UUID contractorId,
+            @NotNull WorkOrderType type,
+            WorkType workType,
+            UUID warehouseId,
+            UUID replacementEquipmentId,
+            PriorityLevel priority,
+            Instant startPlannedAt,
+            Instant endPlannedAt,
+            @NotNull UUID createdById,
+            String summary
+    ) {
+        this(number, title, equipmentId, equipmentNodeId, departmentId, repairRequestId, defectId, pprTaskId,
+                contractorId, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
+                endPlannedAt, createdById, summary, null, null);
+    }
+
     public WorkOrderRequest(@NotBlank String number,
                             @NotBlank String title,
                             @NotNull UUID equipmentId,
@@ -47,6 +74,7 @@ public record WorkOrderRequest(
                             @NotNull UUID createdById,
                             String summary) {
         this(number, title, equipmentId, null, departmentId, repairRequestId, defectId, pprTaskId, contractorId, type,
-                workType, warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById, summary);
+                workType, warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
+                summary, null, null);
     }
 }

@@ -233,6 +233,27 @@ public final class RolePermissionDefaults {
         );
         defaults.put("WORKSHOP_HEAD", shopLeadPermissions);
         defaults.put("SECTION_HEAD", shopLeadPermissions);
+        defaults.put("DEPARTMENT_HEAD", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.METER_READ,
+                PermissionConstants.METER_READING_CREATE,
+                PermissionConstants.MAINTENANCE_REGULATION_READ,
+                PermissionConstants.MAINTENANCE_EVENT_READ,
+                PermissionConstants.MAINTENANCE_EVENT_APPROVE,
+                PermissionConstants.MAINTENANCE_EVENT_CANCEL,
+                PermissionConstants.MAINTENANCE_AUTOMATION_RUN,
+                PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_TASK_READ,
+                PermissionConstants.PPR_TASK_APPROVE,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.WORK_ORDER_CREATE,
+                PermissionConstants.WORK_ORDER_APPROVE,
+                PermissionConstants.WORK_ORDER_START,
+                PermissionConstants.WORK_ORDER_COMPLETE,
+                PermissionConstants.NOTIFICATION_READ,
+                PermissionConstants.NOTIFICATION_MARK_READ
+        ));
         defaults.put("STOREKEEPER", List.of(
                 PermissionConstants.READ_LEGACY,
                 PermissionConstants.WAREHOUSE_READ,

@@ -1,10 +1,13 @@
 package com.toir.entity.maintenance;
 import com.toir.entity.BaseEntity;
+import com.toir.enums.AutomationAction;
+import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
+import com.toir.enums.PriorityLevel;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -72,4 +75,37 @@ public class MaintenanceRegulation extends BaseEntity {
     @Column(name = "recalculation_policy", nullable = false)
     private MaintenanceRecalculationPolicy recalculationPolicy =
             MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "automation_action", nullable = false)
+    private AutomationAction automationAction = AutomationAction.REQUIRE_APPROVAL;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "duplicate_policy", nullable = false)
+    private DuplicatePolicy duplicatePolicy = DuplicatePolicy.ONE_ITEM_PER_CYCLE;
+
+    @Column(name = "lead_time_days")
+    private Integer leadTimeDays;
+
+    @Column(name = "lead_meter_percent")
+    private Double leadMeterPercent;
+
+    @Column(name = "default_department_id")
+    private UUID defaultDepartmentId;
+
+    @Column(name = "default_responsible_id")
+    private UUID defaultResponsibleId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "default_priority")
+    private PriorityLevel defaultPriority;
+
+    @Column(name = "requires_approval", nullable = false)
+    private boolean requiresApproval = true;
+
+    @Column(name = "approval_role")
+    private String approvalRole;
+
+    @Column(name = "approval_permission")
+    private String approvalPermission;
 }
