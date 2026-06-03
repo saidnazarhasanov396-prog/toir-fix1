@@ -21,6 +21,7 @@ import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -173,6 +174,10 @@ public class MaintenanceDueCalculationService {
                     "No calendar anchor date");
         }
         Instant nextDue = addPeriod(base, unit, value);
+        if (isDateBased(unit)) {
+            return dateBasedCalendarSignal(calendarBase, nextDue, leadTimeDays);
+        }
+
         Instant now = clock.instant();
         if (!now.isBefore(nextDue.plus(Math.max(0, toleranceDays == null ? 0 : toleranceDays), ChronoUnit.DAYS))) {
             return TriggerSignal.configured(MaintenanceDueStatus.OVERDUE, nextDue, null, null,
@@ -223,7 +228,7 @@ public class MaintenanceDueCalculationService {
         Equipment equipment = foundEquipment == null ? null : foundEquipment.orElse(null);
         LocalDate operationStartDate = equipment == null ? null : equipment.getOperationStartDate();
         if (operationStartDate != null) {
-            return CalendarBase.available(operationStartDate.atStartOfDay().toInstant(ZoneOffset.UTC),
+            return CalendarBase.available(operationStartDate.atStartOfDay(clockZone()).toInstant(),
                     " from operation start");
         }
         return initialScheduleBaseAt == null
@@ -289,14 +294,46 @@ public class MaintenanceDueCalculationService {
     }
 
     private Instant addPeriod(Instant base, PeriodicityUnit unit, int value) {
+        ZoneId zone = clockZone();
         return switch (unit) {
-            case DAY -> base.plus(value, ChronoUnit.DAYS);
-            case WEEK -> base.plus(value * 7L, ChronoUnit.DAYS);
-            case MONTH -> base.atZone(ZoneOffset.UTC).plusMonths(value).toInstant();
-            case QUARTER -> base.atZone(ZoneOffset.UTC).plusMonths(value * 3L).toInstant();
-            case YEAR -> base.atZone(ZoneOffset.UTC).plusYears(value).toInstant();
+            case DAY -> base.atZone(zone).plusDays(value).toInstant();
+            case WEEK -> base.atZone(zone).plusWeeks(value).toInstant();
+            case MONTH -> base.atZone(zone).plusMonths(value).toInstant();
+            case QUARTER -> base.atZone(zone).plusMonths(value * 3L).toInstant();
+            case YEAR -> base.atZone(zone).plusYears(value).toInstant();
             case HOUR -> base.plus(value, ChronoUnit.HOURS);
         };
+    }
+
+    private TriggerSignal dateBasedCalendarSignal(CalendarBase calendarBase,
+                                                  Instant nextDue,
+                                                  Integer leadTimeDays) {
+        LocalDate today = LocalDate.now(clock);
+        LocalDate dueDate = nextDue.atZone(clockZone()).toLocalDate();
+        if (dueDate.isBefore(today)) {
+            return TriggerSignal.configured(MaintenanceDueStatus.OVERDUE, nextDue, null, null,
+                    "Calendar trigger overdue" + calendarBase.explanationSuffix());
+        }
+        if (dueDate.isEqual(today)) {
+            return TriggerSignal.configured(MaintenanceDueStatus.DUE, nextDue, null, null,
+                    "Calendar trigger due" + calendarBase.explanationSuffix());
+        }
+        long daysUntil = ChronoUnit.DAYS.between(today, dueDate);
+        long upcomingDays = Math.max(0, leadTimeDays == null ? 0 : leadTimeDays);
+        if (daysUntil <= upcomingDays) {
+            return TriggerSignal.configured(MaintenanceDueStatus.UPCOMING, nextDue, null, null,
+                    "Calendar trigger upcoming" + calendarBase.explanationSuffix());
+        }
+        return TriggerSignal.configured(MaintenanceDueStatus.NOT_DUE, nextDue, null, null,
+                "Calendar trigger not due" + calendarBase.explanationSuffix());
+    }
+
+    private boolean isDateBased(PeriodicityUnit unit) {
+        return unit != PeriodicityUnit.HOUR;
+    }
+
+    private ZoneId clockZone() {
+        return clock == null || clock.getZone() == null ? ZoneOffset.UTC : clock.getZone();
     }
 
     private CombinedSignal combine(List<TriggerSignal> signals, MaintenanceTriggerPolicy policy) {
