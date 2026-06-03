@@ -18,6 +18,7 @@ import com.toir.enums.PeriodicityUnit;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -129,7 +130,7 @@ public class MaintenanceDueCalculationService {
 
         TriggerSignal calendarSignal = calendarSignal(equipmentId, anchor.orElse(null), periodicityUnit, periodicityValue,
                 toleranceDays, leadTimeDays, effectiveRecalculationPolicy, initialSchedulePolicy, initialScheduleBaseAt);
-        TriggerSignal meterSignal = meterSignal(equipmentId, anchor.orElse(null), meterType, meterInterval);
+        TriggerSignal meterSignal = meterSignal(equipmentId, anchor.orElse(null), meterType, meterInterval, leadMeterPercent);
 
         List<TriggerSignal> configured = new ArrayList<>();
         if (calendarSignal.configured()) {
@@ -239,7 +240,8 @@ public class MaintenanceDueCalculationService {
     private TriggerSignal meterSignal(UUID equipmentId,
                                       MaintenanceCompletionAnchor anchor,
                                       MeterType meterType,
-                                      Double interval) {
+                                      Double interval,
+                                      Double leadMeterPercent) {
         if (meterType == null || interval == null || interval <= 0) {
             return TriggerSignal.notConfigured();
         }
@@ -252,29 +254,45 @@ public class MaintenanceDueCalculationService {
                     "Required active meter is missing: " + meterType);
         }
         double anchorValue;
-        double elapsed;
         if (anchor == null) {
             anchorValue = 0.0;
-            elapsed = Math.max(0.0, meter.getCurrentValue() - anchorValue);
         } else {
             anchorValue = anchorMeterValue(anchor, meterType).orElse(0.0);
-            elapsed = Math.max(0.0, meter.getCurrentValue() - anchorValue);
         }
-        double remaining = Math.max(0.0, interval - elapsed);
-        if (elapsed > interval * (1.0 + UPCOMING_RATIO)) {
+        double dueValue = meterDueValue(anchorValue, interval, meter.getCurrentValue());
+        double remaining = dueValue - meter.getCurrentValue();
+        int remainingComparison = BigDecimal.valueOf(remaining).compareTo(BigDecimal.ZERO);
+        if (remainingComparison < 0) {
             return TriggerSignal.configured(MaintenanceDueStatus.OVERDUE, null, meter.getCurrentValue(), anchorValue,
                     "Meter trigger overdue", remaining);
         }
-        if (elapsed >= interval) {
+        if (remainingComparison == 0) {
             return TriggerSignal.configured(MaintenanceDueStatus.DUE, null, meter.getCurrentValue(), anchorValue,
                     "Meter trigger due", remaining);
         }
-        if (remaining <= interval * UPCOMING_RATIO) {
+        if (BigDecimal.valueOf(remaining).compareTo(BigDecimal.valueOf(interval * meterLeadRatio(leadMeterPercent))) <= 0) {
             return TriggerSignal.configured(MaintenanceDueStatus.UPCOMING, null, meter.getCurrentValue(), anchorValue,
                     "Meter trigger upcoming", remaining);
         }
         return TriggerSignal.configured(MaintenanceDueStatus.NOT_DUE, null, meter.getCurrentValue(), anchorValue,
                 "Meter trigger not due", remaining);
+    }
+
+    private double meterDueValue(double anchorValue, double interval, double currentValue) {
+        double elapsed = Math.max(0.0, currentValue - anchorValue);
+        if (elapsed < interval) {
+            return anchorValue + interval;
+        }
+        double cycleCount = Math.floor(elapsed / interval);
+        return anchorValue + cycleCount * interval;
+    }
+
+    private double meterLeadRatio(Double leadMeterPercent) {
+        if (leadMeterPercent == null) {
+            return UPCOMING_RATIO;
+        }
+        double value = Math.max(0.0, leadMeterPercent);
+        return value > 1.0 ? value / 100.0 : value;
     }
 
     private Optional<Double> anchorMeterValue(MaintenanceCompletionAnchor anchor, MeterType meterType) {
@@ -427,7 +445,12 @@ public class MaintenanceDueCalculationService {
                                              Double interval,
                                              Double remaining,
                                              String explanation) {
-        Double nextMeterDueValue = anchorValue == null || interval == null ? null : anchorValue + interval;
+        Double nextMeterDueValue = null;
+        if (currentValue != null && remaining != null) {
+            nextMeterDueValue = currentValue + remaining;
+        } else if (anchorValue != null && interval != null) {
+            nextMeterDueValue = anchorValue + interval;
+        }
         return new MaintenanceDueCalculationDto(
                 equipmentId,
                 regulationId,
