@@ -40,8 +40,10 @@ import java.time.LocalTime;
 import java.time.Year;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -65,6 +67,7 @@ public class MaintenanceAutomationService {
     private final WorkOrderRepository workOrderRepository;
     private final WorkOrderService workOrderService;
     private final UserRepository userRepository;
+    private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
 
     @Transactional
     public EvaluationResult evaluateEquipment(UUID equipmentId, MaintenanceTriggerSource source) {
@@ -73,15 +76,14 @@ public class MaintenanceAutomationService {
         if (equipment.getStatus() == EquipmentStatus.DECOMMISSIONED) {
             return new EvaluationResult(1, 0, 0, 0, 0);
         }
-        List<MaintenanceRegulation> regulations = regulationRepository
-                .findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(equipment.getEquipmentTypeId());
+        List<EquipmentMaintenanceEffectiveRule> rules = effectiveRuleResolver.resolveApplicable(equipmentId);
         int createdOrUpdated = 0;
         int suppressed = 0;
         int tasks = 0;
         int workOrders = 0;
-        for (MaintenanceRegulation regulation : regulations) {
+        for (EquipmentMaintenanceEffectiveRule rule : rules) {
             try {
-                MaintenanceDueEvent event = evaluate(equipment, regulation, source, null);
+                MaintenanceDueEvent event = evaluate(equipment, rule, source, null);
                 if (event == null) {
                     continue;
                 }
@@ -96,7 +98,8 @@ public class MaintenanceAutomationService {
                     workOrders++;
                 }
             } catch (RuntimeException ex) {
-                log.warn("Maintenance automation failed equipmentId={} regulationId={}", equipmentId, regulation.getId(), ex);
+                log.warn("Maintenance automation failed equipmentId={} regulationId={} ruleId={}",
+                        equipmentId, rule.regulationId(), rule.equipmentMaintenanceRuleId(), ex);
             }
         }
         return new EvaluationResult(1, createdOrUpdated, suppressed, tasks, workOrders);
@@ -116,19 +119,25 @@ public class MaintenanceAutomationService {
                 continue;
             }
             try {
-                MaintenanceDueEvent event = evaluate(item, regulation, source, null);
-                if (event == null) {
-                    continue;
-                }
-                events++;
-                if (event.getStatus() == MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE) {
-                    suppressed++;
-                }
-                if (event.getCreatedTaskId() != null) {
-                    tasks++;
-                }
-                if (event.getCreatedWorkOrderId() != null) {
-                    workOrders++;
+                List<EquipmentMaintenanceEffectiveRule> rules = effectiveRuleResolver.resolveApplicable(item.getId())
+                        .stream()
+                        .filter(rule -> Objects.equals(rule.regulationId(), regulationId))
+                        .toList();
+                for (EquipmentMaintenanceEffectiveRule rule : rules) {
+                    MaintenanceDueEvent event = evaluate(item, rule, source, null);
+                    if (event == null) {
+                        continue;
+                    }
+                    events++;
+                    if (event.getStatus() == MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE) {
+                        suppressed++;
+                    }
+                    if (event.getCreatedTaskId() != null) {
+                        tasks++;
+                    }
+                    if (event.getCreatedWorkOrderId() != null) {
+                        workOrders++;
+                    }
                 }
             } catch (RuntimeException ex) {
                 log.warn("Maintenance automation failed equipmentId={} regulationId={}", item.getId(), regulationId, ex);
@@ -169,12 +178,12 @@ public class MaintenanceAutomationService {
                 && event.getStatus() != MaintenanceDueEventStatus.DETECTED) {
             return eventService.toDto(event);
         }
-        MaintenanceRegulation regulation = regulation(event);
-        if (regulation.getAutomationAction() == AutomationAction.CREATE_TASK
-                || regulation.getAutomationAction() == AutomationAction.REQUIRE_APPROVAL) {
-            createTask(event, regulation, userId);
+        EquipmentMaintenanceEffectiveRule rule = effectiveRule(event);
+        if (rule.automationAction() == AutomationAction.CREATE_TASK
+                || rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
+            createTask(event, rule, userId);
         } else {
-            createWorkOrder(event, regulation, userId);
+            createWorkOrder(event, rule, userId);
         }
         return eventService.toDto(eventRepository.save(event));
     }
@@ -185,33 +194,37 @@ public class MaintenanceAutomationService {
         if (isBlocked(event)) {
             return blockedEventDto(event);
         }
-        MaintenanceRegulation regulation = regulation(event);
-        createWorkOrder(event, regulation, userId);
+        EquipmentMaintenanceEffectiveRule rule = effectiveRule(event);
+        createWorkOrder(event, rule, userId);
         return eventService.toDto(eventRepository.save(event));
     }
 
     private MaintenanceDueEvent evaluate(Equipment equipment,
-                                         MaintenanceRegulation regulation,
+                                         EquipmentMaintenanceEffectiveRule rule,
                                          MaintenanceTriggerSource source,
                                          UUID userId) {
-        if (regulation.getTriggerPolicy() != null && regulation.getTriggerPolicy().name().equals("MANUAL")) {
+        if (!rule.applicable() || !rule.active()) {
             return null;
         }
-        if (source == MaintenanceTriggerSource.METER_READING && !hasMeterTrigger(regulation)) {
+        if (rule.triggerPolicy() != null && rule.triggerPolicy().name().equals("MANUAL")) {
             return null;
         }
-        MaintenanceDueCalculationDto due = dueCalculationService.calculate(equipment.getId(), regulation);
+        if (source == MaintenanceTriggerSource.METER_READING && !rule.hasMeterTrigger()) {
+            return null;
+        }
+        MaintenanceDueCalculationDto due = dueCalculationService.calculate(rule);
         if (!shouldCreateEvent(due.status())) {
             return null;
         }
-        String cycleKey = cycleKey(equipment.getId(), regulation, due);
+        String cycleKey = cycleKey(equipment.getId(), rule, due);
         MaintenanceDueEvent event = eventRepository
-                .findByEquipmentIdAndRegulationIdAndCycleKeyAndIsDeletedFalse(equipment.getId(), regulation.getId(), cycleKey)
+                .findByScopeAndCycleKey(equipment.getId(), rule.regulationId(), rule.equipmentMaintenanceRuleId(), cycleKey)
                 .orElseGet(MaintenanceDueEvent::new);
         boolean isNew = event.getId() == null;
         event.setEquipmentId(equipment.getId());
-        event.setRegulationId(regulation.getId());
-        event.setTemplateId(regulation.getTemplateId());
+        event.setRegulationId(rule.regulationId());
+        event.setEquipmentMaintenanceRuleId(rule.equipmentMaintenanceRuleId());
+        event.setTemplateId(rule.templateId());
         event.setDueStatus(due.status());
         event.setTriggerSource(source);
         event.setCycleKey(cycleKey);
@@ -224,22 +237,22 @@ public class MaintenanceAutomationService {
         event.setExplanation(due.explanation());
         if (isNew) {
             event.setDetectedAt(Instant.now());
-            event.setStatus(initialStatus(regulation, due.status()));
+            event.setStatus(initialStatus(rule, due.status()));
         }
-        if (isDuplicateSuppressed(regulation, event)) {
+        if (isDuplicateSuppressed(rule, event)) {
             event.setStatus(MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE);
             return eventService.saveEvent(event, equipment);
         }
         event = eventService.saveEvent(event, equipment);
         if (due.status() == MaintenanceDueStatus.BLOCKED
-                || regulation.getAutomationAction() == AutomationAction.TRACK_ONLY
-                || regulation.getAutomationAction() == AutomationAction.REQUIRE_APPROVAL) {
+                || rule.automationAction() == AutomationAction.TRACK_ONLY
+                || rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
             return event;
         }
-        if (regulation.getAutomationAction() == AutomationAction.CREATE_TASK) {
-            createTask(event, regulation, userId);
-        } else if (regulation.getAutomationAction() == AutomationAction.CREATE_WORK_ORDER) {
-            createWorkOrder(event, regulation, userId);
+        if (rule.automationAction() == AutomationAction.CREATE_TASK) {
+            createTask(event, rule, userId);
+        } else if (rule.automationAction() == AutomationAction.CREATE_WORK_ORDER) {
+            createWorkOrder(event, rule, userId);
         }
         return eventRepository.save(event);
     }
@@ -251,33 +264,36 @@ public class MaintenanceAutomationService {
                 || status == MaintenanceDueStatus.BLOCKED;
     }
 
-    private boolean hasMeterTrigger(MaintenanceRegulation regulation) {
-        return regulation.getTriggerMeterType() != null
-                && regulation.getTriggerMeterInterval() != null
-                && regulation.getTriggerMeterInterval() > 0;
-    }
-
-    private MaintenanceDueEventStatus initialStatus(MaintenanceRegulation regulation, MaintenanceDueStatus dueStatus) {
+    private MaintenanceDueEventStatus initialStatus(EquipmentMaintenanceEffectiveRule rule, MaintenanceDueStatus dueStatus) {
         if (dueStatus == MaintenanceDueStatus.BLOCKED) {
             return MaintenanceDueEventStatus.DETECTED;
         }
-        return regulation.getAutomationAction() == AutomationAction.REQUIRE_APPROVAL || regulation.isRequiresApproval()
+        return rule.automationAction() == AutomationAction.REQUIRE_APPROVAL || rule.requiresApproval()
                 ? MaintenanceDueEventStatus.AWAITING_APPROVAL
                 : MaintenanceDueEventStatus.DETECTED;
     }
 
-    private boolean isDuplicateSuppressed(MaintenanceRegulation regulation, MaintenanceDueEvent event) {
+    private boolean isDuplicateSuppressed(EquipmentMaintenanceEffectiveRule rule, MaintenanceDueEvent event) {
         if (event.getCreatedTaskId() != null || event.getCreatedWorkOrderId() != null) {
             return false;
         }
-        if (regulation.getDuplicatePolicy() == DuplicatePolicy.ONE_ITEM_PER_CYCLE) {
+        if (rule.duplicatePolicy() == DuplicatePolicy.ONE_ITEM_PER_CYCLE) {
             return pprTaskRepository.existsOpenByCycleKey(event.getCycleKey())
                     || workOrderRepository.existsOpenByCycleKey(event.getCycleKey());
+        }
+        if (rule.duplicatePolicy() == DuplicatePolicy.ONE_OPEN_ITEM_PER_RULE) {
+            return eventRepository.findOpenByScope(
+                            event.getEquipmentId(),
+                            event.getRegulationId(),
+                            event.getEquipmentMaintenanceRuleId(),
+                            MaintenanceDueEventService.openStatuses())
+                    .stream()
+                    .anyMatch(existing -> event.getId() == null || !event.getId().equals(existing.getId()));
         }
         return false;
     }
 
-    private PprTask createTask(MaintenanceDueEvent event, MaintenanceRegulation regulation, UUID userId) {
+    private PprTask createTask(MaintenanceDueEvent event, EquipmentMaintenanceEffectiveRule rule, UUID userId) {
         if (isBlocked(event)) {
             event.setStatus(MaintenanceDueEventStatus.DETECTED);
             return null;
@@ -285,7 +301,7 @@ public class MaintenanceAutomationService {
         if (event.getCreatedTaskId() != null) {
             return pprTaskRepository.findByIdAndIsDeletedFalse(event.getCreatedTaskId()).orElse(null);
         }
-        if (regulation.getTemplateId() == null) {
+        if (rule.templateId() == null) {
             event.setStatus(MaintenanceDueEventStatus.DETECTED);
             event.setExplanation(append(event.getExplanation(), "templateId is required to create task"));
             return null;
@@ -295,22 +311,23 @@ public class MaintenanceAutomationService {
             return null;
         }
         Equipment equipment = equipment(event);
-        UUID departmentId = effectiveDepartmentId(equipment, regulation);
+        UUID departmentId = effectiveDepartmentId(equipment, rule);
         PprPlan plan = autoPlan(departmentId, userId);
         PprTask task = new PprTask();
         task.setCode(nextTaskCode());
         task.setPlan(plan);
-        task.setRegulationId(regulation.getId());
+        task.setRegulationId(rule.regulationId());
+        task.setEquipmentMaintenanceRuleId(rule.equipmentMaintenanceRuleId());
         task.setEquipmentId(equipment.getId());
         task.setMaintenanceDueEventId(event.getId());
         task.setCycleKey(event.getCycleKey());
-        task.setTitle(regulation.getName() + " - " + equipment.getCode());
+        task.setTitle(rule.name() + " - " + equipment.getCode());
         LocalDateTime start = plannedStart(event);
         task.setScheduledStart(start);
-        task.setScheduledEnd(start.plusHours(Math.max(1, (long) Math.ceil(regulation.getNormativeLaborHours()))));
+        task.setScheduledEnd(start.plusHours(Math.max(1, (long) Math.ceil(rule.normativeLaborHours()))));
         task.setDueDate(dueDateTime(event));
-        task.setPriority(regulation.getDefaultPriority() == null ? PriorityLevel.MEDIUM : regulation.getDefaultPriority());
-        task.setPlannedLaborHours(regulation.getNormativeLaborHours());
+        task.setPriority(rule.defaultPriority() == null ? PriorityLevel.MEDIUM : rule.defaultPriority());
+        task.setPlannedLaborHours(rule.normativeLaborHours());
         task.setStatus(PprTaskStatus.PLANNED);
         PprTask saved = pprTaskRepository.save(task);
         event.setCreatedTaskId(saved.getId());
@@ -318,7 +335,7 @@ public class MaintenanceAutomationService {
         return saved;
     }
 
-    private WorkOrderDto createWorkOrder(MaintenanceDueEvent event, MaintenanceRegulation regulation, UUID userId) {
+    private WorkOrderDto createWorkOrder(MaintenanceDueEvent event, EquipmentMaintenanceEffectiveRule rule, UUID userId) {
         if (isBlocked(event)) {
             event.setStatus(MaintenanceDueEventStatus.DETECTED);
             return null;
@@ -331,14 +348,14 @@ public class MaintenanceAutomationService {
             return null;
         }
         Equipment equipment = equipment(event);
-        UUID departmentId = effectiveDepartmentId(equipment, regulation);
+        UUID departmentId = effectiveDepartmentId(equipment, rule);
         if (departmentId == null) {
             event.setExplanation(append(event.getExplanation(), "departmentId is required to create work order"));
             return null;
         }
         WorkOrderRequest request = new WorkOrderRequest(
                 nextWorkOrderNumber(),
-                regulation.getName() + " - " + equipment.getCode(),
+                rule.name() + " - " + equipment.getCode(),
                 equipment.getId(),
                 null,
                 departmentId,
@@ -346,11 +363,11 @@ public class MaintenanceAutomationService {
                 null,
                 event.getCreatedTaskId(),
                 null,
-                workOrderType(regulation),
-                workType(regulation),
+                workOrderType(rule),
+                workType(rule),
                 null,
                 null,
-                regulation.getDefaultPriority() == null ? PriorityLevel.MEDIUM : regulation.getDefaultPriority(),
+                rule.defaultPriority() == null ? PriorityLevel.MEDIUM : rule.defaultPriority(),
                 plannedStart(event).atZone(ZoneId.systemDefault()).toInstant(),
                 dueDateTime(event).atZone(ZoneId.systemDefault()).toInstant(),
                 effectiveUserId(userId),
@@ -383,9 +400,9 @@ public class MaintenanceAutomationService {
         });
     }
 
-    private UUID effectiveDepartmentId(Equipment equipment, MaintenanceRegulation regulation) {
-        if (regulation.getDefaultDepartmentId() != null) {
-            return regulation.getDefaultDepartmentId();
+    private UUID effectiveDepartmentId(Equipment equipment, EquipmentMaintenanceEffectiveRule rule) {
+        if (rule.defaultDepartmentId() != null) {
+            return rule.defaultDepartmentId();
         }
         return equipment.getResponsibleDepartmentId() != null ? equipment.getResponsibleDepartmentId() : equipment.getDepartmentId();
     }
@@ -393,6 +410,15 @@ public class MaintenanceAutomationService {
     private Equipment equipment(MaintenanceDueEvent event) {
         return equipmentRepository.findByIdAndIsDeletedFalse(event.getEquipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + event.getEquipmentId()));
+    }
+
+    private EquipmentMaintenanceEffectiveRule effectiveRule(MaintenanceDueEvent event) {
+        return effectiveRuleResolver.resolveApplicable(event.getEquipmentId())
+                .stream()
+                .filter(rule -> Objects.equals(rule.regulationId(), event.getRegulationId())
+                        && Objects.equals(rule.equipmentMaintenanceRuleId(), event.getEquipmentMaintenanceRuleId()))
+                .findFirst()
+                .orElseGet(() -> EquipmentMaintenanceEffectiveRule.fromRegulation(event.getEquipmentId(), regulation(event)));
     }
 
     private MaintenanceRegulation regulation(MaintenanceDueEvent event) {
@@ -419,19 +445,38 @@ public class MaintenanceAutomationService {
         return LocalDateTime.ofInstant(dueAt, ZoneId.systemDefault()).with(LocalTime.of(18, 0));
     }
 
-    private String cycleKey(UUID equipmentId, MaintenanceRegulation regulation, MaintenanceDueCalculationDto due) {
-        if (due.meterType() != null
+    private String cycleKey(UUID equipmentId, EquipmentMaintenanceEffectiveRule rule, MaintenanceDueCalculationDto due) {
+        String scope = cycleScope(equipmentId, rule);
+        if (due.status() == MaintenanceDueStatus.BLOCKED) {
+            String explanation = due.explanation() == null ? "" : due.explanation().toLowerCase(Locale.ROOT);
+            if (explanation.contains("calendar")) {
+                return scope + ":CALENDAR:BLOCKED:NO_ANCHOR";
+            }
+            if (due.meterType() != null) {
+                return "%s:METER:%s:BLOCKED:MISSING_METER".formatted(scope, due.meterType().name());
+            }
+            return scope + ":CALENDAR:BLOCKED:UNKNOWN";
+        }
+        if (due.dueByMeter()
+                && due.meterType() != null
                 && due.meterInterval() != null
                 && due.meterInterval() > 0
                 && due.meterCurrentValue() != null) {
             double cycleBucket = Math.floor(due.meterCurrentValue() / due.meterInterval()) * due.meterInterval();
-            return "METER:%s:%s".formatted(due.meterType().name(), formatCycleBucket(cycleBucket));
+            return "%s:METER:%s:%s".formatted(scope, due.meterType().name(), formatCycleBucket(cycleBucket));
         }
-        String source = due.meterType() != null ? due.meterType().name() : "CALENDAR";
-        String boundary;
-        Instant dueAt = due.nextDueAt() != null ? due.nextDueAt() : Instant.now();
-        boundary = dueAt.toString();
-        return "%s:%s:%s:%s".formatted(equipmentId, regulation.getId(), source, boundary);
+        if (due.nextDueAt() != null) {
+            LocalDate dueDate = due.nextDueAt().atZone(ZoneOffset.UTC).toLocalDate();
+            return "%s:CALENDAR:%s".formatted(scope, dueDate);
+        }
+        return scope + ":CALENDAR:BLOCKED:NO_ANCHOR";
+    }
+
+    private String cycleScope(UUID equipmentId, EquipmentMaintenanceEffectiveRule rule) {
+        if (rule.equipmentMaintenanceRuleId() != null) {
+            return "%s:RULE:%s".formatted(equipmentId, rule.equipmentMaintenanceRuleId());
+        }
+        return "%s:REG:%s".formatted(equipmentId, rule.regulationId());
     }
 
     private String formatCycleBucket(double value) {
@@ -456,12 +501,12 @@ public class MaintenanceAutomationService {
         return eventService.toDto(event);
     }
 
-    private WorkOrderType workOrderType(MaintenanceRegulation regulation) {
-        return isInspectionOrDiagnostic(regulation.getMaintenanceKind()) ? WorkOrderType.INSPECTION : WorkOrderType.PLANNED;
+    private WorkOrderType workOrderType(EquipmentMaintenanceEffectiveRule rule) {
+        return isInspectionOrDiagnostic(rule.maintenanceKind()) ? WorkOrderType.INSPECTION : WorkOrderType.PLANNED;
     }
 
-    private WorkType workType(MaintenanceRegulation regulation) {
-        return isInspectionOrDiagnostic(regulation.getMaintenanceKind()) ? WorkType.DIAGNOSTICS : WorkType.REPAIR;
+    private WorkType workType(EquipmentMaintenanceEffectiveRule rule) {
+        return isInspectionOrDiagnostic(rule.maintenanceKind()) ? WorkType.DIAGNOSTICS : WorkType.REPAIR;
     }
 
     private boolean isInspectionOrDiagnostic(MaintenanceKind kind) {

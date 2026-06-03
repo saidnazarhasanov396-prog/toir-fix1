@@ -18,10 +18,26 @@ public interface MaintenanceDueEventRepository extends JpaRepository<Maintenance
 
     Optional<MaintenanceDueEvent> findByIdAndIsDeletedFalse(UUID id);
 
-    Optional<MaintenanceDueEvent> findByEquipmentIdAndRegulationIdAndCycleKeyAndIsDeletedFalse(
-            UUID equipmentId,
-            UUID regulationId,
-            String cycleKey);
+    @Query("""
+            select e
+            from MaintenanceDueEvent e
+            where e.isDeleted = false
+              and e.equipmentId = :equipmentId
+              and e.cycleKey = :cycleKey
+              and (
+                    (:regulationId is null and e.regulationId is null)
+                 or (:regulationId is not null and e.regulationId = :regulationId)
+              )
+              and (
+                    (:ruleId is null and e.equipmentMaintenanceRuleId is null)
+                 or (:ruleId is not null and e.equipmentMaintenanceRuleId = :ruleId)
+              )
+            """)
+    Optional<MaintenanceDueEvent> findByScopeAndCycleKey(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("regulationId") UUID regulationId,
+            @Param("ruleId") UUID ruleId,
+            @Param("cycleKey") String cycleKey);
 
     List<MaintenanceDueEvent> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
@@ -35,4 +51,25 @@ public interface MaintenanceDueEventRepository extends JpaRepository<Maintenance
             """)
     List<MaintenanceDueEvent> findOpenByCycleKey(@Param("cycleKey") String cycleKey,
                                                  @Param("statuses") Collection<MaintenanceDueEventStatus> statuses);
+
+    @Query("""
+            select e
+            from MaintenanceDueEvent e
+            where e.isDeleted = false
+              and e.equipmentId = :equipmentId
+              and e.status in :statuses
+              and (
+                    (:regulationId is null and e.regulationId is null)
+                 or (:regulationId is not null and e.regulationId = :regulationId)
+              )
+              and (
+                    (:ruleId is null and e.equipmentMaintenanceRuleId is null)
+                 or (:ruleId is not null and e.equipmentMaintenanceRuleId = :ruleId)
+              )
+            order by e.updatedAt desc
+            """)
+    List<MaintenanceDueEvent> findOpenByScope(@Param("equipmentId") UUID equipmentId,
+                                              @Param("regulationId") UUID regulationId,
+                                              @Param("ruleId") UUID ruleId,
+                                              @Param("statuses") Collection<MaintenanceDueEventStatus> statuses);
 }

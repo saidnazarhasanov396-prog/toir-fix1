@@ -45,7 +45,9 @@ public class MaintenanceDueCalculationService {
                 regulation.getTriggerMeterType(),
                 regulation.getTriggerMeterInterval(),
                 regulation.getTriggerPolicy(),
-                regulation.getRecalculationPolicy()
+                regulation.getRecalculationPolicy(),
+                regulation.getLeadTimeDays(),
+                regulation.getLeadMeterPercent()
         );
     }
 
@@ -60,7 +62,26 @@ public class MaintenanceDueCalculationService {
                 rule.getTriggerMeterType(),
                 rule.getTriggerMeterInterval(),
                 rule.getTriggerPolicy(),
-                rule.getRecalculationPolicy()
+                rule.getRecalculationPolicy(),
+                null,
+                null
+        );
+    }
+
+    public MaintenanceDueCalculationDto calculate(EquipmentMaintenanceEffectiveRule rule) {
+        return calculate(
+                rule.equipmentId(),
+                rule.regulationId(),
+                rule.equipmentMaintenanceRuleId(),
+                rule.periodicityUnit(),
+                rule.periodicityValue(),
+                rule.toleranceDays(),
+                rule.triggerMeterType(),
+                rule.triggerMeterInterval(),
+                rule.triggerPolicy(),
+                rule.recalculationPolicy(),
+                rule.leadTimeDays(),
+                rule.leadMeterPercent()
         );
     }
 
@@ -73,7 +94,9 @@ public class MaintenanceDueCalculationService {
                                                   MeterType meterType,
                                                   Double meterInterval,
                                                   MaintenanceTriggerPolicy triggerPolicy,
-                                                  MaintenanceRecalculationPolicy recalculationPolicy) {
+                                                  MaintenanceRecalculationPolicy recalculationPolicy,
+                                                  Integer leadTimeDays,
+                                                  Double leadMeterPercent) {
         MaintenanceTriggerPolicy effectiveTriggerPolicy = triggerPolicy == null ? MaintenanceTriggerPolicy.ANY : triggerPolicy;
         MaintenanceRecalculationPolicy effectiveRecalculationPolicy = recalculationPolicy == null
                 ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
@@ -87,18 +110,9 @@ public class MaintenanceDueCalculationService {
                 anchorRepository.findLatestAnchor(equipmentId, regulationId, ruleId);
         Instant lastPerformedAt = anchor.map(MaintenanceCompletionAnchor::getPerformedAt).orElse(null);
 
-        boolean meterTriggerConfigured = meterType != null && meterInterval != null && meterInterval > 0;
-        TriggerSignal calendarSignal = meterTriggerConfigured
-                ? TriggerSignal.notConfigured()
-                : calendarSignal(anchor.orElse(null), periodicityUnit, periodicityValue,
-                        toleranceDays, effectiveRecalculationPolicy);
+        TriggerSignal calendarSignal = calendarSignal(anchor.orElse(null), periodicityUnit, periodicityValue,
+                toleranceDays, leadTimeDays, effectiveRecalculationPolicy);
         TriggerSignal meterSignal = meterSignal(equipmentId, anchor.orElse(null), meterType, meterInterval);
-        if (meterSignal.status() == MaintenanceDueStatus.BLOCKED) {
-            return dto(equipmentId, regulationId, ruleId, MaintenanceDueStatus.BLOCKED,
-                    isDue(calendarSignal), false, lastPerformedAt,
-                    calendarSignal.nextDueAt(), meterType, meterSignal.currentValue(), meterSignal.anchorValue(),
-                    meterInterval, meterSignal.remaining(), meterSignal.explanation());
-        }
 
         List<TriggerSignal> configured = new ArrayList<>();
         if (calendarSignal.configured()) {
@@ -113,44 +127,24 @@ public class MaintenanceDueCalculationService {
                     "No maintenance trigger configured");
         }
 
-        boolean hasBlocked = configured.stream()
-                .anyMatch(signal -> signal.status() == MaintenanceDueStatus.BLOCKED);
-        boolean hasDue = configured.stream().anyMatch(this::isDue);
-        if (hasBlocked && (effectiveTriggerPolicy == MaintenanceTriggerPolicy.ALL || !hasDue)) {
-            String blockedExplanation = configured.stream()
-                    .filter(signal -> signal.status() == MaintenanceDueStatus.BLOCKED)
-                    .map(TriggerSignal::explanation)
-                    .filter(text -> text != null && !text.isBlank())
-                    .findFirst()
-                    .orElse("Required maintenance planning data is missing");
-            return dto(equipmentId, regulationId, ruleId, MaintenanceDueStatus.BLOCKED,
-                    isDue(calendarSignal), isDue(meterSignal), lastPerformedAt, calendarSignal.nextDueAt(),
-                    meterType, meterSignal.currentValue(), meterSignal.anchorValue(), meterInterval,
-                    meterSignal.remaining(), blockedExplanation);
-        }
-
-        MaintenanceDueStatus status = combine(configured, effectiveTriggerPolicy);
-        String explanation = configured.stream()
-                .map(TriggerSignal::explanation)
-                .filter(text -> text != null && !text.isBlank())
-                .findFirst()
-                .orElse(status.name());
-        return dto(equipmentId, regulationId, ruleId, status, isDue(calendarSignal), isDue(meterSignal),
+        CombinedSignal combined = combine(configured, effectiveTriggerPolicy);
+        return dto(equipmentId, regulationId, ruleId, combined.status(), isActive(calendarSignal), isActive(meterSignal),
                 lastPerformedAt, calendarSignal.nextDueAt(), meterType, meterSignal.currentValue(),
-                meterSignal.anchorValue(), meterInterval, meterSignal.remaining(), explanation);
+                meterSignal.anchorValue(), meterInterval, meterSignal.remaining(), combined.explanation());
     }
 
     private TriggerSignal calendarSignal(MaintenanceCompletionAnchor anchor,
                                          PeriodicityUnit unit,
                                          int value,
                                          Integer toleranceDays,
+                                         Integer leadTimeDays,
                                          MaintenanceRecalculationPolicy recalculationPolicy) {
         if (unit == null || value <= 0) {
             return TriggerSignal.notConfigured();
         }
         if (anchor == null) {
             return TriggerSignal.configured(MaintenanceDueStatus.BLOCKED, null, null, null,
-                    "No completion anchor for calendar trigger");
+                    "Calendar trigger blocked: no anchor available");
         }
         Instant base = recalculationPolicy == MaintenanceRecalculationPolicy.FROM_PLANNED_DUE
                 && anchor.getPlannedDueAt() != null
@@ -170,7 +164,7 @@ public class MaintenanceDueCalculationService {
             return TriggerSignal.configured(MaintenanceDueStatus.DUE, nextDue, null, null,
                     "Calendar trigger due");
         }
-        long upcomingDays = Math.max(1, toleranceDays == null ? 0 : toleranceDays);
+        long upcomingDays = Math.max(1, leadTimeDays == null ? toleranceDays == null ? 0 : toleranceDays : leadTimeDays);
         if (!now.isBefore(nextDue.minus(upcomingDays, ChronoUnit.DAYS))) {
             return TriggerSignal.configured(MaintenanceDueStatus.UPCOMING, nextDue, null, null,
                     "Calendar trigger upcoming");
@@ -247,34 +241,81 @@ public class MaintenanceDueCalculationService {
         };
     }
 
-    private MaintenanceDueStatus combine(List<TriggerSignal> signals, MaintenanceTriggerPolicy policy) {
+    private CombinedSignal combine(List<TriggerSignal> signals, MaintenanceTriggerPolicy policy) {
         if (policy == MaintenanceTriggerPolicy.ALL) {
-            boolean allDue = signals.stream()
-                    .allMatch(signal -> signal.status() == MaintenanceDueStatus.DUE
-                            || signal.status() == MaintenanceDueStatus.OVERDUE);
-            if (allDue) {
-                return signals.stream().anyMatch(signal -> signal.status() == MaintenanceDueStatus.OVERDUE)
-                        ? MaintenanceDueStatus.OVERDUE
-                        : MaintenanceDueStatus.DUE;
+            Optional<TriggerSignal> blocked = signals.stream()
+                    .filter(signal -> signal.status() == MaintenanceDueStatus.BLOCKED)
+                    .findFirst();
+            if (blocked.isPresent()) {
+                return new CombinedSignal(MaintenanceDueStatus.BLOCKED, joinExplanations(signals));
             }
-            return signals.stream().anyMatch(signal -> signal.status() == MaintenanceDueStatus.UPCOMING)
-                    ? MaintenanceDueStatus.UPCOMING
-                    : MaintenanceDueStatus.NOT_DUE;
+            boolean allActive = signals.stream().allMatch(this::isActive);
+            if (allActive) {
+                TriggerSignal dominant = dominantActive(signals);
+                return new CombinedSignal(dominant.status(), joinExplanations(dominant, signals));
+            }
+            return new CombinedSignal(MaintenanceDueStatus.NOT_DUE,
+                    "Waiting for all maintenance triggers; " + joinExplanations(signals));
         }
-        if (signals.stream().anyMatch(signal -> signal.status() == MaintenanceDueStatus.OVERDUE)) {
-            return MaintenanceDueStatus.OVERDUE;
+
+        List<TriggerSignal> active = signals.stream().filter(this::isActive).toList();
+        if (!active.isEmpty()) {
+            TriggerSignal dominant = dominantActive(active);
+            return new CombinedSignal(dominant.status(), joinExplanations(dominant, signals));
         }
-        if (signals.stream().anyMatch(signal -> signal.status() == MaintenanceDueStatus.DUE)) {
-            return MaintenanceDueStatus.DUE;
+        Optional<TriggerSignal> blocked = signals.stream()
+                .filter(signal -> signal.status() == MaintenanceDueStatus.BLOCKED)
+                .findFirst();
+        if (blocked.isPresent()) {
+            return new CombinedSignal(MaintenanceDueStatus.BLOCKED, joinExplanations(signals));
         }
-        if (signals.stream().anyMatch(signal -> signal.status() == MaintenanceDueStatus.UPCOMING)) {
-            return MaintenanceDueStatus.UPCOMING;
-        }
-        return MaintenanceDueStatus.NOT_DUE;
+        return new CombinedSignal(MaintenanceDueStatus.NOT_DUE, joinExplanations(signals));
     }
 
-    private boolean isDue(TriggerSignal signal) {
-        return signal.status() == MaintenanceDueStatus.DUE || signal.status() == MaintenanceDueStatus.OVERDUE;
+    private boolean isActive(TriggerSignal signal) {
+        return signal.status() == MaintenanceDueStatus.UPCOMING
+                || signal.status() == MaintenanceDueStatus.DUE
+                || signal.status() == MaintenanceDueStatus.OVERDUE;
+    }
+
+    private TriggerSignal dominantActive(List<TriggerSignal> signals) {
+        return signals.stream()
+                .max(java.util.Comparator.comparingInt(signal -> urgency(signal.status())))
+                .orElse(signals.getFirst());
+    }
+
+    private int urgency(MaintenanceDueStatus status) {
+        return switch (status) {
+            case OVERDUE -> 4;
+            case DUE -> 3;
+            case UPCOMING -> 2;
+            case NOT_DUE -> 1;
+            case BLOCKED -> 0;
+        };
+    }
+
+    private String joinExplanations(List<TriggerSignal> signals) {
+        return signals.stream()
+                .map(TriggerSignal::explanation)
+                .filter(text -> text != null && !text.isBlank())
+                .distinct()
+                .collect(java.util.stream.Collectors.joining("; "));
+    }
+
+    private String joinExplanations(TriggerSignal dominant, List<TriggerSignal> signals) {
+        String rest = signals.stream()
+                .filter(signal -> signal != dominant)
+                .map(TriggerSignal::explanation)
+                .filter(text -> text != null && !text.isBlank())
+                .distinct()
+                .collect(java.util.stream.Collectors.joining("; "));
+        if (dominant.explanation() == null || dominant.explanation().isBlank()) {
+            return rest;
+        }
+        if (rest.isBlank()) {
+            return dominant.explanation();
+        }
+        return dominant.explanation() + "; " + rest;
     }
 
     private MaintenanceDueCalculationDto dto(UUID equipmentId,
@@ -337,4 +378,6 @@ public class MaintenanceDueCalculationService {
             return new TriggerSignal(true, status, nextDueAt, currentValue, anchorValue, remaining, explanation);
         }
     }
+
+    private record CombinedSignal(MaintenanceDueStatus status, String explanation) {}
 }
