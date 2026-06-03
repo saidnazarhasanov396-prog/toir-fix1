@@ -298,11 +298,12 @@ class PprGeneratorServiceLifecycleTest {
     }
 
     @Test
-    void runningGeneratorAgainSkipsExistingPlanRegulationEquipmentTask() {
+    void runningGeneratorAgainForGeneratedPlanSkipsExistingPlanRegulationEquipmentTask() {
         UUID planId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
         PprPlan plan = explicitPreventivePlan(planId);
+        plan.setStatus(PlanStatus.GENERATED);
         MaintenanceRegulation regulation = regulation("MR-PREV", typeId, MaintenanceKind.PREVENTIVE, PeriodicityUnit.MONTH);
         Equipment equipment = equipment(equipmentId, "P-101", typeId, plan.getDepartmentId());
         PprTask existing = new PprTask();
