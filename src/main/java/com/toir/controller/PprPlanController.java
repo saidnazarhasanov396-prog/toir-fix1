@@ -115,8 +115,9 @@ public class PprPlanController {
     @PostMapping
     @PreAuthorize(PPR_PLAN_CREATE_AUTH)
     public ResponseEntity<PprPlanDto> create(@Valid @RequestBody PprPlanRequest request) {
-        assertCanAccessRequestedDepartment(request.departmentId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
+        PprPlanRequest scopedRequest = requestWithScopedDepartment(request);
+        assertCanAccessRequestedDepartment(scopedRequest.departmentId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(scopedRequest));
     }
 
     @PatchMapping("/{id}")
@@ -254,5 +255,31 @@ public class PprPlanController {
             return;
         }
         scopeAccessService.assertCanAccessDepartment(departmentId);
+    }
+
+    private PprPlanRequest requestWithScopedDepartment(PprPlanRequest request) {
+        if (request.departmentId() != null || scopeAccessService.isScopeAdmin()) {
+            return request;
+        }
+        UUID currentDepartmentId = scopeAccessService.currentDepartmentIdOrNull();
+        if (currentDepartmentId == null) {
+            return request;
+        }
+        return new PprPlanRequest(
+                request.name(),
+                currentDepartmentId,
+                request.createdById(),
+                request.notes(),
+                request.fromDate(),
+                request.toDate(),
+                request.pprType(),
+                request.scheduleType(),
+                request.frequency(),
+                request.intervalHours(),
+                request.scopeType(),
+                request.equipmentIds(),
+                request.equipmentTypeIds(),
+                request.regulationIds()
+        );
     }
 }
