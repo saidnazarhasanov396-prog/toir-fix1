@@ -42,6 +42,35 @@ class MaintenanceDueCalculationServiceTest {
     }
 
     @Test
+    void meterTriggerWithoutCompletionHistoryDoesNotUseCalendarAnchor() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        regulation.setTriggerMeterInterval(500.0);
+
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setId(UUID.randomUUID());
+        meter.setEquipmentId(equipmentId);
+        meter.setMeterType(MeterType.ENGINE_HOURS);
+        meter.setCurrentValue(520.0);
+
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(java.util.List.of(meter));
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.DUE);
+        assertThat(result.dueByCalendar()).isFalse();
+        assertThat(result.dueByMeter()).isTrue();
+        assertThat(result.meterType()).isEqualTo(MeterType.ENGINE_HOURS);
+        assertThat(result.meterCurrentValue()).isEqualTo(520.0);
+        assertThat(result.meterInterval()).isEqualTo(500.0);
+        assertThat(result.meterAnchorValue()).isZero();
+        assertThat(result.meterRemaining()).isZero();
+        assertThat(result.explanation()).doesNotContain("No completion anchor for calendar trigger");
+    }
+
+    @Test
     void returnsBlockedWhenConfiguredMeterIsMissing() {
         UUID equipmentId = UUID.randomUUID();
         MaintenanceRegulation regulation = regulation(equipmentId);

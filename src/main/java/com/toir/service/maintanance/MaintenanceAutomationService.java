@@ -32,6 +32,7 @@ import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.WorkOrderService;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -161,6 +162,9 @@ public class MaintenanceAutomationService {
     @Transactional
     public MaintenanceDueEventDto approveDueEvent(UUID eventId, UUID userId) {
         MaintenanceDueEvent event = eventService.getOrThrow(eventId);
+        if (isBlocked(event)) {
+            return blockedEventDto(event);
+        }
         if (event.getStatus() != MaintenanceDueEventStatus.AWAITING_APPROVAL
                 && event.getStatus() != MaintenanceDueEventStatus.DETECTED) {
             return eventService.toDto(event);
@@ -178,6 +182,9 @@ public class MaintenanceAutomationService {
     @Transactional
     public MaintenanceDueEventDto createWorkOrderFromEvent(UUID eventId, UUID userId) {
         MaintenanceDueEvent event = eventService.getOrThrow(eventId);
+        if (isBlocked(event)) {
+            return blockedEventDto(event);
+        }
         MaintenanceRegulation regulation = regulation(event);
         createWorkOrder(event, regulation, userId);
         return eventService.toDto(eventRepository.save(event));
@@ -190,12 +197,16 @@ public class MaintenanceAutomationService {
         if (regulation.getTriggerPolicy() != null && regulation.getTriggerPolicy().name().equals("MANUAL")) {
             return null;
         }
+        if (source == MaintenanceTriggerSource.METER_READING && !hasMeterTrigger(regulation)) {
+            return null;
+        }
         MaintenanceDueCalculationDto due = dueCalculationService.calculate(equipment.getId(), regulation);
         if (!shouldCreateEvent(due.status())) {
             return null;
         }
         String cycleKey = cycleKey(equipment.getId(), regulation, due);
-        MaintenanceDueEvent event = eventRepository.findByCycleKeyAndIsDeletedFalse(cycleKey)
+        MaintenanceDueEvent event = eventRepository
+                .findByEquipmentIdAndRegulationIdAndCycleKeyAndIsDeletedFalse(equipment.getId(), regulation.getId(), cycleKey)
                 .orElseGet(MaintenanceDueEvent::new);
         boolean isNew = event.getId() == null;
         event.setEquipmentId(equipment.getId());
@@ -213,7 +224,7 @@ public class MaintenanceAutomationService {
         event.setExplanation(due.explanation());
         if (isNew) {
             event.setDetectedAt(Instant.now());
-            event.setStatus(initialStatus(regulation));
+            event.setStatus(initialStatus(regulation, due.status()));
         }
         if (isDuplicateSuppressed(regulation, event)) {
             event.setStatus(MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE);
@@ -240,7 +251,16 @@ public class MaintenanceAutomationService {
                 || status == MaintenanceDueStatus.BLOCKED;
     }
 
-    private MaintenanceDueEventStatus initialStatus(MaintenanceRegulation regulation) {
+    private boolean hasMeterTrigger(MaintenanceRegulation regulation) {
+        return regulation.getTriggerMeterType() != null
+                && regulation.getTriggerMeterInterval() != null
+                && regulation.getTriggerMeterInterval() > 0;
+    }
+
+    private MaintenanceDueEventStatus initialStatus(MaintenanceRegulation regulation, MaintenanceDueStatus dueStatus) {
+        if (dueStatus == MaintenanceDueStatus.BLOCKED) {
+            return MaintenanceDueEventStatus.DETECTED;
+        }
         return regulation.getAutomationAction() == AutomationAction.REQUIRE_APPROVAL || regulation.isRequiresApproval()
                 ? MaintenanceDueEventStatus.AWAITING_APPROVAL
                 : MaintenanceDueEventStatus.DETECTED;
@@ -258,6 +278,10 @@ public class MaintenanceAutomationService {
     }
 
     private PprTask createTask(MaintenanceDueEvent event, MaintenanceRegulation regulation, UUID userId) {
+        if (isBlocked(event)) {
+            event.setStatus(MaintenanceDueEventStatus.DETECTED);
+            return null;
+        }
         if (event.getCreatedTaskId() != null) {
             return pprTaskRepository.findByIdAndIsDeletedFalse(event.getCreatedTaskId()).orElse(null);
         }
@@ -295,6 +319,10 @@ public class MaintenanceAutomationService {
     }
 
     private WorkOrderDto createWorkOrder(MaintenanceDueEvent event, MaintenanceRegulation regulation, UUID userId) {
+        if (isBlocked(event)) {
+            event.setStatus(MaintenanceDueEventStatus.DETECTED);
+            return null;
+        }
         if (event.getCreatedWorkOrderId() != null) {
             return null;
         }
@@ -392,15 +420,40 @@ public class MaintenanceAutomationService {
     }
 
     private String cycleKey(UUID equipmentId, MaintenanceRegulation regulation, MaintenanceDueCalculationDto due) {
+        if (due.meterType() != null
+                && due.meterInterval() != null
+                && due.meterInterval() > 0
+                && due.meterCurrentValue() != null) {
+            double cycleBucket = Math.floor(due.meterCurrentValue() / due.meterInterval()) * due.meterInterval();
+            return "METER:%s:%s".formatted(due.meterType().name(), formatCycleBucket(cycleBucket));
+        }
         String source = due.meterType() != null ? due.meterType().name() : "CALENDAR";
         String boundary;
-        if (due.meterType() != null && due.meterInterval() != null && due.meterInterval() > 0 && due.meterCurrentValue() != null) {
-            boundary = Long.toString((long) Math.floor(due.meterCurrentValue() / due.meterInterval()));
-        } else {
-            Instant dueAt = due.nextDueAt() != null ? due.nextDueAt() : Instant.now();
-            boundary = dueAt.toString();
-        }
+        Instant dueAt = due.nextDueAt() != null ? due.nextDueAt() : Instant.now();
+        boundary = dueAt.toString();
         return "%s:%s:%s:%s".formatted(equipmentId, regulation.getId(), source, boundary);
+    }
+
+    private String formatCycleBucket(double value) {
+        if (!Double.isFinite(value)) {
+            return Double.toString(value);
+        }
+        if (Math.abs(value) == 0.0) {
+            return "0";
+        }
+        return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+    }
+
+    private boolean isBlocked(MaintenanceDueEvent event) {
+        return event.getDueStatus() == MaintenanceDueStatus.BLOCKED;
+    }
+
+    private MaintenanceDueEventDto blockedEventDto(MaintenanceDueEvent event) {
+        if (event.getStatus() == MaintenanceDueEventStatus.AWAITING_APPROVAL) {
+            event.setStatus(MaintenanceDueEventStatus.DETECTED);
+            return eventService.toDto(eventRepository.save(event));
+        }
+        return eventService.toDto(event);
     }
 
     private WorkOrderType workOrderType(MaintenanceRegulation regulation) {
