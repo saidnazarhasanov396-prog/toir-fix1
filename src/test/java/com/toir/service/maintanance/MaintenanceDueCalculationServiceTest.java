@@ -446,7 +446,8 @@ class MaintenanceDueCalculationServiceTest {
         regulation.setTriggerMeterInterval(500.0);
 
         EquipmentMeter meter = meter(equipmentId, MeterType.ENGINE_HOURS, 500.0);
-        MaintenanceCompletionAnchor anchor = anchor(equipmentId, regulation.getId(), Instant.now().minusSeconds(172800), 0.0);
+        MaintenanceCompletionAnchor anchor = anchor(equipmentId, regulation.getId(),
+                Instant.parse("2026-06-01T00:00:00Z"), 0.0);
 
         when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(java.util.List.of(meter));
         when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.of(anchor));

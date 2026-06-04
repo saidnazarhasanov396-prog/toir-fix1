@@ -2,6 +2,7 @@ package com.toir.service.maintanance;
 
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.MaintenanceInitialSchedulePolicy;
@@ -37,6 +38,7 @@ public record EquipmentMaintenanceEffectiveRule(
         MaintenanceInitialSchedulePolicy initialSchedulePolicy,
         Instant initialScheduleBaseAt,
         AutomationAction automationAction,
+        ApprovalResultAction approvalResultAction,
         DuplicatePolicy duplicatePolicy,
         Integer leadTimeDays,
         Double leadMeterPercent,
@@ -92,6 +94,9 @@ public record EquipmentMaintenanceEffectiveRule(
                         : regulation.getInitialSchedulePolicy(),
                 regulation.getCreatedAt(),
                 regulation.getAutomationAction() == null ? AutomationAction.REQUIRE_APPROVAL : regulation.getAutomationAction(),
+                regulation.getApprovalResultAction() == null
+                        ? ApprovalResultAction.CREATE_TASK
+                        : regulation.getApprovalResultAction(),
                 regulation.getDuplicatePolicy() == null ? DuplicatePolicy.ONE_ITEM_PER_CYCLE : regulation.getDuplicatePolicy(),
                 regulation.getLeadTimeDays(),
                 regulation.getLeadMeterPercent(),
@@ -137,6 +142,7 @@ public record EquipmentMaintenanceEffectiveRule(
                         : base.getInitialSchedulePolicy(),
                 base.getCreatedAt(),
                 base.getAutomationAction() == null ? AutomationAction.REQUIRE_APPROVAL : base.getAutomationAction(),
+                base.getApprovalResultAction() == null ? ApprovalResultAction.CREATE_TASK : base.getApprovalResultAction(),
                 base.getDuplicatePolicy() == null ? DuplicatePolicy.ONE_ITEM_PER_CYCLE : base.getDuplicatePolicy(),
                 base.getLeadTimeDays(),
                 base.getLeadMeterPercent(),
@@ -179,6 +185,7 @@ public record EquipmentMaintenanceEffectiveRule(
                 effective.initialSchedulePolicy(),
                 effective.initialScheduleBaseAt(),
                 effective.automationAction(),
+                effective.approvalResultAction(),
                 effective.duplicatePolicy(),
                 effective.leadTimeDays(),
                 effective.leadMeterPercent(),
@@ -220,6 +227,7 @@ public record EquipmentMaintenanceEffectiveRule(
                 MaintenanceInitialSchedulePolicy.FROM_OPERATION_START,
                 rule.getCreatedAt(),
                 AutomationAction.REQUIRE_APPROVAL,
+                ApprovalResultAction.CREATE_TASK,
                 DuplicatePolicy.ONE_ITEM_PER_CYCLE,
                 null,
                 null,

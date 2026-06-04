@@ -1,5 +1,6 @@
 package com.toir.entity.maintenance;
 import com.toir.entity.BaseEntity;
+import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.MaintenanceInitialSchedulePolicy;
@@ -85,6 +86,10 @@ public class MaintenanceRegulation extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "automation_action", nullable = false)
     private AutomationAction automationAction = AutomationAction.REQUIRE_APPROVAL;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_result_action", nullable = false)
+    private ApprovalResultAction approvalResultAction = ApprovalResultAction.CREATE_TASK;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "duplicate_policy", nullable = false)
