@@ -1,5 +1,6 @@
 package com.toir.dto.equipment;
 
+import com.toir.entity.FileAsset;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentOutsideReason;
@@ -45,7 +46,10 @@ public record EquipmentDto(
         String operatingDuration,
         LocalDate expectedEndDate,
         String remainingLifetime,
-        LifetimeStatus lifetimeStatus
+        LifetimeStatus lifetimeStatus,
+        Boolean hasWarranty,
+        UUID warrantyAttachmentId,
+        WarrantyAttachmentRef warrantyAttachment
 ) {
     public EquipmentDto(
             UUID id,
@@ -79,7 +83,7 @@ public record EquipmentDto(
                 departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer, status,
                 category, commissionedAt, warrantyUntil, description, averageOperatingLifeHours, department,
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null,
-                LifetimeStatus.UNKNOWN);
+                LifetimeStatus.UNKNOWN, false, null, null);
     }
 
     public EquipmentDto(
@@ -122,6 +126,14 @@ public record EquipmentDto(
             Double powerKw,
             Double voltageV,
             Double pressureBar
+    ) {}
+
+    public record WarrantyAttachmentRef(
+            UUID id,
+            String originalName,
+            String mimeType,
+            long sizeBytes,
+            String downloadUrl
     ) {}
 
     public record PlacementRef(
@@ -171,6 +183,17 @@ public record EquipmentDto(
                                     Ref parent,
                                     PassportRef passport,
                                     PlacementRef placement) {
+        return from(e, department, location, equipmentType, parent, passport, placement, null);
+    }
+
+    public static EquipmentDto from(Equipment e,
+                                    Ref department,
+                                    Ref location,
+                                    Ref equipmentType,
+                                    Ref parent,
+                                    PassportRef passport,
+                                    PlacementRef placement,
+                                    FileAsset warrantyAttachment) {
         return new EquipmentDto(
                 e.getId(), e.getCode(), e.getName(), e.getInventoryNumber(), e.getTechnicalNumber(),
                 e.getSerialNumber(), e.getModel(), e.getEquipmentTypeId(), e.getDepartmentId(),
@@ -179,7 +202,21 @@ public record EquipmentDto(
                 e.getCommissionedAt(), e.getWarrantyUntil(), e.getDescription(), e.getAverageOperatingLifeHours(),
                 department, location, equipmentType, parent, passport, placement,
                 e.getOperationStartDate(), e.getExpectedLifetimeMonths(), e.getExpectedLifetimeYears(),
-                operatingDuration(e), expectedEndDate(e), remainingLifetime(e), lifetimeStatus(e)
+                operatingDuration(e), expectedEndDate(e), remainingLifetime(e), lifetimeStatus(e),
+                Boolean.TRUE.equals(e.getHasWarranty()), e.getWarrantyAttachmentId(), warrantyAttachmentRef(warrantyAttachment)
+        );
+    }
+
+    private static WarrantyAttachmentRef warrantyAttachmentRef(FileAsset fileAsset) {
+        if (fileAsset == null) {
+            return null;
+        }
+        return new WarrantyAttachmentRef(
+                fileAsset.getId(),
+                fileAsset.getOriginalName(),
+                fileAsset.getMimeType(),
+                fileAsset.getSizeBytes(),
+                "/api/v1/files/assets/" + fileAsset.getId() + "/download"
         );
     }
 
