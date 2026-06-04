@@ -114,12 +114,8 @@ public class MaintenanceAutomationService {
                 if (event.getStatus() == MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE) {
                     suppressed++;
                 }
-                if (event.getCreatedTaskId() != null) {
-                    tasks++;
-                }
-                if (event.getCreatedWorkOrderId() != null) {
-                    workOrders++;
-                }
+                tasks += outcome.tasksCreated();
+                workOrders += outcome.workOrdersCreated();
             } catch (RuntimeException ex) {
                 failures++;
                 log.warn("Maintenance automation failed equipmentId={} regulationId={} ruleId={}",
@@ -176,12 +172,8 @@ public class MaintenanceAutomationService {
                     if (event.getStatus() == MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE) {
                         suppressed++;
                     }
-                    if (event.getCreatedTaskId() != null) {
-                        tasks++;
-                    }
-                    if (event.getCreatedWorkOrderId() != null) {
-                        workOrders++;
-                    }
+                    tasks += outcome.tasksCreated();
+                    workOrders += outcome.workOrdersCreated();
                 }
             } catch (RuntimeException ex) {
                 failures++;
@@ -319,28 +311,37 @@ public class MaintenanceAutomationService {
         }
         if (isDuplicateSuppressed(rule, event)) {
             event.setStatus(MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE);
-            return new EvaluationOutcome(eventService.saveEvent(event, equipment), isNew, 0);
+            return new EvaluationOutcome(eventService.saveEvent(event, equipment), isNew, 0, 0, 0);
         }
         event = eventService.saveEvent(event, equipment);
         int notifications = notificationService.notifyEventStatus(event, rule, equipment);
         if (event.getStatus() == MaintenanceDueEventStatus.AWAITING_APPROVAL) {
             notifications += notificationService.notifyRequiresApproval(event, rule, equipment);
         }
-        if (due.status() == MaintenanceDueStatus.BLOCKED
-                || due.status() == MaintenanceDueStatus.UPCOMING
+        if (!canCreateDownstream(due.status())
                 || rule.automationAction() == AutomationAction.TRACK_ONLY
                 || rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
-            return new EvaluationOutcome(event, isNew, notifications);
+            return new EvaluationOutcome(event, isNew, notifications, 0, 0);
         }
+        boolean alreadyHadTask = event.getCreatedTaskId() != null;
+        boolean alreadyHadWorkOrder = event.getCreatedWorkOrderId() != null;
+        int tasksCreated = 0;
+        int workOrdersCreated = 0;
         if (rule.automationAction() == AutomationAction.CREATE_TASK) {
-            createTask(event, rule, userId);
+            PprTask task = createTask(event, rule, userId);
+            if (task != null && !alreadyHadTask) {
+                tasksCreated = 1;
+            }
         } else if (rule.automationAction() == AutomationAction.CREATE_WORK_ORDER) {
             WorkOrderDto workOrder = createWorkOrder(event, rule, userId);
             if (workOrder != null) {
+                if (!alreadyHadWorkOrder) {
+                    workOrdersCreated = 1;
+                }
                 notifications += notificationService.notifyWorkOrderCreated(event, rule, equipment);
             }
         }
-        return new EvaluationOutcome(eventRepository.save(event), isNew, notifications);
+        return new EvaluationOutcome(eventRepository.save(event), isNew, notifications, tasksCreated, workOrdersCreated);
     }
 
     private boolean shouldCreateEvent(MaintenanceDueStatus status) {
@@ -348,6 +349,10 @@ public class MaintenanceAutomationService {
                 || status == MaintenanceDueStatus.DUE
                 || status == MaintenanceDueStatus.OVERDUE
                 || status == MaintenanceDueStatus.BLOCKED;
+    }
+
+    private boolean canCreateDownstream(MaintenanceDueStatus status) {
+        return status == MaintenanceDueStatus.DUE || status == MaintenanceDueStatus.OVERDUE;
     }
 
     private MaintenanceDueEventStatus initialStatus(EquipmentMaintenanceEffectiveRule rule, MaintenanceDueStatus dueStatus) {
@@ -677,10 +682,12 @@ public class MaintenanceAutomationService {
     private record EvaluationOutcome(
             MaintenanceDueEvent event,
             boolean created,
-            int notificationsCreated
+            int notificationsCreated,
+            int tasksCreated,
+            int workOrdersCreated
     ) {
         private static EvaluationOutcome none() {
-            return new EvaluationOutcome(null, false, 0);
+            return new EvaluationOutcome(null, false, 0, 0, 0);
         }
     }
 

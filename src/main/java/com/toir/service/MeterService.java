@@ -211,8 +211,13 @@ public class MeterService {
         try {
             maintenanceAutomationService.evaluateEquipment(meter.getEquipmentId(), MaintenanceTriggerSource.METER_READING);
         } catch (RuntimeException ex) {
-            log.warn("maintenance_automation_after_meter_reading_failed equipmentId={} meterId={} readingId={}",
-                    meter.getEquipmentId(), meter.getId(), saved.getId(), ex);
+            log.warn(
+                    "maintenance_automation_after_meter_reading_failed equipmentId={} meterId={} readingId={}",
+                    meter.getEquipmentId(),
+                    meter.getId(),
+                    saved.getId(),
+                    ex
+            );
         }
 
         return enrichReading(saved);

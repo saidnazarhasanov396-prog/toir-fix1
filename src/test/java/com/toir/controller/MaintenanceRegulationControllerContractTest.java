@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.controller.maintenance.MaintenanceRegulationController;
+import com.toir.dto.maintenanceregulation.EquipmentTypeWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
@@ -140,6 +141,48 @@ class MaintenanceRegulationControllerContractTest {
                 .andExpect(jsonPath("$.content[0].equipmentTypeId").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.content[0].equipmentTypeName").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.content[0].regulations").isEmpty());
+    }
+
+    @Test
+    void equipmentTypeWithRegulationsReturnsTypesAndSummaries() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        EquipmentTypeWithRegulationsDto dto = new EquipmentTypeWithRegulationsDto(
+                equipmentTypeId,
+                "ET-2026-0001",
+                "Pump",
+                "PUMP",
+                4,
+                List.of(new MaintenanceRegulationSummaryDto(
+                        regulationId,
+                        "MR-2026-0001",
+                        "Monthly pump regulation",
+                        "PREVENTIVE",
+                        3,
+                        "Mechanic",
+                        "Lockout",
+                        "Wrench",
+                        "Seal kit",
+                        "Grease",
+                        true
+                ))
+        );
+        when(service.equipmentTypeWithRegulations(equipmentTypeId, true, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/maintenance-regulations/equipment-types")
+                        .param("equipmentTypeId", equipmentTypeId.toString())
+                        .param("active", "true")
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].equipmentTypeId").value(equipmentTypeId.toString()))
+                .andExpect(jsonPath("$.content[0].equipmentTypeCode").value("ET-2026-0001"))
+                .andExpect(jsonPath("$.content[0].equipmentTypeName").value("Pump"))
+                .andExpect(jsonPath("$.content[0].equipmentTypeCategory").value("PUMP"))
+                .andExpect(jsonPath("$.content[0].equipmentCount").value(4))
+                .andExpect(jsonPath("$.content[0].regulations[0].id").value(regulationId.toString()))
+                .andExpect(jsonPath("$.content[0].regulations[0].toolsRequired").value("Wrench"));
     }
 
     @Test

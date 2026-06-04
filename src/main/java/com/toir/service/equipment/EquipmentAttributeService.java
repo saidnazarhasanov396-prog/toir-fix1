@@ -89,6 +89,10 @@ public class EquipmentAttributeService {
             "commissioned_at",
             "warrantyUntil",
             "warranty_until",
+            "warrantyStartDate",
+            "warranty_start_date",
+            "warrantyEndDate",
+            "warranty_end_date",
             "averageOperatingLifeHours",
             "average_operating_life_hours"
     ).stream().map(EquipmentAttributeService::normalizeReservedKey).collect(Collectors.toUnmodifiableSet());

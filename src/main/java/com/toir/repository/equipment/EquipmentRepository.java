@@ -71,6 +71,17 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
             """)
     List<Equipment> findAllForMaintenanceRegulations(@Param("equipmentTypeId") UUID equipmentTypeId);
 
+    @Query("""
+            select e.equipmentTypeId as equipmentTypeId, count(e.id) as equipmentCount
+            from Equipment e
+            where e.isDeleted = false
+              and e.equipmentTypeId in :equipmentTypeIds
+            group by e.equipmentTypeId
+            """)
+    List<EquipmentTypeEquipmentCountProjection> countByEquipmentTypeIds(
+            @Param("equipmentTypeIds") Collection<UUID> equipmentTypeIds
+    );
+
     @Query(value = "SELECT * FROM equipment WHERE parent_id = :parentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Equipment> findAllByParentIdAndIsDeletedFalse(@Param("parentId") UUID parentId);
 

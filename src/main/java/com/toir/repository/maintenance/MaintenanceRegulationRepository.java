@@ -84,4 +84,17 @@ public interface MaintenanceRegulationRepository extends JpaRepository<Maintenan
             @Param("equipmentTypeIds") Collection<UUID> equipmentTypeIds,
             @Param("active") Boolean active
     );
+
+    @Query("""
+            select r
+            from MaintenanceRegulation r
+            where r.isDeleted = false
+              and (:equipmentTypeId is null or r.equipmentTypeId = :equipmentTypeId)
+              and (:active is null or r.active = :active)
+            order by r.updatedAt desc
+            """)
+    List<MaintenanceRegulation> findAllByOptionalEquipmentTypeIdAndOptionalActive(
+            @Param("equipmentTypeId") UUID equipmentTypeId,
+            @Param("active") Boolean active
+    );
 }
