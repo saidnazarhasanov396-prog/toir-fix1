@@ -76,7 +76,7 @@ public class MaintenanceRegulationApplicabilityService {
                                              List<MaintenanceRegulationAttributeCondition> persistedConditions) {
         if ((requestConditions == null || requestConditions.isEmpty())
                 && (persistedConditions == null || persistedConditions.isEmpty())) {
-            return ConditionMatch.matched();
+            return ConditionMatch.success();
         }
         AttributeIndex attributeIndex = loadAttributeIndex(equipment);
         if (requestConditions != null && !requestConditions.isEmpty()) {
@@ -85,14 +85,14 @@ public class MaintenanceRegulationApplicabilityService {
                     return ConditionMatch.unmatched("Excluded by attribute condition: " + condition.attributeKey());
                 }
             }
-            return ConditionMatch.matched();
+            return ConditionMatch.success();
         }
         for (MaintenanceRegulationAttributeCondition condition : persistedConditions) {
             if (!matchesCondition(equipment, attributeIndex, condition)) {
                 return ConditionMatch.unmatched("Excluded by attribute condition: " + condition.getAttributeKey());
             }
         }
-        return ConditionMatch.matched();
+        return ConditionMatch.success();
     }
 
     private AttributeIndex loadAttributeIndex(Equipment equipment) {
@@ -244,7 +244,7 @@ public class MaintenanceRegulationApplicabilityService {
     ) {}
 
     private record ConditionMatch(boolean matched, String reason) {
-        static ConditionMatch matched() {
+        static ConditionMatch success() {
             return new ConditionMatch(true, null);
         }
 
