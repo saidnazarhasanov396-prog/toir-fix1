@@ -85,6 +85,13 @@ public class Equipment extends BaseEntity {
     @Column(name = "warranty_until")
     private LocalDate warrantyUntil;
 
+    @Column(name = "has_warranty", nullable = false)
+    @Builder.Default
+    private Boolean hasWarranty = false;
+
+    @Column(name = "warranty_attachment_id")
+    private UUID warrantyAttachmentId;
+
     @Column(name = "average_operating_life_hours")
     private Long averageOperatingLifeHours;
 
