@@ -35,6 +35,38 @@ public interface MaintenanceOperationRepository extends JpaRepository<Maintenanc
     @Query(value = "SELECT EXISTS(SELECT 1 FROM maintenance_operations WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM maintenance_operations
+                WHERE template_id = cast(:templateId as uuid)
+                  AND sequence = :sequence
+            )
+            """, nativeQuery = true)
+    boolean existsByTemplateIdAndSequence(@Param("templateId") UUID templateId, @Param("sequence") int sequence);
+
+    @Query(value = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM maintenance_operations
+                WHERE template_id = cast(:templateId as uuid)
+                  AND sequence = :sequence
+                  AND id <> cast(:operationId as uuid)
+            )
+            """, nativeQuery = true)
+    boolean existsByTemplateIdAndSequenceAndIdNot(
+            @Param("templateId") UUID templateId,
+            @Param("sequence") int sequence,
+            @Param("operationId") UUID operationId
+    );
+
+    @Query(value = """
+            SELECT COALESCE(MAX(sequence), 0)
+            FROM maintenance_operations
+            WHERE template_id = cast(:templateId as uuid)
+            """, nativeQuery = true)
+    int maxSequenceByTemplateId(@Param("templateId") UUID templateId);
+
     @Query(value = "SELECT COUNT(*) FROM maintenance_operations WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 

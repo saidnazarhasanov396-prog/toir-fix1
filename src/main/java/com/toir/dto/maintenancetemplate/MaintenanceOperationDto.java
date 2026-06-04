@@ -11,7 +11,7 @@ public record MaintenanceOperationDto(
         UUID actionId,
         String actionCode,
         String actionName,
-        @Positive int sequence,
+        @Positive Integer sequence,
         String name,
         String description,
         @PositiveOrZero double durationHours,

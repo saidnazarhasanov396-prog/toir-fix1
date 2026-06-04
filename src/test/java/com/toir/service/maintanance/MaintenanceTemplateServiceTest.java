@@ -2,11 +2,14 @@ package com.toir.service.maintanance;
 
 import com.toir.repository.equipment.EquipmentTypeRepository;
 
+import com.toir.dto.maintenancetemplate.MaintenanceOperationDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
+import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.MaintenanceKind;
 import com.toir.exception.RestException;
+import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.service.SparePartService;
@@ -41,6 +44,9 @@ class MaintenanceTemplateServiceTest {
 
     @Mock
     MaintenanceOperationRepository operationRepository;
+
+    @Mock
+    MaintenanceActionRepository actionRepository;
 
     @Mock
     SparePartService sparePartService;
@@ -158,6 +164,66 @@ class MaintenanceTemplateServiceTest {
         verify(repository, times(2)).save(any(MaintenanceTemplate.class));
     }
 
+    @Test
+    void addOperationWithDuplicateSequenceReturns400() {
+        UUID templateId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId);
+        when(repository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(operationRepository.existsByTemplateIdAndSequence(templateId, 1)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.addOperation(templateId, operationRequest(null, 1, "Inspect seal")))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("Checklist item sequence must be unique within the same template");
+                });
+
+        verify(operationRepository, never()).save(any(MaintenanceOperation.class));
+    }
+
+    @Test
+    void addOperationWithoutSequenceGeneratesNextSequence() {
+        UUID templateId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId);
+        when(repository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(operationRepository.maxSequenceByTemplateId(templateId)).thenReturn(2);
+        when(operationRepository.existsByTemplateIdAndSequence(templateId, 3)).thenReturn(false);
+        when(operationRepository.save(any(MaintenanceOperation.class))).thenAnswer(invocation -> {
+            MaintenanceOperation op = invocation.getArgument(0);
+            op.setId(UUID.randomUUID());
+            return op;
+        });
+
+        MaintenanceOperationDto created = service.addOperation(templateId, operationRequest(null, null, "Inspect seal"));
+
+        assertThat(created.sequence()).isEqualTo(3);
+    }
+
+    @Test
+    void addOperationWithExistingIdUpdatesInsteadOfAppendingDuplicateRow() {
+        UUID templateId = UUID.randomUUID();
+        UUID operationId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId);
+        MaintenanceOperation existing = new MaintenanceOperation();
+        existing.setId(operationId);
+        existing.setTemplate(template);
+        existing.setSequence(1);
+        existing.setName("Old step");
+        existing.setDurationHours(1.0);
+        template.getOperations().add(existing);
+
+        when(repository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(operationRepository.findByIdAndIsDeletedFalse(operationId)).thenReturn(Optional.of(existing));
+        when(operationRepository.existsByTemplateIdAndSequenceAndIdNot(templateId, 2, operationId)).thenReturn(false);
+        when(operationRepository.save(any(MaintenanceOperation.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        MaintenanceOperationDto updated = service.addOperation(templateId, operationRequest(operationId, 2, "Updated step"));
+
+        assertThat(updated.id()).isEqualTo(operationId);
+        assertThat(updated.sequence()).isEqualTo(2);
+        assertThat(updated.name()).isEqualTo("Updated step");
+        assertThat(template.getOperations()).hasSize(1);
+    }
+
     private MaintenanceTemplateRequest request(String code) {
         return new MaintenanceTemplateRequest(
                 code,
@@ -168,5 +234,39 @@ class MaintenanceTemplateServiceTest {
                 4.5,
                 true
         );
+    }
+
+    private MaintenanceOperationDto operationRequest(UUID id, Integer sequence, String name) {
+        return new MaintenanceOperationDto(
+                id,
+                null,
+                null,
+                null,
+                sequence,
+                name,
+                "Description",
+                1.0,
+                "Mechanic",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    private MaintenanceTemplate template(UUID templateId) {
+        MaintenanceTemplate template = new MaintenanceTemplate();
+        template.setId(templateId);
+        template.setCode("MT-2026-0001");
+        template.setName("Template");
+        template.setEquipmentTypeId(UUID.randomUUID());
+        template.setMaintenanceKind(MaintenanceKind.PREVENTIVE);
+        template.setNormativeLaborHours(2.0);
+        return template;
     }
 }
