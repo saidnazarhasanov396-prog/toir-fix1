@@ -122,7 +122,7 @@ class MaintenanceAutomationServiceTest {
         when(dueCalculationService.calculate(any(EquipmentMaintenanceEffectiveRule.class))).thenReturn(due(equipmentId, regulation.getId()));
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
 
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
 
@@ -169,7 +169,7 @@ class MaintenanceAutomationServiceTest {
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
         when(pprTaskRepository.existsOpenByCycleKey(any())).thenReturn(true);
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
 
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
 
@@ -196,7 +196,7 @@ class MaintenanceAutomationServiceTest {
         when(dueCalculationService.calculate(any(EquipmentMaintenanceEffectiveRule.class))).thenReturn(blockedDue(equipmentId, regulation.getId()));
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
 
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
 
@@ -230,7 +230,7 @@ class MaintenanceAutomationServiceTest {
         when(dueCalculationService.calculate(any(EquipmentMaintenanceEffectiveRule.class))).thenReturn(meterDue(equipmentId, regulation.getId(), currentValue));
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
 
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
 
@@ -274,7 +274,7 @@ class MaintenanceAutomationServiceTest {
         );
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty(), Optional.of(existing));
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
 
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
@@ -515,7 +515,7 @@ class MaintenanceAutomationServiceTest {
         when(pprTaskRepository.existsOpenByCycleKey("cycle-task-approved")).thenReturn(false);
         when(pprTaskRepository.maxSequenceByCodePrefix(any())).thenReturn(0L);
         when(pprPlanRepository.findByCodeAndIsDeletedFalse(any())).thenReturn(Optional.of(pprPlan(departmentId)));
-        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignPprTaskId(invocation.getArgument(0, PprTask.class)));
         when(eventRepository.save(event)).thenReturn(event);
         when(eventService.toDto(event)).thenReturn(null);
 
@@ -554,7 +554,7 @@ class MaintenanceAutomationServiceTest {
         when(pprTaskRepository.existsOpenByCycleKey("cycle-task-default")).thenReturn(false);
         when(pprTaskRepository.maxSequenceByCodePrefix(any())).thenReturn(0L);
         when(pprPlanRepository.findByCodeAndIsDeletedFalse(any())).thenReturn(Optional.of(pprPlan(null)));
-        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignPprTaskId(invocation.getArgument(0, PprTask.class)));
         when(eventRepository.save(event)).thenReturn(event);
         when(eventService.toDto(event)).thenReturn(null);
 
@@ -598,12 +598,12 @@ class MaintenanceAutomationServiceTest {
         when(dueCalculationService.calculate(any(EquipmentMaintenanceEffectiveRule.class))).thenReturn(due(equipmentId, regulation.getId()));
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
         when(workOrderRepository.countByIsDeletedFalse()).thenReturn(0L);
         when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
         when(workOrderRepository.existsOpenByCycleKey(any())).thenReturn(false);
         when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
-        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0, MaintenanceDueEvent.class));
 
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
 
@@ -635,12 +635,12 @@ class MaintenanceAutomationServiceTest {
                 .thenReturn(due(equipmentId, regulation.getId()));
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
         when(pprTaskRepository.existsOpenByCycleKey(any())).thenReturn(false);
         when(pprTaskRepository.maxSequenceByCodePrefix(any())).thenReturn(0L);
         when(pprPlanRepository.findByCodeAndIsDeletedFalse(any())).thenReturn(Optional.of(pprPlan(departmentId)));
-        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
-        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignPprTaskId(invocation.getArgument(0, PprTask.class)));
+        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0, MaintenanceDueEvent.class));
 
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
 
@@ -673,12 +673,12 @@ class MaintenanceAutomationServiceTest {
                 .thenReturn(overdueDue(equipmentId, regulation.getId()));
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
         when(pprTaskRepository.existsOpenByCycleKey(any())).thenReturn(false);
         when(pprTaskRepository.maxSequenceByCodePrefix(any())).thenReturn(0L);
         when(pprPlanRepository.findByCodeAndIsDeletedFalse(any())).thenReturn(Optional.of(pprPlan(departmentId)));
-        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
-        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignPprTaskId(invocation.getArgument(0, PprTask.class)));
+        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0, MaintenanceDueEvent.class));
 
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
 
@@ -703,8 +703,8 @@ class MaintenanceAutomationServiceTest {
                 .thenReturn(due(equipmentId, regulation.getId()));
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
-        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
+        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0, MaintenanceDueEvent.class));
 
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
 
@@ -745,13 +745,13 @@ class MaintenanceAutomationServiceTest {
         );
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulationId), eq(null), any())).thenReturn(Optional.empty(), Optional.of(existing));
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
         when(pprTaskRepository.existsOpenByCycleKey(any())).thenReturn(false);
         when(pprTaskRepository.maxSequenceByCodePrefix(any())).thenReturn(0L);
         when(pprPlanRepository.findByCodeAndIsDeletedFalse(any())).thenReturn(Optional.of(pprPlan(departmentId)));
-        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignPprTaskId(invocation.getArgument(0, PprTask.class)));
         when(pprTaskRepository.findByIdAndIsDeletedFalse(taskId)).thenReturn(Optional.of(new PprTask()));
-        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0, MaintenanceDueEvent.class));
 
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
         var secondResult = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
@@ -775,7 +775,7 @@ class MaintenanceAutomationServiceTest {
                 .thenReturn(meterDue(equipmentId, regulation.getId(), 500.0));
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
         when(pprTaskRepository.existsOpenByCycleKey(any())).thenReturn(false);
         when(pprTaskRepository.maxSequenceByCodePrefix(any())).thenReturn(0L);
         when(pprPlanRepository.findByCodeAndIsDeletedFalse(any())).thenReturn(Optional.of(pprPlan(null)));
@@ -803,12 +803,12 @@ class MaintenanceAutomationServiceTest {
                 .thenReturn(overdueDue(equipmentId, regulation.getId()));
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
         when(workOrderRepository.countByIsDeletedFalse()).thenReturn(0L);
         when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
         when(workOrderRepository.existsOpenByCycleKey(any())).thenReturn(false);
         when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
-        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0, MaintenanceDueEvent.class));
 
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
 
@@ -832,7 +832,7 @@ class MaintenanceAutomationServiceTest {
                 .thenReturn(upcomingDue(equipmentId, regulation.getId()));
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
 
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
 
@@ -899,7 +899,7 @@ class MaintenanceAutomationServiceTest {
                 .thenReturn(meterRuleDue(equipmentId, regulation.getId(), override.getId(), 260.0, 250.0));
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(override.getId()), any())).thenReturn(Optional.empty());
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
 
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
 
@@ -947,12 +947,12 @@ class MaintenanceAutomationServiceTest {
         );
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulationId), eq(null), any())).thenReturn(Optional.empty(), Optional.of(existing));
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
         when(workOrderRepository.countByIsDeletedFalse()).thenReturn(0L);
         when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
         when(workOrderRepository.existsOpenByCycleKey(any())).thenReturn(false);
         when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
-        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0, MaintenanceDueEvent.class));
 
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
         var secondResult = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
@@ -985,7 +985,7 @@ class MaintenanceAutomationServiceTest {
         );
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulationId), eq(null), any())).thenReturn(Optional.empty(), Optional.of(existing));
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
 
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
@@ -1023,7 +1023,7 @@ class MaintenanceAutomationServiceTest {
         );
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulationId), eq(null), any())).thenReturn(Optional.empty(), Optional.of(existing));
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
 
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
@@ -1064,12 +1064,12 @@ class MaintenanceAutomationServiceTest {
         );
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulationId), eq(null), any())).thenReturn(Optional.empty(), Optional.of(existing));
-        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
         when(workOrderRepository.countByIsDeletedFalse()).thenReturn(0L);
         when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
         when(workOrderRepository.existsOpenByCycleKey(any())).thenReturn(false);
         when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
-        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0, MaintenanceDueEvent.class));
 
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
         service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
@@ -1077,14 +1077,14 @@ class MaintenanceAutomationServiceTest {
         verify(workOrderService).create(any());
     }
 
-    private MaintenanceDueEvent assignId(MaintenanceDueEvent event) {
+    private MaintenanceDueEvent assignDueEventId(MaintenanceDueEvent event) {
         if (event.getId() == null) {
             ReflectionTestUtils.setField(event, "id", UUID.randomUUID());
         }
         return event;
     }
 
-    private PprTask assignId(PprTask task) {
+    private PprTask assignPprTaskId(PprTask task) {
         if (task.getId() == null) {
             ReflectionTestUtils.setField(task, "id", UUID.randomUUID());
         }
