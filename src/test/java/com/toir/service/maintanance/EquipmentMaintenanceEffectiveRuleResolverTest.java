@@ -116,8 +116,6 @@ class EquipmentMaintenanceEffectiveRuleResolverTest {
         when(ruleRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of(disablingRule));
         when(regulationRepository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(typeId)).thenReturn(List.of(regulation));
         when(conditionRepository.findAllByRegulationIdInAndIsDeletedFalse(List.of(regulation.getId()))).thenReturn(List.of());
-        when(definitionRepository.findAllByEquipmentTypeIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of());
-        when(valueRepository.findAllByEquipmentIdInAndIsDeletedFalse(Set.of(equipmentId))).thenReturn(List.of());
 
         List<EquipmentMaintenanceEffectiveRule> resolved = resolver.resolve(equipmentId);
 
@@ -148,8 +146,6 @@ class EquipmentMaintenanceEffectiveRuleResolverTest {
         when(ruleRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of(override));
         when(regulationRepository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(typeId)).thenReturn(List.of(regulation));
         when(conditionRepository.findAllByRegulationIdInAndIsDeletedFalse(List.of(regulation.getId()))).thenReturn(List.of());
-        when(definitionRepository.findAllByEquipmentTypeIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of());
-        when(valueRepository.findAllByEquipmentIdInAndIsDeletedFalse(Set.of(equipmentId))).thenReturn(List.of());
 
         List<EquipmentMaintenanceEffectiveRule> resolved = resolver.resolveApplicable(equipmentId);
 
