@@ -1329,6 +1329,7 @@ class EquipmentServiceTest {
                 EquipmentCategory.PRODUCTION_EQUIPMENT,
                 null,
                 null,
+                null,
                 true,
                 warrantyAttachmentId,
                 "Pump",
@@ -1369,6 +1370,7 @@ class EquipmentServiceTest {
                 "KSB",
                 EquipmentStatus.ACTIVE,
                 EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
                 null,
                 null,
                 true,
@@ -1417,6 +1419,7 @@ class EquipmentServiceTest {
                 "KSB",
                 EquipmentStatus.ACTIVE,
                 EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
                 null,
                 null,
                 true,
@@ -1500,6 +1503,7 @@ class EquipmentServiceTest {
         when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubEnrichment();
         EquipmentUpdateRequest request = new EquipmentUpdateRequest(
+                null,
                 null,
                 null,
                 null,

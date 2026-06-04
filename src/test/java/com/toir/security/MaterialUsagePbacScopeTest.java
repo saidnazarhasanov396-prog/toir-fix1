@@ -8,10 +8,13 @@ import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.util.AuditBuilderService;
@@ -39,6 +42,9 @@ class MaterialUsagePbacScopeTest {
     StockMovementRepository stockMovementRepository;
     AuditBuilderService auditBuilderService;
     WarehouseRepository warehouseRepository;
+    SparePartRepository sparePartRepository;
+    UserRepository userRepository;
+    RepairRequestRepository repairRequestRepository;
     ScopeAccessService scopeAccessService;
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     RepairMaterialUsageService service;
@@ -51,6 +57,9 @@ class MaterialUsagePbacScopeTest {
         stockMovementRepository = mock(StockMovementRepository.class);
         auditBuilderService = mock(AuditBuilderService.class);
         warehouseRepository = mock(WarehouseRepository.class);
+        sparePartRepository = mock(SparePartRepository.class);
+        userRepository = mock(UserRepository.class);
+        repairRequestRepository = mock(RepairRequestRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
         equipmentStatusLifecycleService = mock(EquipmentStatusLifecycleService.class);
         service = new RepairMaterialUsageService(
@@ -60,6 +69,9 @@ class MaterialUsagePbacScopeTest {
                 stockMovementRepository,
                 auditBuilderService,
                 warehouseRepository,
+                sparePartRepository,
+                userRepository,
+                repairRequestRepository,
                 scopeAccessService,
                 equipmentStatusLifecycleService
         );

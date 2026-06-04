@@ -31,6 +31,7 @@ public record EquipmentDto(
         EquipmentStatus status,
         EquipmentCategory category,
         LocalDate commissionedAt,
+        LocalDate arrivalDate,
         LocalDate warrantyUntil,
         String description,
         Long averageOperatingLifeHours,
@@ -71,6 +72,7 @@ public record EquipmentDto(
             EquipmentStatus status,
             EquipmentCategory category,
             LocalDate commissionedAt,
+            LocalDate arrivalDate,
             LocalDate warrantyUntil,
             String description,
             Long averageOperatingLifeHours,
@@ -93,7 +95,7 @@ public record EquipmentDto(
     ) {
         this(id, code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                 departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer, status,
-                category, commissionedAt, warrantyUntil, description, averageOperatingLifeHours,
+                category, commissionedAt, arrivalDate, warrantyUntil, description, averageOperatingLifeHours,
                 department, location, equipmentType, parent, passport, placement, operationStartDate,
                 expectedLifetimeMonths, expectedLifetimeYears, operatingDuration, expectedEndDate, remainingLifetime,
                 lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment);
@@ -129,7 +131,7 @@ public record EquipmentDto(
     ) {
         this(id, code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                 departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer, status,
-                category, commissionedAt, warrantyUntil, description, averageOperatingLifeHours, department,
+                category, commissionedAt, null, warrantyUntil, description, averageOperatingLifeHours, department,
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null,
                 LifetimeStatus.UNKNOWN, false, null, null, null, null);
     }
@@ -247,7 +249,7 @@ public record EquipmentDto(
                 e.getSerialNumber(), e.getModel(), e.getEquipmentTypeId(), e.getDepartmentId(),
                 e.getLocationId(), e.getParentId(), e.getCriticalityClassId(), e.getResponsibleId(),
                 e.getManufacturer(), e.getStatus(), e.getCategory(),
-                e.getCommissionedAt(), e.getWarrantyUntil(), e.getDescription(), e.getAverageOperatingLifeHours(),
+                e.getCommissionedAt(), e.getArrivalDate(), e.getWarrantyUntil(), e.getDescription(), e.getAverageOperatingLifeHours(),
                 department, location, equipmentType, parent, passport, placement,
                 e.getOperationStartDate(), e.getExpectedLifetimeMonths(), e.getExpectedLifetimeYears(),
                 operatingDuration(e), expectedEndDate(e), remainingLifetime(e), lifetimeStatus(e),

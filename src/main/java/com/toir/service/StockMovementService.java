@@ -8,6 +8,7 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
@@ -46,6 +47,7 @@ public class StockMovementService {
     @Transactional
     public StockMovementDto create(StockMovementRequest request) {
         validatePositiveQuantity(request.quantity());
+        assertWorkOrderIssueUsesMaterialUsageEndpoint(request);
         assertCanAccessWarehouseId(request.warehouseId());
 
         WarehouseStock stock = stockRepository
@@ -124,6 +126,13 @@ public class StockMovementService {
     private void validatePositiveQuantity(double quantity) {
         if (quantity <= 0) {
             throw RestException.badRequest("Quantity must be greater than 0");
+        }
+    }
+
+    private void assertWorkOrderIssueUsesMaterialUsageEndpoint(StockMovementRequest request) {
+        if (request.type() == StockMovementType.ISSUE && request.workOrderId() != null) {
+            throw RestException.badRequest(
+                    "Work order material issues must be recorded through /api/v1/work-orders/{workOrderId}/material-usage");
         }
     }
 

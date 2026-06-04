@@ -4,16 +4,20 @@ import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.StockMovement;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairMaterialUsage;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
@@ -54,6 +58,15 @@ class RepairMaterialUsageServiceTest {
 
     @Mock
     WarehouseRepository warehouseRepository;
+
+    @Mock
+    SparePartRepository sparePartRepository;
+
+    @Mock
+    UserRepository userRepository;
+
+    @Mock
+    RepairRequestRepository repairRequestRepository;
 
     @Mock
     ScopeAccessService scopeAccessService;
@@ -181,6 +194,65 @@ class RepairMaterialUsageServiceTest {
     }
 
     @Test
+    void findByRepairRequestReturnsMaterialUsageFromLinkedWorkOrders() {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        RepairMaterialUsage usage = usage(workOrderId, warehouseId);
+        RepairRequest repairRequest = new RepairRequest();
+        repairRequest.setId(repairRequestId);
+        WorkOrder workOrder = workOrder(workOrderId, WorkOrderStatus.IN_PROGRESS);
+        workOrder.setNumber("WO-7");
+        workOrder.setTitle("Pump repair");
+
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId))
+                .thenReturn(java.util.List.of(workOrder));
+        when(repository.findAllByWorkOrderIdInAndIsDeletedFalseOrderByUpdatedAtDesc(java.util.List.of(workOrderId)))
+                .thenReturn(java.util.List.of(usage));
+
+        var result = service.findByRepairRequest(repairRequestId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().workOrderId()).isEqualTo(workOrderId);
+        assertThat(result.getFirst().workOrderNumber()).isEqualTo("WO-7");
+        assertThat(result.getFirst().workOrderTitle()).isEqualTo("Pump repair");
+        assertThat(result.getFirst().warehouseId()).isEqualTo(warehouseId);
+    }
+
+    @Test
+    void findByPprTaskReturnsEmptyListWhenNoWorkOrderExists() {
+        UUID taskId = UUID.randomUUID();
+        when(workOrderRepository.findFirstByPprTaskIdAndIsDeletedFalseOrderByUpdatedAtDesc(taskId))
+                .thenReturn(Optional.empty());
+
+        assertThat(service.findByPprTask(taskId)).isEmpty();
+    }
+
+    @Test
+    void findByPprTaskReturnsMaterialUsageFromLinkedWorkOrder() {
+        UUID taskId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        WorkOrder workOrder = workOrder(workOrderId, WorkOrderStatus.IN_PROGRESS);
+        workOrder.setPprTaskId(taskId);
+        workOrder.setNumber("PPR-WO-1");
+        RepairMaterialUsage usage = usage(workOrderId, warehouseId);
+
+        when(workOrderRepository.findFirstByPprTaskIdAndIsDeletedFalseOrderByUpdatedAtDesc(taskId))
+                .thenReturn(Optional.of(workOrder));
+        when(repository.findAllByWorkOrderIdInAndIsDeletedFalseOrderByUpdatedAtDesc(java.util.List.of(workOrderId)))
+                .thenReturn(java.util.List.of(usage));
+
+        var result = service.findByPprTask(taskId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().workOrderId()).isEqualTo(workOrderId);
+        assertThat(result.getFirst().workOrderNumber()).isEqualTo("PPR-WO-1");
+    }
+
+    @Test
     void registerSucceedsForInProgressWorkOrder() {
         UUID workOrderId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
@@ -276,6 +348,17 @@ class RepairMaterialUsageServiceTest {
         stock.setQuantity(quantity);
         stock.setReservedQty(reservedQty);
         return stock;
+    }
+
+    private RepairMaterialUsage usage(UUID workOrderId, UUID warehouseId) {
+        RepairMaterialUsage usage = new RepairMaterialUsage();
+        usage.setId(UUID.randomUUID());
+        usage.setWorkOrderId(workOrderId);
+        usage.setWarehouseId(warehouseId);
+        usage.setSparePartId(UUID.randomUUID());
+        usage.setQuantity(2);
+        usage.setUnitCost(4.5);
+        return usage;
     }
 
     private Warehouse warehouse(UUID warehouseId) {

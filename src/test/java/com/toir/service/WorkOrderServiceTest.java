@@ -5,6 +5,7 @@ import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.CompletionAct;
 import com.toir.entity.Department;
 import com.toir.entity.PprPlan;
@@ -56,6 +57,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
+import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -138,6 +140,9 @@ class WorkOrderServiceTest {
 
     @Mock
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+
+    @Mock
+    RepairMaterialUsageService repairMaterialUsageService;
 
     @Mock
     MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
@@ -666,6 +671,45 @@ class WorkOrderServiceTest {
 
         assertThat(response.operationsCount()).isEqualTo(2);
         assertThat(response.materialsCount()).isEqualTo(4);
+    }
+
+    @Test
+    void detailIncludesMaterialUsageLines() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        RepairMaterialUsageDto usage = new RepairMaterialUsageDto(
+                UUID.randomUUID(),
+                workOrderId,
+                "WO-100",
+                "Repair pump",
+                warehouseId,
+                "Main warehouse",
+                sparePartId,
+                "Bearing",
+                "BRG-1",
+                null,
+                2,
+                15.0,
+                30.0,
+                java.time.Instant.parse("2026-06-04T09:00:00Z"),
+                UUID.randomUUID(),
+                "Technician",
+                UUID.randomUUID(),
+                "Installed"
+        );
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(workExecutionRepository.countByWorkOrderIds(List.of(workOrderId))).thenReturn(List.of());
+        when(repairMaterialUsageRepository.countByWorkOrderIds(List.of(workOrderId))).thenReturn(List.of(countProjection(workOrderId, 1)));
+        when(repairMaterialUsageService.findByWorkOrder(workOrderId)).thenReturn(List.of(usage));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.findById(workOrderId);
+
+        assertThat(response.materialsCount()).isEqualTo(1);
+        assertThat(response.materialUsages()).containsExactly(usage);
     }
 
     @Test
@@ -1647,6 +1691,82 @@ class WorkOrderServiceTest {
 
         assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
         assertThat(result.result()).isEqualTo("done");
+    }
+
+    @Test
+    void completeWithMaterialUsagesIssuesMaterialsBeforeCompletion() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        RepairMaterialUsageDto usage = new RepairMaterialUsageDto(
+                null,
+                null,
+                warehouseId,
+                sparePartId,
+                2,
+                12.5
+        );
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repairMaterialUsageService.register(workOrderId, usage)).thenReturn(usage);
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest(
+                "done",
+                "summary",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(usage)
+        ));
+
+        assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
+        verify(repairMaterialUsageService).register(workOrderId, usage);
+        verify(repository).save(workOrder);
+    }
+
+    @Test
+    void completeWithMaterialUsageFailureDoesNotSaveCompletedWorkOrder() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        RepairMaterialUsageDto usage = new RepairMaterialUsageDto(
+                null,
+                null,
+                warehouseId,
+                sparePartId,
+                99,
+                12.5
+        );
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repairMaterialUsageService.register(workOrderId, usage))
+                .thenThrow(RestException.badRequest("Cannot write off more than available"));
+
+        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest(
+                "done",
+                "summary",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(usage)
+        )))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Cannot write off more than available");
+
+        assertThat(workOrder.getStatus()).isEqualTo(WorkOrderStatus.IN_PROGRESS);
+        verify(repository, never()).save(any(WorkOrder.class));
     }
 
     @Test

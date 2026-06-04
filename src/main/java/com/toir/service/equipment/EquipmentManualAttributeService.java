@@ -36,6 +36,8 @@ public class EquipmentManualAttributeService {
             "department_id",
             "equipmentTypeId",
             "equipment_type_id",
+            "arrivalDate",
+            "arrival_date",
             "averageOperatingLifeHours",
             "average_operating_life_hours",
             "inventoryNumber",

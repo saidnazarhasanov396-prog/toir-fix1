@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.util.UUID;
+import java.time.Instant;
 
 @Entity
 @Table(name = "repair_material_usages")
@@ -24,10 +25,21 @@ public class RepairMaterialUsage extends BaseEntity {
     @Column(name = "spare_part_id", nullable = false)
     private UUID sparePartId;
 
+    @Column(name = "stock_movement_id")
+    private UUID stockMovementId;
+
+    @Column(name = "issued_by_id")
+    private UUID issuedById;
+
+    @Column(name = "issued_at")
+    private Instant issuedAt;
+
     @Column(nullable = false)
     private double quantity;
 
     @Column(name = "unit_cost")
     private Double unitCost;
 
+    @Column(columnDefinition = "text")
+    private String notes;
 }

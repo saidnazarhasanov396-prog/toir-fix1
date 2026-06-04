@@ -32,7 +32,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -318,7 +317,7 @@ class PprPbacScopeTest {
                         .param("actualLaborHours", "1.5"))
                 .andExpect(status().isForbidden());
 
-        verify(service, never()).completeTask(eq(taskId), anyDouble());
+        verify(service, never()).completeTask(eq(taskId), any(com.toir.dto.pprplanning.CompletePprTaskRequest.class));
     }
 
     private PprPlan plan(UUID id, UUID departmentId) {

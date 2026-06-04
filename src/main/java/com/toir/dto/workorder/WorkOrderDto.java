@@ -1,5 +1,7 @@
 package com.toir.dto.workorder;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -49,8 +51,14 @@ public record WorkOrderDto(
         DefectBriefDto defect,
         int operationsCount,
         int materialsCount,
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        List<RepairMaterialUsageDto> materialUsages,
         Instant updatedAt
 ) {
+    public WorkOrderDto {
+        materialUsages = materialUsages == null ? List.of() : List.copyOf(materialUsages);
+    }
+
     public WorkOrderDto(UUID id,
                         String number,
                         String title,
@@ -92,7 +100,7 @@ public record WorkOrderDto(
                 pprTaskId, contractorId, status, type, workType, priority, startPlannedAt, endPlannedAt,
                 startedAt, completedAt, summary, result, closureNotes, createdById, approvedById, warehouseId,
                 replacementEquipmentId, replacementEquipmentName, tasks, repairRequest, defect, operationsCount,
-                materialsCount, null);
+                materialsCount, List.of(), null);
     }
 
     public WorkOrderDto(UUID id,
@@ -131,7 +139,7 @@ public record WorkOrderDto(
                 repairRequestId, defectId, pprTaskId, contractorId, status, type, workType, priority,
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
                 createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
-                tasks, repairRequest, defect, operationsCount, materialsCount, null);
+                tasks, repairRequest, defect, operationsCount, materialsCount, List.of(), null);
     }
 //    public static WorkOrderDto from(WorkOrder w) {
 //        return new WorkOrderDto(

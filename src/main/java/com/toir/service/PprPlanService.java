@@ -9,6 +9,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.PlanStatus;
@@ -22,6 +23,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprPlanStatsProjection;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
@@ -30,6 +32,7 @@ import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
+import com.toir.service.repair.RepairMaterialUsageService;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -60,6 +63,7 @@ public class PprPlanService {
 
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
+    private final WorkOrderRepository workOrderRepository;
     private final DepartmentRepository departmentRepository;
     private final EquipmentRepository equipmentRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
@@ -68,6 +72,7 @@ public class PprPlanService {
     private final PprGeneratorService generatorService;
     private final AuditBuilderService auditBuilderService;
     private final AuditSerializationService auditSerializationService;
+    private final RepairMaterialUsageService repairMaterialUsageService;
     private final EntityManager entityManager;
     private static final int MAX_PLAN_CODE_GENERATION_ATTEMPTS = 50;
     private static final int MAX_TASK_CODE_GENERATION_ATTEMPTS = 50;
@@ -320,13 +325,19 @@ public class PprPlanService {
     }
 
     public PprTaskDto completeTask(UUID taskId, Double actualLaborHours) {
+        return completeTask(taskId, new CompletePprTaskRequest(actualLaborHours, null));
+    }
+
+    public PprTaskDto completeTask(UUID taskId, CompletePprTaskRequest request) {
         PprTask task = getTask(taskId);
         if (task.getStatus() != PprTaskStatus.IN_PROGRESS) {
             throw RestException.badRequest("Only IN_PROGRESS PPR tasks can be completed");
         }
+        Double actualLaborHours = request == null ? null : request.actualLaborHours();
         if (actualLaborHours != null && actualLaborHours < 0) {
             throw RestException.badRequest("Actual labor hours cannot be negative");
         }
+        issueTaskCompletionMaterials(taskId, request);
         task.setStatus(PprTaskStatus.COMPLETED);
         task.setActualLaborHours(actualLaborHours);
 
@@ -343,6 +354,15 @@ public class PprPlanService {
         );
 
         return PprTaskDto.from(task);
+    }
+
+    private void issueTaskCompletionMaterials(UUID taskId, CompletePprTaskRequest request) {
+        if (request == null || request.materialUsages() == null || request.materialUsages().isEmpty()) {
+            return;
+        }
+        WorkOrder workOrder = workOrderRepository.findFirstByPprTaskIdAndIsDeletedFalseOrderByUpdatedAtDesc(taskId)
+                .orElseThrow(() -> RestException.badRequest("Material usage requires a linked Work Order"));
+        request.materialUsages().forEach(usage -> repairMaterialUsageService.register(workOrder.getId(), usage));
     }
 
     public PprTaskDto cancelTask(UUID taskId, String reason) {

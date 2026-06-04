@@ -30,6 +30,7 @@ public record EquipmentCreateRequest(
         EquipmentStatus status,
         EquipmentCategory category,
         LocalDate commissionedAt,
+        LocalDate arrivalDate,
         LocalDate warrantyUntil,
         Boolean hasWarranty,
         UUID warrantyAttachmentId,
@@ -62,6 +63,7 @@ public record EquipmentCreateRequest(
                 EquipmentStatus status,
                 EquipmentCategory category,
                 LocalDate commissionedAt,
+                LocalDate arrivalDate,
                 LocalDate warrantyUntil,
                 Boolean hasWarranty,
                 UUID warrantyAttachmentId,
@@ -76,7 +78,7 @@ public record EquipmentCreateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
-                        manufacturer, status, category, commissionedAt, warrantyUntil, hasWarranty,
+                        manufacturer, status, category, commissionedAt, arrivalDate, warrantyUntil, hasWarranty,
                         warrantyAttachmentId, null, null, description, averageOperatingLifeHours,
                         operationStartDate, expectedLifetimeMonths, expectedLifetimeYears, attributes, manualAttributes,
                         location);
@@ -108,7 +110,7 @@ public record EquipmentCreateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
-                        manufacturer, status, category, commissionedAt, warrantyUntil, false, null, null, null, description,
+                        manufacturer, status, category, commissionedAt, null, warrantyUntil, false, null, null, null, description,
                         averageOperatingLifeHours, null, null, null, attributes, manualAttributes, null);
         }
 
@@ -139,7 +141,7 @@ public record EquipmentCreateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
-                        manufacturer, status, category, commissionedAt, warrantyUntil, false, null, null, null, description,
+                        manufacturer, status, category, commissionedAt, null, warrantyUntil, false, null, null, null, description,
                         averageOperatingLifeHours, null, null, null, attributes, manualAttributes, location);
         }
 
@@ -168,7 +170,7 @@ public record EquipmentCreateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
-                        manufacturer, status, category, commissionedAt, warrantyUntil, false, null, null, null, description,
+                        manufacturer, status, category, commissionedAt, null, warrantyUntil, false, null, null, null, description,
                         averageOperatingLifeHours, null, null, null, attributes, null, null);
         }
 
@@ -196,7 +198,7 @@ public record EquipmentCreateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
-                        manufacturer, status, category, commissionedAt, warrantyUntil, false, null, null, null, description, null,
+                        manufacturer, status, category, commissionedAt, null, warrantyUntil, false, null, null, null, description, null,
                         null, null, null, attributes, null, null);
         }
 
@@ -224,7 +226,7 @@ public record EquipmentCreateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
-                        manufacturer, status, category, commissionedAt, warrantyUntil, false, null, null, null, description,
+                        manufacturer, status, category, commissionedAt, null, warrantyUntil, false, null, null, null, description,
                         averageOperatingLifeHours, null, null, null, null, null, null);
         }
 
@@ -251,7 +253,7 @@ public record EquipmentCreateRequest(
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
-                        manufacturer, status, category, commissionedAt, warrantyUntil, false, null, null, null, description, null,
+                        manufacturer, status, category, commissionedAt, null, warrantyUntil, false, null, null, null, description, null,
                         null, null, null, null, null, null);
         }
 }

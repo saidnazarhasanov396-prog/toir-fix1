@@ -39,6 +39,7 @@ class WorkOrderServiceStatsTest {
     @Mock com.toir.repository.WarehouseRepository warehouseRepository;
     @Mock com.toir.repository.WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     @Mock WarehouseEquipmentItemService warehouseEquipmentItemService;
+    @Mock com.toir.service.repair.RepairMaterialUsageService repairMaterialUsageService;
 
     @InjectMocks
     WorkOrderService service;
