@@ -3,6 +3,7 @@ package com.toir.service.equipment;
 import com.toir.dto.equipment.*;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.file.UploadFileResponse;
+import com.toir.entity.FileAsset;
 import com.toir.entity.UploadedFile;
 import com.toir.repository.equipment.EquipmentStatsProjection;
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
@@ -32,6 +33,7 @@ import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.DowntimeEventRepository;
+import com.toir.repository.FileAssetRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -90,6 +92,7 @@ public class EquipmentService {
     private final EquipmentLocationValidator equipmentLocationValidator;
     private final AuditBuilderService auditBuilderService;
     private final FileService fileService;
+    private final FileAssetRepository fileAssetRepository;
     private final UploadedFileRepository uploadedFileRepository;
     private final EquipmentDocumentRepository equipmentDocumentRepository;
     private final UserRepository userRepository;
@@ -397,6 +400,7 @@ public class EquipmentService {
             throw RestException.conflict("Inventory number already exists: " + request.inventoryNumber());
         }
         validateParent(null, request.parentId());
+        validateWarrantyAttachment(request.hasWarranty(), request.warrantyAttachmentId());
         Equipment entity = new Equipment();
         entity.setCode(nextCode());
         apply(entity, request);
@@ -451,6 +455,7 @@ public class EquipmentService {
 
         boolean equipmentTypeChanged = isEquipmentTypeChanged(entity.getEquipmentTypeId(), request.equipmentTypeId());
         validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
+        validateWarrantyAttachmentForUpdate(request);
 
         applyForUpdate(entity, request);
         if (location != null) {
@@ -559,6 +564,7 @@ public class EquipmentService {
         Set<UUID> typeIds = collectIds(items, Equipment::getEquipmentTypeId);
         Set<UUID> parentIds = collectIds(items, Equipment::getParentId);
         Set<UUID> currentWarehouseIds = collectIds(items, Equipment::getCurrentWarehouseId);
+        Set<UUID> warrantyAttachmentIds = collectIds(items, Equipment::getWarrantyAttachmentId);
         Set<UUID> equipmentIds = items.stream().map(Equipment::getId).collect(Collectors.toSet());
 
         Map<UUID, Department> deptMap = byId(departmentRepository.findAllByIdInAndIsDeletedFalse(deptIds), Department::getId);
@@ -586,6 +592,9 @@ public class EquipmentService {
         Map<UUID, EquipmentPassport> passportMap = passportRepository
                 .findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
                 .collect(Collectors.toMap(EquipmentPassport::getEquipmentId, Function.identity(), (a, b) -> a));
+        Map<UUID, FileAsset> warrantyAttachmentMap = warrantyAttachmentIds.isEmpty()
+                ? Collections.emptyMap()
+                : byId(fileAssetRepository.findAllByIdInAndIsDeletedFalse(warrantyAttachmentIds), FileAsset::getId);
 
         return items.stream()
                 .map(e -> {
@@ -609,7 +618,8 @@ public class EquipmentService {
                             typeRef(typeMap.get(e.getEquipmentTypeId())),
                             parentRef(parentMap.get(e.getParentId())),
                             passportRef(passportMap.get(e.getId())),
-                            placement
+                            placement,
+                            warrantyAttachmentMap.get(e.getWarrantyAttachmentId())
                     );
                 })
                 .toList();
@@ -801,6 +811,8 @@ public class EquipmentService {
         entity.setCategory(request.category() != null ? request.category() : EquipmentCategory.PRODUCTION_EQUIPMENT);
         entity.setCommissionedAt(request.commissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil());
+        entity.setHasWarranty(Boolean.TRUE.equals(request.hasWarranty()));
+        entity.setWarrantyAttachmentId(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyAttachmentId() : null);
         entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours());
         entity.setOperationStartDate(request.operationStartDate());
         entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths());
@@ -1303,6 +1315,7 @@ public class EquipmentService {
         entity.setCategory(request.category() != null ? request.category() : entity.getCategory());
         entity.setCommissionedAt(request.commissionedAt() != null ? request.commissionedAt() : entity.getCommissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil() != null ? request.warrantyUntil() : entity.getWarrantyUntil());
+        applyWarrantyForUpdate(entity, request);
         entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours() != null
                 ? request.averageOperatingLifeHours()
                 : entity.getAverageOperatingLifeHours());
@@ -1316,6 +1329,41 @@ public class EquipmentService {
                 ? request.expectedLifetimeYears()
                 : entity.getExpectedLifetimeYears());
         entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
+    }
+
+    private void validateWarrantyAttachment(Boolean hasWarranty, UUID warrantyAttachmentId) {
+        if (Boolean.TRUE.equals(hasWarranty) && warrantyAttachmentId != null) {
+            getFileAssetOrThrow(warrantyAttachmentId);
+        }
+    }
+
+    private void validateWarrantyAttachmentForUpdate(EquipmentUpdateRequest request) {
+        if (Boolean.FALSE.equals(request.hasWarranty())) {
+            return;
+        }
+        if (request.warrantyAttachmentId() != null) {
+            getFileAssetOrThrow(request.warrantyAttachmentId());
+        }
+    }
+
+    private FileAsset getFileAssetOrThrow(UUID fileAssetId) {
+        return fileAssetRepository.findByIdAndIsDeletedFalse(fileAssetId)
+                .orElseThrow(() -> RestException.notFound("File not found: " + fileAssetId));
+    }
+
+    private void applyWarrantyForUpdate(Equipment entity, EquipmentUpdateRequest request) {
+        if (Boolean.FALSE.equals(request.hasWarranty())) {
+            entity.setHasWarranty(false);
+            entity.setWarrantyAttachmentId(null);
+            return;
+        }
+        if (Boolean.TRUE.equals(request.hasWarranty())) {
+            entity.setHasWarranty(true);
+        }
+        if (request.warrantyAttachmentId() != null) {
+            entity.setHasWarranty(true);
+            entity.setWarrantyAttachmentId(request.warrantyAttachmentId());
+        }
     }
 
     private void validateNoDirectStatusChange(Equipment entity, EquipmentStatus requestedStatus) {

@@ -10,6 +10,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AutomationAction;
+import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceDueEventStatus;
@@ -237,6 +238,7 @@ public class MaintenanceAutomationService {
     @Transactional
     public MaintenanceDueEventDto approveDueEvent(UUID eventId, UUID userId) {
         MaintenanceDueEvent event = eventService.getOrThrow(eventId);
+        eventService.assertCanAccessEvent(event);
         if (isBlocked(event)) {
             return blockedEventDto(event);
         }
@@ -247,8 +249,7 @@ public class MaintenanceAutomationService {
         EquipmentMaintenanceEffectiveRule rule = effectiveRule(event);
         enforceApprovalAuthority(rule);
         Equipment equipment = equipment(event);
-        if (rule.automationAction() == AutomationAction.CREATE_TASK
-                || rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
+        if (approvalResultAction(rule) == ApprovalResultAction.CREATE_TASK) {
             createTask(event, rule, userId);
         } else {
             WorkOrderDto workOrder = createWorkOrder(event, rule, userId);
@@ -264,6 +265,7 @@ public class MaintenanceAutomationService {
     @Transactional
     public MaintenanceDueEventDto createWorkOrderFromEvent(UUID eventId, UUID userId) {
         MaintenanceDueEvent event = eventService.getOrThrow(eventId);
+        eventService.assertCanAccessEvent(event);
         if (isBlocked(event)) {
             return blockedEventDto(event);
         }
@@ -325,6 +327,7 @@ public class MaintenanceAutomationService {
             notifications += notificationService.notifyRequiresApproval(event, rule, equipment);
         }
         if (due.status() == MaintenanceDueStatus.BLOCKED
+                || due.status() == MaintenanceDueStatus.UPCOMING
                 || rule.automationAction() == AutomationAction.TRACK_ONLY
                 || rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
             return new EvaluationOutcome(event, isNew, notifications);
@@ -351,9 +354,23 @@ public class MaintenanceAutomationService {
         if (dueStatus == MaintenanceDueStatus.BLOCKED) {
             return MaintenanceDueEventStatus.DETECTED;
         }
+        if (dueStatus == MaintenanceDueStatus.UPCOMING) {
+            return MaintenanceDueEventStatus.DETECTED;
+        }
         return rule.automationAction() == AutomationAction.REQUIRE_APPROVAL || rule.requiresApproval()
                 ? MaintenanceDueEventStatus.AWAITING_APPROVAL
                 : MaintenanceDueEventStatus.DETECTED;
+    }
+
+    private ApprovalResultAction approvalResultAction(EquipmentMaintenanceEffectiveRule rule) {
+        if (rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
+            return rule.approvalResultAction() == null
+                    ? ApprovalResultAction.CREATE_TASK
+                    : rule.approvalResultAction();
+        }
+        return rule.automationAction() == AutomationAction.CREATE_WORK_ORDER
+                ? ApprovalResultAction.CREATE_WORK_ORDER
+                : ApprovalResultAction.CREATE_TASK;
     }
 
     private boolean isDuplicateSuppressed(EquipmentMaintenanceEffectiveRule rule, MaintenanceDueEvent event) {

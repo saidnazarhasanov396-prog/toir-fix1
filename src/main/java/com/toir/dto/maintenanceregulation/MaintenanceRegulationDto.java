@@ -2,6 +2,7 @@ package com.toir.dto.maintenanceregulation;
 
 import com.toir.enums.MaintenanceKind;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.MaintenanceInitialSchedulePolicy;
@@ -37,6 +38,7 @@ public record MaintenanceRegulationDto(
         MaintenanceRecalculationPolicy recalculationPolicy,
         MaintenanceInitialSchedulePolicy initialSchedulePolicy,
         AutomationAction automationAction,
+        ApprovalResultAction approvalResultAction,
         DuplicatePolicy duplicatePolicy,
         Integer leadTimeDays,
         Double leadMeterPercent,
@@ -70,6 +72,7 @@ public record MaintenanceRegulationDto(
             MaintenanceTriggerPolicy triggerPolicy,
             MaintenanceRecalculationPolicy recalculationPolicy,
             AutomationAction automationAction,
+            ApprovalResultAction approvalResultAction,
             DuplicatePolicy duplicatePolicy,
             Integer leadTimeDays,
             Double leadMeterPercent,
@@ -84,9 +87,9 @@ public record MaintenanceRegulationDto(
         this(id, code, name, description, equipmentTypeId, equipmentTypeName, templateId, templateCode, templateName,
                 maintenanceKind, normativeLaborHours, active, periodicityUnit, periodicityValue, toleranceDays,
                 requiresShutdown, triggerMeterType, triggerMeterInterval, triggerPolicy, recalculationPolicy,
-                MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, automationAction, duplicatePolicy, leadTimeDays,
-                leadMeterPercent, defaultDepartmentId, defaultResponsibleId, defaultPriority, requiresApproval,
-                approvalRole, approvalPermission, attributeConditions);
+                MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, automationAction, approvalResultAction,
+                duplicatePolicy, leadTimeDays, leadMeterPercent, defaultDepartmentId, defaultResponsibleId,
+                defaultPriority, requiresApproval, approvalRole, approvalPermission, attributeConditions);
     }
 
     public MaintenanceRegulationDto(
@@ -114,7 +117,7 @@ public record MaintenanceRegulationDto(
                 requiresShutdown, triggerMeterType, triggerMeterInterval, MaintenanceTriggerPolicy.ANY,
                 MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION,
                 MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, AutomationAction.REQUIRE_APPROVAL,
-                DuplicatePolicy.ONE_ITEM_PER_CYCLE,
+                ApprovalResultAction.CREATE_TASK, DuplicatePolicy.ONE_ITEM_PER_CYCLE,
                 null, null, null, null, null, true, null, null,
                 List.of());
     }
@@ -145,7 +148,7 @@ public record MaintenanceRegulationDto(
                 requiresShutdown, triggerMeterType, triggerMeterInterval, MaintenanceTriggerPolicy.ANY,
                 MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION,
                 MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, AutomationAction.REQUIRE_APPROVAL,
-                DuplicatePolicy.ONE_ITEM_PER_CYCLE,
+                ApprovalResultAction.CREATE_TASK, DuplicatePolicy.ONE_ITEM_PER_CYCLE,
                 null, null, null, null, null, true, null, null,
                 attributeConditions == null ? List.of() : attributeConditions);
     }
@@ -174,6 +177,7 @@ public record MaintenanceRegulationDto(
                         ? MaintenanceInitialSchedulePolicy.FROM_OPERATION_START
                         : r.getInitialSchedulePolicy(),
                 r.getAutomationAction() == null ? AutomationAction.REQUIRE_APPROVAL : r.getAutomationAction(),
+                r.getApprovalResultAction() == null ? ApprovalResultAction.CREATE_TASK : r.getApprovalResultAction(),
                 r.getDuplicatePolicy() == null ? DuplicatePolicy.ONE_ITEM_PER_CYCLE : r.getDuplicatePolicy(),
                 r.getLeadTimeDays(),
                 r.getLeadMeterPercent(),

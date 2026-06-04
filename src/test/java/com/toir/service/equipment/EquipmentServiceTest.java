@@ -13,6 +13,7 @@ import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
 import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
+import com.toir.entity.FileAsset;
 import com.toir.entity.Location;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
@@ -38,6 +39,7 @@ import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.DowntimeEventRepository;
+import com.toir.repository.FileAssetRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -104,6 +106,9 @@ class EquipmentServiceTest {
 
     @Mock
     EquipmentPassportRepository passportRepository;
+
+    @Mock
+    FileAssetRepository fileAssetRepository;
 
     @Mock
     EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
@@ -243,6 +248,41 @@ class EquipmentServiceTest {
         assertThat(dto.location().id()).isEqualTo(locationId);
         assertThat(dto.location().code()).isEqualTo("LOC-001");
         assertThat(dto.location().name()).isEqualTo("Main Workshop");
+    }
+
+    @Test
+    void enrichPopulatesWarrantyAttachmentDownloadLinkFromFileAsset() {
+        UUID warrantyAttachmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-WARRANTY");
+        equipment.setHasWarranty(true);
+        equipment.setWarrantyAttachmentId(warrantyAttachmentId);
+
+        FileAsset warrantyFile = fileAsset(
+                warrantyAttachmentId,
+                "warranty-stored.pdf",
+                "Warranty.pdf",
+                "application/pdf",
+                123_456L
+        );
+
+        stubEnrichment();
+        when(repository.search(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1));
+        when(fileAssetRepository.findAllByIdInAndIsDeletedFalse(anyCollection()))
+                .thenReturn(List.of(warrantyFile));
+
+        Page<EquipmentDto> result = service.search(null, null, null, null, null, false, null, 0, 20);
+
+        EquipmentDto dto = result.getContent().getFirst();
+        assertThat(dto.hasWarranty()).isTrue();
+        assertThat(dto.warrantyAttachmentId()).isEqualTo(warrantyAttachmentId);
+        assertThat(dto.warrantyAttachment()).isNotNull();
+        assertThat(dto.warrantyAttachment().id()).isEqualTo(warrantyAttachmentId);
+        assertThat(dto.warrantyAttachment().originalName()).isEqualTo("Warranty.pdf");
+        assertThat(dto.warrantyAttachment().mimeType()).isEqualTo("application/pdf");
+        assertThat(dto.warrantyAttachment().sizeBytes()).isEqualTo(123_456L);
+        assertThat(dto.warrantyAttachment().downloadUrl())
+                .isEqualTo("/api/v1/files/assets/" + warrantyAttachmentId + "/download");
     }
 
     @Test
@@ -1260,6 +1300,49 @@ class EquipmentServiceTest {
                 .hasMessageContaining("Warehouse not found: " + warehouseId);
 
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsMissingWarrantyAttachmentIdWithClearError() {
+        UUID warrantyAttachmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = new EquipmentCreateRequest(
+                null,
+                "Pump P-102",
+                "INV-P-102",
+                "TN-P-102",
+                "SN-P-102",
+                "CPK 150-400",
+                UUID.randomUUID(),
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "KSB",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                true,
+                warrantyAttachmentId,
+                "Pump",
+                10_000L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        when(repository.existsByInventoryNumberAndIsDeletedFalse("INV-P-102")).thenReturn(false);
+        when(fileAssetRepository.findByIdAndIsDeletedFalse(warrantyAttachmentId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("File not found: " + warrantyAttachmentId);
     }
 
     @Test
@@ -2381,6 +2464,24 @@ class EquipmentServiceTest {
         department.setCode("DEP-001");
         department.setName("Main department");
         return department;
+    }
+
+    private FileAsset fileAsset(
+            UUID id,
+            String fileName,
+            String originalName,
+            String mimeType,
+            long sizeBytes
+    ) {
+        FileAsset fileAsset = new FileAsset();
+        fileAsset.setId(id);
+        fileAsset.setFileName(fileName);
+        fileAsset.setOriginalName(originalName);
+        fileAsset.setMimeType(mimeType);
+        fileAsset.setSizeBytes(sizeBytes);
+        fileAsset.setStoragePath("/tmp/" + fileName);
+        fileAsset.setDeleted(false);
+        return fileAsset;
     }
 
     private WarehouseEquipmentItem activeWarehouseItem(UUID equipmentId, UUID warehouseId, WarehouseEquipmentStatus status) {
