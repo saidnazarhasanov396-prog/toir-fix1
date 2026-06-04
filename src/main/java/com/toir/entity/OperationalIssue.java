@@ -9,9 +9,12 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "operational_issues")
@@ -54,4 +57,8 @@ public class OperationalIssue extends BaseEntity {
 
     @Column(name = "resolved_at")
     private Instant resolvedAt;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "metadata", columnDefinition = "jsonb")
+    private Map<String, Object> metadata;
 }

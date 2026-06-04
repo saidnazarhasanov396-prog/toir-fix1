@@ -10,6 +10,7 @@ import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.service.LowStockRecommendationService;
 import com.toir.service.StockMovementService;
 import com.toir.service.WarehouseReorderService;
 import com.toir.util.AuditBuilderService;
@@ -37,6 +38,7 @@ class MaterialStockPbacScopeTest {
     AuditBuilderService auditBuilderService;
     WarehouseRepository warehouseRepository;
     ScopeAccessService scopeAccessService;
+    LowStockRecommendationService lowStockRecommendationService;
     StockMovementService stockMovementService;
     WarehouseReorderService reorderService;
 
@@ -48,13 +50,15 @@ class MaterialStockPbacScopeTest {
         auditBuilderService = mock(AuditBuilderService.class);
         warehouseRepository = mock(WarehouseRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
+        lowStockRecommendationService = mock(LowStockRecommendationService.class);
         stockMovementService = new StockMovementService(
                 movementRepository,
                 stockRepository,
                 sparePartRepository,
                 auditBuilderService,
                 warehouseRepository,
-                scopeAccessService
+                scopeAccessService,
+                lowStockRecommendationService
         );
         when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
         reorderService = new WarehouseReorderService(stockRepository, warehouseRepository, sparePartRepository, scopeAccessService);

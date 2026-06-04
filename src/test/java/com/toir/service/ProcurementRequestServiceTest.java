@@ -57,6 +57,9 @@ class ProcurementRequestServiceTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    LowStockRecommendationService lowStockRecommendationService;
+
     ProcurementRequestService service;
 
     @BeforeEach
@@ -68,7 +71,8 @@ class ProcurementRequestServiceTest {
                 stockMovementRepository,
                 auditBuilderService,
                 warehouseRepository,
-                scopeAccessService
+                scopeAccessService,
+                lowStockRecommendationService
         );
     }
 
@@ -104,6 +108,7 @@ class ProcurementRequestServiceTest {
         assertThat(movement.getUnitCost()).isEqualTo(12.5);
         assertThat(movement.getDocumentNumber()).isEqualTo("PR-2026-0001");
         assertThat(movement.getNotes()).contains(requestId.toString());
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
     }
 
     @Test

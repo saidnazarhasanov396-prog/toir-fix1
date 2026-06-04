@@ -19,6 +19,7 @@ import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.LowStockRecommendationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -73,6 +74,9 @@ class RepairMaterialUsageServiceTest {
 
     @Mock
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+
+    @Mock
+    LowStockRecommendationService lowStockRecommendationService;
 
     @InjectMocks
     RepairMaterialUsageService service;
@@ -191,6 +195,7 @@ class RepairMaterialUsageServiceTest {
         assertThat(movement.getSparePartId()).isEqualTo(sparePartId);
         assertThat(movement.getQuantity()).isEqualTo(7);
         assertThat(movement.getUnitCost()).isEqualTo(12.5);
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
     }
 
     @Test

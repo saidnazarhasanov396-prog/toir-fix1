@@ -13,6 +13,7 @@ import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.service.LowStockRecommendationService;
 import com.toir.service.ProcurementRequestService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,6 +42,7 @@ class ProcurementPbacScopeTest {
     WarehouseRepository warehouseRepository;
     AuditBuilderService auditBuilderService;
     ScopeAccessService scopeAccessService;
+    LowStockRecommendationService lowStockRecommendationService;
     ProcurementRequestService service;
 
     @BeforeEach
@@ -52,6 +54,7 @@ class ProcurementPbacScopeTest {
         warehouseRepository = mock(WarehouseRepository.class);
         auditBuilderService = mock(AuditBuilderService.class);
         scopeAccessService = mock(ScopeAccessService.class);
+        lowStockRecommendationService = mock(LowStockRecommendationService.class);
         service = new ProcurementRequestService(
                 repository,
                 sparePartRepository,
@@ -59,7 +62,8 @@ class ProcurementPbacScopeTest {
                 stockMovementRepository,
                 auditBuilderService,
                 warehouseRepository,
-                scopeAccessService
+                scopeAccessService,
+                lowStockRecommendationService
         );
     }
 

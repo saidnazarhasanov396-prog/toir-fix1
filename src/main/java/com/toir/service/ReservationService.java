@@ -30,6 +30,7 @@ public class ReservationService {
     private final WarehouseStockRepository stockRepository;
     private final StockMovementRepository stockMovementRepository;
     private final AuditBuilderService auditBuilderService;
+    private final LowStockRecommendationService lowStockRecommendationService;
 
 
     @Transactional(readOnly = true)
@@ -119,6 +120,7 @@ public class ReservationService {
 
         Reservation saved = repository.save(reservation);
         stockMovementRepository.save(buildMovement(stock, saved, StockMovementType.ISSUE));
+        lowStockRecommendationService.evaluateStockSafely(stock);
 
         auditBuilderService.log(
                 "reservation",
