@@ -1,6 +1,7 @@
 package com.toir.service.maintanance;
 
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
+import com.toir.dto.maintenanceregulation.EquipmentTypeWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest;
@@ -27,6 +28,7 @@ import com.toir.entity.equipment.EquipmentType;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.equipment.EquipmentTypeEquipmentCountProjection;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
@@ -124,6 +126,23 @@ public class MaintenanceRegulationService {
                     equipmentTypeId, active, page, size, ex);
             throw ex;
         }
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EquipmentTypeWithRegulationsDto> equipmentTypeWithRegulations(UUID equipmentTypeId,
+                                                                              Boolean active,
+                                                                              Integer page,
+                                                                              Integer size) {
+        validateEquipmentTypeIfProvided(equipmentTypeId);
+        List<EquipmentTypeWithRegulationsDto> items = equipmentTypeWithRegulations(equipmentTypeId, active);
+        if (page == null && size == null) {
+            int pageSize = PaginationUtils.pageSizeFromList(0, items.size());
+            return new PageImpl<>(items, PaginationUtils.pageRequest(0, pageSize), items.size());
+        }
+        if (page == null || size == null) {
+            throw RestException.badRequest("Both page and size must be provided for paginated equipment type regulation list");
+        }
+        return PaginationUtils.page(items, page, size);
     }
 
     @Transactional(readOnly = true)
@@ -284,6 +303,87 @@ public class MaintenanceRegulationService {
                 })
                 .filter(item -> item.equipmentTypeId() == null || (item.regulations() != null && !item.regulations().isEmpty()))
                 .toList();
+    }
+
+    private List<EquipmentTypeWithRegulationsDto> equipmentTypeWithRegulations(UUID equipmentTypeId, Boolean active) {
+        List<MaintenanceRegulation> regulations =
+                safeList(repository.findAllByOptionalEquipmentTypeIdAndOptionalActive(equipmentTypeId, active));
+        if (regulations.isEmpty()) {
+            return List.of();
+        }
+
+        Set<UUID> equipmentTypeIds = regulations.stream()
+                .filter(Objects::nonNull)
+                .map(MaintenanceRegulation::getEquipmentTypeId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (equipmentTypeIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, EquipmentType> typeById = safeList(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(equipmentTypeIds))
+                .stream()
+                .filter(type -> type != null && type.getId() != null)
+                .collect(Collectors.toMap(EquipmentType::getId, type -> type, (left, right) -> left));
+        Map<UUID, Integer> equipmentCountByTypeId = equipmentCountByTypeId(equipmentTypeIds);
+        Map<UUID, MaintenanceRegulationSummaryDto.OperationSummary> operationSummaryByTemplateId =
+                operationSummaryByTemplateId(regulations.stream()
+                        .map(MaintenanceRegulation::getTemplateId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet()));
+
+        Map<UUID, LinkedHashMap<UUID, MaintenanceRegulation>> grouped = new LinkedHashMap<>();
+        for (MaintenanceRegulation regulation : regulations) {
+            if (regulation == null || regulation.getId() == null || regulation.getEquipmentTypeId() == null) {
+                continue;
+            }
+            if (!typeById.containsKey(regulation.getEquipmentTypeId())) {
+                continue;
+            }
+            grouped.computeIfAbsent(regulation.getEquipmentTypeId(), ignored -> new LinkedHashMap<>())
+                    .putIfAbsent(regulation.getId(), regulation);
+        }
+
+        return grouped.entrySet().stream()
+                .map(entry -> {
+                    EquipmentType type = typeById.get(entry.getKey());
+                    List<MaintenanceRegulationSummaryDto> summaries = entry.getValue()
+                            .values()
+                            .stream()
+                            .map(regulation -> MaintenanceRegulationSummaryDto.from(
+                                    regulation,
+                                    operationSummary(regulation, operationSummaryByTemplateId)
+                            ))
+                            .filter(Objects::nonNull)
+                            .toList();
+                    return new EquipmentTypeWithRegulationsDto(
+                            type.getId(),
+                            type.getCode(),
+                            type.getName(),
+                            type.getCategory(),
+                            equipmentCountByTypeId.getOrDefault(type.getId(), 0),
+                            summaries
+                    );
+                })
+                .filter(item -> item.regulations() != null && !item.regulations().isEmpty())
+                .toList();
+    }
+
+    private Map<UUID, Integer> equipmentCountByTypeId(Set<UUID> equipmentTypeIds) {
+        if (equipmentTypeIds.isEmpty()) {
+            return Map.of();
+        }
+        return safeList(equipmentRepository.countByEquipmentTypeIds(equipmentTypeIds))
+                .stream()
+                .filter(item -> item != null && item.getEquipmentTypeId() != null)
+                .collect(Collectors.toMap(
+                        EquipmentTypeEquipmentCountProjection::getEquipmentTypeId,
+                        item -> {
+                            Long count = item.getEquipmentCount();
+                            return count == null ? 0 : Math.toIntExact(count);
+                        },
+                        (left, right) -> left
+                ));
     }
 
     private MaintenanceRegulationSummaryDto.OperationSummary operationSummary(

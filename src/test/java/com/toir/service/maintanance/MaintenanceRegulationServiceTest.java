@@ -2,6 +2,7 @@ package com.toir.service.maintanance;
 
 import com.toir.repository.equipment.EquipmentTypeRepository;
 
+import com.toir.dto.maintenanceregulation.EquipmentTypeWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
@@ -24,6 +25,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentTypeEquipmentCountProjection;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
@@ -241,6 +243,65 @@ class MaintenanceRegulationServiceTest {
     @Test
     void equipmentWithRegulationsRejectsPartialPagination() {
         assertThatThrownBy(() -> service.equipmentWithRegulations(null, null, 0, null))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Both page and size");
+                });
+    }
+
+    @Test
+    void equipmentTypeWithRegulationsGroupsRegulationsByEquipmentType() {
+        UUID typeId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        EquipmentType type = new EquipmentType();
+        type.setId(typeId);
+        type.setCode("ET-2026-0001");
+        type.setName("Pump");
+        type.setCategory("PUMP");
+        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, "MR-2026-0001", true);
+        regulation.setTemplateId(templateId);
+        MaintenanceTemplate template = template(templateId, typeId, MaintenanceKind.PREVENTIVE, true);
+        MaintenanceOperation operation = new MaintenanceOperation();
+        operation.setTemplate(template);
+        operation.setRequiredSkill("Mechanic");
+        operation.setToolsRequired("Wrench");
+        EquipmentTypeEquipmentCountProjection count = new EquipmentTypeEquipmentCountProjection() {
+            @Override
+            public UUID getEquipmentTypeId() {
+                return typeId;
+            }
+
+            @Override
+            public Long getEquipmentCount() {
+                return 4L;
+            }
+        };
+
+        when(equipmentTypeRepository.existsByIdAndIsDeletedFalse(typeId)).thenReturn(true);
+        when(repository.findAllByOptionalEquipmentTypeIdAndOptionalActive(typeId, true))
+                .thenReturn(List.of(regulation));
+        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of(type));
+        when(equipmentRepository.countByEquipmentTypeIds(Set.of(typeId))).thenReturn(List.of(count));
+        when(operationRepository.findAllByTemplateIdInAndIsDeletedFalse(Set.of(templateId))).thenReturn(List.of(operation));
+
+        var page = service.equipmentTypeWithRegulations(typeId, true, 0, 10);
+
+        assertThat(page.getContent()).hasSize(1);
+        EquipmentTypeWithRegulationsDto dto = page.getContent().getFirst();
+        assertThat(dto.equipmentTypeId()).isEqualTo(typeId);
+        assertThat(dto.equipmentTypeCode()).isEqualTo("ET-2026-0001");
+        assertThat(dto.equipmentTypeName()).isEqualTo("Pump");
+        assertThat(dto.equipmentTypeCategory()).isEqualTo("PUMP");
+        assertThat(dto.equipmentCount()).isEqualTo(4);
+        assertThat(dto.regulations()).hasSize(1);
+        assertThat(dto.regulations().getFirst().id()).isEqualTo(regulation.getId());
+        assertThat(dto.regulations().getFirst().requiredSkill()).isEqualTo("Mechanic");
+        assertThat(dto.regulations().getFirst().toolsRequired()).isEqualTo("Wrench");
+    }
+
+    @Test
+    void equipmentTypeWithRegulationsRejectsPartialPagination() {
+        assertThatThrownBy(() -> service.equipmentTypeWithRegulations(null, null, 0, null))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("Both page and size");

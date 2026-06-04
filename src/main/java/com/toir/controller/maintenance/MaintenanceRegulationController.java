@@ -1,5 +1,6 @@
 package com.toir.controller.maintenance;
 import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
+import com.toir.dto.maintenanceregulation.EquipmentTypeWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationImpactDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationPreviewDto;
@@ -52,6 +53,19 @@ public class MaintenanceRegulationController {
         log.info("Entering GET /api/v1/maintenance-regulations/equipment equipmentTypeId={}, active={}, page={}, size={}",
                 equipmentTypeId, active, page, size);
         return ResponseEntity.ok(service.equipmentWithRegulations(equipmentTypeId, active, page, size));
+    }
+
+    @GetMapping("/equipment-types")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_REGULATION_READ')")
+    public ResponseEntity<Page<EquipmentTypeWithRegulationsDto>> equipmentTypeWithRegulations(
+            @RequestParam(required = false) UUID equipmentTypeId,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size
+    ) {
+        log.info("Entering GET /api/v1/maintenance-regulations/equipment-types equipmentTypeId={}, active={}, page={}, size={}",
+                equipmentTypeId, active, page, size);
+        return ResponseEntity.ok(service.equipmentTypeWithRegulations(equipmentTypeId, active, page, size));
     }
 
     @GetMapping("/{id:[0-9a-fA-F-]{36}}")

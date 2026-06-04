@@ -135,7 +135,11 @@ public class MaintenanceDueEventService {
 
     @Transactional
     public MaintenanceDueEvent cancel(UUID id, String reason) {
-        MaintenanceDueEvent event = getOrThrow(id);
+        return cancel(getOrThrow(id), reason);
+    }
+
+    @Transactional
+    public MaintenanceDueEvent cancel(MaintenanceDueEvent event, String reason) {
         assertCanAccessEvent(event);
         if (event.getStatus() == MaintenanceDueEventStatus.COMPLETED
                 || event.getStatus() == MaintenanceDueEventStatus.CANCELLED) {
@@ -175,10 +179,24 @@ public class MaintenanceDueEventService {
     }
 
     @Transactional(readOnly = true)
-    public void assertCanAccessEvent(MaintenanceDueEvent event) {
+    public UUID departmentIdForEvent(MaintenanceDueEvent event) {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(event.getEquipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + event.getEquipmentId()));
-        scopeAccessService.assertCanAccessDepartment(effectiveDepartmentId(equipment));
+        return effectiveDepartmentId(equipment);
+    }
+
+    @Transactional(readOnly = true)
+    public void assertCanMutate(MaintenanceDueEvent event) {
+        assertCanAccessEvent(event);
+    }
+
+    @Transactional(readOnly = true)
+    public void assertCanAccessEvent(MaintenanceDueEvent event) {
+        UUID departmentId = departmentIdForEvent(event);
+        if (departmentId == null && scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        scopeAccessService.assertCanAccessDepartment(departmentId);
     }
 
     @Transactional(readOnly = true)

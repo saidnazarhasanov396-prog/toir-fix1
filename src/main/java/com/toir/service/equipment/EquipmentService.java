@@ -400,6 +400,7 @@ public class EquipmentService {
             throw RestException.conflict("Inventory number already exists: " + request.inventoryNumber());
         }
         validateParent(null, request.parentId());
+        validateWarrantyDateRange(request.warrantyStartDate(), request.warrantyEndDate());
         validateWarrantyAttachment(request.hasWarranty(), request.warrantyAttachmentId());
         Equipment entity = new Equipment();
         entity.setCode(nextCode());
@@ -455,6 +456,7 @@ public class EquipmentService {
 
         boolean equipmentTypeChanged = isEquipmentTypeChanged(entity.getEquipmentTypeId(), request.equipmentTypeId());
         validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
+        validateWarrantyDateRangeForUpdate(entity, request);
         validateWarrantyAttachmentForUpdate(request);
 
         applyForUpdate(entity, request);
@@ -813,6 +815,8 @@ public class EquipmentService {
         entity.setWarrantyUntil(request.warrantyUntil());
         entity.setHasWarranty(Boolean.TRUE.equals(request.hasWarranty()));
         entity.setWarrantyAttachmentId(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyAttachmentId() : null);
+        entity.setWarrantyStartDate(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyStartDate() : null);
+        entity.setWarrantyEndDate(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyEndDate() : null);
         entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours());
         entity.setOperationStartDate(request.operationStartDate());
         entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths());
@@ -1355,6 +1359,8 @@ public class EquipmentService {
         if (Boolean.FALSE.equals(request.hasWarranty())) {
             entity.setHasWarranty(false);
             entity.setWarrantyAttachmentId(null);
+            entity.setWarrantyStartDate(null);
+            entity.setWarrantyEndDate(null);
             return;
         }
         if (Boolean.TRUE.equals(request.hasWarranty())) {
@@ -1363,6 +1369,31 @@ public class EquipmentService {
         if (request.warrantyAttachmentId() != null) {
             entity.setHasWarranty(true);
             entity.setWarrantyAttachmentId(request.warrantyAttachmentId());
+        }
+        if (request.warrantyStartDate() != null) {
+            entity.setWarrantyStartDate(request.warrantyStartDate());
+        }
+        if (request.warrantyEndDate() != null) {
+            entity.setWarrantyEndDate(request.warrantyEndDate());
+        }
+    }
+
+    private void validateWarrantyDateRangeForUpdate(Equipment entity, EquipmentUpdateRequest request) {
+        if (Boolean.FALSE.equals(request.hasWarranty())) {
+            return;
+        }
+        LocalDate startDate = request.warrantyStartDate() != null
+                ? request.warrantyStartDate()
+                : entity.getWarrantyStartDate();
+        LocalDate endDate = request.warrantyEndDate() != null
+                ? request.warrantyEndDate()
+                : entity.getWarrantyEndDate();
+        validateWarrantyDateRange(startDate, endDate);
+    }
+
+    private void validateWarrantyDateRange(LocalDate startDate, LocalDate endDate) {
+        if (startDate != null && endDate != null && endDate.isBefore(startDate)) {
+            throw RestException.badRequest("Warranty end date must be after or equal to warranty start date");
         }
     }
 

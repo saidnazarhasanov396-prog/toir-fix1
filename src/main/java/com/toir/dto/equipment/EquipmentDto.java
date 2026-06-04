@@ -49,8 +49,56 @@ public record EquipmentDto(
         LifetimeStatus lifetimeStatus,
         Boolean hasWarranty,
         UUID warrantyAttachmentId,
+        LocalDate warrantyStartDate,
+        LocalDate warrantyEndDate,
         WarrantyAttachmentRef warrantyAttachment
 ) {
+    public EquipmentDto(
+            UUID id,
+            String code,
+            String name,
+            String inventoryNumber,
+            String technicalNumber,
+            String serialNumber,
+            String model,
+            UUID equipmentTypeId,
+            UUID departmentId,
+            UUID locationId,
+            UUID parentId,
+            UUID criticalityClassId,
+            UUID responsibleId,
+            String manufacturer,
+            EquipmentStatus status,
+            EquipmentCategory category,
+            LocalDate commissionedAt,
+            LocalDate warrantyUntil,
+            String description,
+            Long averageOperatingLifeHours,
+            Ref department,
+            Ref location,
+            Ref equipmentType,
+            Ref parent,
+            PassportRef passport,
+            PlacementRef placement,
+            LocalDate operationStartDate,
+            Integer expectedLifetimeMonths,
+            Integer expectedLifetimeYears,
+            String operatingDuration,
+            LocalDate expectedEndDate,
+            String remainingLifetime,
+            LifetimeStatus lifetimeStatus,
+            Boolean hasWarranty,
+            UUID warrantyAttachmentId,
+            WarrantyAttachmentRef warrantyAttachment
+    ) {
+        this(id, code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer, status,
+                category, commissionedAt, warrantyUntil, description, averageOperatingLifeHours,
+                department, location, equipmentType, parent, passport, placement, operationStartDate,
+                expectedLifetimeMonths, expectedLifetimeYears, operatingDuration, expectedEndDate, remainingLifetime,
+                lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment);
+    }
+
     public EquipmentDto(
             UUID id,
             String code,
@@ -83,7 +131,7 @@ public record EquipmentDto(
                 departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer, status,
                 category, commissionedAt, warrantyUntil, description, averageOperatingLifeHours, department,
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null,
-                LifetimeStatus.UNKNOWN, false, null, null);
+                LifetimeStatus.UNKNOWN, false, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -203,7 +251,8 @@ public record EquipmentDto(
                 department, location, equipmentType, parent, passport, placement,
                 e.getOperationStartDate(), e.getExpectedLifetimeMonths(), e.getExpectedLifetimeYears(),
                 operatingDuration(e), expectedEndDate(e), remainingLifetime(e), lifetimeStatus(e),
-                Boolean.TRUE.equals(e.getHasWarranty()), e.getWarrantyAttachmentId(), warrantyAttachmentRef(warrantyAttachment)
+                Boolean.TRUE.equals(e.getHasWarranty()), e.getWarrantyAttachmentId(),
+                e.getWarrantyStartDate(), e.getWarrantyEndDate(), warrantyAttachmentRef(warrantyAttachment)
         );
     }
 

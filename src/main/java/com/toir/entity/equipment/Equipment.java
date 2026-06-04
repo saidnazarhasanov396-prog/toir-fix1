@@ -92,6 +92,12 @@ public class Equipment extends BaseEntity {
     @Column(name = "warranty_attachment_id")
     private UUID warrantyAttachmentId;
 
+    @Column(name = "warranty_start_date")
+    private LocalDate warrantyStartDate;
+
+    @Column(name = "warranty_end_date")
+    private LocalDate warrantyEndDate;
+
     @Column(name = "average_operating_life_hours")
     private Long averageOperatingLifeHours;
 
