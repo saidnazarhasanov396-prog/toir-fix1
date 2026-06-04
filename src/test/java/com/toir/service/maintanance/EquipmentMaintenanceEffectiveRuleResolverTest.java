@@ -62,13 +62,19 @@ class EquipmentMaintenanceEffectiveRuleResolverTest {
 
     @BeforeEach
     void setUp() {
+        MaintenanceRegulationApplicabilityService applicabilityService = new MaintenanceRegulationApplicabilityService(
+                conditionRepository,
+                definitionRepository,
+                valueRepository
+        );
         resolver = new EquipmentMaintenanceEffectiveRuleResolver(
                 equipmentRepository,
                 regulationRepository,
                 ruleRepository,
                 conditionRepository,
                 definitionRepository,
-                valueRepository
+                valueRepository,
+                applicabilityService
         );
     }
 

@@ -13,6 +13,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.OperationalIssueService;
 import com.toir.util.PaginationUtils;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -50,6 +51,7 @@ public class MaintenanceDueEventService {
     private final EquipmentRepository equipmentRepository;
     private final MaintenanceRegulationRepository regulationRepository;
     private final OperationalIssueService operationalIssueService;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public Page<MaintenanceDueEventDto> search(UUID equipmentId,
@@ -134,6 +136,7 @@ public class MaintenanceDueEventService {
     @Transactional
     public MaintenanceDueEvent cancel(UUID id, String reason) {
         MaintenanceDueEvent event = getOrThrow(id);
+        assertCanAccessEvent(event);
         if (event.getStatus() == MaintenanceDueEventStatus.COMPLETED
                 || event.getStatus() == MaintenanceDueEventStatus.CANCELLED) {
             throw RestException.badRequest("Maintenance due event is already closed");
@@ -169,6 +172,13 @@ public class MaintenanceDueEventService {
     public MaintenanceDueEvent getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Maintenance due event not found: " + id));
+    }
+
+    @Transactional(readOnly = true)
+    public void assertCanAccessEvent(MaintenanceDueEvent event) {
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(event.getEquipmentId())
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + event.getEquipmentId()));
+        scopeAccessService.assertCanAccessDepartment(effectiveDepartmentId(equipment));
     }
 
     @Transactional(readOnly = true)
@@ -240,6 +250,12 @@ public class MaintenanceDueEventService {
                 "Maintenance due: " + event.getCycleKey(),
                 event.getExplanation()
         );
+    }
+
+    private UUID effectiveDepartmentId(Equipment equipment) {
+        return equipment.getResponsibleDepartmentId() != null
+                ? equipment.getResponsibleDepartmentId()
+                : equipment.getDepartmentId();
     }
 
     private void normalizeMeterDueStatus(MaintenanceDueEvent event) {

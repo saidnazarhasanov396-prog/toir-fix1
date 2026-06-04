@@ -37,6 +37,7 @@ public class EquipmentMaintenanceEffectiveRuleResolver {
     private final MaintenanceRegulationAttributeConditionRepository conditionRepository;
     private final EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
     private final EquipmentAttributeValueRepository attributeValueRepository;
+    private final MaintenanceRegulationApplicabilityService applicabilityService;
 
     @Transactional(readOnly = true)
     public List<EquipmentMaintenanceEffectiveRule> resolveApplicable(UUID equipmentId) {
@@ -66,15 +67,9 @@ public class EquipmentMaintenanceEffectiveRuleResolver {
                         (left, right) -> left,
                         LinkedHashMap::new
                 ));
-        Map<UUID, List<MaintenanceRegulationAttributeCondition>> conditionsByRegulationId =
-                loadConditionsByRegulationId(inheritedRegulations);
-        AttributeIndex attributeIndex = loadAttributeIndex(equipment);
-
         List<EquipmentMaintenanceEffectiveRule> resolved = new java.util.ArrayList<>();
         for (MaintenanceRegulation regulation : inheritedRegulations) {
-            List<MaintenanceRegulationAttributeCondition> conditions =
-                    conditionsByRegulationId.getOrDefault(regulation.getId(), List.of());
-            if (!matchesConditions(equipment, conditions, attributeIndex)) {
+            if (!applicabilityService.matchesPersistedConditions(equipment, regulation)) {
                 resolved.add(EquipmentMaintenanceEffectiveRule.excludedRegulation(
                         equipment.getId(),
                         regulation,

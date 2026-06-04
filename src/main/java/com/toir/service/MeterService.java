@@ -19,6 +19,7 @@ import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MeterService {
 
     private static final List<String> READING_SORT_FIELDS = List.of("createdAt", "readAt", "value");
@@ -209,7 +211,8 @@ public class MeterService {
         try {
             maintenanceAutomationService.evaluateEquipment(meter.getEquipmentId(), MaintenanceTriggerSource.METER_READING);
         } catch (RuntimeException ex) {
-            // Meter reading is the source of truth; automation failures are recorded separately and must not lose readings.
+            log.warn("maintenance_automation_after_meter_reading_failed equipmentId={} meterId={} readingId={}",
+                    meter.getEquipmentId(), meter.getId(), saved.getId(), ex);
         }
 
         return enrichReading(saved);

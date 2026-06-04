@@ -14,12 +14,14 @@ import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceRegulationConditionOperator;
 import com.toir.enums.MaintenanceTriggerPolicy;
+import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -138,7 +140,7 @@ public class MaintenanceRegulationService {
     @Transactional
     public MaintenanceRegulationDto create(MaintenanceRegulationRequest request) {
         validateClientProvidedCode(request.code());
-        validateAutomationConfigurationPermission(request);
+        validateAutomationConfigurationPermissionForCreate(request);
         MaintenanceRegulation saved = saveWithGeneratedCode(request);
         replaceConditions(saved.getId(), saved.getEquipmentTypeId(), request.attributeConditions());
 
@@ -157,8 +159,8 @@ public class MaintenanceRegulationService {
     @Transactional
     public MaintenanceRegulationDto update(UUID id, MaintenanceRegulationRequest request) {
         validateClientProvidedCode(request.code());
-        validateAutomationConfigurationPermission(request);
         MaintenanceRegulation entity = getOrThrow(id);
+        validateAutomationConfigurationPermissionForUpdate(entity, request);
         applyMutableFields(entity, request);
 
         MaintenanceRegulation save = repository.save(entity);
@@ -392,6 +394,9 @@ public class MaintenanceRegulationService {
         entity.setAutomationAction(request.automationAction() == null
                 ? AutomationAction.REQUIRE_APPROVAL
                 : request.automationAction());
+        entity.setApprovalResultAction(request.approvalResultAction() == null
+                ? ApprovalResultAction.CREATE_TASK
+                : request.approvalResultAction());
         entity.setDuplicatePolicy(request.duplicatePolicy() == null
                 ? DuplicatePolicy.ONE_ITEM_PER_CYCLE
                 : request.duplicatePolicy());
@@ -489,27 +494,97 @@ public class MaintenanceRegulationService {
         }
     }
 
-    private void validateAutomationConfigurationPermission(MaintenanceRegulationRequest request) {
-        if (!containsAutomationConfiguration(request)) {
+    private void validateAutomationConfigurationPermissionForCreate(MaintenanceRegulationRequest request) {
+        if (!containsNonDefaultAutomationConfiguration(request)) {
             return;
         }
+        assertCanConfigureAutomation();
+    }
+
+    private void validateAutomationConfigurationPermissionForUpdate(MaintenanceRegulation existing,
+                                                                    MaintenanceRegulationRequest request) {
+        if (!changesAutomationConfiguration(existing, request)) {
+            return;
+        }
+        assertCanConfigureAutomation();
+    }
+
+    private void assertCanConfigureAutomation() {
         var authentication = SecurityContextHolder.getContext().getAuthentication();
         if (!securityAccessService.hasPermission(authentication, PermissionConstants.MAINTENANCE_AUTOMATION_CONFIGURE)) {
             throw new AccessDeniedException("Missing permission: " + PermissionConstants.MAINTENANCE_AUTOMATION_CONFIGURE);
         }
     }
 
-    private boolean containsAutomationConfiguration(MaintenanceRegulationRequest request) {
-        return request.automationAction() != null
-                || request.duplicatePolicy() != null
+    private boolean containsNonDefaultAutomationConfiguration(MaintenanceRegulationRequest request) {
+        return effectiveAutomationAction(request) != AutomationAction.REQUIRE_APPROVAL
+                || effectiveApprovalResultAction(request) != ApprovalResultAction.CREATE_TASK
+                || effectiveDuplicatePolicy(request) != DuplicatePolicy.ONE_ITEM_PER_CYCLE
                 || request.leadTimeDays() != null
                 || request.leadMeterPercent() != null
                 || request.defaultDepartmentId() != null
                 || request.defaultResponsibleId() != null
-                || request.defaultPriority() != null
-                || request.requiresApproval() != null
-                || request.approvalRole() != null
-                || request.approvalPermission() != null;
+                || effectiveDefaultPriority(request) != PriorityLevel.MEDIUM
+                || (request.requiresApproval() != null && !request.requiresApproval())
+                || blankToNull(request.approvalRole()) != null
+                || blankToNull(request.approvalPermission()) != null;
+    }
+
+    private boolean changesAutomationConfiguration(MaintenanceRegulation existing,
+                                                   MaintenanceRegulationRequest request) {
+        return effectiveAutomationAction(request) != effectiveAutomationAction(existing)
+                || effectiveApprovalResultAction(request) != effectiveApprovalResultAction(existing)
+                || effectiveDuplicatePolicy(request) != effectiveDuplicatePolicy(existing)
+                || !Objects.equals(request.leadTimeDays(), existing.getLeadTimeDays())
+                || !Objects.equals(request.leadMeterPercent(), existing.getLeadMeterPercent())
+                || !Objects.equals(request.defaultDepartmentId(), existing.getDefaultDepartmentId())
+                || !Objects.equals(request.defaultResponsibleId(), existing.getDefaultResponsibleId())
+                || effectiveDefaultPriority(request) != effectiveDefaultPriority(existing)
+                || !Objects.equals(effectiveRequiresApproval(request), existing.isRequiresApproval())
+                || !Objects.equals(blankToNull(request.approvalRole()), blankToNull(existing.getApprovalRole()))
+                || !Objects.equals(blankToNull(request.approvalPermission()), blankToNull(existing.getApprovalPermission()));
+    }
+
+    private AutomationAction effectiveAutomationAction(MaintenanceRegulationRequest request) {
+        return request.automationAction() == null ? AutomationAction.REQUIRE_APPROVAL : request.automationAction();
+    }
+
+    private AutomationAction effectiveAutomationAction(MaintenanceRegulation regulation) {
+        return regulation.getAutomationAction() == null ? AutomationAction.REQUIRE_APPROVAL : regulation.getAutomationAction();
+    }
+
+    private ApprovalResultAction effectiveApprovalResultAction(MaintenanceRegulationRequest request) {
+        return request.approvalResultAction() == null ? ApprovalResultAction.CREATE_TASK : request.approvalResultAction();
+    }
+
+    private ApprovalResultAction effectiveApprovalResultAction(MaintenanceRegulation regulation) {
+        return regulation.getApprovalResultAction() == null
+                ? ApprovalResultAction.CREATE_TASK
+                : regulation.getApprovalResultAction();
+    }
+
+    private DuplicatePolicy effectiveDuplicatePolicy(MaintenanceRegulationRequest request) {
+        return request.duplicatePolicy() == null ? DuplicatePolicy.ONE_ITEM_PER_CYCLE : request.duplicatePolicy();
+    }
+
+    private DuplicatePolicy effectiveDuplicatePolicy(MaintenanceRegulation regulation) {
+        return regulation.getDuplicatePolicy() == null
+                ? DuplicatePolicy.ONE_ITEM_PER_CYCLE
+                : regulation.getDuplicatePolicy();
+    }
+
+    private PriorityLevel effectiveDefaultPriority(MaintenanceRegulationRequest request) {
+        return request.defaultPriority() == null ? PriorityLevel.MEDIUM : request.defaultPriority();
+    }
+
+    private PriorityLevel effectiveDefaultPriority(MaintenanceRegulation regulation) {
+        return regulation.getDefaultPriority() == null ? PriorityLevel.MEDIUM : regulation.getDefaultPriority();
+    }
+
+    private boolean effectiveRequiresApproval(MaintenanceRegulationRequest request) {
+        return request.requiresApproval() != null
+                ? request.requiresApproval()
+                : effectiveAutomationAction(request) == AutomationAction.REQUIRE_APPROVAL;
     }
 
     private String blankToNull(String value) {

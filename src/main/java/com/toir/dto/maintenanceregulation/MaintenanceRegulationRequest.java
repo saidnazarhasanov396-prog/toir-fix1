@@ -1,6 +1,7 @@
 package com.toir.dto.maintenanceregulation;
 
 import com.toir.enums.AutomationAction;
+import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceKind;
@@ -36,6 +37,7 @@ public record MaintenanceRegulationRequest(
         MaintenanceRecalculationPolicy recalculationPolicy,
         MaintenanceInitialSchedulePolicy initialSchedulePolicy,
         AutomationAction automationAction,
+        ApprovalResultAction approvalResultAction,
         DuplicatePolicy duplicatePolicy,
         Integer leadTimeDays,
         Double leadMeterPercent,
@@ -78,7 +80,8 @@ public record MaintenanceRegulationRequest(
         ) {
                 this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours, active,
                         periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
-                        triggerMeterInterval, triggerPolicy, recalculationPolicy, null, automationAction, duplicatePolicy,
+                        triggerMeterInterval, triggerPolicy, recalculationPolicy, null, automationAction,
+                        null, duplicatePolicy,
                         leadTimeDays, leadMeterPercent, defaultDepartmentId, defaultResponsibleId, defaultPriority,
                         requiresApproval, approvalRole, approvalPermission, attributeConditions);
         }
@@ -102,7 +105,7 @@ public record MaintenanceRegulationRequest(
                 this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours, active,
                         periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
                         triggerMeterInterval, null, null, null, null, null, null, null, null, null, null, null, null,
-                        null, null);
+                        null, null, null);
         }
 
         public MaintenanceRegulationRequest(
@@ -125,6 +128,6 @@ public record MaintenanceRegulationRequest(
                 this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours, active,
                         periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
                         triggerMeterInterval, null, null, null, null, null, null, null, null, null, null, null, null,
-                        null, attributeConditions);
+                        null, null, attributeConditions);
         }
 }
