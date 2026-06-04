@@ -20,6 +20,7 @@ import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MeterType;
 import com.toir.enums.MaintenanceRegulationConditionOperator;
 import com.toir.enums.PeriodicityUnit;
+import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -686,6 +687,7 @@ class MaintenanceRegulationServiceTest {
                 10.0,
                 null,
                 null,
+                null,
                 AutomationAction.CREATE_WORK_ORDER,
                 null,
                 null,
@@ -717,6 +719,7 @@ class MaintenanceRegulationServiceTest {
                 false,
                 MeterType.CUSTOM,
                 10.0,
+                null,
                 null,
                 null,
                 AutomationAction.REQUIRE_APPROVAL,
