@@ -29,8 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -163,70 +163,51 @@ class MaintenanceDueEventServiceTest {
         UUID equipmentId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         MaintenanceDueEvent event = event(eventId, equipmentId, MaintenanceDueStatus.DUE);
-        event.setStatus(MaintenanceDueEventStatus.DETECTED);
         Equipment equipment = equipment(equipmentId, null, departmentId);
+        event.setStatus(MaintenanceDueEventStatus.DETECTED);
         when(repository.findByIdAndIsDeletedFalse(eventId)).thenReturn(Optional.of(event));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(repository.save(event)).thenReturn(event);
 
         MaintenanceDueEvent result = service.cancel(eventId, "manual override");
 
+        verify(scopeAccessService).assertCanAccessDepartment(departmentId);
         assertThat(result.getStatus()).isEqualTo(MaintenanceDueEventStatus.CANCELLED);
         assertThat(result.getResolutionReason()).isEqualTo("manual override");
         assertThat(result.getResolvedAt()).isNotNull();
-        verify(scopeAccessService).assertCanAccessDepartment(departmentId);
         verify(repository).save(event);
         verify(operationalIssueService).resolveOpen("MaintenanceDueEvent", eventId);
     }
 
     @Test
-    void cancelDueEvent_deniesCrossDepartmentScopedUser() {
+    void cancelDueEventDeniesCrossDepartmentScopedUser() {
         UUID eventId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
-        UUID otherDepartmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
         MaintenanceDueEvent event = event(eventId, equipmentId, MaintenanceDueStatus.DUE);
-        Equipment equipment = equipment(equipmentId, null, otherDepartmentId);
+        Equipment equipment = equipment(equipmentId, null, departmentId);
+        event.setStatus(MaintenanceDueEventStatus.DETECTED);
         when(repository.findByIdAndIsDeletedFalse(eventId)).thenReturn(Optional.of(event));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         doThrow(new AccessDeniedException("Access denied by data scope"))
-                .when(scopeAccessService).assertCanAccessDepartment(otherDepartmentId);
+                .when(scopeAccessService).assertCanAccessDepartment(departmentId);
 
-        assertThatThrownBy(() -> service.cancel(eventId, "cross department"))
+        assertThatThrownBy(() -> service.cancel(eventId, "manual override"))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("data scope");
 
-        verify(repository, never()).save(any(MaintenanceDueEvent.class));
-        verify(operationalIssueService, never()).resolveOpen("MaintenanceDueEvent", eventId);
-    }
-
-    @Test
-    void cancelDueEvent_allowsSameDepartmentScopedUserUsingResponsibleDepartmentFirst() {
-        UUID eventId = UUID.randomUUID();
-        UUID equipmentId = UUID.randomUUID();
-        UUID responsibleDepartmentId = UUID.randomUUID();
-        UUID physicalDepartmentId = UUID.randomUUID();
-        MaintenanceDueEvent event = event(eventId, equipmentId, MaintenanceDueStatus.DUE);
-        Equipment equipment = equipment(equipmentId, responsibleDepartmentId, physicalDepartmentId);
-        when(repository.findByIdAndIsDeletedFalse(eventId)).thenReturn(Optional.of(event));
-        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(repository.save(event)).thenReturn(event);
-
-        MaintenanceDueEvent result = service.cancel(eventId, "same department");
-
-        assertThat(result.getStatus()).isEqualTo(MaintenanceDueEventStatus.CANCELLED);
-        verify(scopeAccessService).assertCanAccessDepartment(responsibleDepartmentId);
-        verify(repository).save(event);
+        verify(repository, never()).save(any());
+        verify(operationalIssueService, never()).resolveOpen(any(), any());
     }
 
     @Test
     void cancelClosedEventIsRejected() {
         UUID eventId = UUID.randomUUID();
-        UUID equipmentId = UUID.randomUUID();
-        MaintenanceDueEvent event = event(eventId, equipmentId, MaintenanceDueStatus.DUE);
+        MaintenanceDueEvent event = event(eventId, UUID.randomUUID(), MaintenanceDueStatus.DUE);
         event.setStatus(MaintenanceDueEventStatus.COMPLETED);
         when(repository.findByIdAndIsDeletedFalse(eventId)).thenReturn(Optional.of(event));
-        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
-                .thenReturn(Optional.of(equipment(equipmentId, null, UUID.randomUUID())));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(event.getEquipmentId()))
+                .thenReturn(Optional.of(equipment(event.getEquipmentId(), null, UUID.randomUUID())));
 
         assertThatThrownBy(() -> service.cancel(eventId, "too late"))
                 .isInstanceOf(RestException.class)

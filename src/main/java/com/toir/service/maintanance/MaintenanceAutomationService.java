@@ -10,6 +10,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AutomationAction;
+import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceDueEventStatus;
@@ -113,12 +114,8 @@ public class MaintenanceAutomationService {
                 if (event.getStatus() == MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE) {
                     suppressed++;
                 }
-                if (event.getCreatedTaskId() != null) {
-                    tasks++;
-                }
-                if (event.getCreatedWorkOrderId() != null) {
-                    workOrders++;
-                }
+                tasks += outcome.tasksCreated();
+                workOrders += outcome.workOrdersCreated();
             } catch (RuntimeException ex) {
                 failures++;
                 log.warn("Maintenance automation failed equipmentId={} regulationId={} ruleId={}",
@@ -175,12 +172,8 @@ public class MaintenanceAutomationService {
                     if (event.getStatus() == MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE) {
                         suppressed++;
                     }
-                    if (event.getCreatedTaskId() != null) {
-                        tasks++;
-                    }
-                    if (event.getCreatedWorkOrderId() != null) {
-                        workOrders++;
-                    }
+                    tasks += outcome.tasksCreated();
+                    workOrders += outcome.workOrdersCreated();
                 }
             } catch (RuntimeException ex) {
                 failures++;
@@ -237,7 +230,7 @@ public class MaintenanceAutomationService {
     @Transactional
     public MaintenanceDueEventDto approveDueEvent(UUID eventId, UUID userId) {
         MaintenanceDueEvent event = eventService.getOrThrow(eventId);
-        eventService.assertCanMutate(event);
+        eventService.assertCanAccessEvent(event);
         if (isBlocked(event)) {
             return blockedEventDto(event);
         }
@@ -248,8 +241,7 @@ public class MaintenanceAutomationService {
         EquipmentMaintenanceEffectiveRule rule = effectiveRule(event);
         enforceApprovalAuthority(rule);
         Equipment equipment = equipment(event);
-        if (rule.automationAction() == AutomationAction.CREATE_TASK
-                || rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
+        if (approvalResultAction(rule) == ApprovalResultAction.CREATE_TASK) {
             createTask(event, rule, userId);
         } else {
             WorkOrderDto workOrder = createWorkOrder(event, rule, userId);
@@ -265,7 +257,7 @@ public class MaintenanceAutomationService {
     @Transactional
     public MaintenanceDueEventDto createWorkOrderFromEvent(UUID eventId, UUID userId) {
         MaintenanceDueEvent event = eventService.getOrThrow(eventId);
-        eventService.assertCanMutate(event);
+        eventService.assertCanAccessEvent(event);
         if (isBlocked(event)) {
             return blockedEventDto(event);
         }
@@ -319,7 +311,7 @@ public class MaintenanceAutomationService {
         }
         if (isDuplicateSuppressed(rule, event)) {
             event.setStatus(MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE);
-            return new EvaluationOutcome(eventService.saveEvent(event, equipment), isNew, 0);
+            return new EvaluationOutcome(eventService.saveEvent(event, equipment), isNew, 0, 0, 0);
         }
         event = eventService.saveEvent(event, equipment);
         int notifications = notificationService.notifyEventStatus(event, rule, equipment);
@@ -329,17 +321,27 @@ public class MaintenanceAutomationService {
         if (!canCreateDownstream(due.status())
                 || rule.automationAction() == AutomationAction.TRACK_ONLY
                 || rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
-            return new EvaluationOutcome(event, isNew, notifications);
+            return new EvaluationOutcome(event, isNew, notifications, 0, 0);
         }
+        boolean alreadyHadTask = event.getCreatedTaskId() != null;
+        boolean alreadyHadWorkOrder = event.getCreatedWorkOrderId() != null;
+        int tasksCreated = 0;
+        int workOrdersCreated = 0;
         if (rule.automationAction() == AutomationAction.CREATE_TASK) {
-            createTask(event, rule, userId);
+            PprTask task = createTask(event, rule, userId);
+            if (task != null && !alreadyHadTask) {
+                tasksCreated = 1;
+            }
         } else if (rule.automationAction() == AutomationAction.CREATE_WORK_ORDER) {
             WorkOrderDto workOrder = createWorkOrder(event, rule, userId);
             if (workOrder != null) {
+                if (!alreadyHadWorkOrder) {
+                    workOrdersCreated = 1;
+                }
                 notifications += notificationService.notifyWorkOrderCreated(event, rule, equipment);
             }
         }
-        return new EvaluationOutcome(eventRepository.save(event), isNew, notifications);
+        return new EvaluationOutcome(eventRepository.save(event), isNew, notifications, tasksCreated, workOrdersCreated);
     }
 
     private boolean shouldCreateEvent(MaintenanceDueStatus status) {
@@ -357,9 +359,23 @@ public class MaintenanceAutomationService {
         if (dueStatus == MaintenanceDueStatus.BLOCKED) {
             return MaintenanceDueEventStatus.DETECTED;
         }
+        if (dueStatus == MaintenanceDueStatus.UPCOMING) {
+            return MaintenanceDueEventStatus.DETECTED;
+        }
         return rule.automationAction() == AutomationAction.REQUIRE_APPROVAL || rule.requiresApproval()
                 ? MaintenanceDueEventStatus.AWAITING_APPROVAL
                 : MaintenanceDueEventStatus.DETECTED;
+    }
+
+    private ApprovalResultAction approvalResultAction(EquipmentMaintenanceEffectiveRule rule) {
+        if (rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
+            return rule.approvalResultAction() == null
+                    ? ApprovalResultAction.CREATE_TASK
+                    : rule.approvalResultAction();
+        }
+        return rule.automationAction() == AutomationAction.CREATE_WORK_ORDER
+                ? ApprovalResultAction.CREATE_WORK_ORDER
+                : ApprovalResultAction.CREATE_TASK;
     }
 
     private boolean isDuplicateSuppressed(EquipmentMaintenanceEffectiveRule rule, MaintenanceDueEvent event) {
@@ -666,10 +682,12 @@ public class MaintenanceAutomationService {
     private record EvaluationOutcome(
             MaintenanceDueEvent event,
             boolean created,
-            int notificationsCreated
+            int notificationsCreated,
+            int tasksCreated,
+            int workOrdersCreated
     ) {
         private static EvaluationOutcome none() {
-            return new EvaluationOutcome(null, false, 0);
+            return new EvaluationOutcome(null, false, 0, 0, 0);
         }
     }
 

@@ -140,7 +140,7 @@ public class MaintenanceDueEventService {
 
     @Transactional
     public MaintenanceDueEvent cancel(MaintenanceDueEvent event, String reason) {
-        assertCanMutate(event);
+        assertCanAccessEvent(event);
         if (event.getStatus() == MaintenanceDueEventStatus.COMPLETED
                 || event.getStatus() == MaintenanceDueEventStatus.CANCELLED) {
             throw RestException.badRequest("Maintenance due event is already closed");
@@ -182,13 +182,16 @@ public class MaintenanceDueEventService {
     public UUID departmentIdForEvent(MaintenanceDueEvent event) {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(event.getEquipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + event.getEquipmentId()));
-        return equipment.getResponsibleDepartmentId() != null
-                ? equipment.getResponsibleDepartmentId()
-                : equipment.getDepartmentId();
+        return effectiveDepartmentId(equipment);
     }
 
     @Transactional(readOnly = true)
     public void assertCanMutate(MaintenanceDueEvent event) {
+        assertCanAccessEvent(event);
+    }
+
+    @Transactional(readOnly = true)
+    public void assertCanAccessEvent(MaintenanceDueEvent event) {
         UUID departmentId = departmentIdForEvent(event);
         if (departmentId == null && scopeAccessService.isScopeAdmin()) {
             return;
@@ -265,6 +268,12 @@ public class MaintenanceDueEventService {
                 "Maintenance due: " + event.getCycleKey(),
                 event.getExplanation()
         );
+    }
+
+    private UUID effectiveDepartmentId(Equipment equipment) {
+        return equipment.getResponsibleDepartmentId() != null
+                ? equipment.getResponsibleDepartmentId()
+                : equipment.getDepartmentId();
     }
 
     private void normalizeMeterDueStatus(MaintenanceDueEvent event) {

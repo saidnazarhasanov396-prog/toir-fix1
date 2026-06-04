@@ -362,10 +362,15 @@ public class MaintenanceDueCalculationService {
             if (blocked.isPresent()) {
                 return new CombinedSignal(MaintenanceDueStatus.BLOCKED, joinExplanations(signals));
             }
-            boolean allActive = signals.stream().allMatch(this::isActive);
-            if (allActive) {
+            boolean allDue = signals.stream().allMatch(this::isDueOrOverdue);
+            if (allDue) {
                 TriggerSignal dominant = dominantActive(signals);
                 return new CombinedSignal(dominant.status(), joinExplanations(dominant, signals));
+            }
+            boolean allAtLeastUpcoming = signals.stream().allMatch(this::isActive);
+            if (allAtLeastUpcoming) {
+                return new CombinedSignal(MaintenanceDueStatus.UPCOMING,
+                        "Waiting for all maintenance triggers to become due; " + joinExplanations(signals));
             }
             return new CombinedSignal(MaintenanceDueStatus.NOT_DUE,
                     "Waiting for all maintenance triggers; " + joinExplanations(signals));
@@ -388,6 +393,11 @@ public class MaintenanceDueCalculationService {
     private boolean isActive(TriggerSignal signal) {
         return signal.status() == MaintenanceDueStatus.UPCOMING
                 || signal.status() == MaintenanceDueStatus.DUE
+                || signal.status() == MaintenanceDueStatus.OVERDUE;
+    }
+
+    private boolean isDueOrOverdue(TriggerSignal signal) {
+        return signal.status() == MaintenanceDueStatus.DUE
                 || signal.status() == MaintenanceDueStatus.OVERDUE;
     }
 

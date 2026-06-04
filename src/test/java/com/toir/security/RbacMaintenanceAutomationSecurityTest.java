@@ -7,6 +7,7 @@ import com.toir.dto.maintenancedue.MaintenanceDueEventDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationImpactDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationPreviewDto;
+import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.MaintenanceDueEventStatus;
@@ -250,6 +251,7 @@ class RbacMaintenanceAutomationSecurityTest {
                 MaintenanceTriggerPolicy.ANY,
                 MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION,
                 AutomationAction.TRACK_ONLY,
+                ApprovalResultAction.CREATE_TASK,
                 DuplicatePolicy.ONE_ITEM_PER_CYCLE,
                 null,
                 null,
