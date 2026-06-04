@@ -46,6 +46,9 @@ class ReservationServiceTest {
     @Mock
     AuditBuilderService auditBuilderService;
 
+    @Mock
+    LowStockRecommendationService lowStockRecommendationService;
+
     @InjectMocks
     ReservationService service;
 
@@ -203,6 +206,7 @@ class ReservationServiceTest {
         assertThat(movement.getWarehouseId()).isEqualTo(warehouseId);
         assertThat(movement.getSparePartId()).isEqualTo(sparePartId);
         assertThat(movement.getQuantity()).isEqualTo(5);
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
     }
 
     private WarehouseStock stock(UUID stockId, UUID warehouseId, UUID sparePartId, double quantity, double reservedQty) {

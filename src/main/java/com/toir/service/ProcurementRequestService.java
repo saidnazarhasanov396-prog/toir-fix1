@@ -42,6 +42,7 @@ public class ProcurementRequestService {
     private final AuditBuilderService auditBuilderService;
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
+    private final LowStockRecommendationService lowStockRecommendationService;
 
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId) {
@@ -301,6 +302,7 @@ public class ProcurementRequestService {
             stock.setQuantity(stock.getQuantity() + line.getQuantity());
             stockRepository.save(stock);
             stockMovementRepository.save(receiptMovement(request, line));
+            lowStockRecommendationService.evaluateStockSafely(stock);
         }
     }
 

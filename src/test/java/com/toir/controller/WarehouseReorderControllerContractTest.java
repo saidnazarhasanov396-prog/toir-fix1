@@ -1,7 +1,9 @@
 package com.toir.controller;
 
 import com.toir.dto.warehouse.ReorderSuggestionDto;
+import com.toir.dto.warehouse.LowStockEvaluationResultDto;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.service.LowStockRecommendationService;
 import com.toir.service.WarehouseReorderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -30,11 +33,14 @@ class WarehouseReorderControllerContractTest {
     @Mock
     WarehouseReorderService reorderService;
 
+    @Mock
+    LowStockRecommendationService lowStockRecommendationService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new WarehouseReorderController(reorderService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new WarehouseReorderController(reorderService, lowStockRecommendationService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -94,5 +100,36 @@ class WarehouseReorderControllerContractTest {
                 .andExpect(jsonPath("$.content").isEmpty());
 
         verify(reorderService).suggestions(eq(warehouseId), eq(1), eq(10));
+    }
+
+    @Test
+    void postEvaluateWithWarehouseIdReturnsEvaluationCounts() throws Exception {
+        UUID warehouseId = UUID.randomUUID();
+        when(lowStockRecommendationService.evaluateWarehouse(warehouseId))
+                .thenReturn(new LowStockEvaluationResultDto(3, 1, 1, 1, 0));
+
+        mockMvc.perform(post("/api/v1/warehouses/reorder/evaluate")
+                        .param("warehouseId", warehouseId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.evaluatedCount").value(3))
+                .andExpect(jsonPath("$.openedCount").value(1))
+                .andExpect(jsonPath("$.updatedCount").value(1))
+                .andExpect(jsonPath("$.resolvedCount").value(1))
+                .andExpect(jsonPath("$.skippedCount").value(0));
+
+        verify(lowStockRecommendationService).evaluateWarehouse(warehouseId);
+    }
+
+    @Test
+    void postEvaluateWithoutWarehouseIdEvaluatesAllStocks() throws Exception {
+        when(lowStockRecommendationService.evaluateAll())
+                .thenReturn(new LowStockEvaluationResultDto(2, 1, 0, 0, 1));
+
+        mockMvc.perform(post("/api/v1/warehouses/reorder/evaluate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.evaluatedCount").value(2))
+                .andExpect(jsonPath("$.skippedCount").value(1));
+
+        verify(lowStockRecommendationService).evaluateAll();
     }
 }

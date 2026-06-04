@@ -83,6 +83,19 @@ public class OperationalIssueService {
                                          UUID sourceId,
                                          String title,
                                          String message) {
+        return openOrUpdate(type, severity, equipmentId, departmentId, sourceType, sourceId, title, message, null);
+    }
+
+    @Transactional
+    public OperationalIssue openOrUpdate(OperationalIssueType type,
+                                         NotificationSeverity severity,
+                                         UUID equipmentId,
+                                         UUID departmentId,
+                                         String sourceType,
+                                         UUID sourceId,
+                                         String title,
+                                         String message,
+                                         Map<String, Object> metadata) {
         OperationalIssue issue = repository
                 .findBySourceTypeAndSourceIdAndStatusAndIsDeletedFalse(sourceType, sourceId, OperationalIssueStatus.OPEN)
                 .orElseGet(OperationalIssue::new);
@@ -94,6 +107,7 @@ public class OperationalIssueService {
         issue.setSourceId(sourceId);
         issue.setTitle(title);
         issue.setMessage(message);
+        issue.setMetadata(metadata);
         issue.setStatus(OperationalIssueStatus.OPEN);
         issue.setResolvedAt(null);
         return repository.save(issue);
@@ -101,10 +115,18 @@ public class OperationalIssueService {
 
     @Transactional
     public void resolveOpen(String sourceType, UUID sourceId) {
+        resolveOpen(sourceType, sourceId, null);
+    }
+
+    @Transactional
+    public void resolveOpen(String sourceType, UUID sourceId, String resolutionMessage) {
         repository.findBySourceTypeAndSourceIdAndStatusAndIsDeletedFalse(sourceType, sourceId, OperationalIssueStatus.OPEN)
                 .ifPresent(issue -> {
                     issue.setStatus(OperationalIssueStatus.RESOLVED);
                     issue.setResolvedAt(Instant.now());
+                    if (resolutionMessage != null && !resolutionMessage.isBlank()) {
+                        issue.setMessage(resolutionMessage);
+                    }
                     repository.save(issue);
                 });
     }

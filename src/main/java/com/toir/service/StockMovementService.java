@@ -34,6 +34,7 @@ public class StockMovementService {
     private final AuditBuilderService auditBuilderService;
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
+    private final LowStockRecommendationService lowStockRecommendationService;
 
 
     @Transactional(readOnly = true)
@@ -110,6 +111,10 @@ public class StockMovementService {
         movement.setNotes(request.notes());
         StockMovement saved = repository.save(movement);
 
+        if (shouldEvaluateLowStock(request.type())) {
+            lowStockRecommendationService.evaluateStockSafely(stock);
+        }
+
         auditBuilderService.log(
                 "stock_movement",
                 saved.getId().toString(),
@@ -121,6 +126,12 @@ public class StockMovementService {
         );
 
         return StockMovementDto.from(saved);
+    }
+
+    private boolean shouldEvaluateLowStock(StockMovementType type) {
+        return type == StockMovementType.ISSUE
+                || type == StockMovementType.TRANSFER
+                || type == StockMovementType.ADJUSTMENT;
     }
 
     private void validatePositiveQuantity(double quantity) {

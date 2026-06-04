@@ -58,6 +58,7 @@ public class OperationalIssueScannerService {
     private final MaintenanceBudgetRepository maintenanceBudgetRepository;
     private final ApprovalRequestRepository approvalRequestRepository;
     private final DefectRepository defectRepository;
+    private final LowStockRecommendationService lowStockRecommendationService;
 
     @Transactional
     public ScanResult scanAll() {
@@ -73,6 +74,9 @@ public class OperationalIssueScannerService {
         openedOrUpdated += scanBudgetIssues();
         openedOrUpdated += scanApprovalEscalations();
         openedOrUpdated += scanInspectionDefects();
+        var lowStock = lowStockRecommendationService.evaluateAll();
+        openedOrUpdated += lowStock.openedCount() + lowStock.updatedCount();
+        resolved += lowStock.resolvedCount();
         return new ScanResult(openedOrUpdated, resolved);
     }
 

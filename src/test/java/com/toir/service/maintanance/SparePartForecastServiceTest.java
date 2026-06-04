@@ -1,0 +1,376 @@
+package com.toir.service.maintanance;
+
+import com.toir.dto.sparepartforecast.SparePartForecastRequest;
+import com.toir.entity.OperationalIssue;
+import com.toir.entity.SparePart;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.MaintenanceDueEvent;
+import com.toir.entity.maintenance.MaintenanceTemplate;
+import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
+import com.toir.entity.warehouse.Warehouse;
+import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.MaintenanceDueEventStatus;
+import com.toir.enums.MaintenanceDueStatus;
+import com.toir.enums.MaintenanceTriggerSource;
+import com.toir.enums.NotificationSeverity;
+import com.toir.enums.OperationalIssueStatus;
+import com.toir.enums.OperationalIssueType;
+import com.toir.repository.OperationalIssueRepository;
+import com.toir.repository.SparePartRepository;
+import com.toir.repository.WarehouseRepository;
+import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceDueEventRepository;
+import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
+import com.toir.service.OperationalIssueService;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.startsWith;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class SparePartForecastServiceTest {
+
+    @Mock
+    private MaintenanceDueEventRepository eventRepository;
+    @Mock
+    private MaintenanceTemplateSparePartRequirementRepository requirementRepository;
+    @Mock
+    private WarehouseStockRepository stockRepository;
+    @Mock
+    private WarehouseRepository warehouseRepository;
+    @Mock
+    private SparePartRepository sparePartRepository;
+    @Mock
+    private EquipmentRepository equipmentRepository;
+    @Mock
+    private OperationalIssueRepository operationalIssueRepository;
+    @Mock
+    private OperationalIssueService operationalIssueService;
+
+    @InjectMocks
+    private SparePartForecastService service;
+
+    @Test
+    void forecastDueEventAndRequirementCalculatesShortage() {
+        UUID templateId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-04T00:00:00Z");
+        Instant dueAt = Instant.parse("2026-06-10T09:00:00Z");
+
+        when(eventRepository.findForecastCandidates(
+                now,
+                now.plusSeconds(30L * 24 * 60 * 60),
+                null,
+                null,
+                null,
+                List.of(
+                        MaintenanceDueEventStatus.DETECTED,
+                        MaintenanceDueEventStatus.AWAITING_APPROVAL,
+                        MaintenanceDueEventStatus.TASK_CREATED,
+                        MaintenanceDueEventStatus.WORK_ORDER_CREATED
+                ),
+                List.of(MaintenanceDueStatus.UPCOMING, MaintenanceDueStatus.DUE, MaintenanceDueStatus.OVERDUE)
+        )).thenReturn(List.of(event(eventId, templateId, equipmentId, dueAt)));
+        when(requirementRepository.findAllActiveByTemplateIdIn(List.of(templateId)))
+                .thenReturn(List.of(requirement(requirementId, templateId, sparePartId, 5)));
+        when(stockRepository.findAllBySparePartIdInAndWarehouseIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                List.of(sparePartId),
+                warehouseId
+        )).thenReturn(List.of(stock(warehouseId, sparePartId, 3, 1)));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(List.of(sparePartId)))
+                .thenReturn(List.of(sparePart(sparePartId)));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId)))
+                .thenReturn(List.of(warehouse(warehouseId)));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment(equipmentId)));
+
+        var summary = service.forecast(new SparePartForecastRequest(
+                30,
+                now,
+                null,
+                warehouseId,
+                null,
+                null,
+                null,
+                false
+        ));
+
+        assertThat(summary.periodStart()).isEqualTo(now);
+        assertThat(summary.items()).hasSize(1);
+        var item = summary.items().get(0);
+        assertThat(item.sparePartId()).isEqualTo(sparePartId);
+        assertThat(item.warehouseId()).isEqualTo(warehouseId);
+        assertThat(item.requiredQty()).isEqualTo(5);
+        assertThat(item.availableQty()).isEqualTo(2);
+        assertThat(item.reservedQty()).isEqualTo(1);
+        assertThat(item.shortageQty()).isEqualTo(3);
+        assertThat(item.severity()).isEqualTo(NotificationSeverity.WARNING);
+        assertThat(item.firstDueAt()).isEqualTo(dueAt);
+        assertThat(item.sourceCount()).isEqualTo(1);
+        assertThat(item.sources().get(0).maintenanceDueEventId()).isEqualTo(eventId);
+        assertThat(item.sources().get(0).requiredQty()).isEqualTo(5);
+    }
+
+    @Test
+    void onlyDeficitFiltersNonShortageItems() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-04T00:00:00Z");
+
+        when(eventRepository.findForecastCandidates(
+                eq(now),
+                eq(now.plusSeconds(30L * 24 * 60 * 60)),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(List.of(
+                        MaintenanceDueEventStatus.DETECTED,
+                        MaintenanceDueEventStatus.AWAITING_APPROVAL,
+                        MaintenanceDueEventStatus.TASK_CREATED,
+                        MaintenanceDueEventStatus.WORK_ORDER_CREATED
+                )),
+                eq(List.of(MaintenanceDueStatus.UPCOMING, MaintenanceDueStatus.DUE, MaintenanceDueStatus.OVERDUE))
+        )).thenReturn(List.of(event(UUID.randomUUID(), templateId, UUID.randomUUID(), now.plusSeconds(3600))));
+        when(requirementRepository.findAllActiveByTemplateIdIn(List.of(templateId)))
+                .thenReturn(List.of(requirement(UUID.randomUUID(), templateId, sparePartId, 2)));
+        when(stockRepository.findAllBySparePartIdInAndWarehouseIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                List.of(sparePartId),
+                warehouseId
+        )).thenReturn(List.of(stock(warehouseId, sparePartId, 10, 1)));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(List.of(sparePartId)))
+                .thenReturn(List.of(sparePart(sparePartId)));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId)))
+                .thenReturn(List.of(warehouse(warehouseId)));
+
+        var summary = service.forecast(new SparePartForecastRequest(
+                30,
+                now,
+                null,
+                warehouseId,
+                null,
+                null,
+                null,
+                true
+        ));
+
+        assertThat(summary.items()).isEmpty();
+    }
+
+    @Test
+    void evaluateCreatesIssueAndDoesNotCreateDuplicateOpenIssue() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-04T00:00:00Z");
+
+        when(eventRepository.findForecastCandidates(
+                eq(now),
+                eq(now.plusSeconds(30L * 24 * 60 * 60)),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(List.of(
+                        MaintenanceDueEventStatus.DETECTED,
+                        MaintenanceDueEventStatus.AWAITING_APPROVAL,
+                        MaintenanceDueEventStatus.TASK_CREATED,
+                        MaintenanceDueEventStatus.WORK_ORDER_CREATED
+                )),
+                eq(List.of(MaintenanceDueStatus.UPCOMING, MaintenanceDueStatus.DUE, MaintenanceDueStatus.OVERDUE))
+        )).thenReturn(List.of(event(UUID.randomUUID(), templateId, equipmentId, now.plusSeconds(3600))));
+        when(requirementRepository.findAllActiveByTemplateIdIn(List.of(templateId)))
+                .thenReturn(List.of(requirement(UUID.randomUUID(), templateId, sparePartId, 4)));
+        when(stockRepository.findAllBySparePartIdInAndWarehouseIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                List.of(sparePartId),
+                warehouseId
+        )).thenReturn(List.of(stock(warehouseId, sparePartId, 1, 0)));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(List.of(sparePartId)))
+                .thenReturn(List.of(sparePart(sparePartId)));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId)))
+                .thenReturn(List.of(warehouse(warehouseId)));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment(equipmentId)));
+        when(operationalIssueRepository.findBySourceTypeAndSourceIdAndStatusAndIsDeletedFalse(
+                eq("SPARE_PART_FORECAST"),
+                org.mockito.ArgumentMatchers.any(UUID.class),
+                eq(OperationalIssueStatus.OPEN)
+        )).thenReturn(Optional.empty(), Optional.of(new OperationalIssue()));
+
+        var first = service.evaluateAndCreateIssues(new SparePartForecastRequest(
+                30,
+                now,
+                null,
+                warehouseId,
+                null,
+                null,
+                null,
+                true
+        ));
+        var second = service.evaluateAndCreateIssues(new SparePartForecastRequest(
+                30,
+                now,
+                null,
+                warehouseId,
+                null,
+                null,
+                null,
+                true
+        ));
+
+        assertThat(first.createdIssueCount()).isEqualTo(1);
+        assertThat(first.updatedIssueCount()).isZero();
+        assertThat(second.createdIssueCount()).isZero();
+        assertThat(second.updatedIssueCount()).isEqualTo(1);
+        verify(operationalIssueService).openOrUpdate(
+                eq(OperationalIssueType.SPARE_PART_SHORTAGE_FORECAST),
+                eq(NotificationSeverity.WARNING),
+                isNull(),
+                isNull(),
+                eq("SPARE_PART_FORECAST"),
+                org.mockito.ArgumentMatchers.any(UUID.class),
+                startsWith("Spare part shortage forecast: Bearing"),
+                org.mockito.ArgumentMatchers.contains("shortageQty=3.0")
+        );
+    }
+
+    @Test
+    void evaluateDoesNotCreateIssueWhenThereIsNoShortage() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-04T00:00:00Z");
+
+        when(eventRepository.findForecastCandidates(
+                eq(now),
+                eq(now.plusSeconds(30L * 24 * 60 * 60)),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(List.of(
+                        MaintenanceDueEventStatus.DETECTED,
+                        MaintenanceDueEventStatus.AWAITING_APPROVAL,
+                        MaintenanceDueEventStatus.TASK_CREATED,
+                        MaintenanceDueEventStatus.WORK_ORDER_CREATED
+                )),
+                eq(List.of(MaintenanceDueStatus.UPCOMING, MaintenanceDueStatus.DUE, MaintenanceDueStatus.OVERDUE))
+        )).thenReturn(List.of(event(UUID.randomUUID(), templateId, UUID.randomUUID(), now.plusSeconds(3600))));
+        when(requirementRepository.findAllActiveByTemplateIdIn(List.of(templateId)))
+                .thenReturn(List.of(requirement(UUID.randomUUID(), templateId, sparePartId, 1)));
+        when(stockRepository.findAllBySparePartIdInAndWarehouseIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                List.of(sparePartId),
+                warehouseId
+        )).thenReturn(List.of(stock(warehouseId, sparePartId, 5, 0)));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(List.of(sparePartId)))
+                .thenReturn(List.of(sparePart(sparePartId)));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId)))
+                .thenReturn(List.of(warehouse(warehouseId)));
+
+        var response = service.evaluateAndCreateIssues(new SparePartForecastRequest(
+                30,
+                now,
+                null,
+                warehouseId,
+                null,
+                null,
+                null,
+                true
+        ));
+
+        assertThat(response.createdIssueCount()).isZero();
+        assertThat(response.updatedIssueCount()).isZero();
+        verify(operationalIssueService, never()).openOrUpdate(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+        );
+    }
+
+    private MaintenanceDueEvent event(UUID id, UUID templateId, UUID equipmentId, Instant dueAt) {
+        MaintenanceDueEvent event = new MaintenanceDueEvent();
+        event.setId(id);
+        event.setTemplateId(templateId);
+        event.setEquipmentId(equipmentId);
+        event.setStatus(MaintenanceDueEventStatus.DETECTED);
+        event.setDueStatus(MaintenanceDueStatus.UPCOMING);
+        event.setTriggerSource(MaintenanceTriggerSource.CALENDAR_JOB);
+        event.setDueAt(dueAt);
+        event.setCycleKey(id.toString());
+        return event;
+    }
+
+    private MaintenanceTemplateSparePartRequirement requirement(UUID id, UUID templateId, UUID sparePartId, double quantity) {
+        MaintenanceTemplate template = new MaintenanceTemplate();
+        template.setId(templateId);
+        SparePart sparePart = sparePart(sparePartId);
+        MaintenanceTemplateSparePartRequirement requirement = new MaintenanceTemplateSparePartRequirement();
+        requirement.setId(id);
+        requirement.setTemplate(template);
+        requirement.setTemplateId(templateId);
+        requirement.setSparePart(sparePart);
+        requirement.setSparePartId(sparePartId);
+        requirement.setQuantity(quantity);
+        requirement.setUnit("pcs");
+        requirement.setActive(true);
+        return requirement;
+    }
+
+    private WarehouseStock stock(UUID warehouseId, UUID sparePartId, double quantity, double reservedQty) {
+        WarehouseStock stock = new WarehouseStock();
+        stock.setId(UUID.randomUUID());
+        stock.setWarehouseId(warehouseId);
+        stock.setSparePartId(sparePartId);
+        stock.setQuantity(quantity);
+        stock.setReservedQty(reservedQty);
+        stock.setMinQty(0);
+        return stock;
+    }
+
+    private SparePart sparePart(UUID id) {
+        SparePart sparePart = new SparePart();
+        sparePart.setId(id);
+        sparePart.setCode("BRG-001");
+        sparePart.setName("Bearing");
+        sparePart.setUnit("pcs");
+        return sparePart;
+    }
+
+    private Warehouse warehouse(UUID id) {
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(id);
+        warehouse.setCode("WH-1");
+        warehouse.setName("Main warehouse");
+        return warehouse;
+    }
+
+    private Equipment equipment(UUID id) {
+        Equipment equipment = new Equipment();
+        equipment.setId(id);
+        equipment.setCode("EQ-1");
+        equipment.setName("Pump");
+        return equipment;
+    }
+}

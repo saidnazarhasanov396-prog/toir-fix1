@@ -15,6 +15,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.LowStockRecommendationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.util.AuditBuilderService;
@@ -47,6 +48,7 @@ class MaterialUsagePbacScopeTest {
     RepairRequestRepository repairRequestRepository;
     ScopeAccessService scopeAccessService;
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+    LowStockRecommendationService lowStockRecommendationService;
     RepairMaterialUsageService service;
 
     @BeforeEach
@@ -62,6 +64,7 @@ class MaterialUsagePbacScopeTest {
         repairRequestRepository = mock(RepairRequestRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
         equipmentStatusLifecycleService = mock(EquipmentStatusLifecycleService.class);
+        lowStockRecommendationService = mock(LowStockRecommendationService.class);
         service = new RepairMaterialUsageService(
                 repository,
                 stockRepository,
@@ -73,7 +76,8 @@ class MaterialUsagePbacScopeTest {
                 userRepository,
                 repairRequestRepository,
                 scopeAccessService,
-                equipmentStatusLifecycleService
+                equipmentStatusLifecycleService,
+                lowStockRecommendationService
         );
     }
 

@@ -7,6 +7,7 @@ import com.toir.enums.NotificationSeverity;
 import com.toir.enums.OperationalIssueStatus;
 import com.toir.enums.OperationalIssueType;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 public record OperationalIssueDto(
@@ -23,7 +24,8 @@ public record OperationalIssueDto(
         Instant detectedAt,
         Instant resolvedAt,
         String sourceType,
-        UUID sourceId
+        UUID sourceId,
+        Map<String, Object> metadata
 ) {
     public static OperationalIssueDto from(OperationalIssue issue, Equipment equipment, Department department) {
         return new OperationalIssueDto(
@@ -40,7 +42,8 @@ public record OperationalIssueDto(
                 issue.getDetectedAt(),
                 issue.getResolvedAt(),
                 issue.getSourceType(),
-                issue.getSourceId()
+                issue.getSourceId(),
+                issue.getMetadata()
         );
     }
 }

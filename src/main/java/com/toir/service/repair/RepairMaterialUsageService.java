@@ -22,6 +22,7 @@ import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.LowStockRecommendationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +58,7 @@ public class RepairMaterialUsageService {
     private final RepairRequestRepository repairRequestRepository;
     private final ScopeAccessService scopeAccessService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+    private final LowStockRecommendationService lowStockRecommendationService;
 
 
     @Transactional(readOnly = true)
@@ -128,6 +130,7 @@ public class RepairMaterialUsageService {
         movement.setCreatedById(r.issuedById());
         movement.setNotes(r.notes());
         StockMovement savedMovement = stockMovementRepository.save(movement);
+        lowStockRecommendationService.evaluateStockSafely(stock);
 
         RepairMaterialUsage usage = new RepairMaterialUsage();
         usage.setWorkOrderId(workOrderId);

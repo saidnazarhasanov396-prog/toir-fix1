@@ -1,7 +1,9 @@
 package com.toir.security;
 
 import com.toir.controller.WarehouseReorderController;
+import com.toir.dto.warehouse.LowStockEvaluationResultDto;
 import com.toir.dto.warehouse.ReorderStatsDto;
+import com.toir.service.LowStockRecommendationService;
 import com.toir.service.WarehouseReorderService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +21,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -43,6 +46,9 @@ class RbacWarehouseReorderStatsSecurityTest {
 
     @MockBean
     WarehouseReorderService reorderService;
+
+    @MockBean
+    LowStockRecommendationService lowStockRecommendationService;
 
     @TestConfiguration
     static class SecurityBeans {
@@ -138,5 +144,30 @@ class RbacWarehouseReorderStatsSecurityTest {
 
         mockMvc.perform(get("/api/v1/warehouses/reorder/suggestions"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void unauthenticatedCannotEvaluateLowStock() throws Exception {
+        mockMvc.perform(post("/api/v1/warehouses/reorder/evaluate"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.USER_READ)
+    void unrelatedPermissionCannotEvaluateLowStock() throws Exception {
+        mockMvc.perform(post("/api/v1/warehouses/reorder/evaluate"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.STOCK_READ)
+    void stockReadCanEvaluateLowStock() throws Exception {
+        when(lowStockRecommendationService.evaluateAll())
+                .thenReturn(new LowStockEvaluationResultDto(1, 1, 0, 0, 0));
+
+        mockMvc.perform(post("/api/v1/warehouses/reorder/evaluate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.evaluatedCount").value(1))
+                .andExpect(jsonPath("$.openedCount").value(1));
     }
 }
