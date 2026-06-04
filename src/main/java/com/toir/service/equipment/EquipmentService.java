@@ -812,6 +812,7 @@ public class EquipmentService {
         if (request.status() != null) entity.setStatus(request.status());
         entity.setCategory(request.category() != null ? request.category() : EquipmentCategory.PRODUCTION_EQUIPMENT);
         entity.setCommissionedAt(request.commissionedAt());
+        entity.setArrivalDate(request.arrivalDate());
         entity.setWarrantyUntil(request.warrantyUntil());
         entity.setHasWarranty(Boolean.TRUE.equals(request.hasWarranty()));
         entity.setWarrantyAttachmentId(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyAttachmentId() : null);
@@ -1318,6 +1319,7 @@ public class EquipmentService {
         entity.setManufacturer(request.manufacturer() != null ? request.manufacturer() : entity.getManufacturer());
         entity.setCategory(request.category() != null ? request.category() : entity.getCategory());
         entity.setCommissionedAt(request.commissionedAt() != null ? request.commissionedAt() : entity.getCommissionedAt());
+        entity.setArrivalDate(request.arrivalDate() != null ? request.arrivalDate() : entity.getArrivalDate());
         entity.setWarrantyUntil(request.warrantyUntil() != null ? request.warrantyUntil() : entity.getWarrantyUntil());
         applyWarrantyForUpdate(entity, request);
         entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours() != null

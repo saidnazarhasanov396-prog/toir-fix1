@@ -201,6 +201,7 @@ public class MaintenanceDueEventService {
 
     @Transactional(readOnly = true)
     public MaintenanceDueEventDto toDto(MaintenanceDueEvent event) {
+        normalizeMeterDueStatus(event);
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(event.getEquipmentId()).orElse(null);
         MaintenanceRegulation regulation = event.getRegulationId() == null
                 ? null
@@ -230,6 +231,7 @@ public class MaintenanceDueEventService {
                 : regulationRepository.findAllByIdInAndIsDeletedFalse(regulationIds).stream()
                 .collect(Collectors.toMap(MaintenanceRegulation::getId, Function.identity(), (left, right) -> left));
         return page.map(event -> {
+            normalizeMeterDueStatus(event);
             Equipment equipment = equipmentById.get(event.getEquipmentId());
             MaintenanceRegulation regulation = event.getRegulationId() == null ? null : regulationById.get(event.getRegulationId());
             return MaintenanceDueEventDto.from(
@@ -287,7 +289,21 @@ public class MaintenanceDueEventService {
         } else if (remaining == 0) {
             event.setDueStatus(MaintenanceDueStatus.DUE);
             event.setExplanation(replaceMeterExplanation(event.getExplanation(), "Meter trigger due"));
+        } else if (isWithinMeterLeadWindow(event)) {
+            event.setDueStatus(MaintenanceDueStatus.UPCOMING);
+            event.setExplanation(replaceMeterExplanation(event.getExplanation(), "Meter trigger upcoming"));
+        } else {
+            event.setDueStatus(MaintenanceDueStatus.NOT_DUE);
+            event.setExplanation(replaceMeterExplanation(event.getExplanation(), "Meter trigger not due"));
         }
+    }
+
+    private boolean isWithinMeterLeadWindow(MaintenanceDueEvent event) {
+        if (event.getMeterInterval() == null || event.getMeterInterval() <= 0) {
+            return true;
+        }
+        return BigDecimal.valueOf(event.getMeterRemaining())
+                .compareTo(BigDecimal.valueOf(event.getMeterInterval() * 0.05)) <= 0;
     }
 
     private boolean meterDominant(MaintenanceDueEvent event) {

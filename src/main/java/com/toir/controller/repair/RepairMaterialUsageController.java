@@ -28,6 +28,24 @@ public class RepairMaterialUsageController {
         return ResponseEntity.ok(PaginationUtils.page(service.findByWorkOrder(workOrderId), page, size));
     }
 
+    @GetMapping("/repair-requests/{repairRequestId}/material-usage")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MATERIAL_USAGE_READ')")
+    public ResponseEntity<Page<RepairMaterialUsageDto>> listByRepairRequest(
+            @PathVariable UUID repairRequestId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByRepairRequest(repairRequestId), page, size));
+    }
+
+    @GetMapping("/ppr-plans/tasks/{taskId}/material-usage")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MATERIAL_USAGE_READ')")
+    public ResponseEntity<Page<RepairMaterialUsageDto>> listByPprTask(
+            @PathVariable UUID taskId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByPprTask(taskId), page, size));
+    }
+
     @PostMapping("/work-orders/{workOrderId}/material-usage")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MATERIAL_USAGE_ISSUE')")
     public ResponseEntity<RepairMaterialUsageDto> register(@PathVariable UUID workOrderId, @Valid @RequestBody RepairMaterialUsageDto r) {

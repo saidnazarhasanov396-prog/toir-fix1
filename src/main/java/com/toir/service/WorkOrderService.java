@@ -51,6 +51,7 @@ import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
+import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -96,6 +97,7 @@ public class WorkOrderService {
     private final SafetyPermitRepository safetyPermitRepository;
     private final CompletionActRepository completionActRepository;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+    private final RepairMaterialUsageService repairMaterialUsageService;
     private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
     private final MaintenanceDueEventService maintenanceDueEventService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
@@ -161,7 +163,7 @@ public class WorkOrderService {
     @Transactional(readOnly = true)
     public WorkOrderDto findById(UUID id) {
         WorkOrder entity = getOrThrow(id);
-        return toDto(entity);
+        return toDetailDto(entity);
     }
 
     @Transactional
@@ -281,6 +283,7 @@ public class WorkOrderService {
             entity.setSummary(request.summary());
         }
         validateCompleteRequestForReplacement(entity, request);
+        issueCompletionMaterials(entity, request);
         entity.setStatus(WorkOrderStatus.COMPLETED);
         entity.setCompletedAt(Instant.now());
         updateReplacementEquipmentStatus(entity, WarehouseEquipmentStatus.INSTALLED);
@@ -314,7 +317,7 @@ public class WorkOrderService {
                 "Завершён наряд " + saved.getNumber(),
                 entity,
                 saved);
-        return toDto(saved);
+        return toDetailDto(saved);
     }
 
     @Transactional
@@ -1049,14 +1052,32 @@ public class WorkOrderService {
         equipmentRepository.save(replacementEquipment);
     }
 
+    private void issueCompletionMaterials(WorkOrder workOrder, CompleteWorkOrderRequest request) {
+        if (request.materialUsages() == null || request.materialUsages().isEmpty()) {
+            return;
+        }
+        request.materialUsages().forEach(usage -> repairMaterialUsageService.register(workOrder.getId(), usage));
+    }
+
+    private WorkOrderDto toDetailDto(WorkOrder entity) {
+        EquipmentNode equipmentNode = entity.getEquipmentNodeId() == null
+                ? null
+                : equipmentNodeRepository.findByIdAndIsDeletedFalse(entity.getEquipmentNodeId()).orElse(null);
+        return toDto(entity, equipmentNode, materialUsagesFor(entity));
+    }
+
     private WorkOrderDto toDto(WorkOrder entity) {
         EquipmentNode equipmentNode = entity.getEquipmentNodeId() == null
                 ? null
                 : equipmentNodeRepository.findByIdAndIsDeletedFalse(entity.getEquipmentNodeId()).orElse(null);
-        return toDto(entity, equipmentNode);
+        return toDto(entity, equipmentNode, List.of());
     }
 
     private WorkOrderDto toDto(WorkOrder entity, EquipmentNode equipmentNode) {
+        return toDto(entity, equipmentNode, List.of());
+    }
+
+    private WorkOrderDto toDto(WorkOrder entity, EquipmentNode equipmentNode, List<com.toir.dto.materialusage.RepairMaterialUsageDto> materialUsages) {
         RepairRequest linkedRepairRequest = entity.getRepairRequestId() == null
                 ? null
                 : repairRequestRepository.findByIdAndIsDeletedFalse(entity.getRepairRequestId()).orElse(null);
@@ -1075,7 +1096,8 @@ public class WorkOrderService {
                 linkedRepairRequest,
                 linkedDefect,
                 resolveCount(entity.getId(), operationsCountByWorkOrderId),
-                resolveCount(entity.getId(), materialsCountByWorkOrderId));
+                resolveCount(entity.getId(), materialsCountByWorkOrderId),
+                materialUsages);
     }
 
     private WorkOrderDto toDto(WorkOrder entity,
@@ -1084,6 +1106,16 @@ public class WorkOrderService {
             Defect linkedDefect,
             int operationsCount,
             int materialsCount) {
+        return toDto(entity, equipmentNode, linkedRepairRequest, linkedDefect, operationsCount, materialsCount, List.of());
+    }
+
+    private WorkOrderDto toDto(WorkOrder entity,
+            EquipmentNode equipmentNode,
+            RepairRequest linkedRepairRequest,
+            Defect linkedDefect,
+            int operationsCount,
+            int materialsCount,
+            List<com.toir.dto.materialusage.RepairMaterialUsageDto> materialUsages) {
         String equipmentName = equipmentRepository.findById(entity.getEquipmentId())
                 .map(Equipment::getName)
                 .orElse(null);
@@ -1114,7 +1146,15 @@ public class WorkOrderService {
                 TriadLinkMapper.toDefectBrief(linkedDefect),
                 operationsCount,
                 materialsCount,
+                materialUsages,
                 entity.getUpdatedAt());
+    }
+
+    private List<com.toir.dto.materialusage.RepairMaterialUsageDto> materialUsagesFor(WorkOrder entity) {
+        if (entity.getId() == null) {
+            return List.of();
+        }
+        return repairMaterialUsageService.findByWorkOrder(entity.getId());
     }
 
     private List<WorkOrderDto> toDtos(List<WorkOrder> entities) {

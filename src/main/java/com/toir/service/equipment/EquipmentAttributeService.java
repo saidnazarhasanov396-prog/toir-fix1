@@ -87,6 +87,8 @@ public class EquipmentAttributeService {
             "category",
             "commissionedAt",
             "commissioned_at",
+            "arrivalDate",
+            "arrival_date",
             "warrantyUntil",
             "warranty_until",
             "warrantyStartDate",

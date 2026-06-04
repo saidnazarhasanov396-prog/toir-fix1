@@ -160,11 +160,37 @@ class StockMovementServiceTest {
         assertThat(movementCaptor.getValue().getType()).isEqualTo(StockMovementType.ISSUE);
     }
 
+    @Test
+    void issueWithWorkOrderIdIsBlockedToPreserveMaterialUsageSourceOfTruth() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.create(requestWithWorkOrder(
+                warehouseId,
+                sparePartId,
+                StockMovementType.ISSUE,
+                1,
+                UUID.randomUUID())))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("/api/v1/work-orders/{workOrderId}/material-usage");
+
+        verifyNoInteractions(stockRepository, repository, sparePartRepository);
+    }
+
     private StockMovementRequest request(UUID warehouseId, UUID sparePartId, StockMovementType type, double quantity) {
+        return requestWithWorkOrder(warehouseId, sparePartId, type, quantity, null);
+    }
+
+    private StockMovementRequest requestWithWorkOrder(
+            UUID warehouseId,
+            UUID sparePartId,
+            StockMovementType type,
+            double quantity,
+            UUID workOrderId) {
         return new StockMovementRequest(
                 warehouseId,
                 sparePartId,
-                UUID.randomUUID(),
+                workOrderId,
                 type,
                 quantity,
                 null,
