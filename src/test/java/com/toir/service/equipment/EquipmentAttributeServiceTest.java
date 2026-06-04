@@ -1386,7 +1386,13 @@ class EquipmentAttributeServiceTest {
     }
 
     private static Stream<String> reservedDefinitionKeys() {
-        return Stream.of("model", "averageOperatingLifeHours", "average_operating_life_hours");
+        return Stream.of(
+                "model",
+                "arrivalDate",
+                "arrival_date",
+                "averageOperatingLifeHours",
+                "average_operating_life_hours"
+        );
     }
 
     private void stubEquipmentType(UUID id) {

@@ -1,21 +1,97 @@
 package com.toir.dto.materialusage;
 
 import com.toir.entity.repair.RepairMaterialUsage;
+import com.toir.enums.InventoryItemKind;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public record RepairMaterialUsageDto(
         UUID id,
         UUID workOrderId,
+        String workOrderNumber,
+        String workOrderTitle,
         @NotNull UUID warehouseId,
+        String warehouseName,
         @NotNull UUID sparePartId,
+        String sparePartName,
+        String sparePartCode,
+        InventoryItemKind kind,
         @Positive double quantity,
-        Double unitCost
+        Double unitCost,
+        Double totalCost,
+        Instant issuedAt,
+        UUID issuedById,
+        String issuedByName,
+        UUID stockMovementId,
+        String notes
 ) {
+    public RepairMaterialUsageDto(UUID id,
+                                  UUID workOrderId,
+                                  UUID warehouseId,
+                                  UUID sparePartId,
+                                  double quantity,
+                                  Double unitCost) {
+        this(id, workOrderId, null, null, warehouseId, null, sparePartId, null, null, null,
+                quantity, unitCost, totalCost(quantity, unitCost), null, null, null, null, null);
+    }
+
     public static RepairMaterialUsageDto from(RepairMaterialUsage u) {
-        return new RepairMaterialUsageDto(u.getId(), u.getWorkOrderId(), u.getWarehouseId(),
-                u.getSparePartId(), u.getQuantity(), u.getUnitCost());
+        return new RepairMaterialUsageDto(
+                u.getId(),
+                u.getWorkOrderId(),
+                null,
+                null,
+                u.getWarehouseId(),
+                null,
+                u.getSparePartId(),
+                null,
+                null,
+                null,
+                u.getQuantity(),
+                u.getUnitCost(),
+                totalCost(u.getQuantity(), u.getUnitCost()),
+                u.getIssuedAt() == null ? u.getCreatedAt() : u.getIssuedAt(),
+                u.getIssuedById(),
+                null,
+                u.getStockMovementId(),
+                u.getNotes()
+        );
+    }
+
+    public static RepairMaterialUsageDto detailed(RepairMaterialUsage u,
+                                                  String workOrderNumber,
+                                                  String workOrderTitle,
+                                                  String warehouseName,
+                                                  String sparePartName,
+                                                  String sparePartCode,
+                                                  InventoryItemKind kind,
+                                                  String issuedByName) {
+        return new RepairMaterialUsageDto(
+                u.getId(),
+                u.getWorkOrderId(),
+                workOrderNumber,
+                workOrderTitle,
+                u.getWarehouseId(),
+                warehouseName,
+                u.getSparePartId(),
+                sparePartName,
+                sparePartCode,
+                kind,
+                u.getQuantity(),
+                u.getUnitCost(),
+                totalCost(u.getQuantity(), u.getUnitCost()),
+                u.getIssuedAt() == null ? u.getCreatedAt() : u.getIssuedAt(),
+                u.getIssuedById(),
+                issuedByName,
+                u.getStockMovementId(),
+                u.getNotes()
+        );
+    }
+
+    private static Double totalCost(double quantity, Double unitCost) {
+        return unitCost == null ? null : quantity * unitCost;
     }
 }

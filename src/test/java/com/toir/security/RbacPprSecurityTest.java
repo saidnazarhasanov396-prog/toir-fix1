@@ -36,7 +36,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
@@ -350,7 +349,8 @@ class RbacPprSecurityTest {
     @WithMockUser(authorities = PermissionConstants.PPR_TASK_COMPLETE)
     void pprTaskCompleteCanCompleteTask() throws Exception {
         UUID taskId = UUID.randomUUID();
-        when(pprPlanService.completeTask(eq(taskId), anyDouble())).thenReturn(taskDto(UUID.randomUUID()));
+        when(pprPlanService.completeTask(eq(taskId), any(com.toir.dto.pprplanning.CompletePprTaskRequest.class)))
+                .thenReturn(taskDto(UUID.randomUUID()));
 
         mockMvc.perform(post("/api/v1/ppr-plans/tasks/{taskId}/complete", taskId)
                         .param("actualLaborHours", "2.0"))

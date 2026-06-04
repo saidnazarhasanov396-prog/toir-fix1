@@ -78,6 +78,26 @@ class RbacMaterialUsageSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = PermissionConstants.MATERIAL_USAGE_READ)
+    void materialUsageReadCanReadRepairRequestAggregatedMaterialUsage() throws Exception {
+        UUID repairRequestId = UUID.randomUUID();
+        when(repairMaterialUsageService.findByRepairRequest(repairRequestId)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/repair-requests/{repairRequestId}/material-usage", repairRequestId))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.MATERIAL_USAGE_READ)
+    void materialUsageReadCanReadPprTaskAggregatedMaterialUsage() throws Exception {
+        UUID taskId = UUID.randomUUID();
+        when(repairMaterialUsageService.findByPprTask(taskId)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/ppr-plans/tasks/{taskId}/material-usage", taskId))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void systemAdminCanReadMaterialUsage() throws Exception {
         UUID workOrderId = UUID.randomUUID();

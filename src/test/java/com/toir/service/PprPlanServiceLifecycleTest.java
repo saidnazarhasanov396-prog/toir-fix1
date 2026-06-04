@@ -1,5 +1,7 @@
 package com.toir.service;
 
+import com.toir.dto.materialusage.RepairMaterialUsageDto;
+import com.toir.dto.pprplanning.CompletePprTaskRequest;
 import com.toir.dto.pprplanning.PprTaskDto;
 import com.toir.dto.pprplanning.PprPlanRequest;
 import com.toir.dto.pprplanning.PprTaskRequest;
@@ -9,6 +11,7 @@ import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PprFrequency;
 import com.toir.enums.PprScheduleType;
@@ -20,11 +23,13 @@ import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import jakarta.persistence.EntityManager;
@@ -63,6 +68,9 @@ class PprPlanServiceLifecycleTest {
     PprTaskRepository taskRepository;
 
     @Mock
+    WorkOrderRepository workOrderRepository;
+
+    @Mock
     DepartmentRepository departmentRepository;
 
     @Mock
@@ -85,6 +93,9 @@ class PprPlanServiceLifecycleTest {
 
     @Mock
     AuditSerializationService auditSerializationService;
+
+    @Mock
+    RepairMaterialUsageService repairMaterialUsageService;
 
     @Mock
     EntityManager entityManager;
@@ -673,6 +684,64 @@ class PprPlanServiceLifecycleTest {
 
         assertThat(plan.getStatus()).isEqualTo(PlanStatus.IN_PROGRESS);
         verify(planRepository).save(plan);
+    }
+
+    @Test
+    void completeTaskWithMaterialUsagesIssuesAgainstLinkedWorkOrder() {
+        UUID taskId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        PprTask task = task(taskId, plan(UUID.randomUUID(), PlanStatus.IN_PROGRESS), PprTaskStatus.IN_PROGRESS);
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setPprTaskId(taskId);
+        RepairMaterialUsageDto usage = new RepairMaterialUsageDto(
+                null,
+                null,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                3,
+                8.0
+        );
+
+        when(taskRepository.findByIdAndIsDeletedFalse(taskId)).thenReturn(Optional.of(task));
+        when(workOrderRepository.findFirstByPprTaskIdAndIsDeletedFalseOrderByUpdatedAtDesc(taskId))
+                .thenReturn(Optional.of(workOrder));
+        when(taskRepository.save(any(PprTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repairMaterialUsageService.register(workOrderId, usage)).thenReturn(usage);
+
+        PprTaskDto result = service.completeTask(taskId, new CompletePprTaskRequest(4.5, List.of(usage)));
+
+        assertThat(result.status()).isEqualTo(PprTaskStatus.COMPLETED);
+        assertThat(result.actualLaborHours()).isEqualTo(4.5);
+        verify(repairMaterialUsageService).register(workOrderId, usage);
+        verify(taskRepository).save(task);
+    }
+
+    @Test
+    void completeTaskWithMaterialUsagesRequiresLinkedWorkOrder() {
+        UUID taskId = UUID.randomUUID();
+        PprTask task = task(taskId, plan(UUID.randomUUID(), PlanStatus.IN_PROGRESS), PprTaskStatus.IN_PROGRESS);
+        RepairMaterialUsageDto usage = new RepairMaterialUsageDto(
+                null,
+                null,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                3,
+                8.0
+        );
+
+        when(taskRepository.findByIdAndIsDeletedFalse(taskId)).thenReturn(Optional.of(task));
+        when(workOrderRepository.findFirstByPprTaskIdAndIsDeletedFalseOrderByUpdatedAtDesc(taskId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.completeTask(taskId, new CompletePprTaskRequest(4.5, List.of(usage))))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Material usage requires a linked Work Order");
+                });
+
+        assertThat(task.getStatus()).isEqualTo(PprTaskStatus.IN_PROGRESS);
+        verify(taskRepository, never()).save(any(PprTask.class));
     }
 
     private PprPlan plan(UUID id, PlanStatus status) {

@@ -32,6 +32,9 @@ public interface RepairMaterialUsageRepository extends JpaRepository<RepairMater
     @Query(value = "SELECT * FROM repair_material_usages WHERE work_order_id = :workOrderId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<RepairMaterialUsage> findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("workOrderId") UUID workOrderId);
 
+    @Query(value = "SELECT * FROM repair_material_usages WHERE work_order_id IN (:workOrderIds) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<RepairMaterialUsage> findAllByWorkOrderIdInAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("workOrderIds") Collection<UUID> workOrderIds);
+
     @Query("""
             select u.workOrderId as workOrderId, count(u) as count
             from RepairMaterialUsage u

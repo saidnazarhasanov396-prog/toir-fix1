@@ -1,5 +1,6 @@
 package com.toir.controller;
 
+import com.toir.dto.pprplanning.CompletePprTaskRequest;
 import com.toir.dto.pprplanning.PostponeTaskRequest;
 import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.dto.pprplanning.PprPlanRequest;
@@ -201,9 +202,15 @@ public class PprPlanController {
     @PreAuthorize(PPR_TASK_COMPLETE_AUTH)
     public ResponseEntity<PprTaskDto> completeTask(
             @PathVariable UUID taskId,
-            @RequestParam(required = false) Double actualLaborHours) {
+            @RequestParam(required = false) Double actualLaborHours,
+            @Valid @RequestBody(required = false) CompletePprTaskRequest request) {
         assertCanAccessTask(taskOrThrow(taskId));
-        return ResponseEntity.ok(service.completeTask(taskId, actualLaborHours));
+        CompletePprTaskRequest effectiveRequest = request == null
+                ? new CompletePprTaskRequest(actualLaborHours, null)
+                : new CompletePprTaskRequest(
+                        request.actualLaborHours() == null ? actualLaborHours : request.actualLaborHours(),
+                        request.materialUsages());
+        return ResponseEntity.ok(service.completeTask(taskId, effectiveRequest));
     }
 
     @PostMapping("/tasks/{taskId}/cancel")

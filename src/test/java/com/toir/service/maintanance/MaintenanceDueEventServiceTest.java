@@ -158,6 +158,39 @@ class MaintenanceDueEventServiceTest {
     }
 
     @Test
+    void saveEventNormalizesStaleMeterOverdueWhenRemainingIsPositive() {
+        UUID eventId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceDueEvent event = event(eventId, equipmentId, MaintenanceDueStatus.OVERDUE);
+        event.setTriggerSource(MaintenanceTriggerSource.METER_READING);
+        event.setMeterType(com.toir.enums.MeterType.ENGINE_HOURS);
+        event.setMeterCurrentValue(980.0);
+        event.setMeterAnchorValue(500.0);
+        event.setMeterInterval(500.0);
+        event.setMeterRemaining(20.0);
+        event.setExplanation("Meter trigger overdue");
+        Equipment equipment = equipment(equipmentId, null, UUID.randomUUID());
+        when(repository.save(event)).thenReturn(event);
+
+        service.saveEvent(event, equipment);
+
+        assertThat(event.getDueStatus()).isEqualTo(MaintenanceDueStatus.UPCOMING);
+        assertThat(event.getExplanation()).contains("Meter trigger upcoming");
+        assertThat(event.getExplanation()).doesNotContain("Meter trigger overdue");
+        verify(operationalIssueService).resolveOpen("MaintenanceDueEvent", eventId);
+        verify(operationalIssueService, never()).openOrUpdate(
+                any(OperationalIssueType.class),
+                any(NotificationSeverity.class),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
+    }
+
+    @Test
     void cancelOpenEventMarksItCancelledAndResolved() {
         UUID eventId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();

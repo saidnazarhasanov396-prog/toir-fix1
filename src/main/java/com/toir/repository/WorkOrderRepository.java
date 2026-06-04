@@ -37,6 +37,9 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM work_orders WHERE ppr_task_id = cast(:pprTaskId as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByPprTaskIdAndIsDeletedFalse(@Param("pprTaskId") UUID pprTaskId);
 
+    @Query(value = "SELECT * FROM work_orders WHERE ppr_task_id = cast(:pprTaskId as uuid) AND is_deleted = false ORDER BY updated_at DESC LIMIT 1", nativeQuery = true)
+    Optional<WorkOrder> findFirstByPprTaskIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("pprTaskId") UUID pprTaskId);
+
     @Query(value = """
             SELECT EXISTS(
                 SELECT 1

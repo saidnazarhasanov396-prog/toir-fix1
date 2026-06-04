@@ -82,6 +82,9 @@ public class Equipment extends BaseEntity {
     @Column(name = "commissioned_at")
     private LocalDate commissionedAt;
 
+    @Column(name = "arrival_date")
+    private LocalDate arrivalDate;
+
     @Column(name = "warranty_until")
     private LocalDate warrantyUntil;
 
