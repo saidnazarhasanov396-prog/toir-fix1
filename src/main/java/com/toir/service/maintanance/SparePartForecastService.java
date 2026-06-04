@@ -178,16 +178,26 @@ public class SparePartForecastService {
                 true
         );
         SparePartForecastSummaryDto summary = forecast(deficitRequest);
-        int created = 0;
-        int updated = 0;
+        Map<UUID, SparePartForecastItemDto> candidatesBySourceId = new LinkedHashMap<>();
         for (SparePartForecastItemDto item : summary.items()) {
             if (item.shortageQty() <= 0) {
                 continue;
             }
             UUID sourceId = sourceId(summary.periodStart(), summary.periodEnd(), item.warehouseId(), item.sparePartId());
+            candidatesBySourceId.merge(sourceId, item, this::mergeForecastItems);
+        }
+        int created = 0;
+        int updated = 0;
+        for (Map.Entry<UUID, SparePartForecastItemDto> entry : candidatesBySourceId.entrySet()) {
+            UUID sourceId = entry.getKey();
+            SparePartForecastItemDto item = entry.getValue();
             boolean exists = operationalIssueRepository
                     .findBySourceTypeAndSourceIdAndStatusAndIsDeletedFalse(SOURCE_TYPE, sourceId, OperationalIssueStatus.OPEN)
                     .isPresent();
+            if (exists) {
+                updated++;
+                continue;
+            }
             operationalIssueService.openOrUpdate(
                     OperationalIssueType.SPARE_PART_SHORTAGE_FORECAST,
                     item.severity(),
@@ -198,13 +208,39 @@ public class SparePartForecastService {
                     "Spare part shortage forecast: " + firstNonBlank(item.sparePartName(), item.sparePartId().toString()),
                     issueMessage(summary, item)
             );
-            if (exists) {
-                updated++;
-            } else {
-                created++;
-            }
+            created++;
         }
         return new SparePartForecastEvaluateResponse(created, updated, 0, summary);
+    }
+
+    private SparePartForecastItemDto mergeForecastItems(SparePartForecastItemDto first, SparePartForecastItemDto duplicate) {
+        double requiredQty = first.requiredQty() + duplicate.requiredQty();
+        double availableQty = first.availableQty();
+        double shortageQty = Math.max(requiredQty - availableQty, 0);
+        List<SparePartForecastSourceDto> sources = new ArrayList<>();
+        sources.addAll(first.sources());
+        sources.addAll(duplicate.sources());
+        Instant firstDueAt = sources.stream()
+                .map(SparePartForecastSourceDto::dueAt)
+                .filter(Objects::nonNull)
+                .min(Instant::compareTo)
+                .orElse(null);
+        return new SparePartForecastItemDto(
+                first.sparePartId(),
+                firstNonBlank(first.sparePartCode(), duplicate.sparePartCode()),
+                firstNonBlank(first.sparePartName(), duplicate.sparePartName()),
+                first.warehouseId(),
+                firstNonBlank(first.warehouseName(), duplicate.warehouseName()),
+                requiredQty,
+                availableQty,
+                first.reservedQty(),
+                shortageQty,
+                firstNonBlank(first.unit(), duplicate.unit()),
+                severity(requiredQty, availableQty, shortageQty),
+                firstDueAt,
+                sources.size(),
+                sources
+        );
     }
 
     private List<DemandRow> buildDemandRows(List<MaintenanceDueEvent> events,
