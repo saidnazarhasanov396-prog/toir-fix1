@@ -237,6 +237,7 @@ public class MaintenanceAutomationService {
     @Transactional
     public MaintenanceDueEventDto approveDueEvent(UUID eventId, UUID userId) {
         MaintenanceDueEvent event = eventService.getOrThrow(eventId);
+        eventService.assertCanMutate(event);
         if (isBlocked(event)) {
             return blockedEventDto(event);
         }
@@ -264,6 +265,7 @@ public class MaintenanceAutomationService {
     @Transactional
     public MaintenanceDueEventDto createWorkOrderFromEvent(UUID eventId, UUID userId) {
         MaintenanceDueEvent event = eventService.getOrThrow(eventId);
+        eventService.assertCanMutate(event);
         if (isBlocked(event)) {
             return blockedEventDto(event);
         }
@@ -324,7 +326,7 @@ public class MaintenanceAutomationService {
         if (event.getStatus() == MaintenanceDueEventStatus.AWAITING_APPROVAL) {
             notifications += notificationService.notifyRequiresApproval(event, rule, equipment);
         }
-        if (due.status() == MaintenanceDueStatus.BLOCKED
+        if (!canCreateDownstream(due.status())
                 || rule.automationAction() == AutomationAction.TRACK_ONLY
                 || rule.automationAction() == AutomationAction.REQUIRE_APPROVAL) {
             return new EvaluationOutcome(event, isNew, notifications);
@@ -345,6 +347,10 @@ public class MaintenanceAutomationService {
                 || status == MaintenanceDueStatus.DUE
                 || status == MaintenanceDueStatus.OVERDUE
                 || status == MaintenanceDueStatus.BLOCKED;
+    }
+
+    private boolean canCreateDownstream(MaintenanceDueStatus status) {
+        return status == MaintenanceDueStatus.DUE || status == MaintenanceDueStatus.OVERDUE;
     }
 
     private MaintenanceDueEventStatus initialStatus(EquipmentMaintenanceEffectiveRule rule, MaintenanceDueStatus dueStatus) {

@@ -53,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -208,6 +209,93 @@ class MaintenanceAutomationServiceTest {
         verify(workOrderService, never()).create(any());
     }
 
+    @Test
+    void upcomingWithCreateWorkOrder_createsEventOnly() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        equipment.setResponsibleDepartmentId(departmentId);
+        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, AutomationAction.CREATE_WORK_ORDER);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        mockEffectiveRules(equipmentId, regulation);
+        when(dueCalculationService.calculate(any(EquipmentMaintenanceEffectiveRule.class)))
+                .thenReturn(upcomingDue(equipmentId, regulation.getId()));
+        when(eventRepository.findByScopeAndCycleKey(
+                eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+
+        var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
+
+        assertThat(result.events()).isEqualTo(1);
+        assertThat(result.workOrdersCreated()).isZero();
+        ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
+        verify(eventService).saveEvent(eventCaptor.capture(), eq(equipment));
+        assertThat(eventCaptor.getValue().getDueStatus()).isEqualTo(MaintenanceDueStatus.UPCOMING);
+        assertThat(eventCaptor.getValue().getStatus()).isEqualTo(MaintenanceDueEventStatus.DETECTED);
+        verify(workOrderService, never()).create(any());
+        verify(pprTaskRepository, never()).save(any());
+        verify(eventRepository, never()).save(any());
+    }
+
+    @Test
+    void upcomingWithCreateTask_createsEventOnly() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        equipment.setResponsibleDepartmentId(departmentId);
+        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, AutomationAction.CREATE_TASK);
+        regulation.setTemplateId(UUID.randomUUID());
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        mockEffectiveRules(equipmentId, regulation);
+        when(dueCalculationService.calculate(any(EquipmentMaintenanceEffectiveRule.class)))
+                .thenReturn(upcomingDue(equipmentId, regulation.getId()));
+        when(eventRepository.findByScopeAndCycleKey(
+                eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+
+        var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
+
+        assertThat(result.events()).isEqualTo(1);
+        assertThat(result.tasksCreated()).isZero();
+        ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
+        verify(eventService).saveEvent(eventCaptor.capture(), eq(equipment));
+        assertThat(eventCaptor.getValue().getDueStatus()).isEqualTo(MaintenanceDueStatus.UPCOMING);
+        assertThat(eventCaptor.getValue().getStatus()).isEqualTo(MaintenanceDueEventStatus.DETECTED);
+        verify(pprTaskRepository, never()).save(any());
+        verify(workOrderService, never()).create(any());
+        verify(eventRepository, never()).save(any());
+    }
+
+    @Test
+    void overdueWithCreateWorkOrder_createsWorkOrder() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        equipment.setResponsibleDepartmentId(departmentId);
+        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, AutomationAction.CREATE_WORK_ORDER);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        mockEffectiveRules(equipmentId, regulation);
+        when(dueCalculationService.calculate(any(EquipmentMaintenanceEffectiveRule.class)))
+                .thenReturn(overdueDue(equipmentId, regulation.getId()));
+        when(eventRepository.findByScopeAndCycleKey(
+                eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
+        when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignId(invocation.getArgument(0)));
+        when(workOrderRepository.countByIsDeletedFalse()).thenReturn(0L);
+        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderRepository.existsOpenByCycleKey(any())).thenReturn(false);
+        when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
+        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
+
+        assertThat(result.workOrdersCreated()).isEqualTo(1);
+        verify(workOrderService).create(any());
+    }
+
     @ParameterizedTest
     @CsvSource({
             "520.0, 500",
@@ -322,6 +410,107 @@ class MaintenanceAutomationServiceTest {
         verify(regulationRepository, never()).findByIdAndIsDeletedFalse(any());
         verify(pprTaskRepository, never()).save(any());
         verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void approveDueEvent_deniesCrossDepartmentScopedUser() {
+        UUID eventId = UUID.randomUUID();
+        MaintenanceDueEvent event = event(eventId, UUID.randomUUID(), UUID.randomUUID(), MaintenanceDueStatus.DUE);
+        event.setStatus(MaintenanceDueEventStatus.AWAITING_APPROVAL);
+        when(eventService.getOrThrow(eventId)).thenReturn(event);
+        doThrow(new AccessDeniedException("Access denied by data scope"))
+                .when(eventService).assertCanMutate(event);
+
+        assertThatThrownBy(() -> service.approveDueEvent(eventId, UUID.randomUUID()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("data scope");
+
+        verify(effectiveRuleResolver, never()).resolveApplicable(any());
+        verify(workOrderService, never()).create(any());
+        verify(pprTaskRepository, never()).save(any());
+        verify(eventRepository, never()).save(any());
+    }
+
+    @Test
+    void createWorkOrderFromDueEvent_deniesCrossDepartmentScopedUser() {
+        UUID eventId = UUID.randomUUID();
+        MaintenanceDueEvent event = event(eventId, UUID.randomUUID(), UUID.randomUUID(), MaintenanceDueStatus.DUE);
+        when(eventService.getOrThrow(eventId)).thenReturn(event);
+        doThrow(new AccessDeniedException("Access denied by data scope"))
+                .when(eventService).assertCanMutate(event);
+
+        assertThatThrownBy(() -> service.createWorkOrderFromEvent(eventId, UUID.randomUUID()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("data scope");
+
+        verify(effectiveRuleResolver, never()).resolveApplicable(any());
+        verify(workOrderService, never()).create(any());
+        verify(eventRepository, never()).save(any());
+    }
+
+    @Test
+    void approveDueEvent_allowsSameDepartmentScopedUser() {
+        UUID eventId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        MaintenanceDueEvent event = event(eventId, equipmentId, regulationId, MaintenanceDueStatus.DUE);
+        event.setStatus(MaintenanceDueEventStatus.AWAITING_APPROVAL);
+        event.setCycleKey("cycle-approve");
+        Equipment equipment = equipment(equipmentId, typeId);
+        equipment.setResponsibleDepartmentId(departmentId);
+        MaintenanceRegulation regulation = regulation(regulationId, typeId, AutomationAction.CREATE_WORK_ORDER);
+        EquipmentMaintenanceEffectiveRule rule = EquipmentMaintenanceEffectiveRule.fromRegulation(equipmentId, regulation);
+        when(eventService.getOrThrow(eventId)).thenReturn(event);
+        when(effectiveRuleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(rule));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(workOrderRepository.countByIsDeletedFalse()).thenReturn(0L);
+        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderRepository.existsOpenByCycleKey(any())).thenReturn(false);
+        when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
+        when(eventRepository.save(event)).thenReturn(event);
+        when(eventService.toDto(event)).thenReturn(null);
+
+        service.approveDueEvent(eventId, UUID.randomUUID());
+
+        verify(eventService).assertCanMutate(event);
+        verify(workOrderService).create(any());
+        assertThat(event.getCreatedWorkOrderId()).isEqualTo(workOrderId);
+        assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.WORK_ORDER_CREATED);
+    }
+
+    @Test
+    void createWorkOrderFromDueEvent_allowsSameDepartmentScopedUser() {
+        UUID eventId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        MaintenanceDueEvent event = event(eventId, equipmentId, regulationId, MaintenanceDueStatus.DUE);
+        event.setCycleKey("cycle-work-order");
+        Equipment equipment = equipment(equipmentId, typeId);
+        equipment.setResponsibleDepartmentId(departmentId);
+        MaintenanceRegulation regulation = regulation(regulationId, typeId, AutomationAction.CREATE_WORK_ORDER);
+        EquipmentMaintenanceEffectiveRule rule = EquipmentMaintenanceEffectiveRule.fromRegulation(equipmentId, regulation);
+        when(eventService.getOrThrow(eventId)).thenReturn(event);
+        when(effectiveRuleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(rule));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(workOrderRepository.countByIsDeletedFalse()).thenReturn(0L);
+        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderRepository.existsOpenByCycleKey(any())).thenReturn(false);
+        when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
+        when(eventRepository.save(event)).thenReturn(event);
+        when(eventService.toDto(event)).thenReturn(null);
+
+        service.createWorkOrderFromEvent(eventId, UUID.randomUUID());
+
+        verify(eventService).assertCanMutate(event);
+        verify(workOrderService).create(any());
+        assertThat(event.getCreatedWorkOrderId()).isEqualTo(workOrderId);
+        assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.WORK_ORDER_CREATED);
     }
 
     @Test
@@ -650,6 +839,19 @@ class MaintenanceAutomationServiceTest {
         return event;
     }
 
+    private MaintenanceDueEvent event(UUID id, UUID equipmentId, UUID regulationId, MaintenanceDueStatus dueStatus) {
+        MaintenanceDueEvent event = new MaintenanceDueEvent();
+        ReflectionTestUtils.setField(event, "id", id);
+        event.setEquipmentId(equipmentId);
+        event.setRegulationId(regulationId);
+        event.setDueStatus(dueStatus);
+        event.setStatus(MaintenanceDueEventStatus.DETECTED);
+        event.setTriggerSource(MaintenanceTriggerSource.CALENDAR_JOB);
+        event.setCycleKey("cycle-1");
+        event.setDueAt(Instant.parse("2026-06-03T00:00:00Z"));
+        return event;
+    }
+
     private void mockEffectiveRules(UUID equipmentId, MaintenanceRegulation regulation) {
         when(effectiveRuleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(
                 EquipmentMaintenanceEffectiveRule.fromRegulation(equipmentId, regulation)
@@ -705,6 +907,52 @@ class MaintenanceAutomationServiceTest {
                 null,
                 null,
                 "due by calendar"
+        );
+    }
+
+    private MaintenanceDueCalculationDto upcomingDue(UUID equipmentId, UUID regulationId) {
+        return new MaintenanceDueCalculationDto(
+                equipmentId,
+                regulationId,
+                null,
+                MaintenanceDueStatus.UPCOMING,
+                true,
+                false,
+                Instant.parse("2026-06-01T00:00:00Z"),
+                Instant.parse("2026-06-10T00:00:00Z"),
+                Instant.parse("2026-06-10T00:00:00Z"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "Calendar trigger upcoming"
+        );
+    }
+
+    private MaintenanceDueCalculationDto overdueDue(UUID equipmentId, UUID regulationId) {
+        return new MaintenanceDueCalculationDto(
+                equipmentId,
+                regulationId,
+                null,
+                MaintenanceDueStatus.OVERDUE,
+                true,
+                false,
+                Instant.parse("2026-05-01T00:00:00Z"),
+                Instant.parse("2026-05-01T00:00:00Z"),
+                Instant.parse("2026-05-01T00:00:00Z"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "Calendar trigger overdue"
         );
     }
 
