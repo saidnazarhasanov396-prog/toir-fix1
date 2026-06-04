@@ -54,6 +54,9 @@ class StockMovementServiceTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    LowStockRecommendationService lowStockRecommendationService;
+
     @InjectMocks
     StockMovementService service;
 
@@ -158,6 +161,24 @@ class StockMovementServiceTest {
         ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
         verify(repository).save(movementCaptor.capture());
         assertThat(movementCaptor.getValue().getType()).isEqualTo(StockMovementType.ISSUE);
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
+    }
+
+    @Test
+    void receiptDoesNotTriggerLowStockEvaluation() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WarehouseStock stock = stock(warehouseId, sparePartId, 8, 0);
+
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+        when(repository.save(any(StockMovement.class)))
+                .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
+
+        service.create(request(warehouseId, sparePartId, StockMovementType.RECEIPT, 5));
+
+        assertThat(stock.getQuantity()).isEqualTo(13);
+        verify(lowStockRecommendationService, never()).evaluateStockSafely(any(WarehouseStock.class));
     }
 
     @Test

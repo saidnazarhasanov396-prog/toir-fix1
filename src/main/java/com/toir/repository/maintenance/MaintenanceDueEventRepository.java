@@ -5,6 +5,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import java.util.Collection;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -74,6 +75,29 @@ public interface MaintenanceDueEventRepository extends JpaRepository<Maintenance
                                               @Param("regulationId") UUID regulationId,
                                               @Param("ruleId") UUID ruleId,
                                               @Param("statuses") Collection<MaintenanceDueEventStatus> statuses);
+
+    @Query("""
+            select e
+            from MaintenanceDueEvent e, Equipment equipment
+            where e.isDeleted = false
+              and equipment.isDeleted = false
+              and equipment.id = e.equipmentId
+              and e.templateId is not null
+              and e.dueAt between :from and :to
+              and e.status in :statuses
+              and e.dueStatus in :dueStatuses
+              and (:departmentId is null or coalesce(equipment.responsibleDepartmentId, equipment.departmentId) = :departmentId)
+              and (:equipmentId is null or e.equipmentId = :equipmentId)
+              and (:templateId is null or e.templateId = :templateId)
+            order by e.dueAt asc, e.updatedAt desc
+            """)
+    List<MaintenanceDueEvent> findForecastCandidates(@Param("from") Instant from,
+                                                     @Param("to") Instant to,
+                                                     @Param("departmentId") UUID departmentId,
+                                                     @Param("equipmentId") UUID equipmentId,
+                                                     @Param("templateId") UUID templateId,
+                                                     @Param("statuses") Collection<MaintenanceDueEventStatus> statuses,
+                                                     @Param("dueStatuses") Collection<MaintenanceDueStatus> dueStatuses);
 
     long countByDueStatusAndIsDeletedFalse(MaintenanceDueStatus dueStatus);
 

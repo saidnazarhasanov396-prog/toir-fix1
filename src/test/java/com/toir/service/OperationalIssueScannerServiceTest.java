@@ -10,6 +10,7 @@ import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.dto.warehouse.LowStockEvaluationResultDto;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
@@ -46,6 +47,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class OperationalIssueScannerServiceTest {
@@ -83,6 +85,9 @@ class OperationalIssueScannerServiceTest {
     @Mock
     DefectRepository defectRepository;
 
+    @Mock
+    LowStockRecommendationService lowStockRecommendationService;
+
     @InjectMocks
     OperationalIssueScannerService service;
 
@@ -98,6 +103,7 @@ class OperationalIssueScannerServiceTest {
         when(maintenanceBudgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(approvalRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(lowStockRecommendationService.evaluateAll()).thenReturn(new LowStockEvaluationResultDto(0, 0, 0, 0, 0));
     }
 
     @Test
@@ -180,6 +186,18 @@ class OperationalIssueScannerServiceTest {
                 eq("Maintenance due: cycle-1"),
                 eq("meter missing")
         );
+    }
+
+    @Test
+    void scanIncludesLowStockRecommendationEvaluation() {
+        when(lowStockRecommendationService.evaluateAll())
+                .thenReturn(new LowStockEvaluationResultDto(3, 1, 1, 1, 0));
+
+        var result = service.scanAll();
+
+        assertThat(result.openedOrUpdated()).isEqualTo(2);
+        assertThat(result.resolved()).isEqualTo(1);
+        verify(lowStockRecommendationService).evaluateAll();
     }
 
     private Equipment equipment(UUID id, UUID departmentId) {
