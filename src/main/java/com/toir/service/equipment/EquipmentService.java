@@ -391,6 +391,7 @@ public class EquipmentService {
         );
         validateClientProvidedCode(request.code());
         validateAverageOperatingLifeForCreate(request.averageOperatingLifeHours());
+        assertCanAccessLocationBeforePersistence(location);
         validateLocationReferences(location);
         if (repository.existsByInventoryNumberAndIsDeletedFalse(request.inventoryNumber())) {
             throw RestException.conflict("Inventory number already exists: " + request.inventoryNumber());
@@ -442,6 +443,7 @@ public class EquipmentService {
         validateNoDirectStatusChange(entity, request.status());
         validateAverageOperatingLifeForUpdate(request.averageOperatingLifeHours());
         if (location != null) {
+            assertCanAccessLocationBeforePersistence(location);
             validateLocationReferences(location);
         } else {
             validateDepartmentExists(request.departmentId());
@@ -489,6 +491,7 @@ public class EquipmentService {
         Equipment equipment = getOrThrow(id);
         EquipmentLocationRequest target = resolvePlacementLocation(request);
         validateLocationReferences(target);
+        assertCanAccessLocationBeforePersistence(target);
         LocationSnapshot from = snapshotLocation(equipment);
 
         if (target.locationType() == EquipmentLocationType.WAREHOUSE) {
@@ -532,7 +535,11 @@ public class EquipmentService {
     }
 
     Equipment getOrThrow(UUID id) {
-        return repository.findByIdAndIsDeletedFalse(id)
+        Optional<Equipment> equipment = repository.findByIdAndIsDeletedFalse(id);
+        if (equipment == null) {
+            throw RestException.notFound("Equipment not found: " + id);
+        }
+        return equipment
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + id));
     }
 
@@ -795,6 +802,9 @@ public class EquipmentService {
         entity.setCommissionedAt(request.commissionedAt());
         entity.setWarrantyUntil(request.warrantyUntil());
         entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours());
+        entity.setOperationStartDate(request.operationStartDate());
+        entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths());
+        entity.setExpectedLifetimeYears(request.expectedLifetimeYears());
         entity.setDescription(request.description());
     }
 
@@ -1005,6 +1015,36 @@ public class EquipmentService {
         }
         validateDepartmentExists(location.responsibleDepartmentId());
         assertDepartmentAccessIfAuthenticated(location.responsibleDepartmentId());
+    }
+
+    private void assertCanAccessLocationBeforePersistence(EquipmentLocationRequest location) {
+        if (location.locationType() == EquipmentLocationType.DEPARTMENT) {
+            scopeAccessService.assertCanAccessEquipmentScope(
+                    location.responsibleDepartmentId(),
+                    location.departmentId()
+            );
+            return;
+        }
+        UUID responsibleDepartmentId = location.responsibleDepartmentId();
+        if (location.locationType() == EquipmentLocationType.WAREHOUSE) {
+            Optional<Warehouse> warehouseResult = warehouseRepository.findByIdAndIsDeletedFalse(location.warehouseId());
+            if (warehouseResult == null) {
+                throw RestException.notFound("Warehouse not found: " + location.warehouseId());
+            }
+            Warehouse warehouse = warehouseResult
+                    .orElseThrow(() -> RestException.notFound("Warehouse not found: " + location.warehouseId()));
+            responsibleDepartmentId = firstNonNull(
+                    responsibleDepartmentId,
+                    warehouse.getDepartmentId(),
+                    scopeAccessService.currentDepartmentIdOrNull()
+            );
+        } else {
+            responsibleDepartmentId = firstNonNull(
+                    responsibleDepartmentId,
+                    scopeAccessService.currentDepartmentIdOrNull()
+            );
+        }
+        scopeAccessService.assertCanAccessEquipmentScope(responsibleDepartmentId, null);
     }
 
     private void assertDepartmentAccessIfAuthenticated(UUID departmentId) {
@@ -1266,6 +1306,15 @@ public class EquipmentService {
         entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours() != null
                 ? request.averageOperatingLifeHours()
                 : entity.getAverageOperatingLifeHours());
+        entity.setOperationStartDate(request.operationStartDate() != null
+                ? request.operationStartDate()
+                : entity.getOperationStartDate());
+        entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths() != null
+                ? request.expectedLifetimeMonths()
+                : entity.getExpectedLifetimeMonths());
+        entity.setExpectedLifetimeYears(request.expectedLifetimeYears() != null
+                ? request.expectedLifetimeYears()
+                : entity.getExpectedLifetimeYears());
         entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
     }
 

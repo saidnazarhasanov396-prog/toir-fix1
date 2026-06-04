@@ -322,7 +322,7 @@ class VehicleControllerContractTest {
     }
 
     @Test
-    void listDocumentsEndpointReturnsArray() throws Exception {
+    void listDocumentsEndpointReturnsPaginatedContent() throws Exception {
         UUID equipmentId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
@@ -331,10 +331,12 @@ class VehicleControllerContractTest {
 
         mockMvc.perform(get("/api/v1/vehicles/{equipmentId}/documents", equipmentId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(documentId.toString()))
-                .andExpect(jsonPath("$[0].fileId").value(fileId.toString()))
-                .andExpect(jsonPath("$[0].documentType").value("TECHNICAL"))
-                .andExpect(jsonPath("$[0].documentName").value("Technical Passport"));
+                .andExpect(jsonPath("$.content[0].id").value(documentId.toString()))
+                .andExpect(jsonPath("$.content[0].fileId").value(fileId.toString()))
+                .andExpect(jsonPath("$.content[0].documentType").value("TECHNICAL"))
+                .andExpect(jsonPath("$.content[0].documentName").value("Technical Passport"))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
     }
 
     @Test

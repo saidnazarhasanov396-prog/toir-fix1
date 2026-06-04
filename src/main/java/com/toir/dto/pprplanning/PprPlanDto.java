@@ -9,6 +9,7 @@ import com.toir.enums.PprScheduleType;
 import com.toir.enums.PprScopeType;
 import com.toir.enums.PprType;
 import com.toir.enums.PprTargetType;
+import com.toir.service.PprGeneratorService;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -36,8 +37,35 @@ public record PprPlanDto(
         PprFrequency frequency,
         Long intervalHours,
         PprScopeType scopeType,
-        List<PprPlanTargetDto> targets
+        List<PprPlanTargetDto> targets,
+        String generationMessage,
+        PprGeneratorService.GenerationDiagnostics generationDiagnostics
 ) {
+    public PprPlanDto(
+            UUID id,
+            String code,
+            String name,
+            PlanStatus status,
+            UUID departmentId,
+            String departmentName,
+            UUID createdById,
+            UUID approvedById,
+            String notes,
+            List<PprTaskDto> tasks,
+            long taskCount,
+            LocalDate fromDate,
+            LocalDate toDate,
+            PprType pprType,
+            PprScheduleType scheduleType,
+            PprFrequency frequency,
+            Long intervalHours,
+            PprScopeType scopeType,
+            List<PprPlanTargetDto> targets
+    ) {
+        this(id, code, name, status, departmentId, departmentName, createdById, approvedById, notes, tasks,
+                taskCount, fromDate, toDate, pprType, scheduleType, frequency, intervalHours, scopeType, targets, null, null);
+    }
+
     public PprPlanDto(
             UUID id,
             String code,
@@ -53,7 +81,7 @@ public record PprPlanDto(
             LocalDate toDate
     ) {
         this(id, code, name, status, departmentId, departmentName, createdById, approvedById, notes, tasks,
-                countTasks(tasks), fromDate, toDate, null, null, null, null, null, List.of());
+                countTasks(tasks), fromDate, toDate, null, null, null, null, null, List.of(), null, null);
     }
 
     public PprPlanDto(
@@ -71,7 +99,7 @@ public record PprPlanDto(
             LocalDate toDate
     ) {
         this(id, code, name, status, departmentId, departmentName, createdById, approvedById, notes, List.of(),
-                taskCount, fromDate, toDate, null, null, null, null, null, List.of());
+                taskCount, fromDate, toDate, null, null, null, null, null, List.of(), null, null);
     }
 
     public PprPlanDto(
@@ -95,7 +123,7 @@ public record PprPlanDto(
             List<PprPlanTargetDto> targets
     ) {
         this(id, code, name, status, departmentId, departmentName, createdById, approvedById, notes, tasks,
-                countTasks(tasks), fromDate, toDate, pprType, scheduleType, frequency, intervalHours, scopeType, targets);
+                countTasks(tasks), fromDate, toDate, pprType, scheduleType, frequency, intervalHours, scopeType, targets, null, null);
     }
 
     public static PprPlanDto from(PprPlan p) {
@@ -127,6 +155,7 @@ public record PprPlanDto(
                                   Map<UUID, String> equipmentTypeNames,
                                   Map<UUID, String> regulationNames) {
         List<PprTaskDto> tasks = p.getTasks().stream()
+                .filter(task -> !task.isDeleted())
                 .map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames))
                 .toList();
         return new PprPlanDto(
@@ -154,7 +183,61 @@ public record PprPlanDto(
                                         ? regulationNames.get(target.getRegulationId())
                                         : null
                         ))
-                        .toList()
+                        .toList(),
+                null,
+                null
+        );
+    }
+
+    public PprPlanDto withGenerationMessage(String message) {
+        return new PprPlanDto(
+                id,
+                code,
+                name,
+                status,
+                departmentId,
+                departmentName,
+                createdById,
+                approvedById,
+                notes,
+                tasks,
+                taskCount,
+                fromDate,
+                toDate,
+                pprType,
+                scheduleType,
+                frequency,
+                intervalHours,
+                scopeType,
+                targets,
+                message,
+                generationDiagnostics
+        );
+    }
+
+    public PprPlanDto withGenerationDiagnostics(PprGeneratorService.GenerationDiagnostics diagnostics) {
+        return new PprPlanDto(
+                id,
+                code,
+                name,
+                status,
+                departmentId,
+                departmentName,
+                createdById,
+                approvedById,
+                notes,
+                tasks,
+                taskCount,
+                fromDate,
+                toDate,
+                pprType,
+                scheduleType,
+                frequency,
+                intervalHours,
+                scopeType,
+                targets,
+                generationMessage,
+                diagnostics
         );
     }
 

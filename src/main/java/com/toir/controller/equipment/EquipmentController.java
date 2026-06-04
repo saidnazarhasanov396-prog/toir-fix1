@@ -13,6 +13,7 @@ import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -126,6 +127,7 @@ public class EquipmentController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_CREATE')")
     public ResponseEntity<EquipmentDto> create(@Valid @RequestBody EquipmentCreateRequest request) {
         if (request.departmentId() != null) {
+            scopeAccessService.assertCanAccessEquipmentScope(null, request.departmentId());
             scopeAccessService.assertCanAccessDepartment(request.departmentId());
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
@@ -160,12 +162,14 @@ public class EquipmentController {
 
     @GetMapping("/{id}/documents")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
-    public ResponseEntity<List<EquipmentDocumentDto>> getDocuments(
+    public ResponseEntity<Page<EquipmentDocumentDto>> getDocuments(
             @PathVariable UUID id,
-            @CurrentUser AuthenticatedUser user
+            @CurrentUser AuthenticatedUser user,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
         assertCanAccessEquipment(equipmentOrThrow(id));
-        return ResponseEntity.ok(service.getDocuments(id, user));
+        return ResponseEntity.ok(PaginationUtils.page(service.getDocuments(id, user), page, size));
     }
 
     @GetMapping("/{id}/documents/{documentId}")

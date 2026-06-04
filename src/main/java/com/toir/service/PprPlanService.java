@@ -32,6 +32,7 @@ import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -54,6 +55,7 @@ import java.util.stream.Collectors;
 @Service
 @Transactional
 @RequiredArgsConstructor
+@Slf4j
 public class PprPlanService {
 
     private final PprPlanRepository planRepository;
@@ -63,6 +65,7 @@ public class PprPlanService {
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
     private final MaintenanceRegulationRepository maintenanceRegulationRepository;
+    private final PprGeneratorService generatorService;
     private final AuditBuilderService auditBuilderService;
     private final AuditSerializationService auditSerializationService;
     private final EntityManager entityManager;
@@ -145,6 +148,9 @@ public class PprPlanService {
     @Transactional
     public PprPlanDto create(PprPlanRequest request) {
         PprPlan saved = saveWithGeneratedPlanCode(request);
+        log.info("Calling PprGeneratorService.generateForPlan after PPR plan create: planId={} planCode={} status={} departmentId={}",
+                saved.getId(), saved.getCode(), saved.getStatus(), saved.getDepartmentId());
+        PprGeneratorService.GenerationResult generationResult = generatorService.generateForPlan(saved.getId());
 
         auditBuilderService.log(
                 "ppr_plan",
@@ -156,7 +162,19 @@ public class PprPlanService {
                 saved
         );
 
-        return toDto(reloadPlan(saved.getId()));
+        PprPlanDto dto = toDto(reloadPlan(saved.getId()));
+        if (generationResult.created() == 0) {
+            String message = generationResult.message() != null
+                    ? generationResult.message()
+                    : "PPR plan was created, but no PPR tasks were generated. Check plan targets, schedule, frequency, equipment status, and maintenance due conditions.";
+            return dto.withGenerationMessage(message)
+                    .withGenerationDiagnostics(generationResult.generationDiagnostics());
+        }
+        String message = generationResult.message() != null
+                ? generationResult.message()
+                : "PPR plan was created and %d PPR task(s) were generated.".formatted(generationResult.created());
+        return dto.withGenerationMessage(message)
+                .withGenerationDiagnostics(generationResult.generationDiagnostics());
     }
 
     @Transactional
@@ -407,6 +425,7 @@ public class PprPlanService {
     private List<PprTask> collectTasks(List<PprPlan> plans) {
         return plans.stream()
                 .flatMap(plan -> plan.getTasks().stream())
+                .filter(task -> !task.isDeleted())
                 .toList();
     }
 

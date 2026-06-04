@@ -207,6 +207,57 @@ class PprGeneratorServiceLifecycleTest {
     }
 
     @Test
+    void preventivePlanWithRegulationTargetGeneratesOnlySelectedRegulation() {
+        UUID planId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        PprPlan plan = explicitPreventivePlan(planId);
+        MaintenanceRegulation selected =
+                regulation("MR-SELECTED", typeId, MaintenanceKind.PREVENTIVE, PeriodicityUnit.MONTH);
+        MaintenanceRegulation other =
+                regulation("MR-OTHER", typeId, MaintenanceKind.PREVENTIVE, PeriodicityUnit.MONTH);
+        plan.getTargets().add(regulationTarget(plan, selected.getId()));
+        Equipment equipment = equipment(UUID.randomUUID(), "P-101", typeId, plan.getDepartmentId());
+        stubGeneration(plan, List.of(selected, other), List.of(equipment), List.of());
+
+        PprGeneratorService.GenerationResult result = service.generateForPlan(planId);
+
+        assertThat(result.created()).isEqualTo(1);
+        assertThat(result.skippedReasons()).containsEntry("SKIP_TARGET", 1);
+        ArgumentCaptor<PprTask> taskCaptor = ArgumentCaptor.forClass(PprTask.class);
+        verify(taskRepository).save(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getRegulationId()).isEqualTo(selected.getId());
+    }
+
+    @Test
+    void existingGeneratedCodeInAnotherPlanDoesNotBlockNewPlanTask() {
+        UUID planId = UUID.randomUUID();
+        UUID otherPlanId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        PprPlan plan = explicitPreventivePlan(planId);
+        PprPlan otherPlan = explicitPreventivePlan(otherPlanId);
+        MaintenanceRegulation regulation = regulation("MR-PREV", typeId, MaintenanceKind.PREVENTIVE, PeriodicityUnit.MONTH);
+        Equipment equipment = equipment(equipmentId, "P-101", typeId, plan.getDepartmentId());
+        PprTask existing = new PprTask();
+        existing.setId(UUID.randomUUID());
+        existing.setCode("PT-" + plan.getCode() + "-" + regulation.getCode() + "-" + equipment.getCode() + "-1");
+        existing.setPlan(otherPlan);
+        existing.setRegulationId(regulation.getId());
+        existing.setEquipmentId(equipmentId);
+        stubGeneration(plan, List.of(regulation), List.of(equipment), List.of(existing));
+
+        PprGeneratorService.GenerationResult result = service.generateForPlan(planId);
+
+        assertThat(result.created()).isEqualTo(1);
+        assertThat(result.skippedReasons()).doesNotContainKey("SKIP_DUPLICATE_SIGNATURE");
+        ArgumentCaptor<PprTask> taskCaptor = ArgumentCaptor.forClass(PprTask.class);
+        verify(taskRepository).save(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getCode()).isEqualTo(
+                "PT-" + plan.getCode() + "-" + regulation.getCode() + "-" + equipment.getCode() + "-2"
+        );
+    }
+
+    @Test
     void departmentScopeFiltersEquipmentByDepartment() {
         UUID planId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
@@ -298,11 +349,12 @@ class PprGeneratorServiceLifecycleTest {
     }
 
     @Test
-    void runningGeneratorAgainSkipsExistingPlanRegulationEquipmentTask() {
+    void runningGeneratorAgainForGeneratedPlanSkipsExistingPlanRegulationEquipmentTask() {
         UUID planId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
         PprPlan plan = explicitPreventivePlan(planId);
+        plan.setStatus(PlanStatus.GENERATED);
         MaintenanceRegulation regulation = regulation("MR-PREV", typeId, MaintenanceKind.PREVENTIVE, PeriodicityUnit.MONTH);
         Equipment equipment = equipment(equipmentId, "P-101", typeId, plan.getDepartmentId());
         PprTask existing = new PprTask();
@@ -684,6 +736,15 @@ class PprGeneratorServiceLifecycleTest {
         target.setPlan(plan);
         target.setTargetType(PprTargetType.EQUIPMENT_TYPE);
         target.setEquipmentTypeId(equipmentTypeId);
+        return target;
+    }
+
+    private PprPlanTarget regulationTarget(PprPlan plan, UUID regulationId) {
+        PprPlanTarget target = new PprPlanTarget();
+        target.setId(UUID.randomUUID());
+        target.setPlan(plan);
+        target.setTargetType(PprTargetType.REGULATION);
+        target.setRegulationId(regulationId);
         return target;
     }
 }

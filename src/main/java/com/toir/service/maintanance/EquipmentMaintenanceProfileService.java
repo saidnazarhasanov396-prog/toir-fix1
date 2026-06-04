@@ -51,6 +51,7 @@ public class EquipmentMaintenanceProfileService {
     private final MaintenanceRegulationAttributeConditionRepository conditionRepository;
     private final EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
     private final EquipmentAttributeValueRepository attributeValueRepository;
+    private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
 
     @Transactional(readOnly = true)
     public EquipmentMaintenanceProfileDto getProfile(UUID equipmentId) {
@@ -65,14 +66,44 @@ public class EquipmentMaintenanceProfileService {
                 .stream()
                 .map(EquipmentMaintenanceRuleDto::from)
                 .toList();
-        List<EquipmentMaintenanceRule> ruleEntities = ruleRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
-        List<EffectiveMaintenanceRuleDto> effectiveRules = effectiveRules(equipment, ruleEntities);
+        List<EffectiveMaintenanceRuleDto> effectiveRules = effectiveRuleResolver.resolveApplicable(equipmentId)
+                .stream()
+                .map(this::fromEffectiveRule)
+                .toList();
         return new EquipmentMaintenanceProfileDto(
                 equipment.getId(),
                 equipment.getEquipmentTypeId(),
                 inheritedRules,
                 individualRules,
                 effectiveRules
+        );
+    }
+
+    private EffectiveMaintenanceRuleDto fromEffectiveRule(EquipmentMaintenanceEffectiveRule rule) {
+        return new EffectiveMaintenanceRuleDto(
+                rule.equipmentMaintenanceRuleId() == null ? rule.regulationId() : rule.equipmentMaintenanceRuleId(),
+                rule.regulationId(),
+                rule.equipmentMaintenanceRuleId(),
+                rule.equipmentId(),
+                rule.regulationId(),
+                rule.templateId(),
+                rule.code(),
+                rule.name(),
+                rule.description(),
+                rule.maintenanceKind(),
+                rule.normativeLaborHours(),
+                rule.active(),
+                rule.periodicityUnit(),
+                rule.periodicityValue(),
+                rule.toleranceDays(),
+                rule.requiresShutdown(),
+                rule.triggerMeterType(),
+                rule.triggerMeterInterval(),
+                rule.triggerPolicy(),
+                rule.recalculationPolicy(),
+                rule.source(),
+                rule.overrideReason(),
+                maintenanceDueCalculationService.calculate(rule)
         );
     }
 

@@ -88,6 +88,15 @@ public class Equipment extends BaseEntity {
     @Column(name = "average_operating_life_hours")
     private Long averageOperatingLifeHours;
 
+    @Column(name = "operation_start_date")
+    private LocalDate operationStartDate;
+
+    @Column(name = "expected_lifetime_months")
+    private Integer expectedLifetimeMonths;
+
+    @Column(name = "expected_lifetime_years")
+    private Integer expectedLifetimeYears;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "outside_reason")
     private EquipmentOutsideReason outsideReason;

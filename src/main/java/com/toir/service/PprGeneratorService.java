@@ -24,6 +24,7 @@ import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.service.maintanance.MaintenanceDueCalculationService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +37,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -46,6 +48,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PprGeneratorService {
 
     private final PprPlanRepository planRepository;
@@ -71,31 +74,28 @@ public class PprGeneratorService {
         PprPlan plan = planRepository.findByIdAndIsDeletedFalse(planId)
                 .orElseThrow(() -> RestException.notFound("PPR plan not found: " + planId));
         if (!PLAN_TASK_GENERATION_STATUSES.contains(plan.getStatus())) {
+            log.info("PPR generation rejected: planId={} planCode={} status={} reason={}",
+                    plan.getId(), plan.getCode(), plan.getStatus(), "SKIP_STATUS");
             throw RestException.badRequest("PPR tasks can be generated only for DRAFT or GENERATED plans");
         }
 
-        LocalDate planStart = plan.getStartDate() != null
-                ? plan.getStartDate()
-                : null;
-        LocalDate planEnd = plan.getEndDate() != null
-                ? plan.getEndDate()
-                : null;
+        LocalDate planStart = plan.getStartDate();
+        LocalDate planEnd = plan.getEndDate();
         if (planStart == null || planEnd == null) {
+            log.info("PPR generation rejected: planId={} planCode={} startDate={} endDate={} reason={}",
+                    plan.getId(), plan.getCode(), planStart, planEnd, "SKIP_MISSING_DATE");
             throw RestException.badRequest("PPR plan date range is required before generating tasks");
         }
+        return generateForPlanFixed(plan, planStart, planEnd);
+    }
+    private GenerationResult generateForPlanFixed(PprPlan plan, LocalDate planStart, LocalDate planEnd) {
         YearMonth planMonth = YearMonth.from(planStart);
         boolean dueStatusRequired = plan.getScheduleType() == PprScheduleType.OPERATING_HOURS;
         TargetContext targetContext = targetContext(plan);
+        GenerationTracker tracker = new GenerationTracker(generationPlanFields(plan));
 
-        List<MaintenanceRegulation> regulations = regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(MaintenanceRegulation::isActive)
-                .filter(regulation -> isAllowedForPprType(plan, regulation))
-                .filter(regulation -> isAllowedForSchedule(plan, regulation, planMonth))
-                .toList();
-        List<EquipmentMaintenanceRule> individualRules = equipmentMaintenanceRuleRepository.findAllActive().stream()
-                .filter(rule -> isAllowedForPprType(plan, rule.getMaintenanceKind()))
-                .filter(rule -> isAllowedForSchedule(plan, rule, planMonth))
-                .toList();
+        List<MaintenanceRegulation> regulations = eligibleRegulations(plan, planMonth, targetContext, tracker);
+        List<EquipmentMaintenanceRule> individualRules = eligibleRules(plan, planMonth, targetContext, tracker);
         Set<RegulationOverrideSignature> individualOverrides = individualRules.stream()
                 .filter(rule -> rule.getBaseRegulationId() != null)
                 .map(rule -> new RegulationOverrideSignature(rule.getBaseRegulationId(), rule.getEquipmentId()))
@@ -103,97 +103,82 @@ public class PprGeneratorService {
         Map<UUID, List<MaintenanceRegulationAttributeCondition>> conditionsByRegulationId =
                 loadConditionsByRegulationId(regulations);
 
-        List<Equipment> allEquipment = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(e -> e.getStatus() != EquipmentStatus.DECOMMISSIONED)
-                .toList();
+        List<Equipment> allEquipment = activeEquipment(tracker);
+        tracker.candidateCounts(new GenerationCandidateCounts(
+                activeRegulationsCount(),
+                activeRulesCount(),
+                allEquipment.size(),
+                matchingEquipmentCount(plan, targetContext, allEquipment)
+        ));
         AttributeIndex attributeIndex = loadAttributeIndex(allEquipment);
 
         List<PprTask> existingTasks = taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         Set<String> existingCodes = existingTasks.stream()
                 .map(PprTask::getCode)
-                .collect(Collectors.toSet());
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(HashSet::new));
         Set<TaskSignature> existingSignatures = existingTasks.stream()
                 .map(PprGeneratorService::taskSignature)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(HashSet::new));
 
         int created = 0;
-        int skipped = 0;
-
         for (MaintenanceRegulation reg : regulations) {
-            // only generate if this plan's month aligns with periodicity:
-            // DAY — always, WEEK/MONTH — always, QUARTER — if month ∈ {1,4,7,10}, YEAR/HALF — if month == 1
             if (!shouldGenerate(plan, reg, planMonth)) {
+                tracker.skip(SkipReason.SKIP_PERIODICITY);
                 continue;
             }
 
-            // filter equipment by type
-            List<Equipment> matching = new ArrayList<>();
             List<MaintenanceRegulationAttributeCondition> conditions =
                     conditionsByRegulationId.getOrDefault(reg.getId(), List.of());
-            for (Equipment eq : allEquipment) {
-                if (eq.getEquipmentTypeId() != null && eq.getEquipmentTypeId().equals(reg.getEquipmentTypeId())) {
-                    // department scope for the plan (if any)
-                    if (plan.getDepartmentId() != null
-                            && !plan.getDepartmentId().equals(eq.getDepartmentId())) {
-                        continue;
-                    }
-                    if (!targetContext.matches(eq)) {
-                        continue;
-                    }
-                    if (!matchesConditions(eq, conditions, attributeIndex)) {
-                        continue;
-                    }
-                    if (individualOverrides.contains(new RegulationOverrideSignature(reg.getId(), eq.getId()))) {
-                        skipped++;
-                        continue;
-                    }
-                    if (dueStatusRequired && !isDueForGeneration(eq.getId(), reg)) {
-                        skipped++;
-                        continue;
-                    }
-                    matching.add(eq);
-                }
-            }
-
             int seq = 1;
-            for (Equipment eq : matching) {
-                String code = String.format("PT-%s-%02d-%s-%d", reg.getCode(), planMonth.getMonthValue(), eq.getCode(), seq++);
+            for (Equipment eq : allEquipment) {
+                if (eq.getEquipmentTypeId() == null || !eq.getEquipmentTypeId().equals(reg.getEquipmentTypeId())) {
+                    tracker.skip(SkipReason.SKIP_EQUIPMENT_TYPE);
+                    continue;
+                }
+                if (plan.getDepartmentId() != null && !plan.getDepartmentId().equals(eq.getDepartmentId())) {
+                    tracker.skip(SkipReason.SKIP_DEPARTMENT);
+                    continue;
+                }
+                if (!targetContext.matchesEquipment(eq)) {
+                    tracker.skip(SkipReason.SKIP_TARGET);
+                    continue;
+                }
+                if (!matchesConditions(eq, conditions, attributeIndex)) {
+                    tracker.skip(SkipReason.SKIP_ATTRIBUTE_CONDITION);
+                    continue;
+                }
+                if (individualOverrides.contains(new RegulationOverrideSignature(reg.getId(), eq.getId()))) {
+                    tracker.skip(SkipReason.SKIP_DUPLICATE_SIGNATURE);
+                    continue;
+                }
+                if (dueStatusRequired && !isDueForGeneration(eq.getId(), reg)) {
+                    tracker.skip(SkipReason.SKIP_NOT_DUE);
+                    continue;
+                }
                 TaskSignature signature = new TaskSignature(plan.getId(), reg.getId(), null, eq.getId());
-                if (existingCodes.contains(code) || existingSignatures.contains(signature)) {
-                    skipped++;
+                if (existingSignatures.contains(signature)) {
+                    tracker.skip(SkipReason.SKIP_DUPLICATE_SIGNATURE);
                     continue;
                 }
 
-                PprTask task = new PprTask();
-                task.setCode(code);
-                task.setPlan(plan);
-                task.setRegulationId(reg.getId());
-                task.setEquipmentId(eq.getId());
-                task.setTitle(reg.getName() + " — " + eq.getCode());
-                task.setScheduledStart(planStart.atTime(LocalTime.of(9, 0)));
-                task.setScheduledEnd(resolveScheduledEnd(plan, reg, planStart, planEnd));
-                task.setDueDate(planEnd.atTime(LocalTime.of(18, 0)));
-                task.setPlannedLaborHours(reg.getNormativeLaborHours());
-                task.setPriority(PriorityLevel.MEDIUM);
-                task.setStatus(PprTaskStatus.PLANNED);
-
-                plan.getTasks().add(task);
-                PprTask saved = taskRepository.save(task);
-
-                auditBuilderService.log(
-                        "ppr_task",
-                        saved.getId().toString(),
-                        AuditAction.CREATE,
-                        AuditModule.PPR_TASK,
-                        "Задача ППР создана",
+                PprTask saved = saveGeneratedTask(
+                        plan,
+                        uniqueTaskCode(existingCodes, plan.getCode(), reg.getCode(), eq.getCode(), seq++),
+                        reg.getId(),
                         null,
-                        saved
+                        eq.getId(),
+                        reg.getName() + " вЂ” " + eq.getCode(),
+                        planStart,
+                        resolveScheduledEnd(plan, reg, planStart, planEnd),
+                        planEnd,
+                        reg.getNormativeLaborHours()
                 );
-
                 created++;
-                existingCodes.add(code);
+                existingCodes.add(saved.getCode());
                 existingSignatures.add(signature);
+                tracker.created(saved.getId(), saved.getCode());
             }
         }
 
@@ -201,78 +186,187 @@ public class PprGeneratorService {
                 .collect(Collectors.toMap(Equipment::getId, Function.identity(), (left, right) -> left));
         for (EquipmentMaintenanceRule rule : individualRules) {
             if (!shouldGenerate(plan, rule, planMonth)) {
+                tracker.skip(SkipReason.SKIP_PERIODICITY);
                 continue;
             }
             Equipment eq = equipmentByIdForRules.get(rule.getEquipmentId());
             if (eq == null) {
-                skipped++;
+                tracker.skip(SkipReason.SKIP_DECOMMISSIONED_EQUIPMENT);
                 continue;
             }
             if (plan.getDepartmentId() != null && !plan.getDepartmentId().equals(eq.getDepartmentId())) {
+                tracker.skip(SkipReason.SKIP_DEPARTMENT);
                 continue;
             }
-            if (!targetContext.matches(eq)) {
+            if (!targetContext.matchesEquipment(eq)) {
+                tracker.skip(SkipReason.SKIP_TARGET);
                 continue;
             }
             if (dueStatusRequired && !isDueForGeneration(eq.getId(), rule)) {
-                skipped++;
+                tracker.skip(SkipReason.SKIP_NOT_DUE);
                 continue;
             }
 
-            String code = String.format("PT-%s-%02d-%s", rule.getCode(), planMonth.getMonthValue(), eq.getCode());
             TaskSignature signature = new TaskSignature(plan.getId(), null, rule.getId(), eq.getId());
-            if (existingCodes.contains(code) || existingSignatures.contains(signature)) {
-                skipped++;
+            if (existingSignatures.contains(signature)) {
+                tracker.skip(SkipReason.SKIP_DUPLICATE_SIGNATURE);
                 continue;
             }
 
-            PprTask task = new PprTask();
-            task.setCode(code);
-            task.setPlan(plan);
-            task.setRegulationId(rule.getBaseRegulationId());
-            task.setEquipmentMaintenanceRuleId(rule.getId());
-            task.setEquipmentId(eq.getId());
-            task.setTitle(rule.getName() + " — " + eq.getCode());
-            task.setScheduledStart(planStart.atTime(LocalTime.of(9, 0)));
-            task.setScheduledEnd(resolveScheduledEnd(plan, rule, planStart, planEnd));
-            task.setDueDate(planEnd.atTime(LocalTime.of(18, 0)));
-            task.setPlannedLaborHours(rule.getNormativeLaborHours());
-            task.setPriority(PriorityLevel.MEDIUM);
-            task.setStatus(PprTaskStatus.PLANNED);
-
-            plan.getTasks().add(task);
-            PprTask saved = taskRepository.save(task);
-            auditBuilderService.log(
-                    "ppr_task",
-                    saved.getId().toString(),
-                    AuditAction.CREATE,
-                    AuditModule.PPR_TASK,
-                    "Задача ППР создана",
-                    null,
-                    saved
+            PprTask saved = saveGeneratedTask(
+                    plan,
+                    uniqueTaskCode(existingCodes, plan.getCode(), rule.getCode(), eq.getCode(), 1),
+                    rule.getBaseRegulationId(),
+                    rule.getId(),
+                    eq.getId(),
+                    rule.getName() + " вЂ” " + eq.getCode(),
+                    planStart,
+                    resolveScheduledEnd(plan, rule, planStart, planEnd),
+                    planEnd,
+                    rule.getNormativeLaborHours()
             );
             created++;
-            existingCodes.add(code);
+            existingCodes.add(saved.getCode());
             existingSignatures.add(signature);
+            tracker.created(saved.getId(), saved.getCode());
         }
 
         if (created > 0 && plan.getStatus() == PlanStatus.DRAFT) {
             plan.setStatus(PlanStatus.GENERATED);
-
             PprPlan pprPlan = planRepository.save(plan);
-
             auditBuilderService.log(
                     "ppr_plan",
                     pprPlan.getId().toString(),
                     AuditAction.UPDATE,
                     AuditModule.PPR_PLAN,
-                    "План ППР обновлен",
+                    "РџР»Р°РЅ РџРџР  РѕР±РЅРѕРІР»РµРЅ",
                     plan,
                     pprPlan
             );
         }
 
-        return new GenerationResult(plan.getId(), created, skipped);
+        return tracker.result(plan, created);
+    }
+
+    private List<MaintenanceRegulation> eligibleRegulations(PprPlan plan,
+                                                            YearMonth planMonth,
+                                                            TargetContext targetContext,
+                                                            GenerationTracker tracker) {
+        List<MaintenanceRegulation> regulations = new ArrayList<>();
+        for (MaintenanceRegulation regulation : regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
+            if (!regulation.isActive()) {
+                tracker.skip(SkipReason.SKIP_INACTIVE_REGULATION);
+                continue;
+            }
+            if (!targetContext.matchesRegulation(regulation.getId())) {
+                tracker.skip(SkipReason.SKIP_TARGET);
+                continue;
+            }
+            if (!isAllowedForPprType(plan, regulation)) {
+                tracker.skip(SkipReason.SKIP_SCHEDULE_TYPE);
+                continue;
+            }
+            if (!isAllowedForSchedule(plan, regulation, planMonth, tracker)) {
+                continue;
+            }
+            regulations.add(regulation);
+        }
+        return regulations;
+    }
+
+    private List<EquipmentMaintenanceRule> eligibleRules(PprPlan plan,
+                                                         YearMonth planMonth,
+                                                         TargetContext targetContext,
+                                                         GenerationTracker tracker) {
+        List<EquipmentMaintenanceRule> rules = new ArrayList<>();
+        for (EquipmentMaintenanceRule rule : equipmentMaintenanceRuleRepository.findAllActive()) {
+            if (!rule.isActive()) {
+                tracker.skip(SkipReason.SKIP_INACTIVE_RULE);
+                continue;
+            }
+            if (!targetContext.matchesRegulation(rule.getBaseRegulationId())) {
+                tracker.skip(SkipReason.SKIP_TARGET);
+                continue;
+            }
+            if (!isAllowedForPprType(plan, rule.getMaintenanceKind())) {
+                tracker.skip(SkipReason.SKIP_SCHEDULE_TYPE);
+                continue;
+            }
+            if (!isAllowedForSchedule(plan, rule, planMonth, tracker)) {
+                continue;
+            }
+            rules.add(rule);
+        }
+        return rules;
+    }
+
+    private List<Equipment> activeEquipment(GenerationTracker tracker) {
+        List<Equipment> equipment = new ArrayList<>();
+        for (Equipment item : equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
+            if (item.getStatus() == EquipmentStatus.DECOMMISSIONED) {
+                tracker.skip(SkipReason.SKIP_DECOMMISSIONED_EQUIPMENT);
+                continue;
+            }
+            equipment.add(item);
+        }
+        return equipment;
+    }
+
+    private long activeRegulationsCount() {
+        return regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(MaintenanceRegulation::isActive)
+                .count();
+    }
+
+    private long activeRulesCount() {
+        return equipmentMaintenanceRuleRepository.findAllActive().stream()
+                .filter(EquipmentMaintenanceRule::isActive)
+                .count();
+    }
+
+    private long matchingEquipmentCount(PprPlan plan, TargetContext targetContext, List<Equipment> allEquipment) {
+        return allEquipment.stream()
+                .filter(equipment -> plan.getDepartmentId() == null || plan.getDepartmentId().equals(equipment.getDepartmentId()))
+                .filter(targetContext::matchesEquipment)
+                .count();
+    }
+
+    private PprTask saveGeneratedTask(PprPlan plan,
+                                      String code,
+                                      UUID regulationId,
+                                      UUID equipmentMaintenanceRuleId,
+                                      UUID equipmentId,
+                                      String title,
+                                      LocalDate planStart,
+                                      java.time.LocalDateTime scheduledEnd,
+                                      LocalDate planEnd,
+                                      double plannedLaborHours) {
+        PprTask task = new PprTask();
+        task.setCode(code);
+        task.setPlan(plan);
+        task.setRegulationId(regulationId);
+        task.setEquipmentMaintenanceRuleId(equipmentMaintenanceRuleId);
+        task.setEquipmentId(equipmentId);
+        task.setTitle(title);
+        task.setScheduledStart(planStart.atTime(LocalTime.of(9, 0)));
+        task.setScheduledEnd(scheduledEnd);
+        task.setDueDate(planEnd.atTime(LocalTime.of(18, 0)));
+        task.setPlannedLaborHours(plannedLaborHours);
+        task.setPriority(PriorityLevel.MEDIUM);
+        task.setStatus(PprTaskStatus.PLANNED);
+
+        plan.getTasks().add(task);
+        PprTask saved = taskRepository.save(task);
+        auditBuilderService.log(
+                "ppr_task",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.PPR_TASK,
+                "Р—Р°РґР°С‡Р° РџРџР  СЃРѕР·РґР°РЅР°",
+                null,
+                saved
+        );
+        return saved;
     }
 
     @Transactional
@@ -514,20 +608,35 @@ public class PprGeneratorService {
     private boolean isAllowedForSchedule(PprPlan plan,
                                          MaintenanceRegulation regulation,
                                          YearMonth planMonth) {
-        return isAllowedForSchedule(plan, regulation.getPeriodicityUnit(), regulation, null, planMonth);
+        return isAllowedForSchedule(plan, regulation.getPeriodicityUnit(), regulation, null, planMonth, null);
     }
 
     private boolean isAllowedForSchedule(PprPlan plan,
                                          EquipmentMaintenanceRule rule,
                                          YearMonth planMonth) {
-        return isAllowedForSchedule(plan, rule.getPeriodicityUnit(), null, rule, planMonth);
+        return isAllowedForSchedule(plan, rule.getPeriodicityUnit(), null, rule, planMonth, null);
+    }
+
+    private boolean isAllowedForSchedule(PprPlan plan,
+                                         MaintenanceRegulation regulation,
+                                         YearMonth planMonth,
+                                         GenerationTracker tracker) {
+        return isAllowedForSchedule(plan, regulation.getPeriodicityUnit(), regulation, null, planMonth, tracker);
+    }
+
+    private boolean isAllowedForSchedule(PprPlan plan,
+                                         EquipmentMaintenanceRule rule,
+                                         YearMonth planMonth,
+                                         GenerationTracker tracker) {
+        return isAllowedForSchedule(plan, rule.getPeriodicityUnit(), null, rule, planMonth, tracker);
     }
 
     private boolean isAllowedForSchedule(PprPlan plan,
                                          PeriodicityUnit periodicityUnit,
                                          MaintenanceRegulation regulation,
                                          EquipmentMaintenanceRule rule,
-                                         YearMonth planMonth) {
+                                         YearMonth planMonth,
+                                         GenerationTracker tracker) {
         PprScheduleType scheduleType = plan.getScheduleType();
         if (scheduleType == null) {
             return true;
@@ -536,11 +645,19 @@ public class PprGeneratorService {
             return true;
         }
         if (scheduleType == PprScheduleType.CALENDAR && plan.getFrequency() != null) {
-            return periodicityUnit == periodicityUnit(plan.getFrequency());
+            boolean matches = periodicityUnit == periodicityUnit(plan.getFrequency());
+            if (!matches && tracker != null) {
+                tracker.skip(SkipReason.SKIP_FREQUENCY);
+            }
+            return matches;
         }
-        return regulation != null
+        boolean matches = regulation != null
                 ? shouldGenerate(plan, regulation, planMonth)
                 : shouldGenerate(plan, rule, planMonth);
+        if (!matches && tracker != null) {
+            tracker.skip(SkipReason.SKIP_SCHEDULE_TYPE);
+        }
+        return matches;
     }
 
     private PeriodicityUnit periodicityUnit(PprFrequency frequency) {
@@ -581,12 +698,38 @@ public class PprGeneratorService {
                 .atTime(scheduledEndTime());
     }
 
+    private String uniqueTaskCode(Set<String> existingCodes,
+                                  String planCode,
+                                  String sourceCode,
+                                  String equipmentCode,
+                                  int sequence) {
+        String base = "PT-%s-%s-%s".formatted(
+                safeCodePart(planCode),
+                safeCodePart(sourceCode),
+                safeCodePart(equipmentCode)
+        );
+        String code = "%s-%d".formatted(base, sequence);
+        while (existingCodes.contains(code)) {
+            sequence++;
+            code = "%s-%d".formatted(base, sequence);
+        }
+        return code;
+    }
+
+    private String safeCodePart(String value) {
+        if (value == null || value.isBlank()) {
+            return "NA";
+        }
+        return value.replaceAll("[^A-Za-z0-9-]", "-");
+    }
+
     private TargetContext targetContext(PprPlan plan) {
         if (plan.getTargets() == null || plan.getTargets().isEmpty()) {
             return TargetContext.empty();
         }
         Set<UUID> equipmentIds = new HashSet<>();
         Set<UUID> equipmentTypeIds = new HashSet<>();
+        Set<UUID> regulationIds = new HashSet<>();
         plan.getTargets().stream()
                 .filter(Objects::nonNull)
                 .filter(target -> !target.isDeleted())
@@ -597,8 +740,38 @@ public class PprGeneratorService {
                     if (target.getTargetType() == PprTargetType.EQUIPMENT_TYPE && target.getEquipmentTypeId() != null) {
                         equipmentTypeIds.add(target.getEquipmentTypeId());
                     }
+                    if (target.getTargetType() == PprTargetType.REGULATION && target.getRegulationId() != null) {
+                        regulationIds.add(target.getRegulationId());
+                    }
                 });
-        return new TargetContext(equipmentIds, equipmentTypeIds);
+        return new TargetContext(equipmentIds, equipmentTypeIds, regulationIds);
+    }
+
+    private GenerationPlanFields generationPlanFields(PprPlan plan) {
+        List<GenerationPlanTarget> targets = plan.getTargets() == null
+                ? List.of()
+                : plan.getTargets().stream()
+                .filter(Objects::nonNull)
+                .filter(target -> !target.isDeleted())
+                .map(target -> new GenerationPlanTarget(
+                        target.getTargetType(),
+                        target.getEquipmentId(),
+                        target.getEquipmentTypeId(),
+                        target.getRegulationId()
+                ))
+                .toList();
+        return new GenerationPlanFields(
+                plan.getId(),
+                plan.getCode(),
+                plan.getStatus(),
+                plan.getDepartmentId(),
+                plan.getPprType(),
+                plan.getScheduleType(),
+                plan.getFrequency(),
+                plan.getStartDate(),
+                plan.getEndDate(),
+                targets
+        );
     }
 
     private Map<UUID, List<MaintenanceRegulationAttributeCondition>> loadConditionsByRegulationId(
@@ -759,21 +932,36 @@ public class PprGeneratorService {
             Map<UUID, Map<UUID, EquipmentAttributeValue>> valuesByEquipmentId
     ) {}
 
-    private record TargetContext(Set<UUID> equipmentIds, Set<UUID> equipmentTypeIds) {
+    private record TargetContext(Set<UUID> equipmentIds, Set<UUID> equipmentTypeIds, Set<UUID> regulationIds) {
         static TargetContext empty() {
-            return new TargetContext(Set.of(), Set.of());
+            return new TargetContext(Set.of(), Set.of(), Set.of());
         }
 
-        boolean hasTargets() {
+        boolean hasEquipmentTargets() {
             return !equipmentIds.isEmpty() || !equipmentTypeIds.isEmpty();
         }
 
         boolean matches(Equipment equipment) {
-            if (!hasTargets()) {
+            return matchesEquipment(equipment);
+        }
+
+        boolean matchesEquipment(Equipment equipment) {
+            if (!hasEquipmentTargets()) {
                 return true;
             }
             return equipmentIds.contains(equipment.getId())
                     || equipmentTypeIds.contains(equipment.getEquipmentTypeId());
+        }
+
+        boolean hasRegulationTargets() {
+            return !regulationIds.isEmpty();
+        }
+
+        boolean matchesRegulation(UUID regulationId) {
+            if (!hasRegulationTargets()) {
+                return true;
+            }
+            return regulationId != null && regulationIds.contains(regulationId);
         }
     }
 
@@ -796,7 +984,171 @@ public class PprGeneratorService {
         );
     }
 
-    public record GenerationResult(UUID planId, int created, int skipped) {}
+    private enum SkipReason {
+        SKIP_DEPARTMENT,
+        SKIP_TARGET,
+        SKIP_EQUIPMENT_TYPE,
+        SKIP_ATTRIBUTE_CONDITION,
+        SKIP_SCHEDULE_TYPE,
+        SKIP_FREQUENCY,
+        SKIP_PERIODICITY,
+        SKIP_NOT_DUE,
+        SKIP_DUPLICATE_SIGNATURE,
+        SKIP_INACTIVE_REGULATION,
+        SKIP_INACTIVE_RULE,
+        SKIP_DECOMMISSIONED_EQUIPMENT
+    }
+
+    private static class GenerationTracker {
+        private final GenerationPlanFields planFields;
+        private final Map<String, Integer> skippedReasons = new LinkedHashMap<>();
+        private final List<UUID> createdTaskIds = new ArrayList<>();
+        private final List<String> createdTaskCodes = new ArrayList<>();
+        private GenerationCandidateCounts candidateCounts;
+
+        private GenerationTracker(GenerationPlanFields planFields) {
+            this.planFields = planFields;
+        }
+
+        void skip(SkipReason reason) {
+            skippedReasons.merge(reason.name(), 1, Integer::sum);
+        }
+
+        void candidateCounts(GenerationCandidateCounts counts) {
+            this.candidateCounts = counts;
+        }
+
+        void created(UUID taskId, String taskCode) {
+            if (taskId != null) {
+                createdTaskIds.add(taskId);
+            }
+            if (taskCode != null && !taskCode.isBlank()) {
+                createdTaskCodes.add(taskCode);
+            }
+        }
+
+        GenerationResult result(PprPlan plan, int created) {
+            int skipped = skippedReasons.values().stream().mapToInt(Integer::intValue).sum();
+            String message = created > 0
+                    ? "Generated %d PPR task(s).".formatted(created)
+                    : "No PPR tasks were generated. Skipped candidates: %d. Reasons: %s".formatted(skipped, skippedReasons);
+            Map<String, Integer> diagnosticReasons = diagnosticSkippedReasons(skippedReasons);
+            GenerationDiagnostics diagnostics = new GenerationDiagnostics(
+                    true,
+                    planFields,
+                    candidateCounts,
+                    created,
+                    skipped,
+                    List.copyOf(createdTaskIds),
+                    List.copyOf(createdTaskCodes),
+                    diagnosticReasons,
+                    message
+            );
+            log.info(
+                    "PPR generation diagnostics: planId={} planCode={} status={} departmentId={} pprType={} scheduleType={} frequency={} startDate={} endDate={} created={} skipped={} createdTaskIds={} createdTaskCodes={} skippedReasons={} message={}",
+                    plan.getId(),
+                    plan.getCode(),
+                    plan.getStatus(),
+                    plan.getDepartmentId(),
+                    plan.getPprType(),
+                    plan.getScheduleType(),
+                    plan.getFrequency(),
+                    plan.getStartDate(),
+                    plan.getEndDate(),
+                    created,
+                    skipped,
+                    createdTaskIds,
+                    createdTaskCodes,
+                    diagnosticReasons,
+                    message
+            );
+            return new GenerationResult(
+                    plan.getId(),
+                    created,
+                    skipped,
+                    List.copyOf(createdTaskIds),
+                    List.copyOf(createdTaskCodes),
+                    Map.copyOf(skippedReasons),
+                    message,
+                    diagnostics
+            );
+        }
+
+        private Map<String, Integer> diagnosticSkippedReasons(Map<String, Integer> source) {
+            Map<String, Integer> reasons = new LinkedHashMap<>();
+            reasons.put("SKIP_STATUS", 0);
+            reasons.put("SKIP_MISSING_DATE", 0);
+            reasons.put("SKIP_INACTIVE_REGULATION", source.getOrDefault(SkipReason.SKIP_INACTIVE_REGULATION.name(), 0));
+            reasons.put("SKIP_INACTIVE_RULE", source.getOrDefault(SkipReason.SKIP_INACTIVE_RULE.name(), 0));
+            reasons.put("SKIP_DECOMMISSIONED_EQUIPMENT", source.getOrDefault(SkipReason.SKIP_DECOMMISSIONED_EQUIPMENT.name(), 0));
+            reasons.put("SKIP_DEPARTMENT_MISMATCH", source.getOrDefault(SkipReason.SKIP_DEPARTMENT.name(), 0));
+            reasons.put("SKIP_TARGET_MISMATCH", source.getOrDefault(SkipReason.SKIP_TARGET.name(), 0));
+            reasons.put("SKIP_REGULATION_TARGET_MISMATCH", source.getOrDefault(SkipReason.SKIP_TARGET.name(), 0));
+            reasons.put("SKIP_EQUIPMENT_TYPE_MISMATCH", source.getOrDefault(SkipReason.SKIP_EQUIPMENT_TYPE.name(), 0));
+            reasons.put("SKIP_ATTRIBUTE_CONDITION", source.getOrDefault(SkipReason.SKIP_ATTRIBUTE_CONDITION.name(), 0));
+            reasons.put("SKIP_SCHEDULE_TYPE_MISMATCH", source.getOrDefault(SkipReason.SKIP_SCHEDULE_TYPE.name(), 0));
+            reasons.put("SKIP_FREQUENCY_MISMATCH", source.getOrDefault(SkipReason.SKIP_FREQUENCY.name(), 0));
+            reasons.put("SKIP_PERIODICITY_MISMATCH", source.getOrDefault(SkipReason.SKIP_PERIODICITY.name(), 0));
+            reasons.put("SKIP_OPERATING_HOURS_NOT_DUE", source.getOrDefault(SkipReason.SKIP_NOT_DUE.name(), 0));
+            reasons.put("SKIP_DUPLICATE_SIGNATURE", source.getOrDefault(SkipReason.SKIP_DUPLICATE_SIGNATURE.name(), 0));
+            reasons.put("SKIP_DUPLICATE_CODE", 0);
+            return reasons;
+        }
+    }
+
+    public record GenerationResult(
+            UUID planId,
+            int created,
+            int skipped,
+            List<UUID> createdTaskIds,
+            List<String> createdTaskCodes,
+            Map<String, Integer> skippedReasons,
+            String message,
+            GenerationDiagnostics generationDiagnostics
+    ) {
+        public GenerationResult(UUID planId, int created, int skipped) {
+            this(planId, created, skipped, List.of(), List.of(), Map.of(), null, null);
+        }
+    }
+
+    public record GenerationDiagnostics(
+            boolean generateForPlanCalled,
+            GenerationPlanFields planFields,
+            GenerationCandidateCounts candidateCounts,
+            int createdCount,
+            int skippedCount,
+            List<UUID> createdTaskIds,
+            List<String> createdTaskCodes,
+            Map<String, Integer> skippedReasons,
+            String message
+    ) {}
+
+    public record GenerationPlanFields(
+            UUID planId,
+            String planCode,
+            PlanStatus status,
+            UUID departmentId,
+            PprType pprType,
+            PprScheduleType scheduleType,
+            PprFrequency frequency,
+            LocalDate startDate,
+            LocalDate endDate,
+            List<GenerationPlanTarget> targets
+    ) {}
+
+    public record GenerationPlanTarget(
+            PprTargetType targetType,
+            UUID equipmentId,
+            UUID equipmentTypeId,
+            UUID regulationId
+    ) {}
+
+    public record GenerationCandidateCounts(
+            long activeRegulationsCount,
+            long activeEquipmentMaintenanceRulesCount,
+            long activeEquipmentCount,
+            long matchingEquipmentCount
+    ) {}
 
     public record WorkOrderGenerationResult(
             UUID planId,

@@ -1,7 +1,9 @@
 package com.toir.config;
 
 import com.toir.service.CertificationService;
+import com.toir.service.OperationalIssueScannerService;
 import com.toir.service.OverdueDetectorService;
+import com.toir.service.maintanance.MaintenanceAutomationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,11 +20,17 @@ public class NightlyMaintenanceJob {
 
     private final OverdueDetectorService overdueDetectorService;
     private final CertificationService certificationService;
+    private final MaintenanceAutomationService maintenanceAutomationService;
+    private final OperationalIssueScannerService operationalIssueScannerService;
 
     public NightlyMaintenanceJob(OverdueDetectorService overdueDetectorService,
-                                 CertificationService certificationService) {
+                                 CertificationService certificationService,
+                                 MaintenanceAutomationService maintenanceAutomationService,
+                                 OperationalIssueScannerService operationalIssueScannerService) {
         this.overdueDetectorService = overdueDetectorService;
         this.certificationService = certificationService;
+        this.maintenanceAutomationService = maintenanceAutomationService;
+        this.operationalIssueScannerService = operationalIssueScannerService;
     }
 
     @Scheduled(cron = "0 0 3 * * *", zone = "UTC")
@@ -40,6 +48,19 @@ public class NightlyMaintenanceJob {
             log.info("Nightly cert expiry: {} certifications marked EXPIRED", expired);
         } catch (Exception e) {
             log.error("Nightly cert expiry failed", e);
+        }
+        try {
+            var result = maintenanceAutomationService.evaluateAllCalendarRules();
+            log.info("Nightly maintenance automation: {}", result);
+        } catch (Exception e) {
+            log.error("Nightly maintenance automation failed", e);
+        }
+        try {
+            var result = operationalIssueScannerService.scanAll();
+            log.info("Nightly operational issue scan: openedOrUpdated={}, resolved={}",
+                    result.openedOrUpdated(), result.resolved());
+        } catch (Exception e) {
+            log.error("Nightly operational issue scan failed", e);
         }
     }
 }

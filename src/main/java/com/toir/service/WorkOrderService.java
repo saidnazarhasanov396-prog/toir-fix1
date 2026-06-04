@@ -8,6 +8,7 @@ import com.toir.entity.Department;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
+import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderTask;
@@ -30,6 +31,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.SafetyPermitStatus;
@@ -47,19 +49,24 @@ import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.maintanance.MaintenanceAutomationService;
+import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -90,6 +97,8 @@ public class WorkOrderService {
     private final CompletionActRepository completionActRepository;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
+    private final MaintenanceDueEventService maintenanceDueEventService;
+    private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     private final ObjectMapper objectMapper;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.APPROVED, WorkOrderStatus.IN_PROGRESS);
@@ -180,6 +189,8 @@ public class WorkOrderService {
         entity.setRepairRequestId(request.repairRequestId());
         entity.setDefectId(request.defectId());
         entity.setPprTaskId(request.pprTaskId());
+        entity.setMaintenanceDueEventId(request.maintenanceDueEventId());
+        entity.setCycleKey(request.cycleKey());
         entity.setContractorId(request.contractorId());
         entity.setType(request.type());
         entity.setWorkType(effectiveWorkType);
@@ -264,6 +275,7 @@ public class WorkOrderService {
     public WorkOrderDto complete(UUID id, CompleteWorkOrderRequest request) {
         WorkOrder entity = getOrThrow(id);
         assertCanComplete(entity, request);
+        MaintenanceDueEvent dueEvent = loadMaintenanceDueEvent(entity);
         entity.setResult(request.result());
         if (request.summary() != null && !request.summary().isBlank()) {
             entity.setSummary(request.summary());
@@ -282,7 +294,8 @@ public class WorkOrderService {
         completeLinkedPprTask(entity);
 
         WorkOrder saved = repository.save(entity);
-        createMaintenanceCompletionAnchor(saved, request);
+        createMaintenanceCompletionAnchor(saved, request, dueEvent);
+        completeLinkedMaintenanceDueEvent(dueEvent);
         syncLinkedOnComplete(saved);
         if (!isReplacementWorkOrder(saved)) {
             equipmentStatusLifecycleService.recordWorkOrderReturn(
@@ -291,6 +304,7 @@ public class WorkOrderService {
                     "Work order completed: " + saved.getNumber()
             );
         }
+        triggerMaintenanceRecalculation(saved);
 
         auditBuilderService.log(
                 "work_order",
@@ -346,38 +360,117 @@ public class WorkOrderService {
         }
     }
 
-    private void createMaintenanceCompletionAnchor(WorkOrder workOrder, CompleteWorkOrderRequest request) {
+    private MaintenanceDueEvent loadMaintenanceDueEvent(WorkOrder workOrder) {
+        if (workOrder.getMaintenanceDueEventId() == null) {
+            return null;
+        }
+        return maintenanceDueEventService.getOrThrow(workOrder.getMaintenanceDueEventId());
+    }
+
+    private void createMaintenanceCompletionAnchor(WorkOrder workOrder,
+                                                   CompleteWorkOrderRequest request,
+                                                   MaintenanceDueEvent dueEvent) {
         UUID regulationId = request.regulationId();
         UUID equipmentMaintenanceRuleId = request.equipmentMaintenanceRuleId();
         Instant plannedDueAt = request.plannedDueAt();
-        if ((regulationId == null && equipmentMaintenanceRuleId == null) && workOrder.getPprTaskId() != null) {
-            PprTask task = pprTaskRepository.findByIdAndIsDeletedFalse(workOrder.getPprTaskId()).orElse(null);
-            if (task != null) {
-                regulationId = task.getRegulationId();
-                equipmentMaintenanceRuleId = task.getEquipmentMaintenanceRuleId();
-                if (plannedDueAt == null && task.getDueDate() != null) {
-                    plannedDueAt = task.getDueDate().atZone(ZoneId.systemDefault()).toInstant();
-                }
-            }
+
+        PprTask task = null;
+        if (workOrder.getPprTaskId() != null) {
+            task = pprTaskRepository.findByIdAndIsDeletedFalse(workOrder.getPprTaskId()).orElse(null);
+        }
+        if ((regulationId == null && equipmentMaintenanceRuleId == null) && task != null) {
+            regulationId = task.getRegulationId();
+            equipmentMaintenanceRuleId = task.getEquipmentMaintenanceRuleId();
+        }
+        if ((regulationId == null && equipmentMaintenanceRuleId == null) && dueEvent != null) {
+            regulationId = dueEvent.getRegulationId();
+            equipmentMaintenanceRuleId = dueEvent.getEquipmentMaintenanceRuleId();
+        }
+        if (plannedDueAt == null && task != null && task.getDueDate() != null) {
+            plannedDueAt = task.getDueDate().atZone(ZoneId.systemDefault()).toInstant();
+        }
+        if (plannedDueAt == null && dueEvent != null) {
+            plannedDueAt = dueEvent.getDueAt();
+        }
+        List<CompletionMeterSnapshotRequest> meterSnapshots = request.meterSnapshots();
+        if ((meterSnapshots == null || meterSnapshots.isEmpty()) && dueEvent != null
+                && dueEvent.getMeterType() != null && dueEvent.getMeterCurrentValue() != null) {
+            meterSnapshots = List.of(new CompletionMeterSnapshotRequest(
+                    null,
+                    dueEvent.getMeterType(),
+                    dueEvent.getMeterCurrentValue(),
+                    dueEvent.getDetectedAt() == null ? workOrder.getCompletedAt() : dueEvent.getDetectedAt()
+            ));
         }
         if (regulationId == null && equipmentMaintenanceRuleId == null) {
             return;
         }
-        MaintenanceCompletionAnchor anchor = new MaintenanceCompletionAnchor();
+        MaintenanceCompletionAnchor anchor = findExistingMaintenanceCompletionAnchor(workOrder, dueEvent)
+                .orElseGet(MaintenanceCompletionAnchor::new);
         anchor.setEquipmentId(workOrder.getEquipmentId());
         anchor.setRegulationId(regulationId);
         anchor.setEquipmentMaintenanceRuleId(equipmentMaintenanceRuleId);
         anchor.setWorkOrderId(workOrder.getId());
         anchor.setPprTaskId(workOrder.getPprTaskId());
+        anchor.setMaintenanceDueEventId(dueEvent == null ? null : dueEvent.getId());
         anchor.setPerformedAt(request.performedAt() == null ? workOrder.getCompletedAt() : request.performedAt());
         anchor.setPlannedDueAt(plannedDueAt);
+        anchor.setPlannedMeterValue(plannedMeterValue(dueEvent));
         anchor.setRecalculationPolicy(request.recalculationPolicy() == null
                 ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
                 : request.recalculationPolicy());
-        anchor.setMeterSnapshots(toMeterSnapshotsJson(request.meterSnapshots()));
+        anchor.setMeterSnapshots(toMeterSnapshotsJson(meterSnapshots));
         anchor.setSource("WORK_ORDER");
         anchor.setNote(request.summary());
         maintenanceCompletionAnchorRepository.save(anchor);
+    }
+
+    private Optional<MaintenanceCompletionAnchor> findExistingMaintenanceCompletionAnchor(WorkOrder workOrder,
+                                                                                         MaintenanceDueEvent dueEvent) {
+        if (dueEvent != null && dueEvent.getId() != null) {
+            Optional<MaintenanceCompletionAnchor> byEvent =
+                    maintenanceCompletionAnchorRepository.findByMaintenanceDueEventIdAndIsDeletedFalse(dueEvent.getId());
+            if (byEvent.isPresent()) {
+                return byEvent;
+            }
+        }
+        if (workOrder.getId() == null) {
+            return Optional.empty();
+        }
+        return maintenanceCompletionAnchorRepository.findByWorkOrderIdAndIsDeletedFalse(workOrder.getId());
+    }
+
+    private BigDecimal plannedMeterValue(MaintenanceDueEvent dueEvent) {
+        if (dueEvent == null) {
+            return null;
+        }
+        Double plannedValue = null;
+        if (dueEvent.getMeterAnchorValue() != null && dueEvent.getMeterInterval() != null) {
+            plannedValue = dueEvent.getMeterAnchorValue() + dueEvent.getMeterInterval();
+        } else if (dueEvent.getMeterCurrentValue() != null && dueEvent.getMeterRemaining() != null) {
+            plannedValue = dueEvent.getMeterCurrentValue() + Math.max(0.0, dueEvent.getMeterRemaining());
+        }
+        if (plannedValue == null || !Double.isFinite(plannedValue)) {
+            return null;
+        }
+        return BigDecimal.valueOf(plannedValue);
+    }
+
+    private void completeLinkedMaintenanceDueEvent(MaintenanceDueEvent dueEvent) {
+        if (dueEvent == null) {
+            return;
+        }
+        maintenanceDueEventService.completeFromWorkOrder(dueEvent, "Work order completed");
+    }
+
+    private void triggerMaintenanceRecalculation(WorkOrder workOrder) {
+        if (workOrder.getMaintenanceDueEventId() == null || workOrder.getEquipmentId() == null) {
+            return;
+        }
+        MaintenanceAutomationService automationService = maintenanceAutomationServiceProvider.getIfAvailable();
+        if (automationService != null) {
+            automationService.evaluateEquipment(workOrder.getEquipmentId(), MaintenanceTriggerSource.WORK_ORDER_COMPLETED);
+        }
     }
 
     private String toMeterSnapshotsJson(List<CompletionMeterSnapshotRequest> snapshots) {

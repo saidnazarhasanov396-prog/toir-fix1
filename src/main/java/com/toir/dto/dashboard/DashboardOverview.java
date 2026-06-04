@@ -18,8 +18,31 @@ public record DashboardOverview(
         List<ContractorReconciliation> contractorReconciliation,
         List<LowStockItem> lowStockItems,
         List<RepeatedDefectsEquipment> repeatedDefectsEquipment,
-        List<MaintenanceKpiRow> maintenanceKpis
+        List<MaintenanceKpiRow> maintenanceKpis,
+        MaintenanceDueCounts maintenanceDueCounts
 ) {
+    public DashboardOverview(
+            Counters counters,
+            PlanFact planFact,
+            Kpis kpis,
+            List<TopProblemEquipment> topProblemEquipment,
+            List<DowntimeByEquipment> downtimeByEquipment,
+            List<LatestDowntime> latestDowntimes,
+            List<LatestStockMovement> latestStockMovements,
+            List<ContractorLoad> contractorLoad,
+            List<FinancialWorkloadByRole> financialReviewWorkloadByRole,
+            List<FinancialWorkloadByDepartment> financialReviewWorkloadByDepartment,
+            List<ContractorReconciliation> contractorReconciliation,
+            List<LowStockItem> lowStockItems,
+            List<RepeatedDefectsEquipment> repeatedDefectsEquipment,
+            List<MaintenanceKpiRow> maintenanceKpis
+    ) {
+        this(counters, planFact, kpis, topProblemEquipment, downtimeByEquipment, latestDowntimes,
+                latestStockMovements, contractorLoad, financialReviewWorkloadByRole,
+                financialReviewWorkloadByDepartment, contractorReconciliation, lowStockItems,
+                repeatedDefectsEquipment, maintenanceKpis, new MaintenanceDueCounts(0, 0, 0, 0, 0));
+    }
+
     public record Counters(
             long openRequests,
             long emergencyRequests,
@@ -122,6 +145,14 @@ public record DashboardOverview(
             double pprCompletion,
             double mtbfHours,
             double mttrHours
+    ) {}
+
+    public record MaintenanceDueCounts(
+            long upcoming,
+            long due,
+            long overdue,
+            long blocked,
+            long awaitingApproval
     ) {}
 
     public record EquipmentRef(UUID id, String code, String name) {}

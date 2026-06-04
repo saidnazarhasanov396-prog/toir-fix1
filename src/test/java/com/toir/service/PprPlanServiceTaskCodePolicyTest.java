@@ -16,6 +16,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -36,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -54,6 +56,9 @@ class PprPlanServiceTaskCodePolicyTest {
     DepartmentRepository departmentRepository;
 
     @Mock
+    PprGeneratorService generatorService;
+
+    @Mock
     AuditBuilderService auditBuilderService;
 
     @Mock
@@ -64,6 +69,12 @@ class PprPlanServiceTaskCodePolicyTest {
 
     @InjectMocks
     PprPlanService service;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(generatorService.generateForPlan(any(UUID.class)))
+                .thenAnswer(invocation -> new PprGeneratorService.GenerationResult(invocation.getArgument(0), 0, 0));
+    }
 
     @Test
     void createWithoutCodeStillGeneratesCode() {

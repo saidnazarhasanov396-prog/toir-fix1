@@ -144,6 +144,15 @@ public final class PermissionConstants {
     public static final String EQUIPMENT_TYPE_CREATE = "EQUIPMENT_TYPE_CREATE";
     public static final String EQUIPMENT_TYPE_UPDATE = "EQUIPMENT_TYPE_UPDATE";
     public static final String EQUIPMENT_TYPE_DELETE = "EQUIPMENT_TYPE_DELETE";
+    public static final String MAINTENANCE_REGULATION_READ = "MAINTENANCE_REGULATION_READ";
+    public static final String MAINTENANCE_REGULATION_CREATE = "MAINTENANCE_REGULATION_CREATE";
+    public static final String MAINTENANCE_REGULATION_UPDATE = "MAINTENANCE_REGULATION_UPDATE";
+    public static final String MAINTENANCE_REGULATION_DELETE = "MAINTENANCE_REGULATION_DELETE";
+    public static final String MAINTENANCE_EVENT_READ = "MAINTENANCE_EVENT_READ";
+    public static final String MAINTENANCE_EVENT_APPROVE = "MAINTENANCE_EVENT_APPROVE";
+    public static final String MAINTENANCE_EVENT_CANCEL = "MAINTENANCE_EVENT_CANCEL";
+    public static final String MAINTENANCE_AUTOMATION_RUN = "MAINTENANCE_AUTOMATION_RUN";
+    public static final String MAINTENANCE_AUTOMATION_CONFIGURE = "MAINTENANCE_AUTOMATION_CONFIGURE";
     public static final String CATEGORY_READ = "CATEGORY_READ";
     public static final String CATEGORY_CREATE = "CATEGORY_CREATE";
     public static final String CATEGORY_UPDATE = "CATEGORY_UPDATE";
@@ -162,6 +171,8 @@ public final class PermissionConstants {
     public static final String NOTIFICATION_MARK_READ = "NOTIFICATION_MARK_READ";
     public static final String NOTIFICATION_ADMIN = "NOTIFICATION_ADMIN";
     public static final String NOTIFICATION_UPDATE = "NOTIFICATION_UPDATE";
+    public static final String OPERATIONAL_ISSUE_READ = "OPERATIONAL_ISSUE_READ";
+    public static final String OPERATIONAL_ISSUE_RESOLVE = "OPERATIONAL_ISSUE_RESOLVE";
     public static final String ANALYTICS_READ = "ANALYTICS_READ";
     public static final String ANALYTICS_EXPORT = "ANALYTICS_EXPORT";
     public static final String INTEGRATION_READ = "INTEGRATION_READ";
