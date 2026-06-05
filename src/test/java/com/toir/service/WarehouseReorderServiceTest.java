@@ -77,6 +77,7 @@ class WarehouseReorderServiceTest {
         assertThat(suggestion.sparePartName()).isEqualTo("Filter");
         assertThat(suggestion.sparePartCode()).isEqualTo("SP-001");
         assertThat(suggestion.sparePartUnit()).isEqualTo("PCS");
+        assertThat(suggestion.recommendedQuantity()).isEqualTo(20.0);
         assertThat(suggestion.urgency()).isEqualTo("CRITICAL");
         verify(stockRepository).findAllByWarehouseIdAndIsDeletedFalse(warehouseId);
     }
@@ -137,6 +138,7 @@ class WarehouseReorderServiceTest {
         ReorderSuggestionDto suggestion = result.getContent().getFirst();
         assertThat(suggestion.urgency()).isEqualTo("WARNING");
         assertThat(suggestion.shortfall()).isEqualTo(3.0); // 15 - 12
+        assertThat(suggestion.recommendedQuantity()).isEqualTo(20.0);
     }
 
     @Test
@@ -220,6 +222,30 @@ class WarehouseReorderServiceTest {
         assertThat(result.getContent()).hasSize(2);
         verify(sparePartRepository, times(1)).findAllByIdInAndIsDeletedFalse(any());
         verify(sparePartRepository, never()).findById(any());
+    }
+
+    @Test
+    void recommendedQuantityUsesReorderQtyWhenAvailable() {
+        assertThat(service.recommendedQuantity(20.0, 15.0, 10.0, 4.0, 6.0, true))
+                .isEqualTo(20.0);
+    }
+
+    @Test
+    void recommendedQuantityUsesReorderPointShortageWhenReorderQtyIsMissing() {
+        assertThat(service.recommendedQuantity(null, 15.0, 10.0, 4.0, 6.0, true))
+                .isEqualTo(11.0);
+    }
+
+    @Test
+    void recommendedQuantityUsesMinQtyShortageWhenReorderPointIsMissing() {
+        assertThat(service.recommendedQuantity(null, null, 10.0, 4.0, 6.0, true))
+                .isEqualTo(6.0);
+    }
+
+    @Test
+    void recommendedQuantityIsZeroWhenReorderIsNotNeeded() {
+        assertThat(service.recommendedQuantity(null, 15.0, 10.0, 20.0, 0.0, false))
+                .isZero();
     }
 
     private WarehouseStock createStock(UUID warehouseId, UUID sparePartId, double quantity, double reserved, double minQty, Double reorderPoint, Double reorderQty) {
