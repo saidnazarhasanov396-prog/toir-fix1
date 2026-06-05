@@ -16,6 +16,7 @@ public record ReorderSuggestionDto(
         Double reorderPoint,
         Double reorderQty,
         double shortfall,
+        double recommendedQuantity,
         String urgency
 ) {
 }

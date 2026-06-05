@@ -1,9 +1,7 @@
 package com.toir.controller;
 
 import com.toir.dto.warehouse.ReorderSuggestionDto;
-import com.toir.dto.warehouse.LowStockEvaluationResultDto;
 import com.toir.exception.GlobalExceptionHandler;
-import com.toir.service.LowStockRecommendationService;
 import com.toir.service.WarehouseReorderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,16 +12,18 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.PostMapping;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -33,14 +33,11 @@ class WarehouseReorderControllerContractTest {
     @Mock
     WarehouseReorderService reorderService;
 
-    @Mock
-    LowStockRecommendationService lowStockRecommendationService;
-
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new WarehouseReorderController(reorderService, lowStockRecommendationService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new WarehouseReorderController(reorderService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -64,6 +61,7 @@ class WarehouseReorderControllerContractTest {
                 15.0,
                 20.0,
                 15.0,
+                20.0,
                 "CRITICAL"
         );
 
@@ -79,6 +77,7 @@ class WarehouseReorderControllerContractTest {
                 .andExpect(jsonPath("$.content[0].sparePartName").value("Engine Oil"))
                 .andExpect(jsonPath("$.content[0].sparePartCode").value("OIL-001"))
                 .andExpect(jsonPath("$.content[0].sparePartUnit").value("LITRE"))
+                .andExpect(jsonPath("$.content[0].recommendedQuantity").value(20.0))
                 .andExpect(jsonPath("$.content[0].urgency").value("CRITICAL"))
                 .andExpect(jsonPath("$.totalElements").value(1));
 
@@ -103,33 +102,12 @@ class WarehouseReorderControllerContractTest {
     }
 
     @Test
-    void postEvaluateWithWarehouseIdReturnsEvaluationCounts() throws Exception {
-        UUID warehouseId = UUID.randomUUID();
-        when(lowStockRecommendationService.evaluateWarehouse(warehouseId))
-                .thenReturn(new LowStockEvaluationResultDto(3, 1, 1, 1, 0));
-
-        mockMvc.perform(post("/api/v1/warehouses/reorder/evaluate")
-                        .param("warehouseId", warehouseId.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.evaluatedCount").value(3))
-                .andExpect(jsonPath("$.openedCount").value(1))
-                .andExpect(jsonPath("$.updatedCount").value(1))
-                .andExpect(jsonPath("$.resolvedCount").value(1))
-                .andExpect(jsonPath("$.skippedCount").value(0));
-
-        verify(lowStockRecommendationService).evaluateWarehouse(warehouseId);
-    }
-
-    @Test
-    void postEvaluateWithoutWarehouseIdEvaluatesAllStocks() throws Exception {
-        when(lowStockRecommendationService.evaluateAll())
-                .thenReturn(new LowStockEvaluationResultDto(2, 1, 0, 0, 1));
-
-        mockMvc.perform(post("/api/v1/warehouses/reorder/evaluate"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.evaluatedCount").value(2))
-                .andExpect(jsonPath("$.skippedCount").value(1));
-
-        verify(lowStockRecommendationService).evaluateAll();
+    void postEvaluateEndpointIsNoLongerExposed() throws Exception {
+        assertThat(Arrays.stream(WarehouseReorderController.class.getDeclaredMethods()))
+                .noneMatch(method -> {
+                    PostMapping postMapping = method.getAnnotation(PostMapping.class);
+                    return postMapping != null
+                            && Arrays.asList(postMapping.value()).contains("/evaluate");
+                });
     }
 }

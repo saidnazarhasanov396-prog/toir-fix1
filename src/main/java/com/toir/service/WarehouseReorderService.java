@@ -117,15 +117,18 @@ public class WarehouseReorderService {
             return Optional.empty();
         }
 
-        double shortfall;
         String urgency;
+        double thresholdShortfall = Math.max(trigger - available, 0);
+        double minimumShortfall = Math.max(minQty - available, 0);
+        double shortfall;
         if (available <= minQty) {
-            shortfall = Math.max((stock.getReorderQty() != null ? stock.getReorderQty() : minQty * 2) - available, 0);
+            shortfall = minimumShortfall;
             urgency = "CRITICAL";
         } else {
-            shortfall = trigger - available;
+            shortfall = thresholdShortfall;
             urgency = "WARNING";
         }
+        double recommendedQuantity = recommendedQuantity(stock.getReorderQty(), reorderPoint, minQty, available, shortfall, true);
 
         String warehouseName = warehouseNames.getOrDefault(stock.getWarehouseId(), "");
         SparePart sparePart = sparePartsById.get(stock.getSparePartId());
@@ -147,8 +150,27 @@ public class WarehouseReorderService {
                 reorderPoint,
                 stock.getReorderQty(),
                 shortfall,
+                recommendedQuantity,
                 urgency
         ));
+    }
+
+    double recommendedQuantity(Double reorderQty,
+                               Double reorderPoint,
+                               double minQty,
+                               double available,
+                               double shortfall,
+                               boolean reorderNeeded) {
+        if (!reorderNeeded) {
+            return 0;
+        }
+        if (reorderQty != null && reorderQty > 0) {
+            return reorderQty;
+        }
+        double shortage = reorderPoint != null
+                ? Math.max(shortfall, reorderPoint - available)
+                : minQty - available;
+        return Math.max(shortage, 0);
     }
 
     private void assertCanAccessWarehouseId(UUID warehouseId) {
