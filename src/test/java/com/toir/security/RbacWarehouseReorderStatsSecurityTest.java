@@ -1,9 +1,7 @@
 package com.toir.security;
 
 import com.toir.controller.WarehouseReorderController;
-import com.toir.dto.warehouse.LowStockEvaluationResultDto;
 import com.toir.dto.warehouse.ReorderStatsDto;
-import com.toir.service.LowStockRecommendationService;
 import com.toir.service.WarehouseReorderService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,9 +44,6 @@ class RbacWarehouseReorderStatsSecurityTest {
 
     @MockBean
     WarehouseReorderService reorderService;
-
-    @MockBean
-    LowStockRecommendationService lowStockRecommendationService;
 
     @TestConfiguration
     static class SecurityBeans {
@@ -147,27 +142,9 @@ class RbacWarehouseReorderStatsSecurityTest {
     }
 
     @Test
-    void unauthenticatedCannotEvaluateLowStock() throws Exception {
-        mockMvc.perform(post("/api/v1/warehouses/reorder/evaluate"))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    @WithMockUser(authorities = PermissionConstants.USER_READ)
-    void unrelatedPermissionCannotEvaluateLowStock() throws Exception {
-        mockMvc.perform(post("/api/v1/warehouses/reorder/evaluate"))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
     @WithMockUser(authorities = PermissionConstants.STOCK_READ)
-    void stockReadCanEvaluateLowStock() throws Exception {
-        when(lowStockRecommendationService.evaluateAll())
-                .thenReturn(new LowStockEvaluationResultDto(1, 1, 0, 0, 0));
-
+    void evaluateEndpointIsNoLongerExposed() throws Exception {
         mockMvc.perform(post("/api/v1/warehouses/reorder/evaluate"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.evaluatedCount").value(1))
-                .andExpect(jsonPath("$.openedCount").value(1));
+                .andExpect(status().isNotFound());
     }
 }
