@@ -58,6 +58,7 @@ public class EquipmentMaintenanceEffectiveRuleResolver {
         List<MaintenanceRegulation> inheritedRegulations = regulationRepository
                 .findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(equipment.getEquipmentTypeId());
         List<EquipmentMaintenanceRule> individualRules = ruleRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
+        boolean equipmentSpecificProfile = !individualRules.isEmpty();
         Map<UUID, EquipmentMaintenanceRule> overrideByBaseId = individualRules.stream()
                 .filter(EquipmentMaintenanceRule::isActive)
                 .filter(rule -> rule.getBaseRegulationId() != null)
@@ -80,6 +81,9 @@ public class EquipmentMaintenanceEffectiveRuleResolver {
 
             EquipmentMaintenanceRule override = overrideByBaseId.get(regulation.getId());
             if (override == null) {
+                if (equipmentSpecificProfile) {
+                    continue;
+                }
                 resolved.add(EquipmentMaintenanceEffectiveRule.fromRegulation(equipment.getId(), regulation));
             } else if (override.isDisablesBaseRegulation()) {
                 resolved.add(EquipmentMaintenanceEffectiveRule.disabledByOverride(equipment.getId(), regulation, override));

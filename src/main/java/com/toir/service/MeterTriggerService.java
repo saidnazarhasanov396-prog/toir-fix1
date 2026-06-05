@@ -6,10 +6,10 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.dto.meter.MeterTriggerMatch;
 import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
 
-import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.exception.RestException;
-import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
+import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
 import com.toir.service.maintanance.MaintenanceDueCalculationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,7 +24,7 @@ public class MeterTriggerService {
 
     private final EquipmentMeterRepository meterRepository;
     private final EquipmentRepository equipmentRepository;
-    private final MaintenanceRegulationRepository regulationRepository;
+    private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
     private final MaintenanceDueCalculationService dueCalculationService;
 
 
@@ -34,22 +34,21 @@ public class MeterTriggerService {
             throw RestException.badRequest("equipmentId or equipmentSearch is required");
         }
         List<EquipmentMeter> meters = meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId);
-        List<MaintenanceRegulation> regs = regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(r -> r.isActive() && r.getTriggerMeterType() != null
-                        && r.getTriggerMeterInterval() != null && r.getTriggerMeterInterval() > 0)
+        List<EquipmentMaintenanceEffectiveRule> rules = effectiveRuleResolver.resolveApplicable(equipmentId).stream()
+                .filter(EquipmentMaintenanceEffectiveRule::hasMeterTrigger)
                 .toList();
         List<MeterTriggerMatch> result = new ArrayList<>();
-        for (MaintenanceRegulation reg : regs) {
+        for (EquipmentMaintenanceEffectiveRule rule : rules) {
             for (EquipmentMeter meter : meters) {
-                if (meter.getMeterType() != reg.getTriggerMeterType()) continue;
-                MaintenanceDueCalculationDto dueCalculation = dueCalculationService.calculate(equipmentId, reg);
-                double interval = dueCalculation.meterInterval() == null ? reg.getTriggerMeterInterval() : dueCalculation.meterInterval();
+                if (meter.getMeterType() != rule.triggerMeterType()) continue;
+                MaintenanceDueCalculationDto dueCalculation = dueCalculationService.calculate(rule);
+                double interval = dueCalculation.meterInterval() == null ? rule.triggerMeterInterval() : dueCalculation.meterInterval();
                 double current = dueCalculation.meterCurrentValue() == null ? meter.getCurrentValue() : dueCalculation.meterCurrentValue();
                 double remaining = dueCalculation.meterRemaining() == null ? interval : dueCalculation.meterRemaining();
                 boolean due = dueCalculation.status() == MaintenanceDueStatus.DUE
                         || dueCalculation.status() == MaintenanceDueStatus.OVERDUE;
                 result.add(new MeterTriggerMatch(
-                        reg.getId(), reg.getCode(), reg.getName(),
+                        rule.regulationId(), rule.code(), rule.name(),
                         meter.getId(), meter.getMeterType(), current,
                         interval, remaining, due, dueCalculation.status(), dueCalculation.explanation()));
             }
