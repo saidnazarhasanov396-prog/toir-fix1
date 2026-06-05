@@ -2,11 +2,13 @@ package com.toir.service;
 
 import com.toir.dto.sparepart.SparePartDto;
 import com.toir.entity.SparePart;
+import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.InventoryItemKind;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
@@ -50,6 +52,12 @@ class SparePartServiceTest {
     WarehouseRepository warehouseRepository;
 
     @Mock
+    UnitOfMeasurementRepository unitOfMeasurementRepository;
+
+    @Mock
+    UnitOfMeasurementService unitOfMeasurementService;
+
+    @Mock
     ScopeAccessService scopeAccessService;
 
     @Mock
@@ -63,6 +71,8 @@ class SparePartServiceTest {
                 repository,
                 stockRepository,
                 warehouseRepository,
+                unitOfMeasurementRepository,
+                unitOfMeasurementService,
                 scopeAccessService,
                 auditBuilderService
         );
@@ -228,6 +238,70 @@ class SparePartServiceTest {
         verify(repository, never()).findAllByFilterAndWarehouseIds(any(), any(), anyCollection(), any());
     }
 
+    @Test
+    void findAllReturnsSeparateUnitCodeAndNameFromDictionary() {
+        SparePart part = sparePart(UUID.randomUUID(), "SP-L", "Oil", InventoryItemKind.MATERIAL);
+        part.setUnit("L");
+        UnitOfMeasurement unit = unit("L", "Литр");
+        Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), any())).thenReturn(page);
+        when(unitOfMeasurementRepository.findAllByTokenIgnoreCaseIn(List.of("l"))).thenReturn(List.of(unit));
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
+                .thenReturn(List.of());
+
+        Page<SparePartDto> result = service.findAll(20, 0, null, "", null);
+
+        assertThat(result.getContent().getFirst().unit().code()).isEqualTo("L");
+        assertThat(result.getContent().getFirst().unit().name()).isEqualTo("Литр");
+    }
+
+    @Test
+    void findByIdFallsBackToStoredUnitWhenDictionaryMatchIsMissing() {
+        UUID sparePartId = UUID.randomUUID();
+        SparePart part = sparePart(sparePartId, "SP-UNKNOWN", "Unknown unit", InventoryItemKind.SPARE_PART);
+        part.setUnit("legacy-unit");
+
+        when(repository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(part));
+        when(stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId)).thenReturn(List.of());
+        when(unitOfMeasurementRepository.findAllByTokenIgnoreCaseIn(List.of("legacy-unit"))).thenReturn(List.of());
+
+        SparePartDto result = service.findById(sparePartId);
+
+        assertThat(result.unit().code()).isEqualTo("legacy-unit");
+        assertThat(result.unit().name()).isEqualTo("legacy-unit");
+    }
+
+    @Test
+    void createNormalizesUnitTokenBeforeSaving() {
+        when(repository.existsByCodeAndIsDeletedFalse("SP-NEW")).thenReturn(false);
+        when(unitOfMeasurementService.normalizeRequiredUnitOrThrow("UOM-2026-0026", "spare part unit"))
+                .thenReturn("Литр");
+        when(repository.save(any(SparePart.class))).thenAnswer(invocation -> {
+            SparePart saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(unitOfMeasurementRepository.findAllByTokenIgnoreCaseIn(List.of("литр")))
+                .thenReturn(List.of(unit("L", "Литр")));
+
+        service.create(new com.toir.dto.sparepart.SparePartRequest(
+                "SP-NEW",
+                "Oil",
+                null,
+                InventoryItemKind.MATERIAL,
+                "UOM-2026-0026",
+                null,
+                null,
+                0
+        ));
+
+        ArgumentCaptor<SparePart> captor = ArgumentCaptor.forClass(SparePart.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getUnit()).isEqualTo("Литр");
+    }
+
     private SparePart sparePart(UUID id, String code, String name, InventoryItemKind kind) {
         SparePart sparePart = new SparePart();
         sparePart.setId(id);
@@ -259,5 +333,13 @@ class SparePartServiceTest {
         stock.setReservedQty(reservedQty);
         stock.setMinQty(0);
         return stock;
+    }
+
+    private UnitOfMeasurement unit(String code, String name) {
+        UnitOfMeasurement unit = new UnitOfMeasurement();
+        unit.setId(UUID.randomUUID());
+        unit.setCode(code);
+        unit.setName(name);
+        return unit;
     }
 }

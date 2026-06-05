@@ -28,17 +28,27 @@ public record SparePartDto(
     public record UnitRef(String code, String name) {}
 
     public static SparePartDto from(SparePart s) {
-        return from(s, 0, 0, 0);
+        return from(s, 0, 0, 0, unitRef(s.getUnit()));
     }
 
     public static SparePartDto from(SparePart s, double currentStock, double reservedStock, int warehouseCount) {
+        return from(s, currentStock, reservedStock, warehouseCount, unitRef(s.getUnit()));
+    }
+
+    public static SparePartDto from(
+            SparePart s,
+            double currentStock,
+            double reservedStock,
+            int warehouseCount,
+            UnitRef unit
+    ) {
         return new SparePartDto(
                 s.getId(),
                 "SPARE_PART",
                 s.getCode(),
                 s.getName(),
                 s.getKind() != null ? s.getKind().name() : InventoryItemKind.SPARE_PART.name(),
-                new UnitRef(s.getUnit(), s.getUnit()),
+                unit,
                 s.getManufacturer(),
                 s.getSku(),
                 s.getSpecification(),
@@ -48,5 +58,9 @@ public record SparePartDto(
                 Math.max(0, currentStock - reservedStock),
                 warehouseCount
         );
+    }
+
+    public static UnitRef unitRef(String unit) {
+        return new UnitRef(unit, unit);
     }
 }

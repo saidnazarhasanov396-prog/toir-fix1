@@ -3,6 +3,7 @@ package com.toir.service;
 import com.toir.dto.sparepart.SparePartDto;
 import com.toir.dto.sparepart.SparePartRequest;
 import com.toir.entity.SparePart;
+import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
@@ -10,6 +11,7 @@ import com.toir.enums.AuditModule;
 import com.toir.enums.InventoryItemKind;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
@@ -24,8 +26,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +39,8 @@ public class SparePartService {
     private final SparePartRepository repository;
     private final WarehouseStockRepository stockRepository;
     private final WarehouseRepository warehouseRepository;
+    private final UnitOfMeasurementRepository unitOfMeasurementRepository;
+    private final UnitOfMeasurementService unitOfMeasurementService;
     private final ScopeAccessService scopeAccessService;
     private final AuditBuilderService auditBuilderService;
 
@@ -77,6 +84,7 @@ public class SparePartService {
         if (parts.isEmpty()) {
             return parts.map(SparePartDto::from);
         }
+        Map<String, SparePartDto.UnitRef> unitRefsByToken = unitRefsByToken(parts.getContent());
 
         List<UUID> sparePartIds = parts.getContent().stream().map(SparePart::getId).toList();
         List<WarehouseStock> scopedStocks;
@@ -104,7 +112,13 @@ public class SparePartService {
                     List<WarehouseStock> stocks = stocksByPart.getOrDefault(part.getId(), List.of());
                     double currentStock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
                     double reservedStock = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
-                    return SparePartDto.from(part, currentStock, reservedStock, stocks.size());
+                    return SparePartDto.from(
+                            part,
+                            currentStock,
+                            reservedStock,
+                            stocks.size(),
+                            unitRefFor(part.getUnit(), unitRefsByToken)
+                    );
                 });
     }
 
@@ -130,7 +144,7 @@ public class SparePartService {
         List<WarehouseStock> stocks = stockRepository.findAllBySparePartIdAndIsDeletedFalse(id);
         double currentStock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
         double reservedStock = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
-        return SparePartDto.from(part, currentStock, reservedStock, stocks.size());
+        return SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit()));
     }
 
     @Transactional
@@ -152,7 +166,7 @@ public class SparePartService {
                 saved
         );
 
-        return SparePartDto.from(saved);
+        return SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()));
     }
 
     @Transactional
@@ -171,7 +185,7 @@ public class SparePartService {
                 entity,
                 saved
         );
-        return SparePartDto.from(entity);
+        return SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()));
     }
 
     @Transactional
@@ -201,7 +215,7 @@ public class SparePartService {
         entity.setName(request.name());
         entity.setSku(request.sku());
         if (request.kind() != null) entity.setKind(request.kind());
-        entity.setUnit(request.unit());
+        entity.setUnit(unitOfMeasurementService.normalizeRequiredUnitOrThrow(request.unit(), "spare part unit"));
         entity.setSpecification(request.specification());
         entity.setManufacturer(request.manufacturer());
         entity.setMinStock(request.minStock());
@@ -238,5 +252,51 @@ public class SparePartService {
         }
         return (warehouse.getDepartmentId() != null && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId()))
                 || (warehouse.getResponsibleId() != null && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId()));
+    }
+
+    private SparePartDto.UnitRef unitRefFor(String unit) {
+        if (unit == null || unit.isBlank()) {
+            return SparePartDto.unitRef(unit);
+        }
+        return unitRefFor(unit, unitRefsByToken(List.of(unit)));
+    }
+
+    private SparePartDto.UnitRef unitRefFor(String unit, Map<String, SparePartDto.UnitRef> unitRefsByToken) {
+        String token = normalizeToken(unit);
+        if (token == null) {
+            return SparePartDto.unitRef(unit);
+        }
+        return unitRefsByToken.getOrDefault(token, SparePartDto.unitRef(unit));
+    }
+
+    private Map<String, SparePartDto.UnitRef> unitRefsByToken(List<?> unitSources) {
+        List<String> tokens = unitSources.stream()
+                .map(source -> source instanceof SparePart sparePart ? sparePart.getUnit() : source)
+                .map(value -> value == null ? null : value.toString())
+                .map(this::normalizeToken)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (tokens.isEmpty()) {
+            return Map.of();
+        }
+        return unitOfMeasurementRepository.findAllByTokenIgnoreCaseIn(tokens).stream()
+                .flatMap(unit -> unitTokenEntries(unit).entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (left, right) -> left));
+    }
+
+    private Map<String, SparePartDto.UnitRef> unitTokenEntries(UnitOfMeasurement unit) {
+        SparePartDto.UnitRef ref = new SparePartDto.UnitRef(unit.getCode(), unit.getName());
+        return Stream.of(unit.getCode(), unit.getName(), unit.getNameEn(), unit.getNameUz())
+                .map(this::normalizeToken)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(Function.identity(), ignored -> ref, (left, right) -> left));
+    }
+
+    private String normalizeToken(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        return token.trim().toLowerCase();
     }
 }
