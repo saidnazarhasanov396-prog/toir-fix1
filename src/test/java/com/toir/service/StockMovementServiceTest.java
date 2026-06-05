@@ -1,11 +1,13 @@
 package com.toir.service;
 
+import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementRequest;
 import com.toir.entity.StockMovement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
+import com.toir.repository.StockMovementListRow;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
@@ -19,14 +21,20 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
@@ -182,6 +190,53 @@ class StockMovementServiceTest {
     }
 
     @Test
+    void findAllPageReturnsRelationDisplayFieldsFromProjection() {
+        UUID movementId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID createdById = UUID.randomUUID();
+        Instant occurredAt = Instant.parse("2026-06-05T08:15:30Z");
+        PageRequest pageRequest = PageRequest.of(0, 8);
+
+        when(repository.findListRows(
+                eq(true),
+                eq(null),
+                eq(null),
+                eq(pageRequest)))
+                .thenReturn(new PageImpl<>(
+                        List.of(stockMovementRow(
+                                movementId,
+                                warehouseId,
+                                "Main Warehouse",
+                                sparePartId,
+                                "Bearing 6205",
+                                workOrderId,
+                                "WO-42",
+                                "Pump repair",
+                                createdById,
+                                "Jane Smith",
+                                occurredAt)),
+                        pageRequest,
+                        1));
+
+        Page<StockMovementDto> result = service.findAll(0, 8);
+
+        StockMovementDto dto = result.getContent().getFirst();
+        assertThat(dto.id()).isEqualTo(movementId);
+        assertThat(dto.warehouseId()).isEqualTo(warehouseId);
+        assertThat(dto.warehouseName()).isEqualTo("Main Warehouse");
+        assertThat(dto.sparePartId()).isEqualTo(sparePartId);
+        assertThat(dto.sparePartName()).isEqualTo("Bearing 6205");
+        assertThat(dto.workOrderId()).isEqualTo(workOrderId);
+        assertThat(dto.workOrderName()).isEqualTo("Pump repair");
+        assertThat(dto.workOrderNumber()).isEqualTo("WO-42");
+        assertThat(dto.createdById()).isEqualTo(createdById);
+        assertThat(dto.createdByFullName()).isEqualTo("Jane Smith");
+        assertThat(dto.occurredAt()).isEqualTo(occurredAt);
+    }
+
+    @Test
     void issueWithWorkOrderIdIsBlockedToPreserveMaterialUsageSourceOfTruth() {
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
@@ -241,5 +296,100 @@ class StockMovementServiceTest {
     private StockMovement saveWithId(StockMovement movement) {
         ReflectionTestUtils.setField(movement, "id", UUID.randomUUID());
         return movement;
+    }
+
+    private StockMovementListRow stockMovementRow(
+            UUID id,
+            UUID warehouseId,
+            String warehouseName,
+            UUID sparePartId,
+            String sparePartName,
+            UUID workOrderId,
+            String workOrderNumber,
+            String workOrderName,
+            UUID createdById,
+            String createdByFullName,
+            Instant occurredAt) {
+        return new StockMovementListRow() {
+            @Override
+            public UUID getId() {
+                return id;
+            }
+
+            @Override
+            public UUID getWarehouseId() {
+                return warehouseId;
+            }
+
+            @Override
+            public String getWarehouseName() {
+                return warehouseName;
+            }
+
+            @Override
+            public UUID getSparePartId() {
+                return sparePartId;
+            }
+
+            @Override
+            public String getSparePartName() {
+                return sparePartName;
+            }
+
+            @Override
+            public UUID getWorkOrderId() {
+                return workOrderId;
+            }
+
+            @Override
+            public String getWorkOrderNumber() {
+                return workOrderNumber;
+            }
+
+            @Override
+            public String getWorkOrderName() {
+                return workOrderName;
+            }
+
+            @Override
+            public String getType() {
+                return StockMovementType.RECEIPT.name();
+            }
+
+            @Override
+            public double getQuantity() {
+                return 2;
+            }
+
+            @Override
+            public Double getUnitCost() {
+                return 10.0;
+            }
+
+            @Override
+            public String getDocumentNumber() {
+                return "DOC-1";
+            }
+
+            @Override
+            public UUID getCreatedById() {
+                return createdById;
+            }
+
+            @Override
+            public String getCreatedByFullName() {
+                return createdByFullName;
+            }
+
+            @Override
+            public Instant getOccurredAt() {
+                return occurredAt;
+            }
+
+            @Override
+            public String getNotes() {
+                return null;
+            }
+        };
     }
 }
