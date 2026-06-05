@@ -16,7 +16,9 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +45,17 @@ public class StockMovementService {
                 .filter(movement -> canAccessWarehouseId(movement.getWarehouseId()))
                 .map(StockMovementDto::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<StockMovementDto> findAll(int page, int size) {
+        boolean scopeAdmin = scopeAccessService.isScopeAdmin();
+        return repository.findListRows(
+                        scopeAdmin,
+                        scopeAdmin ? null : scopeAccessService.currentDepartmentIdOrNull(),
+                        scopeAdmin ? null : scopeAccessService.currentEmployeeId().orElse(null),
+                        PaginationUtils.pageRequest(page, size))
+                .map(StockMovementDto::from);
     }
 
     @Transactional

@@ -10,6 +10,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -23,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = StockMovementController.class)
@@ -71,16 +74,24 @@ class RbacStockMovementSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.STOCK_READ)
     void stockReadCanReadStockMovements() throws Exception {
-        when(stockMovementService.findAll()).thenReturn(List.of(stockMovementDto(StockMovementType.RECEIPT)));
+        when(stockMovementService.findAll(0, 1)).thenReturn(new PageImpl<>(
+                List.of(stockMovementDto(StockMovementType.RECEIPT)),
+                PageRequest.of(0, 1),
+                1));
 
         mockMvc.perform(get("/api/v1/stock-movements?page=0&size=1"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].warehouseName").value("Main Warehouse"))
+                .andExpect(jsonPath("$.content[0].sparePartName").value("Bearing 6205"))
+                .andExpect(jsonPath("$.content[0].workOrderName").value("Pump repair"))
+                .andExpect(jsonPath("$.content[0].workOrderNumber").value("WO-42"))
+                .andExpect(jsonPath("$.content[0].createdByFullName").value("Jane Smith"));
     }
 
     @Test
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void systemAdminCanReadStockMovements() throws Exception {
-        when(stockMovementService.findAll()).thenReturn(List.of());
+        when(stockMovementService.findAll(0, 1)).thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 1), 0));
 
         mockMvc.perform(get("/api/v1/stock-movements?page=0&size=1"))
                 .andExpect(status().isOk());
@@ -89,7 +100,7 @@ class RbacStockMovementSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.WILDCARD)
     void wildcardCanReadStockMovements() throws Exception {
-        when(stockMovementService.findAll()).thenReturn(List.of());
+        when(stockMovementService.findAll(0, 1)).thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 1), 0));
 
         mockMvc.perform(get("/api/v1/stock-movements?page=0&size=1"))
                 .andExpect(status().isOk());
@@ -170,13 +181,18 @@ class RbacStockMovementSecurityTest {
         return new StockMovementDto(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
+                "Main Warehouse",
                 UUID.randomUUID(),
+                "Bearing 6205",
                 null,
+                "WO-42",
+                "Pump repair",
                 type,
                 1,
                 10.0,
                 "DOC-1",
                 UUID.randomUUID(),
+                "Jane Smith",
                 Instant.now(),
                 null
         );
