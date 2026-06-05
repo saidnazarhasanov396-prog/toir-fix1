@@ -24,9 +24,12 @@ import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.OperationalIssueService;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -39,6 +42,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,14 +71,16 @@ public class SparePartForecastService {
     private final EquipmentRepository equipmentRepository;
     private final OperationalIssueRepository operationalIssueRepository;
     private final OperationalIssueService operationalIssueService;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public SparePartForecastSummaryDto forecast(SparePartForecastRequest request) {
         ForecastPeriod period = period(request);
-        UUID departmentId = request == null ? null : request.departmentId();
+        EffectiveScope scope = effectiveScope(request);
+        UUID departmentId = scope.departmentId();
         UUID equipmentId = request == null ? null : request.equipmentId();
         UUID templateId = request == null ? null : request.templateId();
-        UUID warehouseId = request == null ? null : request.warehouseId();
+        UUID warehouseId = scope.warehouseId();
         boolean onlyDeficit = request != null && Boolean.TRUE.equals(request.onlyDeficit());
 
         List<MaintenanceDueEvent> events = eventRepository.findForecastCandidates(
@@ -110,7 +116,7 @@ public class SparePartForecastService {
         List<UUID> sparePartIds = demandRows.stream().map(DemandRow::sparePartId).distinct().toList();
         Map<UUID, SparePart> spareParts = sparePartRepository.findAllByIdInAndIsDeletedFalse(sparePartIds).stream()
                 .collect(Collectors.toMap(SparePart::getId, sparePart -> sparePart));
-        List<WarehouseStock> stocks = loadStocks(sparePartIds, warehouseId);
+        List<WarehouseStock> stocks = loadStocks(sparePartIds, warehouseId, scope.warehouseScopeIds());
         Map<StockKey, StockTotals> stockTotals = stockTotals(stocks, warehouseId);
         Map<UUID, Warehouse> warehouses = loadWarehouses(stocks, warehouseId);
         Map<UUID, Equipment> equipment = loadEquipment(events);
@@ -167,7 +173,8 @@ public class SparePartForecastService {
 
     @Transactional
     public SparePartForecastEvaluateResponse evaluateAndCreateIssues(SparePartForecastRequest request) {
-        SparePartForecastRequest deficitRequest = new SparePartForecastRequest(
+        EffectiveScope scope = effectiveScope(request);
+        SparePartForecastRequest fullRequest = new SparePartForecastRequest(
                 request == null ? null : request.days(),
                 request == null ? null : request.from(),
                 request == null ? null : request.to(),
@@ -175,16 +182,19 @@ public class SparePartForecastService {
                 request == null ? null : request.departmentId(),
                 request == null ? null : request.equipmentId(),
                 request == null ? null : request.templateId(),
-                true
+                false
         );
-        SparePartForecastSummaryDto summary = forecast(deficitRequest);
+        SparePartForecastSummaryDto fullSummary = forecast(fullRequest);
         Map<UUID, SparePartForecastItemDto> candidatesBySourceId = new LinkedHashMap<>();
-        for (SparePartForecastItemDto item : summary.items()) {
-            if (item.shortageQty() <= 0) {
-                continue;
+        Map<UUID, SparePartForecastItemDto> recoveredBySourceId = new LinkedHashMap<>();
+        for (SparePartForecastItemDto item : fullSummary.items()) {
+            UUID sourceId = sourceId(fullSummary.periodStart(), fullSummary.periodEnd(),
+                    item.warehouseId(), scope.departmentId(), item.sparePartId());
+            if (item.shortageQty() > 0) {
+                candidatesBySourceId.merge(sourceId, item, this::mergeForecastItems);
+            } else {
+                recoveredBySourceId.put(sourceId, item);
             }
-            UUID sourceId = sourceId(summary.periodStart(), summary.periodEnd(), item.warehouseId(), item.sparePartId());
-            candidatesBySourceId.merge(sourceId, item, this::mergeForecastItems);
         }
         int created = 0;
         int updated = 0;
@@ -194,23 +204,40 @@ public class SparePartForecastService {
             boolean exists = operationalIssueRepository
                     .findBySourceTypeAndSourceIdAndStatusAndIsDeletedFalse(SOURCE_TYPE, sourceId, OperationalIssueStatus.OPEN)
                     .isPresent();
-            if (exists) {
-                updated++;
-                continue;
-            }
             operationalIssueService.openOrUpdate(
                     OperationalIssueType.SPARE_PART_SHORTAGE_FORECAST,
                     item.severity(),
-                    null,
-                    null,
+                    issueEquipmentId(item),
+                    scope.departmentId(),
                     SOURCE_TYPE,
                     sourceId,
                     "Spare part shortage forecast: " + firstNonBlank(item.sparePartName(), item.sparePartId().toString()),
-                    issueMessage(summary, item)
+                    issueMessage(fullSummary, item),
+                    issueMetadata(fullSummary, item, scope)
             );
-            created++;
+            if (exists) {
+                updated++;
+            } else {
+                created++;
+            }
         }
-        return new SparePartForecastEvaluateResponse(created, updated, 0, summary);
+        int resolved = 0;
+        for (Map.Entry<UUID, SparePartForecastItemDto> entry : recoveredBySourceId.entrySet()) {
+            UUID sourceId = entry.getKey();
+            if (operationalIssueRepository
+                    .findBySourceTypeAndSourceIdAndStatusAndIsDeletedFalse(SOURCE_TYPE, sourceId, OperationalIssueStatus.OPEN)
+                    .isEmpty()) {
+                continue;
+            }
+            operationalIssueService.resolveOpen(SOURCE_TYPE, sourceId, recoveredMessage(fullSummary, entry.getValue()));
+            resolved++;
+        }
+        List<SparePartForecastItemDto> deficitItems = fullSummary.items().stream()
+                .filter(item -> item.shortageQty() > 0)
+                .toList();
+        SparePartForecastSummaryDto deficitSummary =
+                new SparePartForecastSummaryDto(fullSummary.periodStart(), fullSummary.periodEnd(), deficitItems);
+        return new SparePartForecastEvaluateResponse(created, updated, resolved, deficitSummary);
     }
 
     private SparePartForecastItemDto mergeForecastItems(SparePartForecastItemDto first, SparePartForecastItemDto duplicate) {
@@ -274,12 +301,21 @@ public class SparePartForecastService {
         return rows;
     }
 
-    private List<WarehouseStock> loadStocks(List<UUID> sparePartIds, UUID warehouseId) {
+    private List<WarehouseStock> loadStocks(List<UUID> sparePartIds, UUID warehouseId, List<UUID> warehouseScopeIds) {
         if (sparePartIds.isEmpty()) {
             return List.of();
         }
         if (warehouseId != null) {
             return stockRepository.findAllBySparePartIdInAndWarehouseIdAndIsDeletedFalseOrderByUpdatedAtDesc(sparePartIds, warehouseId);
+        }
+        if (warehouseScopeIds != null) {
+            if (warehouseScopeIds.isEmpty()) {
+                return List.of();
+            }
+            return stockRepository.findAllBySparePartIdInAndWarehouseIdInAndIsDeletedFalseOrderByUpdatedAtDesc(
+                    sparePartIds,
+                    warehouseScopeIds
+            );
         }
         return stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(sparePartIds);
     }
@@ -290,8 +326,9 @@ public class SparePartForecastService {
             UUID keyWarehouseId = warehouseId == null ? null : stock.getWarehouseId();
             StockKey key = new StockKey(stock.getSparePartId(), keyWarehouseId);
             StockTotals current = totals.getOrDefault(key, StockTotals.ZERO);
+            double available = Math.max(stock.getAvailable(), 0);
             totals.put(key, new StockTotals(
-                    current.availableQty() + stock.getAvailable(),
+                    current.availableQty() + available,
                     current.reservedQty() + stock.getReservedQty()
             ));
         }
@@ -342,8 +379,13 @@ public class SparePartForecastService {
     }
 
     private ForecastPeriod period(SparePartForecastRequest request) {
-        Instant start = request != null && request.from() != null ? request.from() : Instant.now();
-        Instant end = request != null && request.to() != null ? request.to() : start.plus(normalizedDays(request), ChronoUnit.DAYS);
+        ZoneId zone = ZoneId.systemDefault();
+        Instant start = request != null && request.from() != null
+                ? request.from()
+                : LocalDate.now(zone).atStartOfDay(zone).toInstant();
+        Instant end = request != null && request.to() != null
+                ? request.to()
+                : start.plus(normalizedDays(request), ChronoUnit.DAYS);
         if (end.isBefore(start)) {
             throw RestException.badRequest("forecast period end must be after start");
         }
@@ -358,9 +400,14 @@ public class SparePartForecastService {
         return days;
     }
 
-    private UUID sourceId(Instant start, Instant end, UUID warehouseId, UUID sparePartId) {
-        String scope = warehouseId == null ? "enterprise" : warehouseId.toString();
-        String raw = "spare-part-forecast:" + start + ":" + end + ":" + scope + ":" + sparePartId;
+    private UUID sourceId(Instant start, Instant end, UUID warehouseId, UUID departmentId, UUID sparePartId) {
+        ZoneId zone = ZoneId.systemDefault();
+        LocalDate periodStartDate = start.atZone(zone).toLocalDate();
+        LocalDate periodEndDate = end.atZone(zone).toLocalDate();
+        String warehouseScope = warehouseId == null ? "ENTERPRISE" : warehouseId.toString();
+        String departmentScope = departmentId == null ? "GLOBAL" : departmentId.toString();
+        String raw = "spare-part-forecast:" + periodStartDate + ":" + periodEndDate + ":"
+                + warehouseScope + ":" + departmentScope + ":" + sparePartId;
         return UUID.nameUUIDFromBytes(raw.getBytes(StandardCharsets.UTF_8));
     }
 
@@ -370,11 +417,88 @@ public class SparePartForecastService {
                         item.shortageQty(), item.sourceCount());
     }
 
+    private String recoveredMessage(SparePartForecastSummaryDto summary, SparePartForecastItemDto item) {
+        return "Spare part shortage recovered; periodStart=%s; periodEnd=%s; requiredQty=%s; availableQty=%s; shortageQty=%s; sourceCount=%d"
+                .formatted(summary.periodStart(), summary.periodEnd(), item.requiredQty(), item.availableQty(),
+                        item.shortageQty(), item.sourceCount());
+    }
+
+    private Map<String, Object> issueMetadata(SparePartForecastSummaryDto summary,
+                                              SparePartForecastItemDto item,
+                                              EffectiveScope scope) {
+        ZoneId zone = ZoneId.systemDefault();
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("periodStartDate", summary.periodStart().atZone(zone).toLocalDate().toString());
+        metadata.put("periodEndDate", summary.periodEnd().atZone(zone).toLocalDate().toString());
+        metadata.put("warehouseId", item.warehouseId() == null ? null : item.warehouseId().toString());
+        metadata.put("warehouseScope", item.warehouseId() == null ? "ENTERPRISE" : item.warehouseId().toString());
+        metadata.put("departmentId", scope.departmentId() == null ? null : scope.departmentId().toString());
+        metadata.put("sparePartId", item.sparePartId().toString());
+        metadata.put("sparePartCode", item.sparePartCode());
+        metadata.put("requiredQty", item.requiredQty());
+        metadata.put("availableQty", item.availableQty());
+        metadata.put("shortageQty", item.shortageQty());
+        metadata.put("sourceCount", item.sourceCount());
+        return metadata;
+    }
+
+    private UUID issueEquipmentId(SparePartForecastItemDto item) {
+        if (item.sources().size() != 1) {
+            return null;
+        }
+        return item.sources().get(0).equipmentId();
+    }
+
+    private EffectiveScope effectiveScope(SparePartForecastRequest request) {
+        UUID requestedDepartmentId = request == null ? null : request.departmentId();
+        UUID requestedWarehouseId = request == null ? null : request.warehouseId();
+        if (scopeAccessService.isScopeAdmin()) {
+            return new EffectiveScope(requestedDepartmentId, requestedWarehouseId, null);
+        }
+
+        UUID currentDepartmentId = scopeAccessService.currentDepartmentIdOrNull();
+        if (currentDepartmentId == null) {
+            throw new AccessDeniedException("Access denied by department scope");
+        }
+        if (requestedDepartmentId != null && !currentDepartmentId.equals(requestedDepartmentId)) {
+            throw new AccessDeniedException("Access denied by department scope");
+        }
+
+        if (requestedWarehouseId != null) {
+            Warehouse warehouse = warehouseRepository.findByIdAndIsDeletedFalse(requestedWarehouseId)
+                    .orElseThrow(() -> RestException.notFound("Warehouse not found: " + requestedWarehouseId));
+            if (!canAccessWarehouse(warehouse)) {
+                throw new AccessDeniedException("Access denied by warehouse scope");
+            }
+            return new EffectiveScope(currentDepartmentId, requestedWarehouseId, List.of(requestedWarehouseId));
+        }
+
+        List<UUID> warehouseScopeIds = warehouseRepository.search(null, currentDepartmentId, null, null, true).stream()
+                .map(Warehouse::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        return new EffectiveScope(currentDepartmentId, null, warehouseScopeIds);
+    }
+
+    private boolean canAccessWarehouse(Warehouse warehouse) {
+        if (warehouse == null) {
+            return false;
+        }
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        return (warehouse.getDepartmentId() != null && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId()))
+                || (warehouse.getResponsibleId() != null && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId()));
+    }
+
     private String firstNonBlank(String primary, String fallback) {
         return primary == null || primary.isBlank() ? fallback : primary;
     }
 
     private record ForecastPeriod(Instant start, Instant end) {
+    }
+
+    private record EffectiveScope(UUID departmentId, UUID warehouseId, List<UUID> warehouseScopeIds) {
     }
 
     private record StockKey(UUID sparePartId, UUID warehouseId) {
