@@ -47,6 +47,7 @@ app:
       - http://localhost:5173
       - https://toir.tenzorsoft.uz
       - https://api-toir.tenzorsoft.uz
+      - https://api-mes.tenzorsoft.uz
   files:
     storage-path: ./uploads
   openapi:

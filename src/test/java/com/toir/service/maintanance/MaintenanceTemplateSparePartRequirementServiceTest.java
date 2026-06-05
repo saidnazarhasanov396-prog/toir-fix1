@@ -150,6 +150,57 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
     }
 
     @Test
+    void createDefaultsBlankUnitToSparePartUnit() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId);
+        SparePart sparePart = sparePart(sparePartId);
+
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(repository.existsActiveByTemplateOperationAndSparePart(templateId, null, sparePartId, null))
+                .thenReturn(false);
+        when(repository.save(any(MaintenanceTemplateSparePartRequirement.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var dto = service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
+                null,
+                sparePartId,
+                1,
+                " ",
+                null,
+                null,
+                true
+        ));
+
+        assertThat(dto.unit()).isEqualTo("pcs");
+    }
+
+    @Test
+    void createRejectsUnitDifferentFromSparePartUnit() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId);
+        SparePart sparePart = sparePart(sparePartId);
+
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+
+        assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
+                null,
+                sparePartId,
+                1,
+                "kg",
+                null,
+                null,
+                true
+        ))).isInstanceOf(RestException.class)
+                .hasMessageContaining("unit must match spare part unit");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
     void deleteDeactivatesRequirement() {
         UUID templateId = UUID.randomUUID();
         UUID id = UUID.randomUUID();
