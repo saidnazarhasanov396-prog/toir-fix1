@@ -60,4 +60,17 @@ public interface UnitOfMeasurementRepository extends JpaRepository<UnitOfMeasure
             ORDER BY u.updatedAt DESC
             """)
     List<UnitOfMeasurement> findByTokenIgnoreCase(@Param("token") String token);
+
+    @Query("""
+            SELECT u FROM UnitOfMeasurement u
+            WHERE u.isDeleted = false
+              AND (
+                    lower(u.code) IN :tokens
+                 OR lower(u.name) IN :tokens
+                 OR (u.nameEn IS NOT NULL AND lower(u.nameEn) IN :tokens)
+                 OR (u.nameUz IS NOT NULL AND lower(u.nameUz) IN :tokens)
+              )
+            ORDER BY u.updatedAt DESC
+            """)
+    List<UnitOfMeasurement> findAllByTokenIgnoreCaseIn(@Param("tokens") Collection<String> tokens);
 }
