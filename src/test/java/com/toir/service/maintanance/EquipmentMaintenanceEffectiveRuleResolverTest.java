@@ -161,6 +161,34 @@ class EquipmentMaintenanceEffectiveRuleResolverTest {
         assertThat(effective.defaultPriority()).isEqualTo(PriorityLevel.HIGH);
     }
 
+    @Test
+    void equipmentSpecificProfileDoesNotInheritUnselectedTypeRegulations() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        MaintenanceRegulation selectedRegulation = regulation(UUID.randomUUID(), typeId);
+        selectedRegulation.setCode("MR-SELECTED");
+        MaintenanceRegulation unselectedRegulation = regulation(UUID.randomUUID(), typeId);
+        unselectedRegulation.setCode("MR-UNSELECTED");
+        EquipmentMaintenanceRule selectedOverride = overrideRule(equipmentId, selectedRegulation.getId(), UUID.randomUUID());
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(ruleRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of(selectedOverride));
+        when(regulationRepository.findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(typeId))
+                .thenReturn(List.of(selectedRegulation, unselectedRegulation));
+        when(conditionRepository.findAllByRegulationIdInAndIsDeletedFalse(List.of(selectedRegulation.getId())))
+                .thenReturn(List.of());
+        when(conditionRepository.findAllByRegulationIdInAndIsDeletedFalse(List.of(unselectedRegulation.getId())))
+                .thenReturn(List.of());
+
+        List<EquipmentMaintenanceEffectiveRule> resolved = resolver.resolveApplicable(equipmentId);
+
+        assertThat(resolved)
+                .extracting(EquipmentMaintenanceEffectiveRule::regulationId)
+                .containsExactly(selectedRegulation.getId());
+        assertThat(resolved.getFirst().equipmentMaintenanceRuleId()).isEqualTo(selectedOverride.getId());
+    }
+
     private Equipment equipment(UUID id, UUID typeId) {
         Equipment equipment = new Equipment();
         ReflectionTestUtils.setField(equipment, "id", id);
