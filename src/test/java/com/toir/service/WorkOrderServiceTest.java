@@ -57,6 +57,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
+import com.toir.service.maintanance.WorkOrderSparePartRequirementService;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -151,6 +152,9 @@ class WorkOrderServiceTest {
     MaintenanceDueEventService maintenanceDueEventService;
 
     @Mock
+    WorkOrderSparePartRequirementService workOrderSparePartRequirementService;
+
+    @Mock
     ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
 
     @Mock
@@ -186,6 +190,7 @@ class WorkOrderServiceTest {
         assertThat(result.workType()).isEqualTo(WorkType.REPAIR);
         assertThat(result.repairRequestId()).isNull();
         assertThat(result.defectId()).isNull();
+        verify(workOrderSparePartRequirementService).syncFromWorkOrderContext(captor.getValue());
     }
 
     @Test

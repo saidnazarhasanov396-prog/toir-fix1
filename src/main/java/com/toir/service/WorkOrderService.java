@@ -51,6 +51,7 @@ import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
+import com.toir.service.maintanance.WorkOrderSparePartRequirementService;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -100,6 +101,7 @@ public class WorkOrderService {
     private final RepairMaterialUsageService repairMaterialUsageService;
     private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
     private final MaintenanceDueEventService maintenanceDueEventService;
+    private final WorkOrderSparePartRequirementService workOrderSparePartRequirementService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     private final ObjectMapper objectMapper;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
@@ -214,6 +216,8 @@ public class WorkOrderService {
                 "Создан наряд " + saved.getNumber(),
                 null,
                 saved);
+
+        workOrderSparePartRequirementService.syncFromWorkOrderContext(saved);
 
         return toDto(saved, equipmentNode);
     }
