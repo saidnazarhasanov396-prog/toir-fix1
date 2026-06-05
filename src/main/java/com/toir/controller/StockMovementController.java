@@ -2,10 +2,8 @@ package com.toir.controller;
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementRequest;
 import com.toir.service.StockMovementService;
-import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import java.util.List;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -24,7 +22,9 @@ public class StockMovementController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
-    public ResponseEntity<Page<StockMovementDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
+    public ResponseEntity<Page<StockMovementDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(service.findAll(page, size));
+    }
 
     @PostMapping
     @PreAuthorize("""
