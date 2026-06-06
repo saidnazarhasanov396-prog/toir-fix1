@@ -170,6 +170,25 @@ class DefectControllerContractTest {
     }
 
     @Test
+    void createWithoutDefectListIdReturnsBadRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/defects")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "title": "Leak",
+                                  "description": "Oil leak detected",
+                                  "equipmentId": "%s",
+                                  "category": "MECHANICAL",
+                                  "severity": "MEDIUM"
+                                }
+                                """.formatted(UUID.randomUUID())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("defectListId is required")));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
     void createWithRepairRequestIdAccepted() throws Exception {
         UUID repairRequestId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();

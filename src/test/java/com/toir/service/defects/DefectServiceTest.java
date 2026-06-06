@@ -46,6 +46,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Year;
+import java.util.ArrayList;
 import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
@@ -154,6 +155,8 @@ class DefectServiceTest {
     void createWithValidRepairRequestSucceeds() {
         UUID equipmentId = UUID.randomUUID();
         UUID repairRequestId = UUID.randomUUID();
+        DefectRequest request = request(equipmentId, repairRequestId);
+        List<DefectListLine> savedLines = new ArrayList<>();
         when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
         when(repository.existsByCode(anyString())).thenReturn(false);
         when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
@@ -163,6 +166,13 @@ class DefectServiceTest {
             ReflectionTestUtils.setField(defect, "id", UUID.randomUUID());
             return defect;
         });
+        when(defectListLineRepository.save(any(DefectListLine.class))).thenAnswer(invocation -> {
+            DefectListLine line = invocation.getArgument(0);
+            savedLines.add(line);
+            return line;
+        });
+        when(defectListLineRepository.findAllByDefectIdInAndIsDeletedFalse(any()))
+                .thenAnswer(invocation -> savedLines);
         when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
         when(repairRequestRepository.findAllByIdInAndIsDeletedFalse(List.of(repairRequestId)))
                 .thenReturn(List.of(repairRequest(repairRequestId, RequestStatus.OPEN)));
@@ -171,7 +181,7 @@ class DefectServiceTest {
         when(knowledgeRepository.findDefectIdsWithLesson(any(), eq("LESSON_LEARNED")))
                 .thenReturn(List.of());
 
-        DefectResponse response = service.create(request(equipmentId, repairRequestId));
+        DefectResponse response = service.create(request);
 
         ArgumentCaptor<Defect> defectCaptor = ArgumentCaptor.forClass(Defect.class);
         verify(repository).save(defectCaptor.capture());
@@ -182,6 +192,7 @@ class DefectServiceTest {
         assertThat(lineCaptor.getValue().getDescription()).isEqualTo("Temperature threshold exceeded");
         assertThat(response.repairRequestId()).isEqualTo(repairRequestId);
         assertThat(response.requestId()).isEqualTo(repairRequestId);
+        assertThat(response.defectListId()).isEqualTo(request.defectListId());
     }
 
     @Test
@@ -204,7 +215,91 @@ class DefectServiceTest {
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("Defect list is required");
+                    assertThat(ex.getMessage()).contains("defectListId is required");
+                });
+        verify(repository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void createWithUnknownDefectListReturns404() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
+        DefectRequest request = requestWithDefectListId(equipmentId, null, null, defectListId);
+        when(defectListRepository.findByIdAndIsDeletedFalse(defectListId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(ex.getMessage()).isEqualTo("Defect list not found: " + defectListId);
+                });
+        verify(repository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void createWithClosedDefectListReturns400() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
+        DefectList defectList = defectList(defectListId, equipmentId, null);
+        defectList.setStatus(DefectListStatus.CLOSED);
+        DefectRequest request = requestWithDefectListId(equipmentId, null, null, defectListId);
+        when(defectListRepository.findByIdAndIsDeletedFalse(defectListId)).thenReturn(Optional.of(defectList));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Cannot add defect to closed/cancelled defect list");
+                });
+        verify(repository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void createWithCancelledDefectListReturns400() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
+        DefectList defectList = defectList(defectListId, equipmentId, null);
+        defectList.setStatus(DefectListStatus.CANCELLED);
+        DefectRequest request = requestWithDefectListId(equipmentId, null, null, defectListId);
+        when(defectListRepository.findByIdAndIsDeletedFalse(defectListId)).thenReturn(Optional.of(defectList));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Cannot add defect to closed/cancelled defect list");
+                });
+        verify(repository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void createWithDefectListFromDifferentEquipmentReturns400() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID otherEquipmentId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
+        DefectRequest request = requestWithDefectListId(equipmentId, null, null, defectListId);
+        when(defectListRepository.findByIdAndIsDeletedFalse(defectListId))
+                .thenReturn(Optional.of(defectList(defectListId, otherEquipmentId, null)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Defect list belongs to a different equipment");
+                });
+        verify(repository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void createWithDefectListFromDifferentRepairRequestReturns400() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        UUID otherRepairRequestId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
+        DefectRequest request = requestWithDefectListId(equipmentId, repairRequestId, null, defectListId);
+        when(defectListRepository.findByIdAndIsDeletedFalse(defectListId))
+                .thenReturn(Optional.of(defectList(defectListId, equipmentId, otherRepairRequestId)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Defect list belongs to a different repair request");
                 });
         verify(repository, never()).save(any(Defect.class));
     }
@@ -868,6 +963,15 @@ class DefectServiceTest {
         UUID defectListId = UUID.randomUUID();
         lenient().when(defectListRepository.findByIdAndIsDeletedFalse(defectListId))
                 .thenReturn(Optional.of(defectList(defectListId, equipmentId, repairRequestId)));
+        return requestWithDefectListId(equipmentId, repairRequestId, equipmentNodeId, defectListId);
+    }
+
+    private DefectRequest requestWithDefectListId(
+            UUID equipmentId,
+            UUID repairRequestId,
+            UUID equipmentNodeId,
+            UUID defectListId
+    ) {
         return new DefectRequest(
                 null,
                 "Bearing overheating",
