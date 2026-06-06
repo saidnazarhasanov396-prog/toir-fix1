@@ -8,6 +8,7 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.CostCategory;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ContractStatus;
 import com.toir.enums.ContractorStatus;
 import com.toir.enums.ContractorWorkStatus;
@@ -269,6 +270,8 @@ class ContractorWorkServiceTest {
         ArgumentCaptor<ActualCost> captor = ArgumentCaptor.forClass(ActualCost.class);
         verify(actualCostRepository).save(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(ActualCostStatus.PENDING);
+        assertThat(captor.getValue().getSourceType()).isEqualTo(ActualCostSourceType.CONTRACTOR_WORK);
+        assertThat(captor.getValue().getSourceId()).isEqualTo(workId);
         assertThat(captor.getValue().getContractorWorkId()).isEqualTo(workId);
         assertThat(captor.getValue().getWorkOrderId()).isEqualTo(workOrderId);
         assertThat(captor.getValue().getCostCategoryId()).isEqualTo(costCategoryId);

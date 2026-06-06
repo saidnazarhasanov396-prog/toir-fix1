@@ -8,6 +8,7 @@ import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
@@ -36,6 +37,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -126,6 +128,49 @@ class ActualCostServiceTest {
 
         assertThat(result.status()).isEqualTo(ActualCostStatus.PENDING);
         assertThat(result.workOrderId()).isEqualTo(workOrderId);
+    }
+
+    @Test
+    void createAllowsMultipleWorkOrderSourcedCostComponentsForSameWorkOrder() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setDepartmentId(departmentId);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> {
+            ActualCost saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        ActualCostDto laborLikeCost = service.create(dto(
+                workOrderId, null, null, null, UUID.randomUUID(), 100, "manual labor adjustment"));
+        ActualCostDto materialLikeCost = service.create(dto(
+                workOrderId, null, null, null, UUID.randomUUID(), 250, "manual material adjustment"));
+
+        assertThat(laborLikeCost.sourceType()).isEqualTo(ActualCostSourceType.WORK_ORDER);
+        assertThat(materialLikeCost.sourceType()).isEqualTo(ActualCostSourceType.WORK_ORDER);
+        assertThat(laborLikeCost.sourceId()).isEqualTo(workOrderId);
+        assertThat(materialLikeCost.sourceId()).isEqualTo(workOrderId);
+        verify(repository, times(2)).save(any(ActualCost.class));
+    }
+
+    @Test
+    void createRequiresNotesForManualWorkOrderSourceWithReason() {
+        UUID workOrderId = UUID.randomUUID();
+        ActualCostDto dto = sourceDto(
+                ActualCostSourceType.WORK_ORDER_MANUAL_WITH_REASON,
+                workOrderId,
+                UUID.randomUUID(),
+                100,
+                " ");
+
+        assertThatThrownBy(() -> service.create(dto))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("requires a clear reason");
+
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -249,6 +294,29 @@ class ActualCostServiceTest {
     }
 
     @Test
+    void rejectPendingCostWithCommentDoesNotMutateBudgetUsage() {
+        UUID id = UUID.randomUUID();
+        UUID reviewerId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        ActualCost actualCost = new ActualCost();
+        actualCost.setId(id);
+        actualCost.setStatus(ActualCostStatus.PENDING);
+        actualCost.setBudgetLineId(budgetLineId);
+        actualCost.setAmount(100);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+        when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ActualCostDto result = service.review(id, false, reviewerId, "Rejected: missing source invoice");
+
+        assertThat(result.status()).isEqualTo(ActualCostStatus.REJECTED);
+        assertThat(result.reviewedById()).isEqualTo(reviewerId);
+        assertThat(result.reviewComment()).isEqualTo("Rejected: missing source invoice");
+        verify(budgetLineRepository, never()).save(any(BudgetLine.class));
+        verify(maintenanceBudgetRepository, never()).save(any(MaintenanceBudget.class));
+        verify(budgetLineRepository, never()).findByIdAndIsDeletedFalse(any());
+    }
+
+    @Test
     void missingBudgetLineRemains404DuringApproval() {
         UUID id = UUID.randomUUID();
         UUID budgetLineId = UUID.randomUUID();
@@ -323,20 +391,54 @@ class ActualCostServiceTest {
                               UUID contractorWorkId,
                               UUID budgetLineId,
                               double amount) {
+        return dto(workOrderId, repairRequestId, contractorWorkId, budgetLineId, UUID.randomUUID(), amount, null);
+    }
+
+    private ActualCostDto dto(UUID workOrderId,
+                              UUID repairRequestId,
+                              UUID contractorWorkId,
+                              UUID budgetLineId,
+                              UUID costCategoryId,
+                              double amount,
+                              String notes) {
         return new ActualCostDto(
                 null,
                 workOrderId,
                 repairRequestId,
                 contractorWorkId,
                 budgetLineId,
-                UUID.randomUUID(),
+                costCategoryId,
                 ActualCostStatus.PENDING,
                 null,
                 null,
                 null,
                 amount,
                 Instant.parse("2026-05-01T00:00:00Z"),
-                null
+                notes
+        );
+    }
+
+    private ActualCostDto sourceDto(ActualCostSourceType sourceType,
+                                    UUID sourceId,
+                                    UUID costCategoryId,
+                                    double amount,
+                                    String notes) {
+        return new ActualCostDto(
+                null,
+                null,
+                null,
+                null,
+                sourceType,
+                sourceId,
+                null,
+                costCategoryId,
+                ActualCostStatus.PENDING,
+                null,
+                null,
+                null,
+                amount,
+                Instant.parse("2026-05-01T00:00:00Z"),
+                notes
         );
     }
 
