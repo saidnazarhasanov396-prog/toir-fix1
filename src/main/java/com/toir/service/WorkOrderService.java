@@ -15,6 +15,9 @@ import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.Brigade;
+import com.toir.entity.users.BrigadeMember;
+import com.toir.entity.users.User;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.MaintenanceRecalculationPolicy;
@@ -51,6 +54,8 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
+import com.toir.repository.projects.BrigadeMemberRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
@@ -93,6 +98,8 @@ public class WorkOrderService {
     private final PprTaskRepository pprTaskRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final DefectRepository defectRepository;
+    private final BrigadeMemberRepository brigadeMemberRepository;
+    private final UserRepository userRepository;
     private final WorkExecutionRepository workExecutionRepository;
     private final RepairMaterialUsageRepository repairMaterialUsageRepository;
     private final LaborEntryRepository laborEntryRepository;
@@ -173,6 +180,40 @@ public class WorkOrderService {
         return toDetailDto(entity);
     }
 
+    @Transactional(readOnly = true)
+    public List<WorkOrderPerformerOptionDto> performerOptions(UUID departmentId) {
+        List<BrigadeMember> performers = brigadeMemberRepository.findActivePerformersByDepartment(departmentId);
+        if (performers.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> userIds = performers.stream()
+                .map(BrigadeMember::getUserId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        Map<UUID, User> usersById = userIds.isEmpty()
+                ? Map.of()
+                : userRepository.findAllByIdInAndIsDeletedFalse(userIds).stream()
+                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        return performers.stream()
+                .map(member -> {
+                    Brigade brigade = member.getBrigade();
+                    UUID performerDepartmentId = brigade == null ? null : brigade.getDepartmentId();
+                    String departmentName = performerDepartmentId == null
+                            ? null
+                            : departmentRepository.findById(performerDepartmentId)
+                                    .map(Department::getName)
+                                    .orElse(null);
+                    return new WorkOrderPerformerOptionDto(
+                            member.getId(),
+                            performerDisplayName(member, usersById),
+                            performerDepartmentId,
+                            departmentName,
+                            member.getRoleCode());
+                })
+                .toList();
+    }
+
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request) {
         if (request.equipmentId() == null) {
@@ -188,6 +229,10 @@ public class WorkOrderService {
         Defect linkedDefect = validateCreateRelations(request);
         UUID effectiveEquipmentNodeId = resolveEffectiveEquipmentNodeId(request, linkedDefect);
         EquipmentNode equipmentNode = validateEquipmentNodeLink(effectiveEquipmentNodeId, request.equipmentId());
+        BrigadeMember performer = validatePerformerForCreate(
+                request.performerId(),
+                request.departmentId(),
+                request.equipmentId());
         reserveReplacementEquipmentOnCreate(request, effectiveWorkType);
         WorkOrder entity = new WorkOrder();
         entity.setNumber(request.number());
@@ -201,6 +246,7 @@ public class WorkOrderService {
         entity.setMaintenanceDueEventId(request.maintenanceDueEventId());
         entity.setCycleKey(request.cycleKey());
         entity.setContractorId(request.contractorId());
+        entity.setPerformer(performer);
         entity.setType(request.type());
         entity.setWorkType(effectiveWorkType);
         entity.setWarehouseId(request.warehouseId());
@@ -909,6 +955,37 @@ public class WorkOrderService {
         return defect;
     }
 
+    private BrigadeMember validatePerformerForCreate(UUID performerId, UUID requestDepartmentId, UUID equipmentId) {
+        if (performerId == null) {
+            return null;
+        }
+        BrigadeMember performer = brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)
+                .orElseThrow(() -> RestException.notFound("Performer not found: " + performerId));
+        if (!performer.isActive()) {
+            throw RestException.badRequest("Performer is inactive");
+        }
+        Brigade brigade = performer.getBrigade();
+        if (brigade == null || brigade.isDeleted() || !brigade.isActive()) {
+            throw RestException.badRequest("Performer brigade is inactive");
+        }
+        UUID expectedDepartmentId = requestDepartmentId != null
+                ? requestDepartmentId
+                : resolveEquipmentDepartmentId(equipmentId);
+        if (expectedDepartmentId != null && !expectedDepartmentId.equals(brigade.getDepartmentId())) {
+            throw RestException.badRequest("Performer does not belong to selected department");
+        }
+        return performer;
+    }
+
+    private UUID resolveEquipmentDepartmentId(UUID equipmentId) {
+        if (equipmentId == null) {
+            return null;
+        }
+        return equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .map(Equipment::getDepartmentId)
+                .orElse(null);
+    }
+
     private UUID resolveEffectiveEquipmentNodeId(WorkOrderRequest request, Defect linkedDefect) {
         if (request.equipmentNodeId() != null) {
             return request.equipmentNodeId();
@@ -1169,6 +1246,7 @@ public class WorkOrderService {
                 entity.getDepartmentId(),
                 equipmentName, departmentName,
                 entity.getRepairRequestId(), entity.getDefectId(), entity.getPprTaskId(), entity.getContractorId(),
+                performerId(entity), performerName(entity),
                 entity.getStatus(), entity.getType(), entity.getWorkType(), entity.getPriority(),
                 entity.getStartPlannedAt(), entity.getEndPlannedAt(), entity.getStartedAt(), entity.getCompletedAt(),
                 entity.getSummary(), entity.getResult(), entity.getClosureNotes(),
@@ -1290,6 +1368,28 @@ public class WorkOrderService {
             return null;
         }
         return defectById.get(defectId);
+    }
+
+    private UUID performerId(WorkOrder entity) {
+        return entity.getPerformer() == null ? null : entity.getPerformer().getId();
+    }
+
+    private String performerName(WorkOrder entity) {
+        BrigadeMember performer = entity.getPerformer();
+        if (performer == null || performer.getUserId() == null) {
+            return null;
+        }
+        return userRepository.findByIdAndIsDeletedFalse(performer.getUserId())
+                .map(User::getFullName)
+                .orElse(null);
+    }
+
+    private String performerDisplayName(BrigadeMember member, Map<UUID, User> usersById) {
+        if (member.getUserId() == null) {
+            return null;
+        }
+        User user = usersById.get(member.getUserId());
+        return user == null ? member.getUserId().toString() : user.getFullName();
     }
 
     private EquipmentNode resolveEquipmentNode(UUID equipmentNodeId, Map<UUID, EquipmentNode> equipmentNodeById) {
