@@ -122,6 +122,47 @@ class PprPlanControllerContractTest {
     }
 
     @Test
+    void paginatedListPassesEquipmentFilterToService() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        PprTaskDto task = taskDto(planId, equipmentId, "Compressor A", UUID.randomUUID(), "Quarterly PM");
+        PprPlanDto plan = new PprPlanDto(
+                planId,
+                "PPR-2026-0002",
+                "Filtered plan",
+                PlanStatus.DRAFT,
+                departmentId,
+                "Mechanical",
+                UUID.randomUUID(),
+                null,
+                null,
+                List.of(task),
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 5, 31)
+        );
+        when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
+        when(service.findAll(2026, 5, 12, departmentId, equipmentId, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/ppr-plans")
+                        .param("year", "2026")
+                        .param("month", "5")
+                        .param("day", "12")
+                        .param("departmentId", departmentId.toString())
+                        .param("equipmentId", equipmentId.toString())
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(planId.toString()))
+                .andExpect(jsonPath("$.content[0].taskCount").value(1))
+                .andExpect(jsonPath("$.content[0].tasks.length()").value(1))
+                .andExpect(jsonPath("$.content[0].tasks[0].equipmentId").value(equipmentId.toString()));
+
+        verify(service).findAll(2026, 5, 12, departmentId, equipmentId, 0, 20);
+    }
+
+    @Test
     void listPlansWithoutFiltersKeepsOldListBehavior() throws Exception {
         when(service.findAllUnpaged(null, null, null, null))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
@@ -250,6 +291,27 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.last").value(true));
 
         verify(service).findAllUnpaged(2026, 5, 12, departmentId);
+    }
+
+    @Test
+    void listWithoutPaginationPassesEquipmentFilterToService() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
+        when(service.findAllUnpaged(2026, 5, 12, departmentId, equipmentId))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/ppr-plans")
+                        .param("year", "2026")
+                        .param("month", "5")
+                        .param("day", "12")
+                        .param("departmentId", departmentId.toString())
+                        .param("equipmentId", equipmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(0));
+
+        verify(service).findAllUnpaged(2026, 5, 12, departmentId, equipmentId);
     }
 
     @Test
