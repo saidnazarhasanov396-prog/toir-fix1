@@ -73,4 +73,19 @@ class WorkOrderRepositoryQueryContractTest {
         assertThat(sql).contains("to_jsonb(w)->>'defect_id'");
         assertThat(sql).contains("as defect_id");
     }
+
+    @Test
+    void searchPaginatedQueryMustProjectBrigadeMemberIdForEntityMapping() {
+        Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
+                .filter(m -> m.getName().equals("searchPaginated"))
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+
+        String sql = query.value().toLowerCase();
+        assertThat(sql).contains("brigade_member_id");
+        assertThat(sql).contains("as brigade_member_id");
+    }
 }
