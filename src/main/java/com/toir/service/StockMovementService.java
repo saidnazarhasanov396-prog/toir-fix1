@@ -63,9 +63,9 @@ public class StockMovementService {
         validatePositiveQuantity(request.quantity());
         assertWorkOrderIssueUsesMaterialUsageEndpoint(request);
         assertCanAccessWarehouseId(request.warehouseId());
+        assertMovementHasReasonOrSource(request);
 
-        WarehouseStock stock = stockRepository
-                .findByWarehouseIdAndSparePartIdAndIsDeletedFalse(request.warehouseId(), request.sparePartId())
+        WarehouseStock stock = findStockForMovement(request.warehouseId(), request.sparePartId())
                 .orElseGet(() -> {
                     SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(request.sparePartId())
                             .orElseThrow(() -> RestException.notFound("SparePart not found: " + request.sparePartId()));
@@ -93,7 +93,13 @@ public class StockMovementService {
                 }
                 stock.setReservedQty(stock.getReservedQty() + request.quantity());
             }
-            case RELEASE -> stock.setReservedQty(Math.max(0, stock.getReservedQty() - request.quantity()));
+            case RELEASE -> {
+                if (stock.getReservedQty() < request.quantity()) {
+                    throw RestException.badRequest("Cannot release more than reserved: reserved="
+                            + stock.getReservedQty() + ", requested=" + request.quantity());
+                }
+                stock.setReservedQty(stock.getReservedQty() - request.quantity());
+            }
             case ADJUSTMENT -> {
                 if (request.quantity() < stock.getReservedQty()) {
                     throw RestException.badRequest("Cannot adjust quantity below reserved: reserved="
@@ -108,8 +114,8 @@ public class StockMovementService {
                 stock.setQuantity(stock.getQuantity() - request.quantity());
             }
         }
-        if (stock.getQuantity() < 0) {
-            throw RestException.badRequest("Stock quantity cannot be negative");
+        if (stock.getQuantity() < 0 || stock.getReservedQty() < 0 || stock.getAvailable() < 0) {
+            throw RestException.badRequest("Stock quantities cannot be negative");
         }
 
         StockMovement movement = new StockMovement();
@@ -158,6 +164,23 @@ public class StockMovementService {
             throw RestException.badRequest(
                     "Work order material issues must be recorded through /api/v1/work-orders/{workOrderId}/material-usage");
         }
+    }
+
+    private void assertMovementHasReasonOrSource(StockMovementRequest request) {
+        boolean hasDocument = request.documentNumber() != null && !request.documentNumber().isBlank();
+        boolean hasNotes = request.notes() != null && !request.notes().isBlank();
+        boolean hasSource = request.workOrderId() != null;
+        if (!hasDocument && !hasNotes && !hasSource) {
+            throw RestException.badRequest("Manual stock movement requires a reason or source document");
+        }
+    }
+
+    private java.util.Optional<WarehouseStock> findStockForMovement(UUID warehouseId, UUID sparePartId) {
+        java.util.Optional<WarehouseStock> locked =
+                stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId);
+        return locked != null && locked.isPresent()
+                ? locked
+                : stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId);
     }
 
     private void assertCanAccessWarehouseId(UUID warehouseId) {

@@ -7,6 +7,7 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
@@ -15,6 +16,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.service.LowStockRecommendationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.repair.RepairMaterialUsageService;
@@ -49,6 +51,8 @@ class MaterialUsagePbacScopeTest {
     ScopeAccessService scopeAccessService;
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     LowStockRecommendationService lowStockRecommendationService;
+    ActualCostRepository actualCostRepository;
+    CostCategoryRepository costCategoryRepository;
     RepairMaterialUsageService service;
 
     @BeforeEach
@@ -65,6 +69,8 @@ class MaterialUsagePbacScopeTest {
         scopeAccessService = mock(ScopeAccessService.class);
         equipmentStatusLifecycleService = mock(EquipmentStatusLifecycleService.class);
         lowStockRecommendationService = mock(LowStockRecommendationService.class);
+        actualCostRepository = mock(ActualCostRepository.class);
+        costCategoryRepository = mock(CostCategoryRepository.class);
         service = new RepairMaterialUsageService(
                 repository,
                 stockRepository,
@@ -77,7 +83,9 @@ class MaterialUsagePbacScopeTest {
                 repairRequestRepository,
                 scopeAccessService,
                 equipmentStatusLifecycleService,
-                lowStockRecommendationService
+                lowStockRecommendationService,
+                actualCostRepository,
+                costCategoryRepository
         );
     }
 

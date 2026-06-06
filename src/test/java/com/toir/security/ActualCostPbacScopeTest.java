@@ -120,7 +120,7 @@ class ActualCostPbacScopeTest {
     void createWithoutBusinessSourceReturns400() {
         assertThatThrownBy(() -> service.create(dto(null, null, null, null)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("must be linked to at least one source");
+                .hasMessageContaining("technical source");
 
         verify(repository, never()).save(any(ActualCost.class));
     }
@@ -175,7 +175,10 @@ class ActualCostPbacScopeTest {
     @Test
     void budgetLineScopeAllowsActualCostCreate() {
         UUID departmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
         UUID budgetLineId = UUID.randomUUID();
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, departmentId)));
         when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId))
                 .thenReturn(Optional.of(budgetLine(budgetLineId, departmentId)));
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
@@ -185,8 +188,9 @@ class ActualCostPbacScopeTest {
             return saved;
         });
 
-        var result = service.create(dto(null, null, null, budgetLineId));
+        var result = service.create(dto(null, workOrderId, null, budgetLineId));
 
+        assertThat(result.workOrderId()).isEqualTo(workOrderId);
         assertThat(result.budgetLineId()).isEqualTo(budgetLineId);
     }
 

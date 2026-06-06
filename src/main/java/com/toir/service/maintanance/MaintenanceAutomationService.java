@@ -8,7 +8,10 @@ import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
+import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.DuplicatePolicy;
@@ -22,6 +25,7 @@ import com.toir.enums.PprScheduleType;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PprType;
 import com.toir.enums.PriorityLevel;
+import com.toir.enums.TaskExecutionStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
@@ -30,6 +34,7 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
+import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.SecurityAccessService;
@@ -75,6 +80,7 @@ public class MaintenanceAutomationService {
     private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
     private final SecurityAccessService securityAccessService;
     private final MaintenanceAutomationNotificationService notificationService;
+    private final MaintenanceOperationRepository maintenanceOperationRepository;
 
     @Transactional
     public EvaluationResult evaluateEquipment(UUID equipmentId, MaintenanceTriggerSource source) {
@@ -482,8 +488,75 @@ public class MaintenanceAutomationService {
         );
         WorkOrderDto dto = workOrderService.create(request);
         event.setCreatedWorkOrderId(dto.id());
+        copyTemplateOperationsToWorkOrder(event, rule, dto.id());
         event.setStatus(MaintenanceDueEventStatus.WORK_ORDER_CREATED);
         return dto;
+    }
+
+    private void copyTemplateOperationsToWorkOrder(MaintenanceDueEvent event,
+                                                   EquipmentMaintenanceEffectiveRule rule,
+                                                   UUID workOrderId) {
+        if (rule.templateId() == null || workOrderId == null) {
+            return;
+        }
+        WorkOrder workOrder = workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)
+                .orElse(null);
+        if (workOrder == null) {
+            event.setExplanation(append(event.getExplanation(),
+                    "created work order was not found for template operation copy"));
+            return;
+        }
+        List<MaintenanceOperation> operations = maintenanceOperationRepository
+                .findAllByTemplateIdInAndIsDeletedFalse(List.of(rule.templateId()));
+        if (operations.isEmpty()) {
+            event.setExplanation(append(event.getExplanation(),
+                    "template has no operations/checklist items"));
+            return;
+        }
+        for (MaintenanceOperation operation : operations) {
+            WorkOrderTask task = new WorkOrderTask();
+            task.setWorkOrder(workOrder);
+            task.setTitle(operation.getName());
+            task.setDescription(operationDescription(operation));
+            task.setStatus(TaskExecutionStatus.TODO);
+            if (operation.getDurationHours() > 0) {
+                task.setPlannedHours(operation.getDurationHours());
+            }
+            task.setSourceTemplateId(rule.templateId());
+            task.setSourceOperationId(operation.getId());
+            workOrder.getTasks().add(task);
+        }
+        workOrderRepository.save(workOrder);
+    }
+
+    private String operationDescription(MaintenanceOperation operation) {
+        StringBuilder description = new StringBuilder();
+        appendLine(description, operation.getDescription());
+        appendLine(description, prefixed("Required skill", operation.getRequiredSkill()));
+        appendLine(description, prefixed("Safety", operation.getSafetyNotes()));
+        appendLine(description, prefixed("Tools", operation.getToolsRequired()));
+        appendLine(description, prefixed("Spare parts", operation.getSparePartsRequired()));
+        appendLine(description, prefixed("Consumables", operation.getConsumablesRequired()));
+        appendLine(description, prefixed("Control parameter", operation.getControlParameter()));
+        appendLine(description, prefixed("Instruction", operation.getInstructionUrl()));
+        return description.isEmpty() ? null : description.toString();
+    }
+
+    private String prefixed(String label, String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return label + ": " + value;
+    }
+
+    private void appendLine(StringBuilder builder, String value) {
+        if (!StringUtils.hasText(value)) {
+            return;
+        }
+        if (!builder.isEmpty()) {
+            builder.append('\n');
+        }
+        builder.append(value);
     }
 
     private PprPlan autoPlan(UUID departmentId, UUID userId) {

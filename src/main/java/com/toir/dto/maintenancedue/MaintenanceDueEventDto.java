@@ -1,5 +1,6 @@
 package com.toir.dto.maintenancedue;
 
+import com.toir.dto.maintenanceplanning.MaintenanceDueStructuredExplanationDto;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
@@ -31,10 +32,42 @@ public record MaintenanceDueEventDto(
         Instant resolvedAt,
         String resolutionReason,
         String explanation,
+        MaintenanceDueStructuredExplanationDto structuredExplanation,
         Ref equipment,
         Ref regulation
 ) {
     public record Ref(UUID id, String code, String name) {}
+
+    public MaintenanceDueEventDto(
+            UUID id,
+            UUID equipmentId,
+            UUID regulationId,
+            UUID equipmentMaintenanceRuleId,
+            UUID templateId,
+            MaintenanceDueEventStatus status,
+            MaintenanceDueStatus dueStatus,
+            MaintenanceTriggerSource triggerSource,
+            String cycleKey,
+            Instant dueAt,
+            MeterType meterType,
+            Double meterCurrentValue,
+            Double meterAnchorValue,
+            Double meterInterval,
+            Double meterRemaining,
+            UUID createdTaskId,
+            UUID createdWorkOrderId,
+            Instant detectedAt,
+            Instant resolvedAt,
+            String resolutionReason,
+            String explanation,
+            Ref equipment,
+            Ref regulation
+    ) {
+        this(id, equipmentId, regulationId, equipmentMaintenanceRuleId, templateId, status, dueStatus, triggerSource,
+                cycleKey, dueAt, meterType, meterCurrentValue, meterAnchorValue, meterInterval, meterRemaining,
+                createdTaskId, createdWorkOrderId, detectedAt, resolvedAt, resolutionReason, explanation,
+                null, equipment, regulation);
+    }
 
     public static MaintenanceDueEventDto from(MaintenanceDueEvent event, Ref equipment, Ref regulation) {
         MaintenanceDueStatus dueStatus = normalizedDueStatus(event);
@@ -61,6 +94,7 @@ public record MaintenanceDueEventDto(
                 event.getResolvedAt(),
                 event.getResolutionReason(),
                 explanation,
+                structuredExplanation(event, dueStatus, explanation),
                 equipment,
                 regulation
         );
@@ -113,5 +147,41 @@ public record MaintenanceDueEventDto(
                 .replace("Meter trigger upcoming", replacement)
                 .replace("Meter trigger not due", replacement)
                 .replace("Meter trigger due", replacement);
+    }
+
+    private static MaintenanceDueStructuredExplanationDto structuredExplanation(
+            MaintenanceDueEvent event,
+            MaintenanceDueStatus dueStatus,
+            String explanation
+    ) {
+        String blockingCode = null;
+        String blockingField = null;
+        String fixLink = null;
+        if (dueStatus == MaintenanceDueStatus.BLOCKED && event.getMeterType() != null) {
+            blockingCode = "MISSING_ACTIVE_METER";
+            blockingField = event.getMeterType().name();
+            fixLink = "/equipment/%s/meters".formatted(event.getEquipmentId());
+        } else if (dueStatus == MaintenanceDueStatus.BLOCKED) {
+            blockingCode = "MISSING_COMPLETION_ANCHOR";
+            blockingField = "completionAnchor";
+            fixLink = "/equipment/%s/maintenance".formatted(event.getEquipmentId());
+        }
+        return new MaintenanceDueStructuredExplanationDto(
+                event.getMeterAnchorValue() == null ? null : "COMPLETION_ANCHOR",
+                null,
+                null,
+                event.getMeterType(),
+                event.getMeterCurrentValue(),
+                event.getMeterInterval(),
+                event.getMeterRemaining(),
+                null,
+                null,
+                null,
+                null,
+                explanation,
+                blockingCode,
+                blockingField,
+                fixLink
+        );
     }
 }

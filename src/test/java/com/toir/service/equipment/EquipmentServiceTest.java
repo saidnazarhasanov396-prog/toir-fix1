@@ -17,6 +17,8 @@ import com.toir.entity.FileAsset;
 import com.toir.entity.Location;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentAttributeDefinition;
+import com.toir.entity.equipment.EquipmentAttributeValue;
 import com.toir.entity.equipment.EquipmentLocationHistory;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
@@ -46,6 +48,8 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
+import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
+import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
@@ -106,6 +110,12 @@ class EquipmentServiceTest {
 
     @Mock
     EquipmentPassportRepository passportRepository;
+
+    @Mock
+    EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
+
+    @Mock
+    EquipmentAttributeValueRepository attributeValueRepository;
 
     @Mock
     FileAssetRepository fileAssetRepository;
@@ -287,6 +297,52 @@ class EquipmentServiceTest {
                 .isEqualTo("/api/v1/files/assets/" + warrantyAttachmentId + "/download");
         assertThat(dto.warrantyStartDate()).isEqualTo(LocalDate.of(2026, 6, 1));
         assertThat(dto.warrantyEndDate()).isEqualTo(LocalDate.of(2027, 6, 1));
+    }
+
+    @Test
+    void searchIncludesPassportCompletenessForRequiredAttributes() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PASSPORT");
+        equipment.setId(equipmentId);
+        equipment.setEquipmentTypeId(typeId);
+        EquipmentAttributeDefinition serialDefinition = requiredDefinition(
+                typeId,
+                "serial_plate",
+                "Serial plate",
+                10
+        );
+        EquipmentAttributeDefinition pressureDefinition = requiredDefinition(
+                typeId,
+                "nominal_pressure",
+                "Nominal pressure",
+                20
+        );
+        EquipmentAttributeValue pressureValue = value(equipmentId, pressureDefinition.getId(), 12.5);
+
+        stubEnrichment();
+        when(repository.search(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1));
+        when(attributeDefinitionRepository.findAllByEquipmentTypeIdInAndIsDeletedFalse(anyCollection()))
+                .thenReturn(List.of(serialDefinition, pressureDefinition));
+        when(attributeValueRepository.findAllByEquipmentIdInAndIsDeletedFalse(anyCollection()))
+                .thenReturn(List.of(pressureValue));
+
+        EquipmentDto dto = service.search(null, null, null, null, null, false, null, 0, 20)
+                .getContent()
+                .getFirst();
+
+        assertThat(dto.passportCompleteness()).isNotNull();
+        assertThat(dto.passportCompleteness().requiredCount()).isEqualTo(2);
+        assertThat(dto.passportCompleteness().filledCount()).isEqualTo(1);
+        assertThat(dto.passportCompleteness().missingCriticalCount()).isEqualTo(1);
+        assertThat(dto.passportCompleteness().complete()).isFalse();
+        assertThat(dto.passportCompleteness().blockingReason()).contains("Missing required passport fields");
+        assertThat(dto.passportCompleteness().fixAction()).isEqualTo("Fill equipment passport");
+        assertThat(dto.passportCompleteness().fixLink()).isEqualTo("/equipment/" + equipmentId + "/passport");
+        assertThat(dto.passportCompleteness().missingFields())
+                .extracting(EquipmentDto.MissingPassportFieldRef::key)
+                .containsExactly("serial_plate");
     }
 
     @Test
@@ -2731,6 +2787,32 @@ class EquipmentServiceTest {
         when(repository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
         when(passportRepository.findAllByEquipmentIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
         when(warehouseEquipmentItemRepository.findActiveByEquipmentIds(anyCollection())).thenReturn(List.of());
+        when(attributeDefinitionRepository.findAllByEquipmentTypeIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
+        when(attributeValueRepository.findAllByEquipmentIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
+    }
+
+    private EquipmentAttributeDefinition requiredDefinition(UUID typeId,
+                                                            String key,
+                                                            String label,
+                                                            int sortOrder) {
+        EquipmentAttributeDefinition definition = new EquipmentAttributeDefinition();
+        definition.setId(UUID.randomUUID());
+        definition.setEquipmentTypeId(typeId);
+        definition.setKey(key);
+        definition.setLabel(label);
+        definition.setRequired(true);
+        definition.setDataType(EquipmentAttributeDataType.TEXT);
+        definition.setSortOrder(sortOrder);
+        return definition;
+    }
+
+    private EquipmentAttributeValue value(UUID equipmentId, UUID definitionId, Double valueNumber) {
+        EquipmentAttributeValue value = new EquipmentAttributeValue();
+        value.setId(UUID.randomUUID());
+        value.setEquipmentId(equipmentId);
+        value.setAttributeDefinitionId(definitionId);
+        value.setValueNumber(valueNumber);
+        return value;
     }
 
     private void stubWarehouseLocationFallback(List<Warehouse> warehouses) {

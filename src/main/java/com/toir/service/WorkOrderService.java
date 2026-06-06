@@ -20,8 +20,10 @@ import com.toir.enums.PlanStatus;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.repository.CompletionActRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.LaborEntryRepository;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.ReservationRepository;
 import com.toir.repository.SafetyPermitRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
@@ -34,6 +36,7 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.ReservationStatus;
 import com.toir.enums.SafetyPermitStatus;
 import com.toir.enums.TaskExecutionStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
@@ -92,6 +95,8 @@ public class WorkOrderService {
     private final DefectRepository defectRepository;
     private final WorkExecutionRepository workExecutionRepository;
     private final RepairMaterialUsageRepository repairMaterialUsageRepository;
+    private final LaborEntryRepository laborEntryRepository;
+    private final ReservationRepository reservationRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
@@ -532,7 +537,31 @@ public class WorkOrderService {
                 .filter(act -> act.getSignedAt() == null || act.getSignedById() == null)
                 .ifPresent(act -> missingEvidence.add("Completion act must be signed"));
 
+        if (requiresLaborEvidence(entity) && safeList(laborEntryRepository
+                .findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(entity.getId())).isEmpty()) {
+            missingEvidence.add("At least one labor entry is required for " + entity.getWorkType() + " work order");
+        }
+
+        List<String> activeReservations = safeList(reservationRepository
+                .findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(entity.getId()))
+                .stream()
+                .filter(reservation -> reservation.getStatus() == ReservationStatus.ACTIVE)
+                .map(reservation -> reservation.getId() == null ? "active reservation" : reservation.getId().toString())
+                .toList();
+        if (!activeReservations.isEmpty()) {
+            missingEvidence.add("Material reservations must be issued, released or cancelled: "
+                    + String.join(", ", activeReservations));
+        }
+
         return new ClosureReadiness(missingEvidence.isEmpty(), missingEvidence);
+    }
+
+    private boolean requiresLaborEvidence(WorkOrder workOrder) {
+        return workOrder.getWorkType() == WorkType.REPAIR || workOrder.getWorkType() == WorkType.REPLACEMENT;
+    }
+
+    private <T> List<T> safeList(List<T> values) {
+        return values == null ? List.of() : values;
     }
 
     private String taskEvidenceName(WorkOrderTask task) {

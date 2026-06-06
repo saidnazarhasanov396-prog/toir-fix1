@@ -5,7 +5,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -15,6 +17,10 @@ import org.springframework.stereotype.Repository;
 public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, UUID> {
     @Query(value = "SELECT * FROM warehouse_stocks WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<WarehouseStock> findByIdAndIsDeletedFalse(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from WarehouseStock s where s.id = :id and s.isDeleted = false")
+    Optional<WarehouseStock> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
 
     @Query(value = "SELECT * FROM warehouse_stocks WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<WarehouseStock> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
@@ -30,6 +36,19 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
 
     @Query(value = "SELECT * FROM warehouse_stocks WHERE warehouse_id = :warehouseId AND spare_part_id = :sparePartId AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<WarehouseStock> findByWarehouseIdAndSparePartIdAndIsDeletedFalse(@Param("warehouseId") UUID warehouseId, @Param("sparePartId") UUID sparePartId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select s
+            from WarehouseStock s
+            where s.warehouseId = :warehouseId
+              and s.sparePartId = :sparePartId
+              and s.isDeleted = false
+            """)
+    Optional<WarehouseStock> findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("sparePartId") UUID sparePartId
+    );
 
     @Query("SELECT DISTINCT ws FROM WarehouseStock ws LEFT JOIN FETCH ws.sparePart WHERE ws.warehouseId = :warehouseId AND ws.isDeleted = false ORDER BY ws.updatedAt DESC")
     List<WarehouseStock> findAllByWarehouseIdAndIsDeletedFalse(@Param("warehouseId") UUID warehouseId);

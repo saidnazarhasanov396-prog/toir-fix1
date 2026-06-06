@@ -1,6 +1,7 @@
 package com.toir.entity.projects;
 
 import com.toir.entity.BaseEntity;
+import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -25,6 +26,13 @@ public class ActualCost extends BaseEntity {
 
     @Column(name = "contractor_work_id")
     private UUID contractorWorkId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type")
+    private ActualCostSourceType sourceType;
+
+    @Column(name = "source_id")
+    private UUID sourceId;
 
     @Column(name = "budget_line_id")
     private UUID budgetLineId;

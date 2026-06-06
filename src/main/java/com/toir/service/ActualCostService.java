@@ -8,6 +8,7 @@ import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.BudgetStatus;
@@ -83,6 +84,8 @@ public class ActualCostService {
         c.setWorkOrderId(r.workOrderId());
         c.setRepairRequestId(r.repairRequestId());
         c.setContractorWorkId(r.contractorWorkId());
+        c.setSourceType(resolveSourceType(r));
+        c.setSourceId(resolveSourceId(r));
         c.setBudgetLineId(r.budgetLineId());
         c.setCostCategoryId(r.costCategoryId());
         c.setAmount(r.amount());
@@ -156,12 +159,14 @@ public class ActualCostService {
         if (request.costCategoryId() == null) {
             throw RestException.badRequest("Cost category is required");
         }
-        if (request.workOrderId() == null
-                && request.repairRequestId() == null
-                && request.contractorWorkId() == null
-                && request.budgetLineId() == null) {
+        if (!hasTechnicalSource(request)) {
             throw RestException.badRequest(
-                    "Actual cost must be linked to at least one source: workOrderId, repairRequestId, contractorWorkId or budgetLineId");
+                    "Actual cost must be linked to a technical source: workOrderId, repairRequestId, contractorWorkId, "
+                            + "or sourceType/sourceId. budgetLineId is only an accounting dimension.");
+        }
+        if (request.sourceType() == ActualCostSourceType.WORK_ORDER_MANUAL_WITH_REASON
+                && (request.notes() == null || request.notes().isBlank())) {
+            throw RestException.badRequest("Manual work order actual cost requires a clear reason in notes");
         }
         if (request.contractorWorkId() != null
                 && repository.existsByContractorWorkIdAndIsDeletedFalse(request.contractorWorkId())) {
@@ -171,6 +176,45 @@ public class ActualCostService {
             assertBudgetLineUsable(budgetLine);
             assertBudgetLineCompatible(budgetLine, workOrder, repairRequest);
         }
+    }
+
+    private boolean hasTechnicalSource(ActualCostDto request) {
+        return request.workOrderId() != null
+                || request.repairRequestId() != null
+                || request.contractorWorkId() != null
+                || (request.sourceType() != null && request.sourceId() != null);
+    }
+
+    private ActualCostSourceType resolveSourceType(ActualCostDto request) {
+        if (request.sourceType() != null) {
+            return request.sourceType();
+        }
+        if (request.workOrderId() != null) {
+            return ActualCostSourceType.WORK_ORDER;
+        }
+        if (request.repairRequestId() != null) {
+            return ActualCostSourceType.REPAIR_REQUEST;
+        }
+        if (request.contractorWorkId() != null) {
+            return ActualCostSourceType.CONTRACTOR_WORK;
+        }
+        return null;
+    }
+
+    private UUID resolveSourceId(ActualCostDto request) {
+        if (request.sourceId() != null) {
+            return request.sourceId();
+        }
+        if (request.workOrderId() != null) {
+            return request.workOrderId();
+        }
+        if (request.repairRequestId() != null) {
+            return request.repairRequestId();
+        }
+        if (request.contractorWorkId() != null) {
+            return request.contractorWorkId();
+        }
+        return null;
     }
 
     private void assertCanReviewActualCost(ActualCost actualCost, boolean approve, UUID reviewerId, String comment) {

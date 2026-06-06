@@ -253,6 +253,28 @@ class StockMovementServiceTest {
         verifyNoInteractions(stockRepository, repository, sparePartRepository);
     }
 
+    @Test
+    void manualStockMovementRequiresReasonOrSourceDocument() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.create(new StockMovementRequest(
+                warehouseId,
+                sparePartId,
+                null,
+                StockMovementType.ADJUSTMENT,
+                10,
+                null,
+                null,
+                UUID.randomUUID(),
+                " "
+        )))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("reason or source document");
+
+        verifyNoInteractions(stockRepository, repository, sparePartRepository);
+    }
+
     private StockMovementRequest request(UUID warehouseId, UUID sparePartId, StockMovementType type, double quantity) {
         return requestWithWorkOrder(warehouseId, sparePartId, type, quantity, null);
     }
@@ -270,9 +292,9 @@ class StockMovementServiceTest {
                 type,
                 quantity,
                 null,
+                "DOC-1",
                 null,
-                null,
-                null
+                "Manual stock movement reason"
         );
     }
 

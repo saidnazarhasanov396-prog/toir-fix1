@@ -8,11 +8,13 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.service.LowStockRecommendationService;
 import com.toir.service.ProcurementRequestService;
 import com.toir.util.AuditBuilderService;
@@ -43,6 +45,8 @@ class ProcurementPbacScopeTest {
     AuditBuilderService auditBuilderService;
     ScopeAccessService scopeAccessService;
     LowStockRecommendationService lowStockRecommendationService;
+    ActualCostRepository actualCostRepository;
+    CostCategoryRepository costCategoryRepository;
     ProcurementRequestService service;
 
     @BeforeEach
@@ -55,6 +59,8 @@ class ProcurementPbacScopeTest {
         auditBuilderService = mock(AuditBuilderService.class);
         scopeAccessService = mock(ScopeAccessService.class);
         lowStockRecommendationService = mock(LowStockRecommendationService.class);
+        actualCostRepository = mock(ActualCostRepository.class);
+        costCategoryRepository = mock(CostCategoryRepository.class);
         service = new ProcurementRequestService(
                 repository,
                 sparePartRepository,
@@ -63,7 +69,9 @@ class ProcurementPbacScopeTest {
                 auditBuilderService,
                 warehouseRepository,
                 scopeAccessService,
-                lowStockRecommendationService
+                lowStockRecommendationService,
+                actualCostRepository,
+                costCategoryRepository
         );
     }
 

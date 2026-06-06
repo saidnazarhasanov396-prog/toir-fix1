@@ -4,20 +4,26 @@ import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.CostCategory;
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.users.User;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.ActualCostSourceType;
+import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
@@ -33,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -59,6 +66,8 @@ public class RepairMaterialUsageService {
     private final ScopeAccessService scopeAccessService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final LowStockRecommendationService lowStockRecommendationService;
+    private final ActualCostRepository actualCostRepository;
+    private final CostCategoryRepository costCategoryRepository;
 
 
     @Transactional(readOnly = true)
@@ -143,6 +152,7 @@ public class RepairMaterialUsageService {
         usage.setUnitCost(r.unitCost());
         usage.setNotes(r.notes());
         RepairMaterialUsage saved = repository.save(usage);
+        syncMaterialActualCost(saved);
 
         auditBuilderService.log(
                 "repair_material_usage",
@@ -237,6 +247,31 @@ public class RepairMaterialUsageService {
     private WorkOrder workOrderOrThrow(UUID workOrderId) {
         return workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + workOrderId));
+    }
+
+    private void syncMaterialActualCost(RepairMaterialUsage usage) {
+        if (usage.getUnitCost() == null || usage.getUnitCost() <= 0 || usage.getQuantity() <= 0 || usage.getId() == null) {
+            return;
+        }
+        Optional<CostCategory> category = costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS");
+        if (category.isEmpty()) {
+            return;
+        }
+        ActualCost cost = actualCostRepository
+                .findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                        ActualCostSourceType.MATERIAL_ISSUE,
+                        usage.getId()
+                )
+                .orElseGet(ActualCost::new);
+        cost.setSourceType(ActualCostSourceType.MATERIAL_ISSUE);
+        cost.setSourceId(usage.getId());
+        cost.setWorkOrderId(usage.getWorkOrderId());
+        cost.setCostCategoryId(category.get().getId());
+        cost.setAmount(usage.getQuantity() * usage.getUnitCost());
+        cost.setStatus(ActualCostStatus.PENDING);
+        cost.setCostDate(usage.getIssuedAt() == null ? java.time.Instant.now() : usage.getIssuedAt());
+        cost.setNotes("Generated from material issue %s".formatted(usage.getId()));
+        actualCostRepository.save(cost);
     }
 
     private void assertWorkOrderAllowsMaterialIssue(WorkOrder workOrder) {

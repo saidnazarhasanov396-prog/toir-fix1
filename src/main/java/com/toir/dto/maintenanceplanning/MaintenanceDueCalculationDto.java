@@ -23,5 +23,49 @@ public record MaintenanceDueCalculationDto(
         Double nextMeterDueValue,
         Double meterRemaining,
         Double remainingMeterValue,
-        String explanation
-) {}
+        String explanation,
+        MaintenanceDueStructuredExplanationDto structuredExplanation
+) {
+    public MaintenanceDueCalculationDto(
+            UUID equipmentId,
+            UUID regulationId,
+            UUID equipmentMaintenanceRuleId,
+            MaintenanceDueStatus status,
+            boolean dueByCalendar,
+            boolean dueByMeter,
+            Instant lastPerformedAt,
+            Instant nextDueAt,
+            Instant nextCalendarDueAt,
+            MeterType meterType,
+            Double meterCurrentValue,
+            Double currentMeterValue,
+            Double meterAnchorValue,
+            Double meterInterval,
+            Double nextMeterDueValue,
+            Double meterRemaining,
+            Double remainingMeterValue,
+            String explanation
+    ) {
+        this(
+                equipmentId,
+                regulationId,
+                equipmentMaintenanceRuleId,
+                status,
+                dueByCalendar,
+                dueByMeter,
+                lastPerformedAt,
+                nextDueAt,
+                nextCalendarDueAt,
+                meterType,
+                meterCurrentValue,
+                currentMeterValue,
+                meterAnchorValue,
+                meterInterval,
+                nextMeterDueValue,
+                meterRemaining,
+                remainingMeterValue,
+                explanation,
+                null
+        );
+    }
+}

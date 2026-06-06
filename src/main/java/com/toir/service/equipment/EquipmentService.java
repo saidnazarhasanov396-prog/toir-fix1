@@ -12,6 +12,8 @@ import com.toir.entity.DowntimeEvent;
 import com.toir.entity.Location;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentAttributeDefinition;
+import com.toir.entity.equipment.EquipmentAttributeValue;
 import com.toir.entity.equipment.EquipmentLocationHistory;
 import com.toir.entity.equipment.EquipmentPassport;
 import com.toir.entity.equipment.EquipmentType;
@@ -40,6 +42,8 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
+import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
+import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentDocumentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -59,6 +63,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
@@ -78,6 +83,8 @@ public class EquipmentService {
     private final LocationRepository locationRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final EquipmentPassportRepository passportRepository;
+    private final EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
+    private final EquipmentAttributeValueRepository attributeValueRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
@@ -594,6 +601,10 @@ public class EquipmentService {
         Map<UUID, EquipmentPassport> passportMap = passportRepository
                 .findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
                 .collect(Collectors.toMap(EquipmentPassport::getEquipmentId, Function.identity(), (a, b) -> a));
+        Map<UUID, List<EquipmentAttributeDefinition>> requiredDefinitionsByType =
+                requiredPassportDefinitionsByType(typeIds);
+        Map<UUID, Map<UUID, EquipmentAttributeValue>> valuesByEquipment =
+                passportValuesByEquipment(equipmentIds);
         Map<UUID, FileAsset> warrantyAttachmentMap = warrantyAttachmentIds.isEmpty()
                 ? Collections.emptyMap()
                 : byId(fileAssetRepository.findAllByIdInAndIsDeletedFalse(warrantyAttachmentIds), FileAsset::getId);
@@ -621,10 +632,91 @@ public class EquipmentService {
                             parentRef(parentMap.get(e.getParentId())),
                             passportRef(passportMap.get(e.getId())),
                             placement,
-                            warrantyAttachmentMap.get(e.getWarrantyAttachmentId())
+                            warrantyAttachmentMap.get(e.getWarrantyAttachmentId()),
+                            passportCompleteness(
+                                    e,
+                                    requiredDefinitionsByType.getOrDefault(e.getEquipmentTypeId(), List.of()),
+                                    valuesByEquipment.getOrDefault(e.getId(), Map.of())
+                            )
                     );
                 })
                 .toList();
+    }
+
+    private Map<UUID, List<EquipmentAttributeDefinition>> requiredPassportDefinitionsByType(Set<UUID> typeIds) {
+        if (typeIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return attributeDefinitionRepository.findAllByEquipmentTypeIdInAndIsDeletedFalse(typeIds).stream()
+                .filter(EquipmentAttributeDefinition::isRequired)
+                .collect(Collectors.groupingBy(
+                        EquipmentAttributeDefinition::getEquipmentTypeId,
+                        Collectors.collectingAndThen(Collectors.toList(), definitions -> definitions.stream()
+                                .sorted(Comparator.comparing(
+                                                EquipmentAttributeDefinition::getSortOrder,
+                                                Comparator.nullsLast(Integer::compareTo))
+                                        .thenComparing(EquipmentAttributeDefinition::getLabel,
+                                                Comparator.nullsLast(String::compareToIgnoreCase)))
+                                .toList())
+                ));
+    }
+
+    private Map<UUID, Map<UUID, EquipmentAttributeValue>> passportValuesByEquipment(Set<UUID> equipmentIds) {
+        if (equipmentIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return attributeValueRepository.findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
+                .collect(Collectors.groupingBy(
+                        EquipmentAttributeValue::getEquipmentId,
+                        Collectors.toMap(
+                                EquipmentAttributeValue::getAttributeDefinitionId,
+                                Function.identity(),
+                                (a, b) -> a
+                        )
+                ));
+    }
+
+    private static EquipmentDto.PassportCompletenessRef passportCompleteness(
+            Equipment equipment,
+            List<EquipmentAttributeDefinition> requiredDefinitions,
+            Map<UUID, EquipmentAttributeValue> valuesByDefinition
+    ) {
+        int requiredCount = requiredDefinitions.size();
+        List<EquipmentDto.MissingPassportFieldRef> missingFields = requiredDefinitions.stream()
+                .filter(definition -> !hasPassportValue(valuesByDefinition.get(definition.getId())))
+                .map(definition -> new EquipmentDto.MissingPassportFieldRef(
+                        definition.getId(),
+                        definition.getKey(),
+                        definition.getLabel(),
+                        definition.getGroupName(),
+                        definition.getSortOrder() == null ? 0 : definition.getSortOrder(),
+                        true
+                ))
+                .toList();
+        int missingCriticalCount = missingFields.size();
+        int filledCount = requiredCount - missingCriticalCount;
+        boolean complete = missingCriticalCount == 0;
+        return new EquipmentDto.PassportCompletenessRef(
+                complete,
+                requiredCount,
+                filledCount,
+                missingCriticalCount,
+                0,
+                missingFields,
+                complete ? null : "Missing required passport fields",
+                complete ? null : "Fill equipment passport",
+                complete ? null : "/equipment/" + equipment.getId() + "/passport"
+        );
+    }
+
+    private static boolean hasPassportValue(EquipmentAttributeValue value) {
+        return value != null
+                && (StringUtils.hasText(value.getValueText())
+                || value.getValueNumber() != null
+                || value.getValueDate() != null
+                || value.getValueBoolean() != null
+                || StringUtils.hasText(value.getValueOption())
+                || StringUtils.hasText(value.getValueJson()));
     }
 
     private static Set<UUID> collectIds(List<Equipment> items, Function<Equipment, UUID> getter) {

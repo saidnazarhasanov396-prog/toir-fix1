@@ -41,6 +41,7 @@ public final class RolePermissionDefaults {
                 PermissionConstants.CALIBRATION_RECORD_UPDATE,
                 PermissionConstants.WORK_ORDER_READ,
                 PermissionConstants.REPAIR_REQUEST_READ,
+                PermissionConstants.TIMESHEET_CREATE,
                 PermissionConstants.KNOWLEDGE_READ
         ));
         defaults.put("RELIABILITY_ENGINEER", List.of(
@@ -98,6 +99,9 @@ public final class RolePermissionDefaults {
                 PermissionConstants.CALIBRATION_RECORD_UPDATE,
                 PermissionConstants.EMPLOYEE_READ,
                 PermissionConstants.TIMESHEET_READ,
+                PermissionConstants.TIMESHEET_CREATE,
+                PermissionConstants.TIMESHEET_UPDATE,
+                PermissionConstants.TIMESHEET_DELETE,
                 PermissionConstants.TIMESHEET_APPROVE,
                 PermissionConstants.KNOWLEDGE_READ,
                 PermissionConstants.ANALYTICS_READ
