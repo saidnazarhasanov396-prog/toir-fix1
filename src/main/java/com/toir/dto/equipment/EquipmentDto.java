@@ -45,6 +45,7 @@ public record EquipmentDto(
         LocalDate operationStartDate,
         Integer expectedLifetimeMonths,
         Integer expectedLifetimeYears,
+        Long expectedLifetimeHours,
         String operatingDuration,
         LocalDate expectedEndDate,
         String remainingLifetime,
@@ -99,7 +100,7 @@ public record EquipmentDto(
                 departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer, status,
                 category, commissionedAt, arrivalDate, warrantyUntil, description, averageOperatingLifeHours,
                 department, location, equipmentType, parent, passport, placement, operationStartDate,
-                expectedLifetimeMonths, expectedLifetimeYears, operatingDuration, expectedEndDate, remainingLifetime,
+                expectedLifetimeMonths, expectedLifetimeYears, null, operatingDuration, expectedEndDate, remainingLifetime,
                 lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment, null);
     }
 
@@ -134,7 +135,7 @@ public record EquipmentDto(
         this(id, code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
                 departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer, status,
                 category, commissionedAt, null, warrantyUntil, description, averageOperatingLifeHours, department,
-                location, equipmentType, parent, passport, placement, null, null, null, null, null, null,
+                location, equipmentType, parent, passport, placement, null, null, null, null, null, null, null,
                 LifetimeStatus.UNKNOWN, false, null, null, null, null, null);
     }
 
@@ -290,7 +291,7 @@ public record EquipmentDto(
                 e.getManufacturer(), e.getStatus(), e.getCategory(),
                 e.getCommissionedAt(), e.getArrivalDate(), e.getWarrantyUntil(), e.getDescription(), e.getAverageOperatingLifeHours(),
                 department, location, equipmentType, parent, passport, placement,
-                e.getOperationStartDate(), e.getExpectedLifetimeMonths(), e.getExpectedLifetimeYears(),
+                e.getOperationStartDate(), e.getExpectedLifetimeMonths(), e.getExpectedLifetimeYears(), e.getExpectedLifetimeHours(),
                 operatingDuration(e), expectedEndDate(e), remainingLifetime(e), lifetimeStatus(e),
                 Boolean.TRUE.equals(e.getHasWarranty()), e.getWarrantyAttachmentId(),
                 e.getWarrantyStartDate(), e.getWarrantyEndDate(), warrantyAttachmentRef(warrantyAttachment),
