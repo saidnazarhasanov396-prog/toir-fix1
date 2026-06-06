@@ -35,8 +35,11 @@ ALTER TABLE actual_costs
             )
         );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_actual_cost_source_active
+DROP INDEX IF EXISTS ux_actual_cost_source_active;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_actual_cost_auto_source_active
     ON actual_costs (source_type, source_id)
     WHERE is_deleted = false
-      AND source_type IS NOT NULL
-      AND source_id IS NOT NULL;
+      AND source_type IN ('LABOR_ENTRY', 'MATERIAL_ISSUE', 'PROCUREMENT_RECEIPT', 'CONTRACTOR_WORK')
+      AND source_id IS NOT NULL
+      AND status <> 'REJECTED';

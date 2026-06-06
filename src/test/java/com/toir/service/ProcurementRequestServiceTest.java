@@ -221,6 +221,51 @@ class ProcurementRequestServiceTest {
     }
 
     @Test
+    void receivingLineWithUnitPriceUpdatesExistingProcurementReceiptActualCostWithoutDuplicate() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID movementId = UUID.randomUUID();
+        UUID existingCostId = UUID.randomUUID();
+        UUID categoryId = UUID.randomUUID();
+        ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED,
+                List.of(line(sparePartId, 4, 12.0)));
+        CostCategory category = new CostCategory();
+        category.setId(categoryId);
+        category.setCode("MATERIALS");
+        ActualCost existingCost = new ActualCost();
+        existingCost.setId(existingCostId);
+        existingCost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
+        existingCost.setSourceId(movementId);
+        existingCost.setAmount(10.0);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock(warehouseId, sparePartId, 1)));
+        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(movementId);
+            return movement;
+        });
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS")).thenReturn(Optional.of(category));
+        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                ActualCostSourceType.PROCUREMENT_RECEIPT, movementId)).thenReturn(Optional.of(existingCost));
+
+        service.markReceived(requestId);
+
+        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
+        verify(actualCostRepository).save(costCaptor.capture());
+        ActualCost cost = costCaptor.getValue();
+        assertThat(cost.getId()).isEqualTo(existingCostId);
+        assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.PROCUREMENT_RECEIPT);
+        assertThat(cost.getSourceId()).isEqualTo(movementId);
+        assertThat(cost.getCostCategoryId()).isEqualTo(categoryId);
+        assertThat(cost.getAmount()).isEqualTo(48.0);
+    }
+
+    @Test
     void repeatedReceiveIsBlocked() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();

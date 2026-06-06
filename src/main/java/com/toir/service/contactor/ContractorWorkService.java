@@ -258,6 +258,8 @@ public class ContractorWorkService {
         }
         UUID costCategoryId = resolveCostCategoryId(work);
         ActualCost cost = new ActualCost();
+        cost.setSourceType(com.toir.enums.ActualCostSourceType.CONTRACTOR_WORK);
+        cost.setSourceId(work.getId());
         cost.setWorkOrderId(work.getWorkOrderId());
         cost.setContractorWorkId(work.getId());
         cost.setCostCategoryId(costCategoryId);

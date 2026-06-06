@@ -13,7 +13,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ProductionConfigSecretsTest {
 
     private static final Path PROD_CONFIG = Path.of("src/main/resources/application-prod.yml");
+    private static final Path DEV_CONFIG = Path.of("src/main/resources/application-dev.yml");
+    private static final Path DOCKER_COMPOSE = Path.of("docker-compose.yml");
     private static final Pattern ENV_PLACEHOLDER = Pattern.compile("\\$\\{[A-Z0-9_]+(?::[^}]*)?}");
+    private static final Pattern COMPOSE_ENV_LINE = Pattern.compile("^\\s*([A-Z0-9_]+):\\s*(.+?)\\s*$");
 
     @Test
     void productionConfigKeepsSecretsInEnvironmentPlaceholders() throws IOException {
@@ -28,15 +31,76 @@ class ProductionConfigSecretsTest {
         assertEnvPlaceholder(lines, "admin-email:");
     }
 
+    @Test
+    void productionJwtSecretUsesExplicitToirEnvironmentVariable() throws IOException {
+        List<String> lines = Files.readAllLines(PROD_CONFIG);
+
+        String secretLine = findTrimmedLine(lines, "secret:");
+
+        assertThat(secretLine)
+                .as("prod JWT secret must come from the documented env var without a default")
+                .isEqualTo("secret: ${TOIR_JWT_SECRET}");
+    }
+
+    @Test
+    void dockerDemoUsesDevDemoSeedProfileAndDoesNotUseProdPlaceholders() throws IOException {
+        List<String> lines = Files.readAllLines(DOCKER_COMPOSE);
+
+        assertThat(lines)
+                .as("local/demo Docker must not set legacy or production JWT secret variables")
+                .noneMatch(line -> line.trim().startsWith("TOIR_JWT_SECRET:"))
+                .noneMatch(line -> line.trim().startsWith("JWT_SECRET:"));
+
+        assertThat(findComposeValue(lines, "SPRING_PROFILES_ACTIVE"))
+                .as("local/demo Docker must not boot with application-prod.yml")
+                .isEqualTo("dev,demo-seed");
+
+        assertThat(lines)
+                .as("local/demo Docker must not pass unresolved production placeholders to Spring")
+                .noneMatch(line -> line.contains("${TOIR_DB_URL}"))
+                .noneMatch(line -> line.trim().startsWith("TOIR_DB_URL:"));
+
+        assertThat(findComposeValue(lines, "SPRING_DATASOURCE_URL"))
+                .as("local/demo Docker DB URL must point to the compose postgres service")
+                .isEqualTo("jdbc:postgresql://postgres:5432/toir_demo");
+    }
+
+    @Test
+    void devConfigUsesStrongTestOnlyJwtSecret() throws IOException {
+        List<String> lines = Files.readAllLines(DEV_CONFIG);
+
+        String secret = findTrimmedLine(lines, "secret:").substring("secret:".length()).trim();
+
+        assertThat(secret)
+                .as("dev/demo JWT secret must be fake and long enough for HS256")
+                .startsWith("test-only-local-demo-")
+                .hasSizeGreaterThanOrEqualTo(32)
+                .matches("[\\x20-\\x7E]+");
+    }
+
     private static void assertEnvPlaceholder(List<String> lines, String key) {
-        String line = lines.stream()
-                .map(String::trim)
-                .filter(candidate -> candidate.startsWith(key))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("Missing production config key: " + key));
+        String line = findTrimmedLine(lines, key);
 
         assertThat(line)
                 .as(key + " must use an environment placeholder")
                 .containsPattern(ENV_PLACEHOLDER.pattern());
     }
+
+    private static String findTrimmedLine(List<String> lines, String key) {
+        return lines.stream()
+                .map(String::trim)
+                .filter(candidate -> candidate.startsWith(key))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing production config key: " + key));
+    }
+
+    private static String findComposeValue(List<String> lines, String key) {
+        return lines.stream()
+                .map(COMPOSE_ENV_LINE::matcher)
+                .filter(matcher -> matcher.matches() && matcher.group(1).equals(key))
+                .map(matcher -> matcher.group(2))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing docker compose environment key: " + key));
+    }
+
 }
