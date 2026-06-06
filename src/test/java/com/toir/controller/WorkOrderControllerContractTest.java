@@ -348,6 +348,40 @@ class WorkOrderControllerContractTest {
     }
 
     @Test
+    void listResponseWorksWithoutPerformer() throws Exception {
+        WorkOrderDto dto = workOrderDto(UUID.randomUUID(), null, null);
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, 0, 10, ""))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/v1/work-orders")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("search", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(dto.id().toString()))
+                .andExpect(jsonPath("$.content[0].performerId").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.content[0].performerName").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void listResponseIncludesPerformerDetails() throws Exception {
+        UUID performerId = UUID.randomUUID();
+        WorkOrderDto dto = workOrderDtoWithPerformer(UUID.randomUUID(), performerId, "Ivan Petrov");
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, 0, 10, ""))
+                .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/v1/work-orders")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("search", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].performerId").value(performerId.toString()))
+                .andExpect(jsonPath("$.content[0].performerName").value("Ivan Petrov"));
+    }
+
+    @Test
     void listWithMissingLinkedRepairRequestReturnsNullObject() throws Exception {
         UUID missingRepairRequestId = UUID.randomUUID();
         WorkOrderDto dto = workOrderDtoWithIds(UUID.randomUUID(), missingRepairRequestId, null, null, null);
