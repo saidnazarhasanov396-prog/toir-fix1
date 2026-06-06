@@ -58,6 +58,13 @@ Config is split by profile:
 
 Use `dev` or `prod` Spring profile. The current default profile is `prod`.
 
+Docker Compose is for local/demo verification and runs the backend with `SPRING_PROFILES_ACTIVE=dev,demo-seed`.
+- DB URL source: `SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/toir_demo` in `docker-compose.yml`.
+- JWT source: the fake test-only local secret in `application-dev.yml`.
+- No `.env` file is required for local/demo compose startup.
+
+Production must run with the `prod` profile and provide `TOIR_DB_URL`, `TOIR_DB_USERNAME`, `TOIR_DB_PASSWORD`, and `TOIR_JWT_SECRET` through environment configuration or a secret manager. `TOIR_JWT_SECRET` must be at least 32 bytes / 256 bits for HS256. Generate production/runtime values outside the repo, for example with `openssl rand -hex 32`.
+
 DB schema source of truth is Flyway migrations under `db/migration`.
 - `spring.flyway.enabled=true`
 - `spring.flyway.validate-on-migrate=true`
@@ -143,6 +150,7 @@ Thrown via `com.toir.exception.RestException` and mapped by `GlobalExceptionHand
 
 ## Security
 - All endpoints require `Authorization: Bearer <token>` except: `/api/v1/auth/login`, Swagger, `/actuator/health`
+- JWT signing uses HS256 and requires a secret of at least 32 bytes / 256 bits. Local/demo uses a fake test-only dev value; production must supply `TOIR_JWT_SECRET` externally.
 - JWT payload: `sub`, `username`, `authorities` (role codes), `permissions`, `departmentId`, `primaryRoleCode`
 - `@CurrentUser` parameter resolver injects `AuthenticatedUser` into controllers
 - `JwtAuthenticationEntryPoint` and `RestAccessDeniedHandler` return the unified error format

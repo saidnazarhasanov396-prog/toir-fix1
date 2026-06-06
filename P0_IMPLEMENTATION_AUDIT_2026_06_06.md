@@ -18,6 +18,9 @@ Implemented during this audit:
 - Second hardening pack: labor/reservation RBAC, normalized actual-cost technical source traceability, LABOR_ENTRY actual-cost sync, stock row-lock entrypoints/nonnegative guards, manual stock movement reason/source enforcement, and closure readiness checks for required labor plus active reservations.
 - Third hardening pack: structured due explanation DTOs, material issue/procurement receipt actual-cost source linkage, template operations copied into generated WO tasks with source ids, stock DB check constraints plus Docker-gated concurrency proof, equipment passport completeness summary in list/detail DTOs, and UI-only leadership demo script.
 - UAT seed pass: added demo-only phase-5 seed for exact `AUTO-PUMP-A1`, `AUTO-PUMP-A2`, and `AUTO-PUMP-A3-NOMETER` assets, plus a local static seed contract test and Docker-gated startup/idempotency assertions.
+- Runtime config correction: local/demo Docker had been using the `prod` profile, so `application-prod.yml` placeholders reached runtime and failed with unresolved `${TOIR_DB_URL}` plus weak JWT secret configuration. Local/demo Docker now runs `dev,demo-seed`; final production security/env hardening remains a TeamLead/DevOps runtime responsibility.
+- Runtime migration correction: `V20260606_1__actual_cost_source_traceability.sql` originally made all `(source_type, source_id)` pairs unique, which failed on legacy databases with multiple `WORK_ORDER` cost rows for one work order. The unique index now applies only to granular one-to-one auto sources while `WORK_ORDER` can keep multiple cost components.
+- Final production security/env hardening will be completed at the end by TeamLead/DevOps. Current priority is runnable local/demo P0 verification.
 
 Product scope correction:
 - MT-01 Operational Cockpit is deferred and PM decision pending. It is not part of the current fix pack; do not create a new cockpit endpoint, page, or merged operational queue unless PM explicitly approves it later.
@@ -41,11 +44,11 @@ Product scope correction:
 | SP-01 | PARTIAL | Equipment spare parts and template spare requirements exist | Applicability across equipment type + node + maintenance template is not a single suggestion contract. |
 | SP-02 | PARTIAL++ | `ReservationService` uses stock row lock entrypoints; stock checks block negative state; DB constraints protect new direct writes; Docker-gated parallel reservation proof added; frontend warehouse table shows on-hand/reserved/available consistently | Docker is missing locally, so concurrency proof is compiled but skipped here; must be run on Docker-enabled CI/machine. |
 | SP-03 | PARTIAL | Low stock recommendations and procurement request services exist | Procurement receipt-to-stock is present but needs full UAT and cost/source linkage checks. |
-| FN-01 | PARTIAL++ | `ActualCostService` rejects no-source and budgetLine-only costs; LABOR_ENTRY, MATERIAL_ISSUE and PROCUREMENT_RECEIPT can create/update source-linked pending costs when cost is known; frontend shows source traceability and blocks budget-line-only manual create | Reversal/cancel synchronization remains open. |
+| FN-01 | PARTIAL++ | `ActualCostService` rejects no-source and budgetLine-only costs; LABOR_ENTRY, MATERIAL_ISSUE, PROCUREMENT_RECEIPT and CONTRACTOR_WORK can create/update source-linked pending costs when cost is known; `WORK_ORDER` source rows may repeat for multiple cost components; frontend shows source traceability and blocks budget-line-only manual create | Reversal/cancel synchronization remains open. |
 | FN-02 | PARTIAL | Actual cost review pending/approve/reject and comments exist | Approval routing by department/category/amount is only partially represented. |
 | FN-03 | PARTIAL | Budget summary, actual register and review pages exist | Reserved/committed amount rule is not explicit enough; overrun source drilldown needs validation. |
 | RB-01 | PARTIAL+ | Added method-level RBAC for labor and reservation mutations; finance/stock/WO guards already covered by tests | Full frontend route/action matrix regeneration still needed. |
-| RB-02 | DONE | Prod config now uses env placeholders and default admin disabled by default | Add deployment env template/secret manager documentation. |
+| RB-02 | DONE | Prod config now uses env placeholders and default admin disabled by default; local/demo Docker was switched to `dev,demo-seed` so prod placeholders are not required for P0 verification | Final TeamLead/DevOps production env/secret-manager rollout remains outside this local/demo fix. |
 | QA-01 | PARTIAL+ | Demo seed phases exist; phase-5 now defines exact `AUTO-PUMP-A1`, `AUTO-PUMP-A2`, and `AUTO-PUMP-A3-NOMETER` assets with template, meter/due, stock, budget, cost and negative-branch records | Must run Docker/Postgres seed twice and verify no duplicate natural keys after current migrations. |
 | QA-02 | PARTIAL | `toir-backend/docs/uat/leadership-demo-script.md` defines the UI-only route and A3 blocked branch without Cockpit | Needs executable Playwright/screenshot evidence against seeded demo. |
 | QA-03 | DONE | Manual attribute feature tests updated; `yarn test` passed | Keep flag behavior documented if product later disables it again. |
@@ -206,12 +209,12 @@ Product scope correction:
 
 ### FN-01 - Actual Costs With Technical Source
 - Affected: `ActualCostService`, `ActualCost` entity, `budget-control-page.tsx`.
-- Current: create rejects no-source and budgetLine-only rows; legacy WO/RR/contractor fields map to normalized `sourceType/sourceId`; labor/material/procurement paths create pending costs when actual cost is known.
+- Current: create rejects no-source and budgetLine-only rows; legacy WO/RR/contractor fields map to normalized `sourceType/sourceId`; labor/material/procurement/contractor paths create pending costs when actual cost is known. Multiple `WORK_ORDER` costs per work order are allowed for separate labor/material/contractor/other components.
 - Required: every financial cost must have a technical source; budget line alone is not technical evidence.
-- Backend changes: `ActualCostSourceType`, `source_type/source_id` migration, technical-source validation, and source-linked generation for LABOR_ENTRY/MATERIAL_ISSUE/PROCUREMENT_RECEIPT; budgetLine remains optional accounting dimension.
+- Backend changes: `ActualCostSourceType`, `source_type/source_id` migration, technical-source validation, and source-linked generation for LABOR_ENTRY/MATERIAL_ISSUE/PROCUREMENT_RECEIPT/CONTRACTOR_WORK; budgetLine remains optional accounting dimension. The source uniqueness index is partial and excludes `WORK_ORDER`/manual WO sources.
 - Frontend changes: actual cost form must choose/show source object.
 - DB migration: yes, `V20260606_1__actual_cost_source_traceability.sql`.
-- Tests: no-source and budget-line-only rejected; WO/RR accepted; approved cost updates budget once; rejected cost does not update budget; material issue/procurement receipt create source-linked pending costs when cost exists and do not fake unknown costs.
+- Tests: no-source and budget-line-only rejected; WO/RR accepted; multiple WO cost components allowed; approved cost updates budget once; rejected cost does not update budget; material issue/procurement receipt create/update source-linked pending costs when cost exists and do not fake unknown costs; Docker-gated migration proof covers duplicate legacy `WORK_ORDER` actual costs.
 - Acceptance: manually created finance rows require a technical source; material/procurement known-cost auto-linkage is implemented. Reversal/cancel synchronization remains a BA/product decision.
 
 ### FN-02 - Financial Approval
@@ -246,13 +249,13 @@ Product scope correction:
 
 ### RB-02 - Production Secrets
 - Affected: `application-prod.yml`, `ProductionConfigSecretsTest`.
-- Current: fixed in this audit: DB/JWT/admin use env placeholders; default admin disabled by default.
+- Current: fixed in this audit: DB/JWT/admin use env placeholders; default admin disabled by default. Local/demo Docker no longer uses `prod`, avoiding unresolved `${TOIR_DB_URL}` in Hikari/Flyway and weak runtime JWT secrets during P0 verification.
 - Required: no hardcoded DB/JWT/MinIO/default admin secrets in prod config.
-- Backend changes: completed for visible prod YAML; still add env template.
+- Backend changes: completed for visible prod YAML. Compose local/demo now uses `SPRING_PROFILES_ACTIVE=dev,demo-seed`, `SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/toir_demo`, and the fake test-only dev JWT secret.
 - Frontend changes: no.
 - DB migration: no.
 - Tests: `ProductionConfigSecretsTest`.
-- Acceptance: prod config contains no real secret values.
+- Acceptance: prod config contains no real DB/JWT/default-admin secret values; local/demo verification does not require TeamLead/DevOps production `.env` or secret-manager configuration.
 
 ### QA-01 - Demo Dataset
 - Affected: `src/main/resources/db/demo-seed/*`, demo seeder classes.
@@ -446,6 +449,8 @@ Remaining UAT blockers:
 - Need work-type-specific closure evidence rules for meter/material/result snapshots.
 - Need seeded UI evidence/screenshots for the documented route on a Docker/Postgres demo database.
 - Need Docker/Postgres execution of the new phase-5 seed idempotency test because local Docker is unavailable.
+- TeamLead/DevOps must still provide final production DB/JWT/admin env and secret-manager configuration for the `prod` profile.
+- Need Docker/Postgres confirmation that `V20260606_1__actual_cost_source_traceability.sql` migrates existing data with duplicate `WORK_ORDER` actual costs; a Docker-gated test exists but skips locally without Docker.
 
 Adjusted leadership demo route:
 - Equipment Registry -> Equipment Card -> Passport completeness -> Due Event explanation -> Approval/Create WO -> WO Detail -> Labor/Materials -> Closure readiness -> Completion/Close -> Equipment Card next cycle/history -> Finance/Budget source rows.

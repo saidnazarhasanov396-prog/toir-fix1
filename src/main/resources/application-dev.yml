@@ -34,7 +34,8 @@ springdoc:
 app:
   security:
     jwt:
-      secret: change-me-please-use-a-long-random-secret-at-least-32-bytes
+      # Local/dev/demo only. Production must use TOIR_JWT_SECRET from the environment or secret manager.
+      secret: test-only-local-demo-jwt-secret-minimum-32-bytes
       expiration-minutes: 720
       issuer: toir-backend
   jackson:

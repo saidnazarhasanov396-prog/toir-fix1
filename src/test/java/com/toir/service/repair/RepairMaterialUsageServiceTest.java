@@ -258,6 +258,57 @@ class RepairMaterialUsageServiceTest {
     }
 
     @Test
+    void registerWithKnownUnitCostUpdatesExistingMaterialIssueActualCostWithoutDuplicate() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID usageId = UUID.randomUUID();
+        UUID existingCostId = UUID.randomUUID();
+        UUID categoryId = UUID.randomUUID();
+        WarehouseStock stock = stock(warehouseId, sparePartId, 10, 0);
+        CostCategory category = new CostCategory();
+        category.setId(categoryId);
+        category.setCode("MATERIALS");
+        ActualCost existingCost = new ActualCost();
+        existingCost.setId(existingCostId);
+        existingCost.setSourceType(ActualCostSourceType.MATERIAL_ISSUE);
+        existingCost.setSourceId(usageId);
+        existingCost.setAmount(10.0);
+
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(repository.save(any(RepairMaterialUsage.class))).thenAnswer(invocation -> {
+            RepairMaterialUsage usage = invocation.getArgument(0);
+            usage.setId(usageId);
+            return usage;
+        });
+        when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS")).thenReturn(Optional.of(category));
+        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                ActualCostSourceType.MATERIAL_ISSUE, usageId)).thenReturn(Optional.of(existingCost));
+
+        service.register(
+                workOrderId,
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 3, 20.0)
+        );
+
+        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
+        verify(actualCostRepository).save(costCaptor.capture());
+        ActualCost cost = costCaptor.getValue();
+        assertThat(cost.getId()).isEqualTo(existingCostId);
+        assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.MATERIAL_ISSUE);
+        assertThat(cost.getSourceId()).isEqualTo(usageId);
+        assertThat(cost.getAmount()).isEqualTo(60.0);
+    }
+
+    @Test
     void registerWithoutUnitCostDoesNotCreateFakeActualCostAndReturnsWarning() {
         UUID workOrderId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();

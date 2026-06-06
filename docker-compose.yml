@@ -3,7 +3,7 @@ services:
     image: postgres:16-alpine
     container_name: toir-postgres
     environment:
-      POSTGRES_DB: toir
+      POSTGRES_DB: toir_demo
       POSTGRES_USER: toir
       POSTGRES_PASSWORD: toir
     ports:
@@ -11,7 +11,7 @@ services:
     volumes:
       - toir_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U toir -d toir"]
+      test: ["CMD-SHELL", "pg_isready -U toir -d toir_demo"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,13 +23,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:postgresql://postgres:5432/toir
-      DB_USERNAME: toir
-      DB_PASSWORD: toir
-      JWT_SECRET: change-me-in-production-use-a-long-random-secret-at-least-32-bytes
-      JWT_EXPIRATION_MINUTES: 720
-      APP_BOOTSTRAP_SEED_DEMO_DATA: "false"
+      SPRING_PROFILES_ACTIVE: dev,demo-seed
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/toir_demo
+      SPRING_DATASOURCE_USERNAME: toir
+      SPRING_DATASOURCE_PASSWORD: toir
       FILE_STORAGE_PATH: /app/uploads
     ports:
       - "8080:8080"
