@@ -40,6 +40,11 @@ public class WarehouseReorderService {
     }
 
     @Transactional(readOnly = true)
+    public List<ReorderSuggestionDto> allSuggestions(UUID warehouseId) {
+        return loadAllSuggestions(warehouseId);
+    }
+
+    @Transactional(readOnly = true)
     public ReorderStatsDto getStats(UUID warehouseId) {
         List<ReorderSuggestionDto> all = loadAllSuggestions(warehouseId);
         long critical = all.stream().filter(s -> "CRITICAL".equals(s.urgency())).count();
