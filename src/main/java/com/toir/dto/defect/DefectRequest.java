@@ -12,7 +12,7 @@ public record DefectRequest(
         @NotBlank String description,
         @NotNull UUID equipmentId,
         UUID equipmentNodeId,
-        UUID defectListId,
+        @NotNull(message = "defectListId is required") UUID defectListId,
         @JsonAlias("requestId") UUID repairRequestId,
         String category,
         String severity,

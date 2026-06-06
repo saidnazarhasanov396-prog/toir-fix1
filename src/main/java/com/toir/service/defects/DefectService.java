@@ -242,7 +242,7 @@ public class DefectService {
 
     private DefectList validateDefectListForCreate(DefectRequest request) {
         if (request.defectListId() == null) {
-            throw RestException.badRequest("Defect list is required");
+            throw RestException.badRequest("defectListId is required");
         }
         DefectList defectList = defectListRepository.findByIdAndIsDeletedFalse(request.defectListId())
                 .orElseThrow(() -> RestException.notFound("Defect list not found: " + request.defectListId()));
