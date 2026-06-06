@@ -2,9 +2,11 @@ package com.toir.service;
 
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.entity.contractors.ContractorWork;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ActualCost;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
@@ -82,14 +84,68 @@ class ActualCostServiceTest {
     }
 
     @Test
-    void createRequiresBusinessSourceLink() {
+    void createRequiresTechnicalSourceLink() {
         ActualCostDto dto = dto(null, null, null, null, 100);
 
         assertThatThrownBy(() -> service.create(dto))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("must be linked to at least one source");
+                .hasMessageContaining("technical source");
 
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsBudgetLineOnlyBecauseItIsNotTechnicalSource() {
+        UUID budgetLineId = UUID.randomUUID();
+        BudgetLine line = budgetLine(budgetLineId, 500, 0, BudgetStatus.APPROVED);
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
+
+        assertThatThrownBy(() -> service.create(dto(null, null, null, budgetLineId, 100)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("technical source");
+
+        verify(repository, never()).save(any());
+        verify(notificationService, never()).notifyDepartmentByPermission(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createAcceptsWorkOrderAsTechnicalSource() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setDepartmentId(departmentId);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> {
+            ActualCost saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        ActualCostDto result = service.create(dto(workOrderId, null, null, null, 100));
+
+        assertThat(result.status()).isEqualTo(ActualCostStatus.PENDING);
+        assertThat(result.workOrderId()).isEqualTo(workOrderId);
+    }
+
+    @Test
+    void createAcceptsRepairRequestAsTechnicalSource() {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        RepairRequest repairRequest = new RepairRequest();
+        repairRequest.setId(repairRequestId);
+        repairRequest.setDepartmentId(departmentId);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId)).thenReturn(Optional.of(repairRequest));
+        when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> {
+            ActualCost saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        ActualCostDto result = service.create(dto(null, repairRequestId, null, null, 100));
+
+        assertThat(result.status()).isEqualTo(ActualCostStatus.PENDING);
+        assertThat(result.repairRequestId()).isEqualTo(repairRequestId);
     }
 
     @Test
@@ -231,11 +287,16 @@ class ActualCostServiceTest {
     }
 
     @Test
-    void createPendingActualCostNotifiesFinanceApproverWhenDepartmentResolvedFromBudget() {
+    void createPendingActualCostNotifiesFinanceApproverWhenDepartmentResolvedFromWorkOrderBeforeBudget() {
         UUID budgetLineId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setDepartmentId(departmentId);
         BudgetLine line = budgetLine(budgetLineId, 500, 0, BudgetStatus.APPROVED);
         line.getBudget().setDepartmentId(departmentId);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
         when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> {
             ActualCost saved = invocation.getArgument(0);
@@ -243,7 +304,7 @@ class ActualCostServiceTest {
             return saved;
         });
 
-        ActualCostDto result = service.create(dto(null, null, null, budgetLineId, 120));
+        ActualCostDto result = service.create(dto(workOrderId, null, null, budgetLineId, 120));
 
         assertThat(result.status()).isEqualTo(ActualCostStatus.PENDING);
         verify(notificationService).notifyDepartmentByPermission(

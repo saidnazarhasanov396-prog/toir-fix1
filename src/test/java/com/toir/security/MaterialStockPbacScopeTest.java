@@ -165,7 +165,17 @@ class MaterialStockPbacScopeTest {
     }
 
     private StockMovementRequest request(UUID warehouseId, UUID sparePartId, StockMovementType type, double quantity) {
-        return new StockMovementRequest(warehouseId, sparePartId, null, type, quantity, null, null, null, null);
+        return new StockMovementRequest(
+                warehouseId,
+                sparePartId,
+                null,
+                type,
+                quantity,
+                null,
+                "DOC-1",
+                null,
+                "Manual stock movement reason"
+        );
     }
 
     private StockMovement movement(UUID warehouseId) {

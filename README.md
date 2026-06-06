@@ -33,6 +33,16 @@ API base URL: `http://localhost:8080/api/v1`
 Swagger UI: `http://localhost:8080/swagger-ui.html`
 OpenAPI docs: `http://localhost:8080/api/v1/v3/api-docs`
 
+## Testing
+
+Use the Maven wrapper when local Maven is not installed:
+
+```bash
+./mvnw test
+```
+
+Full repository tests include `@DataJpaTest`/Testcontainers suites and require Docker to be running. Targeted pure unit tests can run without Docker.
+
 ## Default credentials
 When `create-default-admin: true`, `DataBootstrap` creates a default admin only if that user does not already exist:
 - username: `admin`

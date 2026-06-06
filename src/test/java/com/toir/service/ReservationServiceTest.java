@@ -209,6 +209,25 @@ class ReservationServiceTest {
         verify(lowStockRecommendationService).evaluateStockSafely(stock);
     }
 
+    @Test
+    void fulfillRejectsReservationWhenReservedQuantityIsAlreadyLowerThanReservationQuantity() {
+        UUID reservationId = UUID.randomUUID();
+        UUID stockId = UUID.randomUUID();
+        Reservation reservation = activeReservation(reservationId, stockId, UUID.randomUUID(), UUID.randomUUID(), 5);
+        WarehouseStock stock = stock(stockId, UUID.randomUUID(), UUID.randomUUID(), 20, 3);
+
+        when(repository.findByIdAndIsDeletedFalse(reservationId)).thenReturn(Optional.of(reservation));
+        when(stockRepository.findByIdAndIsDeletedFalse(stockId)).thenReturn(Optional.of(stock));
+
+        assertThatThrownBy(() -> service.fulfill(reservationId))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("reserved quantity");
+
+        verify(stockRepository, never()).save(any(WarehouseStock.class));
+        verify(repository, never()).save(any(Reservation.class));
+        verify(stockMovementRepository, never()).save(any(StockMovement.class));
+    }
+
     private WarehouseStock stock(UUID stockId, UUID warehouseId, UUID sparePartId, double quantity, double reservedQty) {
         WarehouseStock stock = new WarehouseStock();
         stock.setId(stockId);

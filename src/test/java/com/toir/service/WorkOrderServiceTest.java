@@ -8,8 +8,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.CompletionAct;
 import com.toir.entity.Department;
+import com.toir.entity.LaborEntry;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
+import com.toir.entity.Reservation;
 import com.toir.entity.SafetyPermit;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
@@ -31,6 +33,7 @@ import com.toir.enums.DefectStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.ReservationStatus;
 import com.toir.enums.SafetyPermitStatus;
 import com.toir.enums.TaskExecutionStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
@@ -38,9 +41,11 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.repository.CompletionActRepository;
+import com.toir.repository.LaborEntryRepository;
 import com.toir.repository.PprPlanRepository;
 import com.toir.exception.RestException;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.ReservationRepository;
 import com.toir.repository.SafetyPermitRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
@@ -123,6 +128,12 @@ class WorkOrderServiceTest {
 
     @Mock
     RepairMaterialUsageRepository repairMaterialUsageRepository;
+
+    @Mock
+    LaborEntryRepository laborEntryRepository;
+
+    @Mock
+    ReservationRepository reservationRepository;
 
     @Mock
     WarehouseRepository warehouseRepository;
@@ -1985,6 +1996,48 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void closeMissingRequiredLaborShouldFailWithEvidenceMessage() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(laborEntryRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrderId))
+                .thenReturn(List.of());
+        when(reservationRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Cannot close work order; missing evidence")
+                .hasMessageContaining("At least one labor entry is required");
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void closeWithActiveReservationShouldFailWithEvidenceMessage() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        Reservation reservation = new Reservation();
+        reservation.setId(UUID.randomUUID());
+        reservation.setWorkOrderId(workOrderId);
+        reservation.setStatus(ReservationStatus.ACTIVE);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(laborEntryRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrderId))
+                .thenReturn(List.of(laborEntry(workOrderId)));
+        when(reservationRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of(reservation));
+
+        assertThatThrownBy(() -> service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Cannot close work order; missing evidence")
+                .hasMessageContaining("Material reservations must be issued, released or cancelled");
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
     void closeClosesDefectWhenAllLinkedWorkOrdersTerminalAndDefectResolved() {
         UUID workOrderId = UUID.randomUUID();
         UUID defectId = UUID.randomUUID();
@@ -2448,8 +2501,24 @@ class WorkOrderServiceTest {
     private void stubLifecycleDtoLookups(WorkOrder workOrder) {
         when(equipmentRepository.findById(workOrder.getEquipmentId())).thenReturn(Optional.empty());
         when(departmentRepository.findById(workOrder.getDepartmentId())).thenReturn(Optional.empty());
+        if (workOrder.getStatus() == WorkOrderStatus.COMPLETED
+                && (workOrder.getWorkType() == WorkType.REPAIR || workOrder.getWorkType() == WorkType.REPLACEMENT)) {
+            when(laborEntryRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrder.getId()))
+                    .thenReturn(List.of(laborEntry(workOrder.getId())));
+            when(reservationRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrder.getId()))
+                    .thenReturn(List.of());
+        }
         if (workOrder.getReplacementEquipmentId() != null) {
             when(equipmentRepository.findById(workOrder.getReplacementEquipmentId())).thenReturn(Optional.empty());
         }
+    }
+
+    private LaborEntry laborEntry(UUID workOrderId) {
+        LaborEntry laborEntry = new LaborEntry();
+        laborEntry.setId(UUID.randomUUID());
+        laborEntry.setWorkOrderId(workOrderId);
+        laborEntry.setWorkDate(java.time.LocalDate.of(2026, 6, 6));
+        laborEntry.setHours(1);
+        return laborEntry;
     }
 }

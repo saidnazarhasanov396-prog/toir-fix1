@@ -41,7 +41,7 @@ public class ReservationService {
     public ReservationDto reserve(ReservationRequest r) {
         validatePositiveQuantity(r.quantity());
 
-        WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(r.warehouseStockId())
+        WarehouseStock stock = stockForUpdate(r.warehouseStockId())
                 .orElseThrow(() -> RestException.notFound("Stock not found: " + r.warehouseStockId()));
         if (stock.getAvailable() < r.quantity()) {
             throw RestException.badRequest("Cannot reserve more than available: available="
@@ -79,8 +79,9 @@ public class ReservationService {
         }
         validatePositiveQuantity(reservation.getQuantity());
 
-        WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseStockId()).orElseThrow();
-        stock.setReservedQty(Math.max(0, stock.getReservedQty() - reservation.getQuantity()));
+        WarehouseStock stock = stockForUpdate(reservation.getWarehouseStockId()).orElseThrow();
+        assertReservedCanCover(stock, reservation.getQuantity());
+        stock.setReservedQty(stock.getReservedQty() - reservation.getQuantity());
         stockRepository.save(stock);
         reservation.setStatus(ReservationStatus.CANCELLED);
 
@@ -108,13 +109,15 @@ public class ReservationService {
         }
         validatePositiveQuantity(reservation.getQuantity());
 
-        WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseStockId()).orElseThrow();
+        WarehouseStock stock = stockForUpdate(reservation.getWarehouseStockId()).orElseThrow();
         if (stock.getQuantity() < reservation.getQuantity()) {
             throw RestException.badRequest("Cannot fulfill more than stock quantity: available="
                     + stock.getQuantity() + ", requested=" + reservation.getQuantity());
         }
+        assertReservedCanCover(stock, reservation.getQuantity());
         stock.setQuantity(stock.getQuantity() - reservation.getQuantity());
-        stock.setReservedQty(Math.max(0, stock.getReservedQty() - reservation.getQuantity()));
+        stock.setReservedQty(stock.getReservedQty() - reservation.getQuantity());
+        assertNonNegativeStock(stock);
         stockRepository.save(stock);
         reservation.setStatus(ReservationStatus.FULFILLED);
 
@@ -143,6 +146,24 @@ public class ReservationService {
     private void validatePositiveQuantity(double quantity) {
         if (quantity <= 0) {
             throw RestException.badRequest("Quantity must be greater than 0");
+        }
+    }
+
+    private java.util.Optional<WarehouseStock> stockForUpdate(UUID stockId) {
+        java.util.Optional<WarehouseStock> locked = stockRepository.findByIdAndIsDeletedFalseForUpdate(stockId);
+        return locked != null && locked.isPresent() ? locked : stockRepository.findByIdAndIsDeletedFalse(stockId);
+    }
+
+    private void assertReservedCanCover(WarehouseStock stock, double quantity) {
+        if (stock.getReservedQty() < quantity) {
+            throw RestException.badRequest("Stock reserved quantity is lower than reservation quantity: reserved="
+                    + stock.getReservedQty() + ", requested=" + quantity);
+        }
+    }
+
+    private void assertNonNegativeStock(WarehouseStock stock) {
+        if (stock.getQuantity() < 0 || stock.getReservedQty() < 0 || stock.getAvailable() < 0) {
+            throw RestException.badRequest("Stock quantities cannot become negative");
         }
     }
 

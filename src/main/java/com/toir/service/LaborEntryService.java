@@ -2,11 +2,20 @@ package com.toir.service;
 
 import com.toir.dto.laborentry.LaborEntryDto;
 import com.toir.entity.LaborEntry;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.CostCategory;
 import com.toir.entity.users.User;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.ActualCostSourceType;
+import com.toir.enums.ActualCostStatus;
+import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.LaborEntryRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +38,9 @@ public class LaborEntryService {
 
     private final LaborEntryRepository repository;
     private final UserRepository userRepository;
+    private final WorkOrderRepository workOrderRepository;
+    private final ActualCostRepository actualCostRepository;
+    private final CostCategoryRepository costCategoryRepository;
     private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
@@ -52,10 +64,12 @@ public class LaborEntryService {
 
     @Transactional
     public LaborEntryDto create(UUID workOrderId, LaborEntryDto r) {
+        WorkOrder workOrder = assertCanAddLabor(workOrderId);
         LaborEntry e = new LaborEntry();
         e.setWorkOrderId(workOrderId);
         apply(e, r);
         LaborEntry saved = repository.save(e);
+        syncActualCostFromLabor(saved, workOrder);
 
         auditBuilderService.log(
                 "labor_entry",
@@ -70,6 +84,15 @@ public class LaborEntryService {
         return LaborEntryDto.from(saved, toUserRef(saved.getUserId()));
     }
 
+    private WorkOrder assertCanAddLabor(UUID workOrderId) {
+        WorkOrder workOrder = workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)
+                .orElseThrow(() -> RestException.notFound("Work order not found: " + workOrderId));
+        if (workOrder.getStatus() == WorkOrderStatus.CLOSED) {
+            throw RestException.badRequest("Labor entries cannot be added to closed work order");
+        }
+        return workOrder;
+    }
+
     @Transactional
     public LaborEntryDto update(UUID id, LaborEntryDto r) {
         LaborEntry e = repository.findByIdAndIsDeletedFalse(id)
@@ -77,6 +100,8 @@ public class LaborEntryService {
         apply(e, r);
 
         LaborEntry saved = repository.save(e);
+        workOrderRepository.findByIdAndIsDeletedFalse(saved.getWorkOrderId())
+                .ifPresent(workOrder -> syncActualCostFromLabor(saved, workOrder));
 
         auditBuilderService.log(
                 "labor_entry",
@@ -96,6 +121,14 @@ public class LaborEntryService {
         var entity = repository.findByIdAndIsDeletedFalse(id).orElseThrow();
         entity.setDeleted(true);
         LaborEntry saved = repository.save(entity);
+        actualCostRepository
+                .findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                        ActualCostSourceType.LABOR_ENTRY,
+                        saved.getId())
+                .ifPresent(cost -> {
+                    cost.setDeleted(true);
+                    actualCostRepository.save(cost);
+                });
 
         auditBuilderService.log(
                 "labor_entry",
@@ -116,6 +149,37 @@ public class LaborEntryService {
         e.setHours(r.hours());
         e.setRate(r.rate());
         e.setDescription(r.description());
+    }
+
+    private void syncActualCostFromLabor(LaborEntry laborEntry, WorkOrder workOrder) {
+        if (!hasMonetaryLaborValue(laborEntry)) {
+            return;
+        }
+        costCategoryRepository.findFirstByCodeAndIsDeletedFalse("LABOR")
+                .ifPresent(category -> upsertLaborActualCost(laborEntry, workOrder, category));
+    }
+
+    private boolean hasMonetaryLaborValue(LaborEntry laborEntry) {
+        return laborEntry.getRate() != null
+                && laborEntry.getRate() > 0
+                && laborEntry.getHours() > 0;
+    }
+
+    private void upsertLaborActualCost(LaborEntry laborEntry, WorkOrder workOrder, CostCategory category) {
+        ActualCost cost = actualCostRepository
+                .findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                        ActualCostSourceType.LABOR_ENTRY,
+                        laborEntry.getId())
+                .orElseGet(ActualCost::new);
+
+        cost.setSourceType(ActualCostSourceType.LABOR_ENTRY);
+        cost.setSourceId(laborEntry.getId());
+        cost.setWorkOrderId(workOrder.getId());
+        cost.setCostCategoryId(category.getId());
+        cost.setAmount(laborEntry.getHours() * laborEntry.getRate());
+        cost.setStatus(ActualCostStatus.PENDING);
+        cost.setNotes("Generated from labor entry " + laborEntry.getId());
+        actualCostRepository.save(cost);
     }
 
     private Map<UUID, LaborEntryDto.UserRef> loadUserRefs(Collection<UUID> userIds) {

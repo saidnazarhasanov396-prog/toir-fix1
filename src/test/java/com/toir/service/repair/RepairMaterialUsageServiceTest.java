@@ -1,20 +1,26 @@
 package com.toir.service.repair;
 
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
+import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.CostCategory;
 import com.toir.entity.StockMovement;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.ActualCostSourceType;
+import com.toir.enums.ActualCostStatus;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
@@ -77,6 +83,12 @@ class RepairMaterialUsageServiceTest {
 
     @Mock
     LowStockRecommendationService lowStockRecommendationService;
+
+    @Mock
+    ActualCostRepository actualCostRepository;
+
+    @Mock
+    CostCategoryRepository costCategoryRepository;
 
     @InjectMocks
     RepairMaterialUsageService service;
@@ -196,6 +208,84 @@ class RepairMaterialUsageServiceTest {
         assertThat(movement.getQuantity()).isEqualTo(7);
         assertThat(movement.getUnitCost()).isEqualTo(12.5);
         verify(lowStockRecommendationService).evaluateStockSafely(stock);
+    }
+
+    @Test
+    void registerWithKnownUnitCostCreatesSourceLinkedPendingActualCost() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID categoryId = UUID.randomUUID();
+        WarehouseStock stock = stock(warehouseId, sparePartId, 10, 0);
+        CostCategory category = new CostCategory();
+        category.setId(categoryId);
+        category.setCode("MATERIALS");
+
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(repository.save(any(RepairMaterialUsage.class))).thenAnswer(invocation -> {
+            RepairMaterialUsage usage = invocation.getArgument(0);
+            usage.setId(UUID.randomUUID());
+            return usage;
+        });
+        when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS")).thenReturn(Optional.of(category));
+        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                any(), any())).thenReturn(Optional.empty());
+
+        RepairMaterialUsageDto result = service.register(
+                workOrderId,
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 2, 15.0)
+        );
+
+        assertThat(result.costWarning()).isNull();
+        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
+        verify(actualCostRepository).save(costCaptor.capture());
+        ActualCost cost = costCaptor.getValue();
+        assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.MATERIAL_ISSUE);
+        assertThat(cost.getSourceId()).isEqualTo(result.id());
+        assertThat(cost.getWorkOrderId()).isEqualTo(workOrderId);
+        assertThat(cost.getCostCategoryId()).isEqualTo(categoryId);
+        assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
+        assertThat(cost.getAmount()).isEqualTo(30.0);
+    }
+
+    @Test
+    void registerWithoutUnitCostDoesNotCreateFakeActualCostAndReturnsWarning() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WarehouseStock stock = stock(warehouseId, sparePartId, 10, 0);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(repository.save(any(RepairMaterialUsage.class))).thenAnswer(invocation -> {
+            RepairMaterialUsage usage = invocation.getArgument(0);
+            usage.setId(UUID.randomUUID());
+            return usage;
+        });
+
+        RepairMaterialUsageDto result = service.register(
+                workOrderId,
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 2, null)
+        );
+
+        assertThat(result.costWarning()).contains("unit cost");
+        verifyNoInteractions(actualCostRepository, costCategoryRepository);
     }
 
     @Test

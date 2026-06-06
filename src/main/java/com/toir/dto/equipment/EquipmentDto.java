@@ -11,6 +11,7 @@ import com.toir.enums.WarehouseEquipmentStatus;
 
 import java.time.Period;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public record EquipmentDto(
@@ -52,7 +53,8 @@ public record EquipmentDto(
         UUID warrantyAttachmentId,
         LocalDate warrantyStartDate,
         LocalDate warrantyEndDate,
-        WarrantyAttachmentRef warrantyAttachment
+        WarrantyAttachmentRef warrantyAttachment,
+        PassportCompletenessRef passportCompleteness
 ) {
     public EquipmentDto(
             UUID id,
@@ -98,7 +100,7 @@ public record EquipmentDto(
                 category, commissionedAt, arrivalDate, warrantyUntil, description, averageOperatingLifeHours,
                 department, location, equipmentType, parent, passport, placement, operationStartDate,
                 expectedLifetimeMonths, expectedLifetimeYears, operatingDuration, expectedEndDate, remainingLifetime,
-                lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment);
+                lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment, null);
     }
 
     public EquipmentDto(
@@ -133,7 +135,7 @@ public record EquipmentDto(
                 departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer, status,
                 category, commissionedAt, null, warrantyUntil, description, averageOperatingLifeHours, department,
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null,
-                LifetimeStatus.UNKNOWN, false, null, null, null, null);
+                LifetimeStatus.UNKNOWN, false, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -177,6 +179,31 @@ public record EquipmentDto(
             Double voltageV,
             Double pressureBar
     ) {}
+
+    public record MissingPassportFieldRef(
+            UUID definitionId,
+            String key,
+            String label,
+            String groupName,
+            int sortOrder,
+            boolean critical
+    ) {}
+
+    public record PassportCompletenessRef(
+            boolean complete,
+            int requiredCount,
+            int filledCount,
+            int missingCriticalCount,
+            int missingWarningCount,
+            List<MissingPassportFieldRef> missingFields,
+            String blockingReason,
+            String fixAction,
+            String fixLink
+    ) {
+        public PassportCompletenessRef {
+            missingFields = missingFields == null ? List.of() : List.copyOf(missingFields);
+        }
+    }
 
     public record WarrantyAttachmentRef(
             UUID id,
@@ -244,6 +271,18 @@ public record EquipmentDto(
                                     PassportRef passport,
                                     PlacementRef placement,
                                     FileAsset warrantyAttachment) {
+        return from(e, department, location, equipmentType, parent, passport, placement, warrantyAttachment, null);
+    }
+
+    public static EquipmentDto from(Equipment e,
+                                    Ref department,
+                                    Ref location,
+                                    Ref equipmentType,
+                                    Ref parent,
+                                    PassportRef passport,
+                                    PlacementRef placement,
+                                    FileAsset warrantyAttachment,
+                                    PassportCompletenessRef passportCompleteness) {
         return new EquipmentDto(
                 e.getId(), e.getCode(), e.getName(), e.getInventoryNumber(), e.getTechnicalNumber(),
                 e.getSerialNumber(), e.getModel(), e.getEquipmentTypeId(), e.getDepartmentId(),
@@ -254,7 +293,8 @@ public record EquipmentDto(
                 e.getOperationStartDate(), e.getExpectedLifetimeMonths(), e.getExpectedLifetimeYears(),
                 operatingDuration(e), expectedEndDate(e), remainingLifetime(e), lifetimeStatus(e),
                 Boolean.TRUE.equals(e.getHasWarranty()), e.getWarrantyAttachmentId(),
-                e.getWarrantyStartDate(), e.getWarrantyEndDate(), warrantyAttachmentRef(warrantyAttachment)
+                e.getWarrantyStartDate(), e.getWarrantyEndDate(), warrantyAttachmentRef(warrantyAttachment),
+                passportCompleteness
         );
     }
 

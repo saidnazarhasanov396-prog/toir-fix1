@@ -4,10 +4,10 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://192.168.1.7:5432/toirdb
-    username: toir-user
-    password: 5oe1z42pNm0D1ohP13Z1
-    driver-class-name: org.postgresql.Driver
+    url: ${TOIR_DB_URL}
+    username: ${TOIR_DB_USERNAME}
+    password: ${TOIR_DB_PASSWORD}
+    driver-class-name: ${TOIR_DB_DRIVER:org.postgresql.Driver}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -35,9 +35,9 @@ springdoc:
 app:
   security:
     jwt:
-      secret: change-me-in-production-use-a-long-random-secret-at-least-32-bytes
-      expiration-minutes: 720
-      issuer: toir-backend
+      secret: ${TOIR_JWT_SECRET}
+      expiration-minutes: ${TOIR_JWT_EXPIRATION_MINUTES:720}
+      issuer: ${TOIR_JWT_ISSUER:toir-backend}
   jackson:
     instant-default-zone: Asia/Tashkent
   cors:
@@ -54,11 +54,11 @@ app:
     dev-url: http://localhost:8080
     prod-url: https://api-toir.tenzorsoft.uz
   bootstrap:
-    create-default-admin: true
-    admin-username: admin
-    admin-password: Root123456
-    admin-email: admin@toir.local
-    admin-full-name: System Administrator
+    create-default-admin: ${TOIR_CREATE_DEFAULT_ADMIN:false}
+    admin-username: ${TOIR_ADMIN_USERNAME}
+    admin-password: ${TOIR_ADMIN_PASSWORD}
+    admin-email: ${TOIR_ADMIN_EMAIL}
+    admin-full-name: ${TOIR_ADMIN_FULL_NAME:System Administrator}
 
 logging:
   level:

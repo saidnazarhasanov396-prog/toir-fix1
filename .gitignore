@@ -10,5 +10,7 @@ target/
 src/main/java/com/toir/Main.java
 uploads/
 
-/docs/
+/docs/*
+!/docs/uat/
+!/docs/uat/**
 /logs/
