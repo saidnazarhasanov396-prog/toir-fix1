@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.dto.workorder.WorkOrderDto;
+import com.toir.dto.workorder.WorkOrderPerformerOptionDto;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.RepairRequestBriefDto;
 import com.toir.entity.maintenance.WorkOrder;
@@ -149,6 +150,24 @@ class WorkOrderControllerContractTest {
     }
 
     @Test
+    void createWorkOrder_acceptsPerformerId() throws Exception {
+        UUID performerId = UUID.randomUUID();
+        WorkOrderDto response = workOrderDtoWithPerformer(UUID.randomUUID(), performerId, "Ivan Petrov");
+        when(service.create(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/work-orders")
+                        .contentType("application/json")
+                        .content(baseCreateRequestJsonWithPerformer(performerId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.performerId").value(performerId.toString()))
+                .andExpect(jsonPath("$.performerName").value("Ivan Petrov"));
+
+        org.mockito.ArgumentCaptor<com.toir.dto.workorder.WorkOrderRequest> captor = forClass(com.toir.dto.workorder.WorkOrderRequest.class);
+        verify(service).create(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().performerId()).isEqualTo(performerId);
+    }
+
+    @Test
     void responseIncludesRepairRequestObject() throws Exception {
         UUID workOrderId = UUID.randomUUID();
         WorkOrderDto response = workOrderDto(workOrderId, repairRequestBrief(), defectBrief());
@@ -187,6 +206,40 @@ class WorkOrderControllerContractTest {
                 .andExpect(jsonPath("$.equipmentNodeCode").value("BRG-01"))
                 .andExpect(jsonPath("$.equipmentNodeName").value("Bearing"))
                 .andExpect(jsonPath("$.equipmentNodeType").value("COMPONENT"));
+    }
+
+    @Test
+    void getWorkOrder_returnsPerformerDetails() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        UUID performerId = UUID.randomUUID();
+        WorkOrderDto response = workOrderDtoWithPerformer(workOrderId, performerId, "Ivan Petrov");
+        when(service.findById(workOrderId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/work-orders/{id}", workOrderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.performerId").value(performerId.toString()))
+                .andExpect(jsonPath("$.performerName").value("Ivan Petrov"));
+    }
+
+    @Test
+    void performerOptionsReturnsDepartmentFilteredPerformers() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID performerId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
+        when(service.performerOptions(departmentId)).thenReturn(List.of(
+                new WorkOrderPerformerOptionDto(performerId, "Ivan Petrov", departmentId, "Maintenance", "MECHANIC")
+        ));
+
+        mockMvc.perform(get("/api/v1/work-orders/options/performers")
+                        .param("departmentId", departmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(performerId.toString()))
+                .andExpect(jsonPath("$[0].name").value("Ivan Petrov"))
+                .andExpect(jsonPath("$[0].departmentId").value(departmentId.toString()))
+                .andExpect(jsonPath("$[0].departmentName").value("Maintenance"))
+                .andExpect(jsonPath("$[0].role").value("MECHANIC"));
+
+        verify(service).performerOptions(departmentId);
     }
 
     @Test
@@ -551,11 +604,25 @@ class WorkOrderControllerContractTest {
         return baseCreateRequestJson(WorkOrderType.PLANNED, repairRequestId, defectId, equipmentNodeId);
     }
 
+    private String baseCreateRequestJsonWithPerformer(UUID performerId) {
+        return baseCreateRequestJson(WorkOrderType.PLANNED, null, null, null, performerId);
+    }
+
     private String baseCreateRequestJson(
             WorkOrderType type,
             UUID repairRequestId,
             UUID defectId,
             UUID equipmentNodeId
+    ) {
+        return baseCreateRequestJson(type, repairRequestId, defectId, equipmentNodeId, null);
+    }
+
+    private String baseCreateRequestJson(
+            WorkOrderType type,
+            UUID repairRequestId,
+            UUID defectId,
+            UUID equipmentNodeId,
+            UUID performerId
     ) {
         String repairRequestPart = repairRequestId == null
                 ? ""
@@ -572,6 +639,11 @@ class WorkOrderControllerContractTest {
                 : """
                   "equipmentNodeId": "%s",
                 """.formatted(equipmentNodeId);
+        String performerPart = performerId == null
+                ? ""
+                : """
+                  "performerId": "%s",
+                """.formatted(performerId);
         return """
                 {
                   "number": "WO-2026-1001",
@@ -579,6 +651,7 @@ class WorkOrderControllerContractTest {
                   "equipmentId": "%s",
                 %s
                   "departmentId": "%s",
+                %s
                 %s
                 %s
                   "type": "%s",
@@ -593,6 +666,7 @@ class WorkOrderControllerContractTest {
                 UUID.randomUUID(),
                 repairRequestPart,
                 defectPart,
+                performerPart,
                 type.name(),
                 UUID.randomUUID()
         );
@@ -709,6 +783,45 @@ class WorkOrderControllerContractTest {
                 null,
                 null,
                 null,
+                WorkOrderStatus.PLANNED,
+                WorkOrderType.PLANNED,
+                WorkType.REPAIR,
+                PriorityLevel.MEDIUM,
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                null,
+                null,
+                "summary",
+                null,
+                null,
+                UUID.randomUUID(),
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                0,
+                0
+        );
+    }
+
+    private WorkOrderDto workOrderDtoWithPerformer(UUID id, UUID performerId, String performerName) {
+        return new WorkOrderDto(
+                id,
+                "WO-2026-1001",
+                "Planned repair",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "Pump #1",
+                "Maintenance",
+                null,
+                null,
+                null,
+                null,
+                performerId,
+                performerName,
                 WorkOrderStatus.PLANNED,
                 WorkOrderType.PLANNED,
                 WorkType.REPAIR,

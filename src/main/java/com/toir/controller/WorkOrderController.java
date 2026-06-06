@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
+import com.toir.dto.workorder.WorkOrderPerformerOptionDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderStatsResponse;
 import com.toir.entity.maintenance.WorkOrder;
@@ -14,6 +15,7 @@ import com.toir.security.ScopeAccessService;
 import com.toir.service.WorkOrderService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -56,6 +58,13 @@ public class WorkOrderController {
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) String search) {
         return ResponseEntity.ok(service.getStats(status, scopedDepartment(departmentId), equipmentId, search));
+    }
+
+    @GetMapping("/options/performers")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_READ') or hasAuthority('WORK_ORDER_CREATE')")
+    public ResponseEntity<List<WorkOrderPerformerOptionDto>> performerOptions(
+            @RequestParam(required = false) UUID departmentId) {
+        return ResponseEntity.ok(service.performerOptions(scopedDepartment(departmentId)));
     }
 
     @GetMapping("/mobile-feed")
