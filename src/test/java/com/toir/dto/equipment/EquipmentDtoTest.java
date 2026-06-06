@@ -25,10 +25,12 @@ class EquipmentDtoTest {
     void fromIncludesAverageOperatingLifeHours() {
         Equipment equipment = new Equipment();
         equipment.setAverageOperatingLifeHours(10_000L);
+        equipment.setExpectedLifetimeHours(18_000L);
 
         EquipmentDto dto = EquipmentDto.from(equipment);
 
         assertThat(dto.averageOperatingLifeHours()).isEqualTo(10_000L);
+        assertThat(dto.expectedLifetimeHours()).isEqualTo(18_000L);
     }
 
     @Test

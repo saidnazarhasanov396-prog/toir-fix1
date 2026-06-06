@@ -1125,6 +1125,22 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void createPersistsExpectedLifetimeHours() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequestWithExpectedLifetimeHours("INV-LIFE-HOURS-1", departmentId, 18_000L);
+        stubCreateFlow("INV-LIFE-HOURS-1");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+
+        EquipmentDto created = service.create(request);
+
+        assertThat(created.expectedLifetimeHours()).isEqualTo(18_000L);
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getExpectedLifetimeHours()).isEqualTo(18_000L);
+    }
+
+    @Test
     void createWithRequiredDynamicAttributeAndAttributesOmittedReturnsBadRequest() {
         UUID departmentId = UUID.randomUUID();
         EquipmentCreateRequest request = createRequest(null, "INV-REQ-OMITTED", departmentId, null);
@@ -1719,6 +1735,25 @@ class EquipmentServiceTest {
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
         assertThat(entityCaptor.getValue().getAverageOperatingLifeHours()).isEqualTo(12_000L);
+    }
+
+    @Test
+    void updateChangesExpectedLifetimeHoursWhenProvided() {
+        UUID id = UUID.randomUUID();
+        Equipment existing = equipment("EQ-LIFE-HOURS-UPDATE");
+        existing.setId(id);
+        existing.setExpectedLifetimeHours(8_000L);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+        EquipmentUpdateRequest request = updateRequestWithExpectedLifetimeHours(12_000L);
+
+        EquipmentDto updated = service.update(id, request);
+
+        assertThat(updated.expectedLifetimeHours()).isEqualTo(12_000L);
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getExpectedLifetimeHours()).isEqualTo(12_000L);
     }
 
     @Test
@@ -2640,6 +2675,47 @@ class EquipmentServiceTest {
         );
     }
 
+    private EquipmentCreateRequest createRequestWithExpectedLifetimeHours(
+            String inventoryNumber,
+            UUID departmentId,
+            Long expectedLifetimeHours
+    ) {
+        return new EquipmentCreateRequest(
+                null,
+                "Compressor",
+                inventoryNumber,
+                "TN-1",
+                "SN-1",
+                "Model X",
+                UUID.randomUUID(),
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "ACME",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                "test",
+                10_000L,
+                null,
+                null,
+                null,
+                expectedLifetimeHours,
+                null,
+                null,
+                null
+        );
+    }
+
     private String stubCreateFlow(String inventoryNumber) {
         int year = Year.now().getValue();
         String expectedCode = "EQ-" + year + "-0020";
@@ -2777,6 +2853,42 @@ class EquipmentServiceTest {
                 null,
                 null,
                 manualAttributes
+        );
+    }
+
+    private EquipmentUpdateRequest updateRequestWithExpectedLifetimeHours(Long expectedLifetimeHours) {
+        return new EquipmentUpdateRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                expectedLifetimeHours,
+                null,
+                null,
+                null
         );
     }
 
