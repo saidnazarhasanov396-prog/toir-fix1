@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
+import com.toir.dto.maintenanceplanning.MaintenanceDueStructuredExplanationDto;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
@@ -148,7 +149,8 @@ public class MaintenanceDueCalculationService {
         CombinedSignal combined = combine(configured, effectiveTriggerPolicy);
         return dto(equipmentId, regulationId, ruleId, combined.status(), isActive(calendarSignal), isActive(meterSignal),
                 lastPerformedAt, calendarSignal.nextDueAt(), meterType, meterSignal.currentValue(),
-                meterSignal.anchorValue(), meterInterval, meterSignal.remaining(), combined.explanation());
+                meterSignal.anchorValue(), meterInterval, meterSignal.remaining(), combined.explanation(),
+                periodicityUnit, periodicityValue, toleranceDays, effectiveTriggerPolicy, calendarSignal.baseDate());
     }
 
     private TriggerSignal calendarSignal(UUID equipmentId,
@@ -172,7 +174,7 @@ public class MaintenanceDueCalculationService {
         Instant base = calendarBase.base();
         if (base == null) {
             return TriggerSignal.configured(MaintenanceDueStatus.NOT_DUE, null, null, null,
-                    "No calendar anchor date");
+                    "No calendar anchor date", null, base);
         }
         Instant nextDue = addPeriod(base, unit, value);
         if (isDateBased(unit)) {
@@ -182,19 +184,19 @@ public class MaintenanceDueCalculationService {
         Instant now = clock.instant();
         if (!now.isBefore(nextDue.plus(Math.max(0, toleranceDays == null ? 0 : toleranceDays), ChronoUnit.DAYS))) {
             return TriggerSignal.configured(MaintenanceDueStatus.OVERDUE, nextDue, null, null,
-                    "Calendar trigger overdue" + calendarBase.explanationSuffix());
+                    "Calendar trigger overdue" + calendarBase.explanationSuffix(), null, base);
         }
         if (!now.isBefore(nextDue)) {
             return TriggerSignal.configured(MaintenanceDueStatus.DUE, nextDue, null, null,
-                    "Calendar trigger due" + calendarBase.explanationSuffix());
+                    "Calendar trigger due" + calendarBase.explanationSuffix(), null, base);
         }
         long upcomingDays = Math.max(1, leadTimeDays == null ? toleranceDays == null ? 0 : toleranceDays : leadTimeDays);
         if (!now.isBefore(nextDue.minus(upcomingDays, ChronoUnit.DAYS))) {
             return TriggerSignal.configured(MaintenanceDueStatus.UPCOMING, nextDue, null, null,
-                    "Calendar trigger upcoming" + calendarBase.explanationSuffix());
+                    "Calendar trigger upcoming" + calendarBase.explanationSuffix(), null, base);
         }
         return TriggerSignal.configured(MaintenanceDueStatus.NOT_DUE, nextDue, null, null,
-                "Calendar trigger not due" + calendarBase.explanationSuffix());
+                "Calendar trigger not due" + calendarBase.explanationSuffix(), null, base);
     }
 
     private CalendarBase calendarBase(UUID equipmentId,
@@ -330,20 +332,20 @@ public class MaintenanceDueCalculationService {
         LocalDate dueDate = nextDue.atZone(clockZone()).toLocalDate();
         if (dueDate.isBefore(today)) {
             return TriggerSignal.configured(MaintenanceDueStatus.OVERDUE, nextDue, null, null,
-                    "Calendar trigger overdue" + calendarBase.explanationSuffix());
+                    "Calendar trigger overdue" + calendarBase.explanationSuffix(), null, calendarBase.base());
         }
         if (dueDate.isEqual(today)) {
             return TriggerSignal.configured(MaintenanceDueStatus.DUE, nextDue, null, null,
-                    "Calendar trigger due" + calendarBase.explanationSuffix());
+                    "Calendar trigger due" + calendarBase.explanationSuffix(), null, calendarBase.base());
         }
         long daysUntil = ChronoUnit.DAYS.between(today, dueDate);
         long upcomingDays = Math.max(0, leadTimeDays == null ? 0 : leadTimeDays);
         if (daysUntil <= upcomingDays) {
             return TriggerSignal.configured(MaintenanceDueStatus.UPCOMING, nextDue, null, null,
-                    "Calendar trigger upcoming" + calendarBase.explanationSuffix());
+                    "Calendar trigger upcoming" + calendarBase.explanationSuffix(), null, calendarBase.base());
         }
         return TriggerSignal.configured(MaintenanceDueStatus.NOT_DUE, nextDue, null, null,
-                "Calendar trigger not due" + calendarBase.explanationSuffix());
+                "Calendar trigger not due" + calendarBase.explanationSuffix(), null, calendarBase.base());
     }
 
     private boolean isDateBased(PeriodicityUnit unit) {
@@ -455,6 +457,30 @@ public class MaintenanceDueCalculationService {
                                              Double interval,
                                              Double remaining,
                                              String explanation) {
+        return dto(equipmentId, regulationId, ruleId, status, dueByCalendar, dueByMeter, lastPerformedAt, nextDueAt,
+                meterType, currentValue, anchorValue, interval, remaining, explanation, null, 0, 0,
+                MaintenanceTriggerPolicy.ANY, null);
+    }
+
+    private MaintenanceDueCalculationDto dto(UUID equipmentId,
+                                             UUID regulationId,
+                                             UUID ruleId,
+                                             MaintenanceDueStatus status,
+                                             boolean dueByCalendar,
+                                             boolean dueByMeter,
+                                             Instant lastPerformedAt,
+                                             Instant nextDueAt,
+                                             MeterType meterType,
+                                             Double currentValue,
+                                             Double anchorValue,
+                                             Double interval,
+                                             Double remaining,
+                                             String explanation,
+                                             PeriodicityUnit periodicityUnit,
+                                             int periodicityValue,
+                                             Integer toleranceDays,
+                                             MaintenanceTriggerPolicy triggerPolicy,
+                                             Instant calendarBaseDate) {
         Double nextMeterDueValue = null;
         if (currentValue != null && remaining != null) {
             nextMeterDueValue = currentValue + remaining;
@@ -479,8 +505,98 @@ public class MaintenanceDueCalculationService {
                 nextMeterDueValue,
                 remaining,
                 remaining,
-                explanation
+                explanation,
+                structuredExplanation(equipmentId, status, lastPerformedAt, nextDueAt, meterType, currentValue,
+                        interval, remaining, explanation, periodicityUnit, periodicityValue, toleranceDays,
+                        triggerPolicy, calendarBaseDate)
         );
+    }
+
+    private MaintenanceDueStructuredExplanationDto structuredExplanation(
+            UUID equipmentId,
+            MaintenanceDueStatus status,
+            Instant lastPerformedAt,
+            Instant nextDueAt,
+            MeterType meterType,
+            Double currentValue,
+            Double interval,
+            Double remaining,
+            String explanation,
+            PeriodicityUnit periodicityUnit,
+            int periodicityValue,
+            Integer toleranceDays,
+            MaintenanceTriggerPolicy triggerPolicy,
+            Instant calendarBaseDate
+    ) {
+        String blockingCode = null;
+        String blockingField = null;
+        String fixLink = null;
+        if (status == MaintenanceDueStatus.BLOCKED && meterType != null
+                && explanation != null && explanation.toLowerCase(java.util.Locale.ROOT).contains("meter")) {
+            blockingCode = "MISSING_ACTIVE_METER";
+            blockingField = meterType.name();
+            fixLink = "/equipment/%s/meters".formatted(equipmentId);
+        } else if (status == MaintenanceDueStatus.BLOCKED
+                && explanation != null && explanation.toLowerCase(java.util.Locale.ROOT).contains("anchor")) {
+            blockingCode = "MISSING_COMPLETION_ANCHOR";
+            blockingField = "completionAnchor";
+            fixLink = "/equipment/%s/maintenance".formatted(equipmentId);
+        }
+        return new MaintenanceDueStructuredExplanationDto(
+                baseSource(lastPerformedAt, calendarBaseDate, explanation),
+                calendarBaseDate == null ? lastPerformedAt : calendarBaseDate,
+                lastPerformedAt,
+                meterType,
+                currentValue,
+                interval,
+                remaining,
+                intervalDays(periodicityUnit, periodicityValue),
+                intervalMonths(periodicityUnit, periodicityValue),
+                Math.max(0, toleranceDays == null ? 0 : toleranceDays),
+                triggerPolicy,
+                explanation,
+                blockingCode,
+                blockingField,
+                fixLink
+        );
+    }
+
+    private String baseSource(Instant lastPerformedAt, Instant calendarBaseDate, String explanation) {
+        if (lastPerformedAt != null) {
+            return "COMPLETION_ANCHOR";
+        }
+        if (calendarBaseDate != null && explanation != null
+                && explanation.toLowerCase(java.util.Locale.ROOT).contains("operation start")) {
+            return "OPERATION_START";
+        }
+        if (calendarBaseDate != null && explanation != null
+                && explanation.toLowerCase(java.util.Locale.ROOT).contains("regulation created")) {
+            return "REGULATION_CREATED";
+        }
+        return calendarBaseDate == null ? null : "CALENDAR_BASE";
+    }
+
+    private Integer intervalDays(PeriodicityUnit unit, int value) {
+        if (unit == null || value <= 0) {
+            return null;
+        }
+        return switch (unit) {
+            case DAY -> value;
+            case WEEK -> value * 7;
+            default -> null;
+        };
+    }
+
+    private Integer intervalMonths(PeriodicityUnit unit, int value) {
+        if (unit == null || value <= 0) {
+            return null;
+        }
+        return switch (unit) {
+            case MONTH -> value;
+            case QUARTER -> value * 3;
+            case YEAR -> value * 12;
+            default -> null;
+        };
     }
 
     private record TriggerSignal(
@@ -490,10 +606,11 @@ public class MaintenanceDueCalculationService {
             Double currentValue,
             Double anchorValue,
             Double remaining,
-            String explanation
+            String explanation,
+            Instant baseDate
     ) {
         static TriggerSignal notConfigured() {
-            return new TriggerSignal(false, MaintenanceDueStatus.NOT_DUE, null, null, null, null, null);
+            return new TriggerSignal(false, MaintenanceDueStatus.NOT_DUE, null, null, null, null, null, null);
         }
 
         static TriggerSignal configured(MaintenanceDueStatus status, Instant nextDueAt, Double currentValue,
@@ -503,7 +620,12 @@ public class MaintenanceDueCalculationService {
 
         static TriggerSignal configured(MaintenanceDueStatus status, Instant nextDueAt, Double currentValue,
                                         Double anchorValue, String explanation, Double remaining) {
-            return new TriggerSignal(true, status, nextDueAt, currentValue, anchorValue, remaining, explanation);
+            return configured(status, nextDueAt, currentValue, anchorValue, explanation, remaining, null);
+        }
+
+        static TriggerSignal configured(MaintenanceDueStatus status, Instant nextDueAt, Double currentValue,
+                                        Double anchorValue, String explanation, Double remaining, Instant baseDate) {
+            return new TriggerSignal(true, status, nextDueAt, currentValue, anchorValue, remaining, explanation, baseDate);
         }
     }
 

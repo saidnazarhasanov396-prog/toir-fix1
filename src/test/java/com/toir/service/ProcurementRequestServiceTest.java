@@ -3,16 +3,22 @@ package com.toir.service;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.equipment.ProcurementRequestLine;
+import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.ActualCostSourceType;
+import com.toir.enums.ActualCostStatus;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
+import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,6 +66,12 @@ class ProcurementRequestServiceTest {
     @Mock
     LowStockRecommendationService lowStockRecommendationService;
 
+    @Mock
+    ActualCostRepository actualCostRepository;
+
+    @Mock
+    CostCategoryRepository costCategoryRepository;
+
     ProcurementRequestService service;
 
     @BeforeEach
@@ -72,7 +84,9 @@ class ProcurementRequestServiceTest {
                 auditBuilderService,
                 warehouseRepository,
                 scopeAccessService,
-                lowStockRecommendationService
+                lowStockRecommendationService,
+                actualCostRepository,
+                costCategoryRepository
         );
     }
 
@@ -165,6 +179,45 @@ class ProcurementRequestServiceTest {
         assertThat(movementCaptor.getAllValues())
                 .extracting(StockMovement::getSparePartId)
                 .containsExactly(firstSparePartId, secondSparePartId);
+    }
+
+    @Test
+    void receivingLineWithUnitPriceCreatesSourceLinkedPendingActualCost() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID categoryId = UUID.randomUUID();
+        ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED,
+                List.of(line(sparePartId, 2, 11.0)));
+        CostCategory category = new CostCategory();
+        category.setId(categoryId);
+        category.setCode("MATERIALS");
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock(warehouseId, sparePartId, 1)));
+        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS")).thenReturn(Optional.of(category));
+        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.markReceived(requestId);
+
+        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
+        verify(actualCostRepository).save(costCaptor.capture());
+        ActualCost cost = costCaptor.getValue();
+        assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.PROCUREMENT_RECEIPT);
+        assertThat(cost.getSourceId()).isNotNull();
+        assertThat(cost.getCostCategoryId()).isEqualTo(categoryId);
+        assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
+        assertThat(cost.getAmount()).isEqualTo(22.0);
+        assertThat(cost.getNotes()).contains(requestId.toString());
     }
 
     @Test

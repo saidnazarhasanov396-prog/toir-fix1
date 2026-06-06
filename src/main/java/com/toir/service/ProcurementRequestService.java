@@ -6,19 +6,25 @@ import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.equipment.ProcurementRequestLine;
+import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.ActualCostSourceType;
+import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
+import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +49,8 @@ public class ProcurementRequestService {
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
     private final LowStockRecommendationService lowStockRecommendationService;
+    private final ActualCostRepository actualCostRepository;
+    private final CostCategoryRepository costCategoryRepository;
 
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId) {
@@ -301,9 +309,37 @@ public class ProcurementRequestService {
                     .orElseGet(() -> createEmptyStock(warehouseId, line.getSparePartId()));
             stock.setQuantity(stock.getQuantity() + line.getQuantity());
             stockRepository.save(stock);
-            stockMovementRepository.save(receiptMovement(request, line));
+            StockMovement movement = stockMovementRepository.save(receiptMovement(request, line));
+            syncProcurementReceiptActualCost(request, line, movement);
             lowStockRecommendationService.evaluateStockSafely(stock);
         }
+    }
+
+    private void syncProcurementReceiptActualCost(ProcurementRequest request,
+                                                 ProcurementRequestLine line,
+                                                 StockMovement movement) {
+        if (line.getUnitPrice() == null || line.getUnitPrice() <= 0 || line.getQuantity() <= 0
+                || movement == null || movement.getId() == null) {
+            return;
+        }
+        Optional<CostCategory> category = costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS");
+        if (category.isEmpty()) {
+            return;
+        }
+        ActualCost cost = actualCostRepository
+                .findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                        ActualCostSourceType.PROCUREMENT_RECEIPT,
+                        movement.getId()
+                )
+                .orElseGet(ActualCost::new);
+        cost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
+        cost.setSourceId(movement.getId());
+        cost.setCostCategoryId(category.get().getId());
+        cost.setAmount(line.getQuantity() * line.getUnitPrice());
+        cost.setStatus(ActualCostStatus.PENDING);
+        cost.setCostDate(movement.getOccurredAt() == null ? Instant.now() : movement.getOccurredAt());
+        cost.setNotes("Generated from procurement receipt %s line %s".formatted(request.getId(), line.getId()));
+        actualCostRepository.save(cost);
     }
 
     private WarehouseStock createEmptyStock(UUID warehouseId, UUID sparePartId) {

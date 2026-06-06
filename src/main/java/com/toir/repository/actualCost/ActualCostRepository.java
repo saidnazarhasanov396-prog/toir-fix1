@@ -1,6 +1,7 @@
 package com.toir.repository.actualCost;
 
 import com.toir.entity.projects.ActualCost;
+import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
 import java.util.Collection;
 import java.util.List;
@@ -53,6 +54,11 @@ public interface ActualCostRepository extends JpaRepository<ActualCost, UUID> {
             )
             """, nativeQuery = true)
     boolean existsByContractorWorkIdAndIsDeletedFalse(@Param("contractorWorkId") UUID contractorWorkId);
+
+    Optional<ActualCost> findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+            ActualCostSourceType sourceType,
+            UUID sourceId
+    );
 
     @Query(value = """
             SELECT ac.*

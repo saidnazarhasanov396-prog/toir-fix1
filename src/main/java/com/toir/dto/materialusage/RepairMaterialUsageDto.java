@@ -26,7 +26,8 @@ public record RepairMaterialUsageDto(
         UUID issuedById,
         String issuedByName,
         UUID stockMovementId,
-        String notes
+        String notes,
+        String costWarning
 ) {
     public RepairMaterialUsageDto(UUID id,
                                   UUID workOrderId,
@@ -35,7 +36,32 @@ public record RepairMaterialUsageDto(
                                   double quantity,
                                   Double unitCost) {
         this(id, workOrderId, null, null, warehouseId, null, sparePartId, null, null, null,
-                quantity, unitCost, totalCost(quantity, unitCost), null, null, null, null, null);
+                quantity, unitCost, totalCost(quantity, unitCost), null, null, null, null, null, null);
+    }
+
+    public RepairMaterialUsageDto(
+            UUID id,
+            UUID workOrderId,
+            String workOrderNumber,
+            String workOrderTitle,
+            @NotNull UUID warehouseId,
+            String warehouseName,
+            @NotNull UUID sparePartId,
+            String sparePartName,
+            String sparePartCode,
+            InventoryItemKind kind,
+            @Positive double quantity,
+            Double unitCost,
+            Double totalCost,
+            Instant issuedAt,
+            UUID issuedById,
+            String issuedByName,
+            UUID stockMovementId,
+            String notes
+    ) {
+        this(id, workOrderId, workOrderNumber, workOrderTitle, warehouseId, warehouseName, sparePartId,
+                sparePartName, sparePartCode, kind, quantity, unitCost, totalCost, issuedAt, issuedById,
+                issuedByName, stockMovementId, notes, null);
     }
 
     public static RepairMaterialUsageDto from(RepairMaterialUsage u) {
@@ -57,7 +83,8 @@ public record RepairMaterialUsageDto(
                 u.getIssuedById(),
                 null,
                 u.getStockMovementId(),
-                u.getNotes()
+                u.getNotes(),
+                costWarning(u.getUnitCost())
         );
     }
 
@@ -87,11 +114,16 @@ public record RepairMaterialUsageDto(
                 u.getIssuedById(),
                 issuedByName,
                 u.getStockMovementId(),
-                u.getNotes()
+                u.getNotes(),
+                costWarning(u.getUnitCost())
         );
     }
 
     private static Double totalCost(double quantity, Double unitCost) {
         return unitCost == null ? null : quantity * unitCost;
+    }
+
+    private static String costWarning(Double unitCost) {
+        return unitCost == null || unitCost <= 0 ? "Actual cost was not generated because unit cost is unknown." : null;
     }
 }

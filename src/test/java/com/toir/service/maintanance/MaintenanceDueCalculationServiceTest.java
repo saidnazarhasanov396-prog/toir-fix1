@@ -97,6 +97,11 @@ class MaintenanceDueCalculationServiceTest {
 
         assertThat(result.status()).isEqualTo(MaintenanceDueStatus.BLOCKED);
         assertThat(result.explanation()).contains("meter");
+        assertThat(result.structuredExplanation()).isNotNull();
+        assertThat(result.structuredExplanation().blockingCode()).isEqualTo("MISSING_ACTIVE_METER");
+        assertThat(result.structuredExplanation().blockingField()).isEqualTo("ENGINE_HOURS");
+        assertThat(result.structuredExplanation().fixLink()).isEqualTo("/equipment/%s/meters".formatted(equipmentId));
+        assertThat(result.structuredExplanation().reasonText()).contains("Required active meter");
     }
 
     @Test
@@ -130,6 +135,14 @@ class MaintenanceDueCalculationServiceTest {
         assertThat(result.status()).isEqualTo(MaintenanceDueStatus.DUE);
         assertThat(result.meterRemaining()).isZero();
         assertThat(result.meterCurrentValue()).isEqualTo(250.0);
+        assertThat(result.explanation()).contains("Meter trigger due");
+        assertThat(result.structuredExplanation().baseSource()).isEqualTo("COMPLETION_ANCHOR");
+        assertThat(result.structuredExplanation().lastCompletionDate()).isEqualTo(anchor.getPerformedAt());
+        assertThat(result.structuredExplanation().meterType()).isEqualTo(MeterType.ENGINE_HOURS);
+        assertThat(result.structuredExplanation().currentMeterValue()).isEqualTo(250.0);
+        assertThat(result.structuredExplanation().intervalMeterValue()).isEqualTo(100.0);
+        assertThat(result.structuredExplanation().remainingMeterValue()).isZero();
+        assertThat(result.structuredExplanation().triggerPolicy()).isEqualTo(MaintenanceTriggerPolicy.ANY);
     }
 
     @Test
@@ -289,6 +302,11 @@ class MaintenanceDueCalculationServiceTest {
         assertThat(result.status()).isEqualTo(MaintenanceDueStatus.OVERDUE);
         assertThat(result.dueByCalendar()).isTrue();
         assertThat(result.nextDueAt()).isEqualTo(Instant.parse("2026-06-01T00:00:00Z"));
+        assertThat(result.structuredExplanation().baseSource()).isEqualTo("COMPLETION_ANCHOR");
+        assertThat(result.structuredExplanation().baseDate()).isEqualTo(anchor.getPerformedAt());
+        assertThat(result.structuredExplanation().intervalDays()).isEqualTo(1);
+        assertThat(result.structuredExplanation().toleranceDays()).isZero();
+        assertThat(result.structuredExplanation().reasonText()).contains("Calendar trigger overdue");
     }
 
     @Test

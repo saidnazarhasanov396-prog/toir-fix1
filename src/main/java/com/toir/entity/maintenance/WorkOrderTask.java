@@ -40,6 +40,12 @@ public class WorkOrderTask extends BaseEntity {
     @Column(name = "actual_hours")
     private Double actualHours;
 
+    @Column(name = "source_template_id")
+    private UUID sourceTemplateId;
+
+    @Column(name = "source_operation_id")
+    private UUID sourceOperationId;
+
     @Column(name = "started_at")
     private Instant startedAt;
 
