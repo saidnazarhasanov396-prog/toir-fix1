@@ -4,9 +4,9 @@ server:
 
 spring:
   datasource:
-    url: ${TOIR_DB_URL}
-    username: ${TOIR_DB_USERNAME}
-    password: ${TOIR_DB_PASSWORD}
+    url: ${TOIR_DB_URL:jdbc:postgresql://192.168.1.7:5432/toirdb}
+    username: ${TOIR_DB_USERNAME:toir-user}
+    password: ${TOIR_DB_PASSWORD:5oe1z42pNm0D1ohP13Z1}
     driver-class-name: ${TOIR_DB_DRIVER:org.postgresql.Driver}
   jpa:
     hibernate:
