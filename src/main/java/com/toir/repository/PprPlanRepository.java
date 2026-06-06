@@ -62,6 +62,16 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             WHERE p.is_deleted = false
               AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
               AND (
+                    cast(:equipmentId as uuid) IS NULL
+                    OR EXISTS (
+                        SELECT 1
+                        FROM ppr_tasks t
+                        WHERE t.plan_id = p.id
+                          AND t.is_deleted = false
+                          AND t.equipment_id = cast(:equipmentId as uuid)
+                    )
+              )
+              AND (
                     (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
                     OR EXISTS (
                         SELECT 1
@@ -79,6 +89,16 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             WHERE p.is_deleted = false
               AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
               AND (
+                    cast(:equipmentId as uuid) IS NULL
+                    OR EXISTS (
+                        SELECT 1
+                        FROM ppr_tasks t
+                        WHERE t.plan_id = p.id
+                          AND t.is_deleted = false
+                          AND t.equipment_id = cast(:equipmentId as uuid)
+                    )
+              )
+              AND (
                     (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
                     OR EXISTS (
                         SELECT 1
@@ -95,14 +115,35 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             @Param("month") Integer month,
             @Param("day") Integer day,
             @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId,
             Pageable pageable
     );
+
+    default Page<PprPlan> searchPlans(
+            Integer year,
+            Integer month,
+            Integer day,
+            UUID departmentId,
+            Pageable pageable
+    ) {
+        return searchPlans(year, month, day, departmentId, (UUID) null, pageable);
+    }
 
     @Query(value = """
             SELECT p.*
             FROM ppr_plans p
             WHERE p.is_deleted = false
               AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
+              AND (
+                    cast(:equipmentId as uuid) IS NULL
+                    OR EXISTS (
+                        SELECT 1
+                        FROM ppr_tasks t
+                        WHERE t.plan_id = p.id
+                          AND t.is_deleted = false
+                          AND t.equipment_id = cast(:equipmentId as uuid)
+                    )
+              )
               AND (
                     (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
                     OR EXISTS (
@@ -120,8 +161,18 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             @Param("year") Integer year,
             @Param("month") Integer month,
             @Param("day") Integer day,
-            @Param("departmentId") UUID departmentId
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId
     );
+
+    default List<PprPlan> searchPlans(
+            Integer year,
+            Integer month,
+            Integer day,
+            UUID departmentId
+    ) {
+        return searchPlans(year, month, day, departmentId, (UUID) null);
+    }
 
     @Query(value = """
             select
