@@ -154,8 +154,19 @@ public record PprPlanDto(
                                   Map<UUID, String> equipmentNames,
                                   Map<UUID, String> equipmentTypeNames,
                                   Map<UUID, String> regulationNames) {
+        return from(p, departmentName, ruleById, equipmentNames, equipmentTypeNames, regulationNames, null);
+    }
+
+    public static PprPlanDto from(PprPlan p,
+                                  String departmentName,
+                                  Map<UUID, EquipmentMaintenanceRule> ruleById,
+                                  Map<UUID, String> equipmentNames,
+                                  Map<UUID, String> equipmentTypeNames,
+                                  Map<UUID, String> regulationNames,
+                                  UUID equipmentId) {
         List<PprTaskDto> tasks = p.getTasks().stream()
                 .filter(task -> !task.isDeleted())
+                .filter(task -> equipmentId == null || equipmentId.equals(task.getEquipmentId()))
                 .map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames))
                 .toList();
         return new PprPlanDto(
@@ -171,6 +182,7 @@ public record PprPlanDto(
                 p.getIntervalHours(),
                 p.getScopeType(),
                 p.getTargets().stream()
+                        .filter(target -> !target.isDeleted())
                         .map(target -> PprPlanTargetDto.from(
                                 target,
                                 target.getTargetType() == PprTargetType.EQUIPMENT

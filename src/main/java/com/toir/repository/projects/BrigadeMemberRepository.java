@@ -31,6 +31,19 @@ public interface BrigadeMemberRepository extends JpaRepository<BrigadeMember, UU
     @Query(value = "SELECT * FROM brigade_members WHERE brigade_id = :brigadeId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<BrigadeMember> findAllByBrigadeIdAndIsDeletedFalse(@Param("brigadeId") UUID brigadeId);
 
+    @Query("""
+            select m
+            from BrigadeMember m
+            join fetch m.brigade b
+            where m.isDeleted = false
+              and m.active = true
+              and b.isDeleted = false
+              and b.active = true
+              and (:departmentId is null or b.departmentId = :departmentId)
+            order by m.updatedAt desc
+            """)
+    List<BrigadeMember> findActivePerformersByDepartment(@Param("departmentId") UUID departmentId);
+
     @Query(value = "SELECT * FROM brigade_members WHERE user_id = :userId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<BrigadeMember> findAllByUserIdAndIsDeletedFalse(@Param("userId") UUID userId);
 

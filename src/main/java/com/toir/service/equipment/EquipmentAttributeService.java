@@ -96,7 +96,9 @@ public class EquipmentAttributeService {
             "warrantyEndDate",
             "warranty_end_date",
             "averageOperatingLifeHours",
-            "average_operating_life_hours"
+            "average_operating_life_hours",
+            "expectedLifetimeHours",
+            "expected_lifetime_hours"
     ).stream().map(EquipmentAttributeService::normalizeReservedKey).collect(Collectors.toUnmodifiableSet());
 
     private final EquipmentAttributeDefinitionRepository definitionRepository;

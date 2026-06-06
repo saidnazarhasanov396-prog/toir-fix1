@@ -21,6 +21,9 @@ import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.Brigade;
+import com.toir.entity.users.BrigadeMember;
+import com.toir.entity.users.User;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.EquipmentNodeType;
@@ -56,9 +59,11 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
+import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.projection.WorkOrderCountProjection;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
@@ -122,6 +127,12 @@ class WorkOrderServiceTest {
 
     @Mock
     DefectRepository defectRepository;
+
+    @Mock
+    BrigadeMemberRepository brigadeMemberRepository;
+
+    @Mock
+    UserRepository userRepository;
 
     @Mock
     WorkExecutionRepository workExecutionRepository;
@@ -401,6 +412,142 @@ class WorkOrderServiceTest {
 
         assertThat(result.equipmentNodeId()).isNull();
         verifyNoInteractions(equipmentNodeRepository);
+    }
+
+    @Test
+    void createWorkOrderWithPerformerIdSavesBrigadeMemberRelation() {
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPerformer(performerId);
+        BrigadeMember performer = brigadeMember(performerId, userId, request.departmentId(), true, true);
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+        when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
+        when(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(Optional.of(user(userId, "Ivan Petrov")));
+
+        WorkOrderDto result = service.create(request);
+
+        ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getPerformer()).isSameAs(performer);
+        assertThat(result.performerId()).isEqualTo(performerId);
+        assertThat(result.performerName()).isEqualTo("Ivan Petrov");
+    }
+
+    @Test
+    void createWorkOrderWithoutPerformerIdStillWorks() {
+        WorkOrderRequest request = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+
+        WorkOrderDto result = service.create(request);
+
+        ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getPerformer()).isNull();
+        assertThat(result.performerId()).isNull();
+        assertThat(result.performerName()).isNull();
+        verify(brigadeMemberRepository, never()).findByIdAndIsDeletedFalse(any());
+    }
+
+    @Test
+    void createWorkOrderWithUnknownPerformerReturns404() {
+        UUID performerId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPerformer(performerId);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(ex.getMessage()).contains("Performer not found");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createWorkOrderWithInactivePerformerReturns400() {
+        UUID performerId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPerformer(performerId);
+        BrigadeMember performer = brigadeMember(performerId, UUID.randomUUID(), request.departmentId(), false, true);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Performer is inactive");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createWorkOrderWithPerformerFromAnotherDepartmentReturns400() {
+        UUID performerId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPerformer(performerId);
+        BrigadeMember performer = brigadeMember(performerId, UUID.randomUUID(), UUID.randomUUID(), true, true);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("selected department");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void findByIdReturnsPerformerIdAndName() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        workOrder.setPerformer(brigadeMember(performerId, userId, workOrder.getDepartmentId(), true, true));
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(Optional.of(user(userId, "Ivan Petrov")));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.findById(workOrderId);
+
+        assertThat(response.performerId()).isEqualTo(performerId);
+        assertThat(response.performerName()).isEqualTo("Ivan Petrov");
+    }
+
+    @Test
+    void performerOptionsReturnsActiveBrigadeMembersByDepartment() {
+        UUID departmentId = UUID.randomUUID();
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        BrigadeMember performer = brigadeMember(performerId, userId, departmentId, true, true);
+        Department department = new Department();
+        department.setId(departmentId);
+        department.setName("Maintenance");
+        when(brigadeMemberRepository.findActivePerformersByDepartment(departmentId)).thenReturn(List.of(performer));
+        when(userRepository.findAllByIdInAndIsDeletedFalse(List.of(userId))).thenReturn(List.of(user(userId, "Ivan Petrov")));
+        when(departmentRepository.findById(departmentId)).thenReturn(Optional.of(department));
+
+        var result = service.performerOptions(departmentId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).id()).isEqualTo(performerId);
+        assertThat(result.get(0).name()).isEqualTo("Ivan Petrov");
+        assertThat(result.get(0).departmentId()).isEqualTo(departmentId);
+        assertThat(result.get(0).departmentName()).isEqualTo("Maintenance");
+        assertThat(result.get(0).role()).isEqualTo("MECHANIC");
     }
 
     @Test
@@ -2357,6 +2504,31 @@ class WorkOrderServiceTest {
         );
     }
 
+    private WorkOrderRequest requestWithPerformer(UUID performerId) {
+        WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        return new WorkOrderRequest(
+                base.number(),
+                base.title(),
+                base.equipmentId(),
+                base.equipmentNodeId(),
+                base.departmentId(),
+                base.repairRequestId(),
+                base.defectId(),
+                base.pprTaskId(),
+                base.contractorId(),
+                performerId,
+                base.type(),
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                base.startPlannedAt(),
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary()
+        );
+    }
+
     private RepairRequest repairRequest(UUID id, RequestStatus status) {
         return repairRequest(id, status, null);
     }
@@ -2402,6 +2574,33 @@ class WorkOrderServiceTest {
         node.setName(name);
         node.setNodeType(EquipmentNodeType.COMPONENT);
         return node;
+    }
+
+    private BrigadeMember brigadeMember(UUID id, UUID userId, UUID departmentId, boolean memberActive, boolean brigadeActive) {
+        Brigade brigade = new Brigade();
+        brigade.setId(UUID.randomUUID());
+        brigade.setCode("BRG-1");
+        brigade.setName("Repair brigade");
+        brigade.setDepartmentId(departmentId);
+        brigade.setActive(brigadeActive);
+
+        BrigadeMember member = new BrigadeMember();
+        member.setId(id);
+        member.setBrigade(brigade);
+        member.setUserId(userId);
+        member.setRoleCode("MECHANIC");
+        member.setActive(memberActive);
+        return member;
+    }
+
+    private User user(UUID id, String fullName) {
+        User user = new User();
+        user.setId(id);
+        user.setUsername("user-" + id.toString().substring(0, 8));
+        user.setEmail(id.toString().substring(0, 8) + "@example.com");
+        user.setFullName(fullName);
+        user.setPasswordHash("hash");
+        return user;
     }
 
     private void mockSuccessfulCreateDependencies(WorkOrderRequest request) {

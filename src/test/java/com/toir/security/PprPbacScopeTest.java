@@ -117,6 +117,27 @@ class PprPbacScopeTest {
     }
 
     @Test
+    void listWithEquipmentFilterStillClampsDepartmentScope() throws Exception {
+        UUID requestedDepartmentId = UUID.randomUUID();
+        UUID currentDepartmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
+        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(currentDepartmentId);
+        when(service.findAllUnpaged(2026, 5, 12, currentDepartmentId, equipmentId))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/ppr-plans")
+                        .param("year", "2026")
+                        .param("month", "5")
+                        .param("day", "12")
+                        .param("departmentId", requestedDepartmentId.toString())
+                        .param("equipmentId", equipmentId.toString()))
+                .andExpect(status().isOk());
+
+        verify(service).findAllUnpaged(2026, 5, 12, currentDepartmentId, equipmentId);
+    }
+
+    @Test
     void statsWithoutCurrentDepartmentIsDeniedForNonAdmin() throws Exception {
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(null);

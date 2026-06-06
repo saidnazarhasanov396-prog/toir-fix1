@@ -84,16 +84,23 @@ public class PprPlanController {
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer day,
             @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID equipmentId,
             @Parameter(description = "Optional page index. Must be provided together with size. Omit both page and size to return all matching plans in the same response wrapper.") @RequestParam(required = false) Integer page,
             @Parameter(description = "Optional page size. Must be provided together with page. Omit both page and size to return all matching plans in the same response wrapper.") @RequestParam(required = false) Integer size) {
         UUID scopedDepartmentId = scopedDepartment(departmentId);
         if (page == null && size == null) {
-            return ResponseEntity.ok(service.findAllUnpaged(year, month, day, scopedDepartmentId));
+            if (equipmentId == null) {
+                return ResponseEntity.ok(service.findAllUnpaged(year, month, day, scopedDepartmentId));
+            }
+            return ResponseEntity.ok(service.findAllUnpaged(year, month, day, scopedDepartmentId, equipmentId));
         }
         if (page == null || size == null) {
             throw RestException.badRequest("Both page and size must be provided for paginated PPR plan list");
         }
-        return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId, page, size));
+        if (equipmentId == null) {
+            return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId, page, size));
+        }
+        return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId, equipmentId, page, size));
     }
 
     @GetMapping("/stats")

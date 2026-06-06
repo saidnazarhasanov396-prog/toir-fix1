@@ -6,6 +6,7 @@ import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.CalibrationRecord;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.MaintenanceBudget;
@@ -16,6 +17,7 @@ import com.toir.enums.ContractorWorkStatus;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceDueStatus;
+import com.toir.enums.MeterType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.OperationalIssueType;
 import com.toir.enums.PprTaskStatus;
@@ -27,6 +29,7 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
@@ -45,6 +48,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class OperationalIssueScannerService {
 
     private static final int LIFETIME_WARNING_MONTHS = 3;
+    private static final double LIFETIME_WARNING_HOURS_RATIO = 0.1;
     private static final int APPROVAL_ESCALATION_DAYS = 3;
 
     private final OperationalIssueService issueService;
@@ -53,6 +57,7 @@ public class OperationalIssueScannerService {
     private final RepairRequestRepository repairRequestRepository;
     private final CalibrationRecordRepository calibrationRecordRepository;
     private final EquipmentRepository equipmentRepository;
+    private final EquipmentMeterRepository equipmentMeterRepository;
     private final MaintenanceDueEventRepository maintenanceDueEventRepository;
     private final ContractorWorkRepository contractorWorkRepository;
     private final MaintenanceBudgetRepository maintenanceBudgetRepository;
@@ -182,6 +187,38 @@ public class OperationalIssueScannerService {
         for (Equipment item : equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
             if (item.getStatus() == EquipmentStatus.DECOMMISSIONED) {
                 issueService.resolveOpen("EquipmentLifetime", item.getId());
+                continue;
+            }
+            Optional<Double> remainingLifetimeHours = remainingLifetimeHours(item);
+            if (remainingLifetimeHours.isPresent()) {
+                double remainingHours = remainingLifetimeHours.get();
+                if (remainingHours <= 0) {
+                    count += open(
+                            OperationalIssueType.EQUIPMENT_LIFETIME_EXPIRED,
+                            NotificationSeverity.CRITICAL,
+                            item.getId(),
+                            effectiveDepartment(item),
+                            "EquipmentLifetime",
+                            item.getId(),
+                            "Equipment lifetime expired: " + item.getCode(),
+                            "Expected lifetime of " + item.getExpectedLifetimeHours()
+                                    + " operating hours has been reached. Remaining lifetime hours: "
+                                    + formatHours(remainingHours) + "."
+                    );
+                } else if (remainingHours <= lifetimeWarningHours(item.getExpectedLifetimeHours())) {
+                    count += open(
+                            OperationalIssueType.EQUIPMENT_LIFETIME_WARNING,
+                            NotificationSeverity.WARNING,
+                            item.getId(),
+                            effectiveDepartment(item),
+                            "EquipmentLifetime",
+                            item.getId(),
+                            "Equipment lifetime expiring soon: " + item.getCode(),
+                            "Remaining lifetime hours: " + formatHours(remainingHours) + "."
+                    );
+                } else {
+                    issueService.resolveOpen("EquipmentLifetime", item.getId());
+                }
                 continue;
             }
             LocalDate expectedEnd = expectedEndDate(item);
@@ -405,6 +442,34 @@ public class OperationalIssueScannerService {
             return equipment.getExpectedLifetimeYears() * 12;
         }
         return null;
+    }
+
+    private Optional<Double> remainingLifetimeHours(Equipment equipment) {
+        Long expectedLifetimeHours = equipment.getExpectedLifetimeHours();
+        if (expectedLifetimeHours == null || expectedLifetimeHours <= 0) {
+            return Optional.empty();
+        }
+        return currentOperatingHours(equipment.getId())
+                .map(currentOperatingHours -> expectedLifetimeHours - currentOperatingHours);
+    }
+
+    private Optional<Double> currentOperatingHours(UUID equipmentId) {
+        if (equipmentId == null) {
+            return Optional.empty();
+        }
+        return equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)
+                .stream()
+                .filter(meter -> meter.getMeterType() == MeterType.ENGINE_HOURS)
+                .map(EquipmentMeter::getCurrentValue)
+                .max(Double::compareTo);
+    }
+
+    private double lifetimeWarningHours(Long expectedLifetimeHours) {
+        return Math.max(1.0, expectedLifetimeHours * LIFETIME_WARNING_HOURS_RATIO);
+    }
+
+    private String formatHours(double hours) {
+        return "%.0f".formatted(hours);
     }
 
     private SourceScope approvalScope(ApprovalRequest request) {

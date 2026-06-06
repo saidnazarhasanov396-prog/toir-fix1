@@ -170,6 +170,16 @@ class EquipmentControllerContractTest {
     }
 
     @Test
+    void createWithZeroExpectedLifetimeHoursReturnsBadRequest() throws Exception {
+        assertCreateExpectedLifetimeHoursValidation(0);
+    }
+
+    @Test
+    void createWithNegativeExpectedLifetimeHoursReturnsBadRequest() throws Exception {
+        assertCreateExpectedLifetimeHoursValidation(-1);
+    }
+
+    @Test
     void createWithWarehouseIdOnlyReturnsCreated() throws Exception {
         UUID id = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
@@ -1077,6 +1087,26 @@ class EquipmentControllerContractTest {
                                 """.formatted(value, equipmentTypeId, departmentId, value)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("averageOperatingLifeHours")));
+    }
+
+    private void assertCreateExpectedLifetimeHoursValidation(long value) throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/equipment")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Compressor A",
+                                  "inventoryNumber": "INV-LIFE-HOURS-%s",
+                                  "equipmentTypeId": "%s",
+                                  "departmentId": "%s",
+                                  "averageOperatingLifeHours": 10000,
+                                  "expectedLifetimeHours": %d
+                                }
+                                """.formatted(value, equipmentTypeId, departmentId, value)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("expectedLifetimeHours")));
     }
 
     private void assertNoResolvedException(MvcResult result) {

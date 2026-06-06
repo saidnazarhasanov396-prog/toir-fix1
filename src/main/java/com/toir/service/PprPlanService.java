@@ -96,8 +96,26 @@ public class PprPlanService {
     }
 
     @Transactional(readOnly = true)
+    public List<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId, UUID equipmentId) {
+        if (equipmentId == null) {
+            return findAll(year, month, day, departmentId);
+        }
+        validateDateFilterParts(year, month, day);
+        return toDtos(planRepository.searchPlans(year, month, day, departmentId, equipmentId), equipmentId);
+    }
+
+    @Transactional(readOnly = true)
     public Page<PprPlanDto> findAllUnpaged(Integer year, Integer month, Integer day, UUID departmentId) {
         List<PprPlanDto> plans = findAll(year, month, day, departmentId);
+        return PaginationUtils.page(plans, 0, PaginationUtils.pageSizeFromList(0, plans.size()), plans.size());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprPlanDto> findAllUnpaged(Integer year, Integer month, Integer day, UUID departmentId, UUID equipmentId) {
+        if (equipmentId == null) {
+            return findAllUnpaged(year, month, day, departmentId);
+        }
+        List<PprPlanDto> plans = findAll(year, month, day, departmentId, equipmentId);
         return PaginationUtils.page(plans, 0, PaginationUtils.pageSizeFromList(0, plans.size()), plans.size());
     }
 
@@ -124,6 +142,37 @@ public class PprPlanService {
                 equipmentNames,
                 equipmentTypeNames,
                 regulationNames
+        ));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId, UUID equipmentId, int page, int size) {
+        if (equipmentId == null) {
+            return findAll(year, month, day, departmentId, page, size);
+        }
+        validateDateFilterParts(year, month, day);
+        Page<PprPlan> plans = planRepository.searchPlans(
+                        year,
+                        month,
+                        day,
+                        departmentId,
+                        equipmentId,
+                        PaginationUtils.pageRequest(page, size)
+                );
+        Map<UUID, String> departmentNames = resolveDepartmentNames(plans.getContent());
+        List<PprTask> tasks = collectTasks(plans.getContent(), equipmentId);
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(plans.getContent(), tasks);
+        Map<UUID, String> equipmentTypeNames = resolveEquipmentTypeNames(plans.getContent());
+        Map<UUID, String> regulationNames = resolveRegulationNames(plans.getContent(), tasks);
+        Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
+        return plans.map(plan -> PprPlanDto.from(
+                plan,
+                departmentName(departmentNames, plan),
+                ruleById,
+                equipmentNames,
+                equipmentTypeNames,
+                regulationNames,
+                equipmentId
         ));
     }
 
@@ -424,8 +473,12 @@ public class PprPlanService {
     }
 
     private List<PprPlanDto> toDtos(List<PprPlan> plans) {
+        return toDtos(plans, null);
+    }
+
+    private List<PprPlanDto> toDtos(List<PprPlan> plans, UUID equipmentId) {
         Map<UUID, String> departmentNames = resolveDepartmentNames(plans);
-        List<PprTask> tasks = collectTasks(plans);
+        List<PprTask> tasks = collectTasks(plans, equipmentId);
         Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
         Map<UUID, String> equipmentNames = resolveEquipmentNames(plans, tasks);
         Map<UUID, String> equipmentTypeNames = resolveEquipmentTypeNames(plans);
@@ -437,15 +490,21 @@ public class PprPlanService {
                         ruleById,
                         equipmentNames,
                         equipmentTypeNames,
-                        regulationNames
+                        regulationNames,
+                        equipmentId
                 ))
                 .toList();
     }
 
     private List<PprTask> collectTasks(List<PprPlan> plans) {
+        return collectTasks(plans, null);
+    }
+
+    private List<PprTask> collectTasks(List<PprPlan> plans, UUID equipmentId) {
         return plans.stream()
                 .flatMap(plan -> plan.getTasks().stream())
                 .filter(task -> !task.isDeleted())
+                .filter(task -> equipmentId == null || equipmentId.equals(task.getEquipmentId()))
                 .toList();
     }
 

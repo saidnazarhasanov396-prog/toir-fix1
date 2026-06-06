@@ -308,6 +308,66 @@ class PprPlanServiceListFilterTest {
     }
 
     @Test
+    void listWithEquipmentIdReturnsOnlyMatchingTasksAndTaskCount() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID unrelatedEquipmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        PprPlan plan = plan(2026, 5, UUID.randomUUID());
+        PprTask matchingTask = task(plan, LocalDateTime.of(2026, 5, 1, 9, 0));
+        matchingTask.setEquipmentId(equipmentId);
+        matchingTask.setRegulationId(regulationId);
+        PprTask unrelatedTask = task(plan, LocalDateTime.of(2026, 5, 2, 9, 0));
+        unrelatedTask.setEquipmentId(unrelatedEquipmentId);
+        PprTask deletedMatchingTask = task(plan, LocalDateTime.of(2026, 5, 3, 9, 0));
+        deletedMatchingTask.setEquipmentId(equipmentId);
+        deletedMatchingTask.setDeleted(true);
+        plan.getTasks().add(matchingTask);
+        plan.getTasks().add(unrelatedTask);
+        plan.getTasks().add(deletedMatchingTask);
+
+        when(planRepository.searchPlans(null, null, null, null, equipmentId, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment(equipmentId, "Compressor A")));
+        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(List.of(regulationId)))
+                .thenReturn(List.of(regulation(regulationId, "Quarterly PM")));
+
+        var result = service.findAll(null, null, null, null, equipmentId, 0, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        PprPlanDto dto = result.getContent().getFirst();
+        assertThat(dto.taskCount()).isEqualTo(1);
+        assertThat(dto.tasks()).hasSize(1);
+        assertThat(dto.tasks().getFirst().equipmentId()).isEqualTo(equipmentId);
+        assertThat(dto.tasks().getFirst().equipmentName()).isEqualTo("Compressor A");
+        assertThat(dto.tasks().getFirst().regulationName()).isEqualTo("Quarterly PM");
+        verify(planRepository).searchPlans(null, null, null, null, equipmentId, PageRequest.of(0, 20));
+    }
+
+    @Test
+    void unpaginatedListWithEquipmentIdUsesEquipmentFilter() {
+        UUID equipmentId = UUID.randomUUID();
+        PprPlan plan = plan(2026, 5, UUID.randomUUID());
+        PprTask matchingTask = task(plan, LocalDateTime.of(2026, 5, 1, 9, 0));
+        matchingTask.setEquipmentId(equipmentId);
+        PprTask unrelatedTask = task(plan, LocalDateTime.of(2026, 5, 2, 9, 0));
+        unrelatedTask.setEquipmentId(UUID.randomUUID());
+        plan.getTasks().add(matchingTask);
+        plan.getTasks().add(unrelatedTask);
+
+        when(planRepository.searchPlans(null, null, null, null, equipmentId)).thenReturn(List.of(plan));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment(equipmentId, "Pump B")));
+
+        var result = service.findAllUnpaged(null, null, null, null, equipmentId);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().taskCount()).isEqualTo(1);
+        assertThat(result.getContent().getFirst().tasks()).extracting("equipmentId").containsExactly(equipmentId);
+        verify(planRepository).searchPlans(null, null, null, null, equipmentId);
+    }
+
+    @Test
     void listAndGetByIdIncludePlanTargetIdsAndNames() {
         UUID equipmentId = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
@@ -347,6 +407,27 @@ class PprPlanServiceListFilterTest {
             assertThat(target.regulationId()).isEqualTo(regulationId);
             assertThat(target.regulationName()).isEqualTo("Monthly inspection");
         });
+    }
+
+    @Test
+    void listExcludesDeletedTargets() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID deletedEquipmentId = UUID.randomUUID();
+        PprPlan plan = plan(2026, 5, UUID.randomUUID());
+        plan.getTargets().add(target(plan, PprTargetType.EQUIPMENT, equipmentId, null, null));
+        PprPlanTarget deletedTarget = target(plan, PprTargetType.EQUIPMENT, deletedEquipmentId, null, null);
+        deletedTarget.setDeleted(true);
+        plan.getTargets().add(deletedTarget);
+
+        when(planRepository.searchPlans(null, null, null, null, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId, deletedEquipmentId)))
+                .thenReturn(List.of(equipment(equipmentId, "Pump 17"), equipment(deletedEquipmentId, "Deleted Pump")));
+
+        var result = service.findAll(null, null, null, null, 0, 20).getContent().getFirst();
+
+        assertThat(result.targets()).hasSize(1);
+        assertThat(result.targets().getFirst().equipmentId()).isEqualTo(equipmentId);
     }
 
     @Test

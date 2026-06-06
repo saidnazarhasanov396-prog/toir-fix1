@@ -250,6 +250,33 @@ class WorkOrderPbacScopeTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void performerOptionsClampRequestedDepartmentToCurrentDepartment() throws Exception {
+        UUID requestedDepartmentId = UUID.randomUUID();
+        UUID currentDepartmentId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
+        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(currentDepartmentId);
+        when(service.performerOptions(currentDepartmentId)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/work-orders/options/performers")
+                        .param("departmentId", requestedDepartmentId.toString()))
+                .andExpect(status().isOk());
+
+        verify(service).performerOptions(currentDepartmentId);
+    }
+
+    @Test
+    void performerOptionsWithoutDepartmentForNonAdminWithoutDepartmentIsDenied() throws Exception {
+        when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(null);
+
+        mockMvc.perform(get("/api/v1/work-orders/options/performers"))
+                .andExpect(status().isForbidden());
+
+        verify(service, never()).performerOptions(any());
+    }
+
     private void doDenyDepartment(UUID departmentId) {
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(false);
     }

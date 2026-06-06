@@ -40,6 +40,8 @@ public class EquipmentManualAttributeService {
             "arrival_date",
             "averageOperatingLifeHours",
             "average_operating_life_hours",
+            "expectedLifetimeHours",
+            "expected_lifetime_hours",
             "inventoryNumber",
             "inventory_number",
             "plateNumber",

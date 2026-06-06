@@ -113,6 +113,9 @@ public class Equipment extends BaseEntity {
     @Column(name = "expected_lifetime_years")
     private Integer expectedLifetimeYears;
 
+    @Column(name = "expected_lifetime_hours")
+    private Long expectedLifetimeHours;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "outside_reason")
     private EquipmentOutsideReason outsideReason;

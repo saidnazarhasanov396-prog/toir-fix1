@@ -3,6 +3,7 @@ import com.toir.entity.BaseEntity;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
 
+import com.toir.entity.users.BrigadeMember;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import jakarta.persistence.*;
@@ -54,6 +55,10 @@ public class WorkOrder extends BaseEntity {
 
     @Column(name = "contractor_id")
     private UUID contractorId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "brigade_member_id")
+    private BrigadeMember performer;
 
     @Column(name = "warehouse_id")
     private UUID warehouseId;
