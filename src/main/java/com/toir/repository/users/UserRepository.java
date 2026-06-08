@@ -1,5 +1,6 @@
 package com.toir.repository.users;
 
+import com.toir.dto.audit.AuditLogUserSummary;
 import com.toir.entity.users.User;
 import java.util.Collection;
 import java.util.List;
@@ -23,6 +24,31 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     @Query(value = "SELECT * FROM users WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<User> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
+
+    @Query("""
+            SELECT new com.toir.dto.audit.AuditLogUserSummary(
+                u.id,
+                u.username,
+                u.email,
+                u.fullName,
+                u.position,
+                u.phone,
+                u.status,
+                u.lastLoginAt,
+                u.departmentId,
+                d.code,
+                d.name,
+                pr.id,
+                pr.code,
+                pr.name
+            )
+            FROM User u
+            LEFT JOIN Department d ON d.id = u.departmentId AND d.isDeleted = false
+            LEFT JOIN u.primaryRole pr
+            WHERE u.id IN :ids
+              AND u.isDeleted = false
+            """)
+    List<AuditLogUserSummary> findAuditLogUserSummariesByIdIn(@Param("ids") Collection<UUID> ids);
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM users WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);

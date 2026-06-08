@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.toir.dto.audit.AuditLogResponseDto;
+import com.toir.dto.audit.AuditLogUserSummary;
 import com.toir.dto.user.UserDto;
-import com.toir.entity.users.User;
 import com.toir.enums.AuditAction;
 import com.toir.entity.AuditLog;
 import com.toir.enums.AuditModule;
@@ -23,7 +23,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -64,11 +69,19 @@ public class AuditLogService {
     public Page<AuditLogResponseDto> find(int page, int size, AuditAction action, LocalDate fromDate, LocalDate toDate, String search,UUID userId) {
         String actionStr = action != null ? action.name() : null;
         String searchPattern = search != null ? "%" + search + "%" : null;
-        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(actionStr, fromDate, toDate, searchPattern, userId, PaginationUtils.pageRequest(page, size))
-                .map(this::toResponse);
+        Page<AuditLog> logs = repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(
+                actionStr,
+                fromDate,
+                toDate,
+                searchPattern,
+                userId,
+                PaginationUtils.pageRequest(page, size)
+        );
+        Map<UUID, AuditLogUserSummary> usersById = loadUsers(logs);
+        return logs.map(log -> toResponse(log, usersById));
     }
 
-    private AuditLogResponseDto toResponse(AuditLog log) {
+    private AuditLogResponseDto toResponse(AuditLog log, Map<UUID, AuditLogUserSummary> usersById) {
         ObjectNode oldNode = objectMapper.createObjectNode();
         ObjectNode newNode = objectMapper.createObjectNode();
 
@@ -82,8 +95,7 @@ public class AuditLogService {
                 }
             });
         }
-        User resolvedUser = resolveUser(log.getUserId());
-        UserDto user = resolvedUser != null ? UserDto.from(resolvedUser) : null;
+        UserDto user = resolveUser(log.getUserId(), usersById);
 
         return new AuditLogResponseDto(
                 log.getId(),
@@ -104,11 +116,24 @@ public class AuditLogService {
         );
     }
 
-    private User resolveUser(UUID userId) {
+    private Map<UUID, AuditLogUserSummary> loadUsers(Page<AuditLog> logs) {
+        Set<UUID> userIds = logs.getContent().stream()
+                .map(AuditLog::getUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+        return userRepository.findAuditLogUserSummariesByIdIn(userIds).stream()
+                .collect(Collectors.toMap(AuditLogUserSummary::id, Function.identity()));
+    }
+
+    private UserDto resolveUser(UUID userId, Map<UUID, AuditLogUserSummary> usersById) {
         if (userId == null) {
             return null;
         }
-        return userRepository.findByIdAndIsDeletedFalse(userId).orElse(null);
+        AuditLogUserSummary user = usersById.get(userId);
+        return user == null ? null : user.toUserDto();
     }
 
     private JsonNode readJson(String raw) {

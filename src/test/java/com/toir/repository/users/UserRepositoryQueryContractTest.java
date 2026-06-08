@@ -26,4 +26,19 @@ class UserRepositoryQueryContractTest {
         assertThat(query.value()).contains("u.phone");
         assertThat(query.value()).contains("LOWER(");
     }
+
+    @Test
+    void auditLogUserSummaryQueryUsesScalarLeftJoinForDepartment() {
+        Method method = Arrays.stream(UserRepository.class.getMethods())
+                .filter(m -> m.getName().equals("findAuditLogUserSummariesByIdIn"))
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+        String normalized = query.value().toLowerCase();
+        assertThat(normalized).contains("new com.toir.dto.audit.auditlogusersummary");
+        assertThat(normalized).contains("left join department d on d.id = u.departmentid");
+        assertThat(normalized).doesNotContain("fetch u.department");
+    }
 }
