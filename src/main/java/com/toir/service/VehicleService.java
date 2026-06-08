@@ -18,6 +18,7 @@ import com.toir.enums.AuditModule;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
+import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.exception.RestException;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.VehicleDocumentRepository;
@@ -62,12 +63,14 @@ public class VehicleService {
     private final VehicleDocumentRepository vehicleDocumentRepository;
 
     @Transactional(readOnly = true)
-    public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, String search, int page, int pageSize) {
+    public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, VehicleRegistrationPlateType plateType,
+                                        String search, int page, int pageSize) {
         int safePage = Math.max(page, 0);
         int safePageSize = Math.max(pageSize, 1);
         Page<Equipment> equipmentPage = vehicleDetailsRepository.searchVehicleEquipment(
                 departmentId,
                 status,
+                plateType,
                 EquipmentCategory.VEHICLE,
                 search,
                 org.springframework.data.domain.PageRequest.of(safePage, safePageSize)
@@ -632,6 +635,7 @@ public class VehicleService {
             throw RestException.badRequest("Current engine hours cannot be negative");
         }
         details.setPlateNumber(request.plateNumber());
+        details.setPlateType(request.plateType() != null ? request.plateType() : VehicleRegistrationPlateType.UNKNOWN);
         details.setVin(normalizeBlankToNull(request.vin()));
         details.setBrand(request.brand());
         details.setModel(request.model());

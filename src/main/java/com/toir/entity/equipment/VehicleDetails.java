@@ -2,6 +2,7 @@ package com.toir.entity.equipment;
 
 import com.toir.entity.BaseEntity;
 import com.toir.entity.UploadedFile;
+import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.enums.VehicleType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -39,6 +40,10 @@ public class VehicleDetails extends BaseEntity {
 
     @Column(name = "plate_number", nullable = false)
     private String plateNumber;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "plate_type", nullable = false)
+    private VehicleRegistrationPlateType plateType = VehicleRegistrationPlateType.UNKNOWN;
 
     @Column
     private String vin;

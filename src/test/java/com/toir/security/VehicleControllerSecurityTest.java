@@ -115,7 +115,7 @@ class VehicleControllerSecurityTest {
         UUID equipmentId = UUID.randomUUID();
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
-        when(vehicleService.list(isNull(), isNull(), isNull(), eq(0), eq(1))).thenReturn(Page.empty());
+        when(vehicleService.list(isNull(), isNull(), isNull(), isNull(), eq(0), eq(1))).thenReturn(Page.empty());
         when(vehicleService.getStats(isNull(), isNull())).thenReturn(new VehicleStatsResponse(0, 0, 0, 0));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
                 .thenReturn(Optional.of(vehicleEquipment(equipmentId, UUID.randomUUID())));

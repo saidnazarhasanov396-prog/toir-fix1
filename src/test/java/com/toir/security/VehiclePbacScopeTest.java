@@ -65,13 +65,13 @@ class VehiclePbacScopeTest {
         UUID requestedDepartmentId = UUID.randomUUID();
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(departmentId);
         when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(departmentId);
-        when(service.list(eq(departmentId), isNull(), isNull(), eq(0), eq(20)))
+        when(service.list(eq(departmentId), isNull(), isNull(), isNull(), eq(0), eq(20)))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         mockMvc.perform(get("/api/v1/vehicles").param("departmentId", requestedDepartmentId.toString()))
                 .andExpect(status().isOk());
 
-        verify(service).list(eq(departmentId), isNull(), isNull(), eq(0), eq(20));
+        verify(service).list(eq(departmentId), isNull(), isNull(), isNull(), eq(0), eq(20));
     }
 
     @Test
