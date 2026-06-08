@@ -217,7 +217,7 @@ class VehicleControllerContractTest {
                                   "equipmentTypeId": "%s",
                                   "departmentId": "%s",
                                   "plateNumber": "95 123 ABC",
-                                  "plateType": "NOT_A_REAL_PLATE_TYPE",
+                                  "plateType": "LEGAL_ENTITY_TWO_LINE",
                                   "vehicleType": "TRUCK"
                                 }
                                 """.formatted(equipmentTypeId, departmentId)))
