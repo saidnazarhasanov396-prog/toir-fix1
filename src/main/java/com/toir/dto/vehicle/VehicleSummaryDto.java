@@ -3,6 +3,7 @@ package com.toir.dto.vehicle;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.enums.VehicleType;
 
 import java.time.LocalDate;
@@ -17,6 +18,7 @@ public record VehicleSummaryDto(
         EquipmentDto.Ref department,
         EquipmentDto.Ref location,
         String plateNumber,
+        VehicleRegistrationPlateType plateType,
         String vin,
         String brand,
         String model,
@@ -37,6 +39,7 @@ public record VehicleSummaryDto(
                 equipment.department(),
                 equipment.location(),
                 details.getPlateNumber(),
+                details.getPlateType(),
                 details.getVin(),
                 details.getBrand(),
                 details.getModel(),

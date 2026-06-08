@@ -9,6 +9,7 @@ import com.toir.dto.vehicle.VehicleSummaryDto;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.security.AuthenticatedUser;
@@ -61,6 +62,7 @@ public class VehicleController {
     public ResponseEntity<Page<VehicleSummaryDto>> list(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) EquipmentStatus status,
+            @RequestParam(required = false) VehicleRegistrationPlateType plateType,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size
@@ -68,6 +70,7 @@ public class VehicleController {
         return ResponseEntity.ok(service.list(
                 scopedDepartment(departmentId),
                 status,
+                plateType,
                 search,
                 page,
                 size

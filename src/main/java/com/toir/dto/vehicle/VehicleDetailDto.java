@@ -6,6 +6,7 @@ import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeDto;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.VehicleDocument;
 import com.toir.entity.equipment.VehicleDetails;
+import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.enums.VehicleType;
 
 import java.time.LocalDate;
@@ -38,6 +39,7 @@ public record VehicleDetailDto(
     public record Details(
             UUID id,
             String plateNumber,
+            VehicleRegistrationPlateType plateType,
             String vin,
             String brand,
             String model,
@@ -61,6 +63,38 @@ public record VehicleDetailDto(
             DocumentRef document,
             List<VehicleDocumentDto> documents
     ) {
+        public Details(
+                UUID id,
+                String plateNumber,
+                String vin,
+                String brand,
+                String model,
+                Integer manufactureYear,
+                VehicleType vehicleType,
+                String bodyNumber,
+                String chassisNumber,
+                String engineNumber,
+                String fuelType,
+                Double fuelTankCapacity,
+                Double carryingCapacity,
+                Integer seatCount,
+                UUID assignedDriverId,
+                double currentOdometerKm,
+                double currentEngineHours,
+                String registrationCertificateNumber,
+                String insurancePolicyNumber,
+                LocalDate insuranceExpiryDate,
+                LocalDate technicalInspectionExpiryDate,
+                String gpsDeviceId,
+                DocumentRef document,
+                List<VehicleDocumentDto> documents
+        ) {
+            this(id, plateNumber, VehicleRegistrationPlateType.UNKNOWN, vin, brand, model, manufactureYear, vehicleType,
+                    bodyNumber, chassisNumber, engineNumber, fuelType, fuelTankCapacity, carryingCapacity, seatCount,
+                    assignedDriverId, currentOdometerKm, currentEngineHours, registrationCertificateNumber,
+                    insurancePolicyNumber, insuranceExpiryDate, technicalInspectionExpiryDate, gpsDeviceId, document,
+                    documents);
+        }
     }
 
     public record DocumentRef(
@@ -124,6 +158,7 @@ public record VehicleDetailDto(
                 new Details(
                         details.getId(),
                         details.getPlateNumber(),
+                        details.getPlateType(),
                         details.getVin(),
                         details.getBrand(),
                         details.getModel(),

@@ -23,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.MethodParameter;
+import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
@@ -41,11 +42,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -197,6 +200,30 @@ class VehicleControllerContractTest {
                 .andExpect(jsonPath("$.attributes[0].valueNumber").value(12000.0));
 
         verify(service).findByEquipmentId(equipmentId);
+    }
+
+    @Test
+    void createRejectsInvalidPlateTypeBeforeServiceCall() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/vehicles")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "code": "VH-PLATE-INVALID",
+                                  "name": "Truck Invalid Plate",
+                                  "inventoryNumber": "INV-VH-PLATE-INVALID",
+                                  "equipmentTypeId": "%s",
+                                  "departmentId": "%s",
+                                  "plateNumber": "95 123 ABC",
+                                  "plateType": "NOT_A_REAL_PLATE_TYPE",
+                                  "vehicleType": "TRUCK"
+                                }
+                                """.formatted(equipmentTypeId, departmentId)))
+                .andExpect(status().isBadRequest());
+
+        verify(service, never()).create(any());
     }
 
     @Test
