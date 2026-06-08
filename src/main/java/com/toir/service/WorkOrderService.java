@@ -5,16 +5,23 @@ import com.toir.dto.triad.TriadLinkMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.entity.Department;
+import com.toir.entity.Location;
 import com.toir.entity.defects.Defect;
+import com.toir.entity.defects.DefectList;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
+import com.toir.entity.maintenance.MaintenanceOperation;
+import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
+import com.toir.entity.CertificationType;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.UserCertification;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.BrigadeMember;
 import com.toir.entity.users.User;
@@ -22,8 +29,10 @@ import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.repository.CompletionActRepository;
+import com.toir.repository.CertificationTypeRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.LaborEntryRepository;
+import com.toir.repository.LocationRepository;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ReservationRepository;
@@ -31,10 +40,12 @@ import com.toir.repository.SafetyPermitRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.WorkExecutionRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.DefectListStatus;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.PprTaskStatus;
@@ -54,9 +65,15 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
+import com.toir.repository.maintenance.MaintenanceOperationRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.repository.maintenance.MaintenanceTemplateRepository;
+import com.toir.repository.maintenance.RepairAcceptanceRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.projection.WorkOrderCalendarBucketProjection;
 import com.toir.repository.users.UserRepository;
+import com.toir.repository.users.UserCertificationRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
@@ -98,14 +115,18 @@ public class WorkOrderService {
     private final WorkOrderRepository repository;
     private final EquipmentRepository equipmentRepository;
     private final EquipmentNodeRepository equipmentNodeRepository;
+    private final LocationRepository locationRepository;
     private final DepartmentRepository departmentRepository;
     private final AuditBuilderService auditBuilderService;
     private final PprPlanRepository pprPlanRepository;
     private final PprTaskRepository pprTaskRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final DefectRepository defectRepository;
+    private final DefectListRepository defectListRepository;
     private final BrigadeMemberRepository brigadeMemberRepository;
     private final UserRepository userRepository;
+    private final UserCertificationRepository userCertificationRepository;
+    private final CertificationTypeRepository certificationTypeRepository;
     private final WorkExecutionRepository workExecutionRepository;
     private final RepairMaterialUsageRepository repairMaterialUsageRepository;
     private final LaborEntryRepository laborEntryRepository;
@@ -118,8 +139,14 @@ public class WorkOrderService {
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final RepairMaterialUsageService repairMaterialUsageService;
     private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
+    private final MaintenanceOperationRepository maintenanceOperationRepository;
+    private final MaintenanceRegulationRepository maintenanceRegulationRepository;
+    private final MaintenanceTemplateRepository maintenanceTemplateRepository;
+    private final RepairAcceptanceRepository repairAcceptanceRepository;
     private final MaintenanceDueEventService maintenanceDueEventService;
     private final WorkOrderSparePartRequirementService workOrderSparePartRequirementService;
+    private final SafetyChecklistService safetyChecklistService;
+    private final ScopeAccessService scopeAccessService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     private final ObjectMapper objectMapper;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
@@ -134,6 +161,8 @@ public class WorkOrderService {
             EnumSet.of(DefectStatus.RESOLVED, DefectStatus.CLOSED, DefectStatus.CANCELLED);
     private static final Set<DefectStatus> RESOLVED_OR_CLOSED_DEFECT_STATUSES =
             EnumSet.of(DefectStatus.RESOLVED, DefectStatus.CLOSED);
+    private static final Set<WorkOrderType> DEFECT_LIST_REQUIRED_WORK_ORDER_TYPES =
+            EnumSet.of(WorkOrderType.MEDIUM_REPAIR, WorkOrderType.CAPITAL_REPAIR);
     private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_WORK_ORDER_CREATE =
             EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
     private static final Set<PlanStatus> ALLOWED_PARENT_PLAN_STATUSES_FOR_WORK_ORDER_CREATE = EnumSet
@@ -308,9 +337,17 @@ public class WorkOrderService {
         Defect linkedDefect = validateCreateRelations(request);
         UUID effectiveEquipmentNodeId = resolveEffectiveEquipmentNodeId(request, linkedDefect);
         EquipmentNode equipmentNode = validateEquipmentNodeLink(effectiveEquipmentNodeId, request.equipmentId());
+        DefectList linkedDefectList = validateDefectListForWorkOrder(
+                request.type(),
+                request.equipmentId(),
+                request.defectListId());
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + request.equipmentId()));
+        UUID effectiveDepartmentId = resolveEffectiveDepartmentId(request, equipment);
+        UUID effectiveLocationId = resolveEffectiveLocationId(request, equipment, effectiveDepartmentId);
         BrigadeMember performer = validatePerformerForCreate(
                 request.performerId(),
-                request.departmentId(),
+                effectiveDepartmentId,
                 request.equipmentId());
         reserveReplacementEquipmentOnCreate(request, effectiveWorkType);
         WorkOrder entity = new WorkOrder();
@@ -318,9 +355,12 @@ public class WorkOrderService {
         entity.setTitle(request.title());
         entity.setEquipmentId(request.equipmentId());
         entity.setEquipmentNodeId(effectiveEquipmentNodeId);
-        entity.setDepartmentId(request.departmentId());
+        entity.setLocationId(effectiveLocationId);
+        entity.setDepartmentId(effectiveDepartmentId);
+        entity.setWorkLocationNote(normalizeNote(request.workLocationNote()));
         entity.setRepairRequestId(request.repairRequestId());
         entity.setDefectId(request.defectId());
+        entity.setDefectListId(linkedDefectList == null ? null : linkedDefectList.getId());
         entity.setPprTaskId(request.pprTaskId());
         entity.setMaintenanceDueEventId(request.maintenanceDueEventId());
         entity.setCycleKey(request.cycleKey());
@@ -337,6 +377,9 @@ public class WorkOrderService {
         entity.setCreatedById(request.createdById());
         entity.setSummary(request.summary());
         WorkOrder saved = repository.save(entity);
+        generateTemplateTasksFromWorkOrderContext(saved);
+        validatePerformerSkillsForWorkOrder(saved);
+        safetyChecklistService.generateForWorkOrderIfTemplateExists(saved);
 
         auditBuilderService.log(
                 "work_order",
@@ -349,7 +392,7 @@ public class WorkOrderService {
 
         workOrderSparePartRequirementService.syncFromWorkOrderContext(saved);
 
-        return toDto(saved, equipmentNode);
+        return toDetailDto(saved);
     }
 
     @Transactional
@@ -358,11 +401,14 @@ public class WorkOrderService {
         if (entity.getStatus() != WorkOrderStatus.DRAFT && entity.getStatus() != WorkOrderStatus.PLANNED) {
             throw RestException.badRequest("Only DRAFT/PLANNED work orders can be approved");
         }
+        assertDefectListGate(entity);
+        validatePerformerSkillsForWorkOrder(entity);
         entity.setStatus(WorkOrderStatus.APPROVED);
         entity.setApprovedById(approverId);
         ensureReplacementEquipmentReservedOnStart(entity);
 
         WorkOrder saved = repository.save(entity);
+        safetyChecklistService.generateForWorkOrderIfTemplateExists(saved);
 
         auditBuilderService.log(
                 "work_order",
@@ -382,6 +428,9 @@ public class WorkOrderService {
         if (entity.getStatus() != WorkOrderStatus.APPROVED) {
             throw RestException.badRequest("Only approved work orders can be started");
         }
+        assertDefectListGate(entity);
+        validatePerformerSkillsForWorkOrder(entity);
+        safetyChecklistService.assertCanStart(entity);
         entity.setStatus(WorkOrderStatus.IN_PROGRESS);
         entity.setStartedAt(Instant.now());
         ensureReplacementEquipmentReservedOnStart(entity);
@@ -411,6 +460,7 @@ public class WorkOrderService {
     public WorkOrderDto complete(UUID id, CompleteWorkOrderRequest request) {
         WorkOrder entity = getOrThrow(id);
         assertCanComplete(entity, request);
+        assertDefectListGate(entity);
         MaintenanceDueEvent dueEvent = loadMaintenanceDueEvent(entity);
         entity.setResult(request.result());
         if (request.summary() != null && !request.summary().isBlank()) {
@@ -494,6 +544,11 @@ public class WorkOrderService {
         }
         if (request.result() == null || request.result().isBlank()) {
             throw RestException.badRequest("Result is required to complete a work order");
+        }
+        List<String> incompleteTasks = incompleteTaskNames(entity);
+        if (!incompleteTasks.isEmpty()) {
+            throw RestException.badRequest("Cannot complete work order; incomplete mandatory tasks/checklist items: "
+                    + String.join(", ", incompleteTasks));
         }
     }
 
@@ -641,12 +696,7 @@ public class WorkOrderService {
     private ClosureReadiness buildClosureReadiness(WorkOrder entity) {
         List<String> missingEvidence = new java.util.ArrayList<>();
 
-        List<String> incompleteTasks = entity.getTasks() == null
-                ? List.of()
-                : entity.getTasks().stream()
-                .filter(task -> task.getStatus() != TaskExecutionStatus.DONE)
-                .map(this::taskEvidenceName)
-                .toList();
+        List<String> incompleteTasks = incompleteTaskNames(entity);
         if (!incompleteTasks.isEmpty()) {
             missingEvidence.add("Incomplete tasks/checklist items: " + String.join(", ", incompleteTasks));
         }
@@ -661,6 +711,15 @@ public class WorkOrderService {
         completionActRepository.findByWorkOrderIdAndIsDeletedFalse(entity.getId())
                 .filter(act -> act.getSignedAt() == null || act.getSignedById() == null)
                 .ifPresent(act -> missingEvidence.add("Completion act must be signed"));
+
+        if (!repairAcceptanceRepository.existsAcceptedFinalByWorkOrderId(entity.getId())) {
+            missingEvidence.add("Final repair acceptance must be ACCEPTED");
+        }
+
+        Optional<String> safetyChecklistBlocker = safetyChecklistService.closeBlocker(entity);
+        if (safetyChecklistBlocker != null) {
+            safetyChecklistBlocker.ifPresent(missingEvidence::add);
+        }
 
         if (requiresLaborEvidence(entity) && safeList(laborEntryRepository
                 .findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(entity.getId())).isEmpty()) {
@@ -694,6 +753,15 @@ public class WorkOrderService {
             return task.getTitle();
         }
         return task.getId() == null ? "unnamed task" : task.getId().toString();
+    }
+
+    private List<String> incompleteTaskNames(WorkOrder entity) {
+        return entity.getTasks() == null
+                ? List.of()
+                : entity.getTasks().stream()
+                .filter(task -> task.getStatus() != TaskExecutionStatus.DONE)
+                .map(this::taskEvidenceName)
+                .toList();
     }
 
     private record ClosureReadiness(boolean ready, List<String> missingEvidence) {}
@@ -1034,6 +1102,46 @@ public class WorkOrderService {
         return defect;
     }
 
+    private void assertDefectListGate(WorkOrder workOrder) {
+        validateDefectListForWorkOrder(
+                workOrder.getType(),
+                workOrder.getEquipmentId(),
+                workOrder.getDefectListId());
+    }
+
+    private DefectList validateDefectListForWorkOrder(WorkOrderType type, UUID equipmentId, UUID defectListId) {
+        boolean required = requiresApprovedDefectList(type);
+        if (defectListId == null) {
+            if (required) {
+                throw RestException.badRequest(approvedDefectListRequiredMessage(type));
+            }
+            return null;
+        }
+
+        DefectList defectList = defectListRepository.findByIdAndIsDeletedFalse(defectListId)
+                .orElseThrow(() -> required
+                        ? RestException.badRequest(approvedDefectListRequiredMessage(type))
+                        : RestException.notFound("DefectList not found: " + defectListId));
+        if (equipmentId != null && defectList.getEquipmentId() != null && !equipmentId.equals(defectList.getEquipmentId())) {
+            throw RestException.badRequest("DefectList belongs to a different equipment");
+        }
+        if (defectList.getStatus() != DefectListStatus.APPROVED) {
+            if (required) {
+                throw RestException.badRequest(approvedDefectListRequiredMessage(type));
+            }
+            throw RestException.badRequest("DefectList must be APPROVED");
+        }
+        return defectList;
+    }
+
+    private boolean requiresApprovedDefectList(WorkOrderType type) {
+        return type != null && DEFECT_LIST_REQUIRED_WORK_ORDER_TYPES.contains(type);
+    }
+
+    private String approvedDefectListRequiredMessage(WorkOrderType type) {
+        return "Approved DefectList is required for " + type;
+    }
+
     private BrigadeMember validatePerformerForCreate(UUID performerId, UUID requestDepartmentId, UUID equipmentId) {
         if (performerId == null) {
             return null;
@@ -1056,6 +1164,129 @@ public class WorkOrderService {
         return performer;
     }
 
+    private void validatePerformerSkillsForWorkOrder(WorkOrder workOrder) {
+        if (workOrder == null || workOrder.getPerformer() == null) {
+            return;
+        }
+        Set<String> requiredSkills = requiredSkillsForWorkOrder(workOrder);
+        if (requiredSkills.isEmpty()) {
+            return;
+        }
+        BrigadeMember performer = workOrder.getPerformer();
+        for (String requiredSkill : requiredSkills) {
+            SkillMatchResult result = performerHasRequiredSkill(performer, requiredSkill);
+            if (result == SkillMatchResult.EXPIRED) {
+                throw RestException.badRequest("Assigned performer certification is expired: " + requiredSkill);
+            }
+            if (result == SkillMatchResult.MISSING) {
+                throw RestException.badRequest("Assigned performer does not have required skill: " + requiredSkill);
+            }
+        }
+    }
+
+    private Set<String> requiredSkillsForWorkOrder(WorkOrder workOrder) {
+        if (workOrder.getTasks() == null || workOrder.getTasks().isEmpty()) {
+            return Set.of();
+        }
+        return workOrder.getTasks().stream()
+                .map(this::requiredSkillForTask)
+                .filter(skill -> skill != null && !skill.isBlank())
+                .map(String::trim)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    private String requiredSkillForTask(WorkOrderTask task) {
+        if (task == null) {
+            return null;
+        }
+        if (task.getSourceOperationId() != null) {
+            Optional<String> fromOperation = maintenanceOperationRepository.findByIdAndIsDeletedFalse(task.getSourceOperationId())
+                    .map(MaintenanceOperation::getRequiredSkill)
+                    .filter(skill -> skill != null && !skill.isBlank());
+            if (fromOperation.isPresent()) {
+                return fromOperation.get();
+            }
+        }
+        return requiredSkillFromTaskDescription(task.getDescription());
+    }
+
+    private String requiredSkillFromTaskDescription(String description) {
+        if (description == null || description.isBlank()) {
+            return null;
+        }
+        String prefix = "Required skill:";
+        return description.lines()
+                .map(String::trim)
+                .filter(line -> line.regionMatches(true, 0, prefix, 0, prefix.length()))
+                .map(line -> line.substring(prefix.length()).trim())
+                .filter(value -> !value.isBlank())
+                .findFirst()
+                .orElse(null);
+    }
+
+    private SkillMatchResult performerHasRequiredSkill(BrigadeMember performer, String requiredSkill) {
+        String normalizedRequiredSkill = normalizeSkill(requiredSkill);
+        if (normalizedRequiredSkill == null) {
+            return SkillMatchResult.OK;
+        }
+        if (performer.getQualifications() != null && performer.getQualifications().stream()
+                .map(this::normalizeSkill)
+                .anyMatch(normalizedRequiredSkill::equals)) {
+            return SkillMatchResult.OK;
+        }
+        if (performer.getUserId() == null) {
+            return SkillMatchResult.MISSING;
+        }
+        boolean expiredMatch = false;
+        for (UserCertification certification : userCertificationRepository.findAllByUserIdAndIsDeletedFalse(performer.getUserId())) {
+            if (!certificationMatchesRequiredSkill(certification, normalizedRequiredSkill)) {
+                continue;
+            }
+            if (certificationExpired(certification)) {
+                expiredMatch = true;
+                continue;
+            }
+            if ("ACTIVE".equalsIgnoreCase(certification.getStatus())) {
+                return SkillMatchResult.OK;
+            }
+        }
+        return expiredMatch ? SkillMatchResult.EXPIRED : SkillMatchResult.MISSING;
+    }
+
+    private boolean certificationMatchesRequiredSkill(UserCertification certification, String normalizedRequiredSkill) {
+        if (certification == null || normalizedRequiredSkill == null) {
+            return false;
+        }
+        String typeCode = certification.getTypeCode();
+        if (normalizedRequiredSkill.equals(normalizeSkill(typeCode))) {
+            return true;
+        }
+        CertificationType type = typeCode == null ? null : certificationTypeRepository.findByCodeAndIsDeletedFalse(typeCode);
+        return type != null && (
+                normalizedRequiredSkill.equals(normalizeSkill(type.getCode()))
+                        || normalizedRequiredSkill.equals(normalizeSkill(type.getName()))
+                        || normalizedRequiredSkill.equals(normalizeSkill(type.getNameEn()))
+                        || normalizedRequiredSkill.equals(normalizeSkill(type.getNameUz())));
+    }
+
+    private boolean certificationExpired(UserCertification certification) {
+        return "EXPIRED".equalsIgnoreCase(certification.getStatus())
+                || (certification.getExpiresAt() != null && certification.getExpiresAt().isBefore(LocalDate.now()));
+    }
+
+    private String normalizeSkill(String skill) {
+        if (skill == null || skill.isBlank()) {
+            return null;
+        }
+        return skill.trim().toLowerCase(java.util.Locale.ROOT).replaceAll("[\\s_\\-]+", "");
+    }
+
+    private enum SkillMatchResult {
+        OK,
+        MISSING,
+        EXPIRED
+    }
+
     private UUID resolveEquipmentDepartmentId(UUID equipmentId) {
         if (equipmentId == null) {
             return null;
@@ -1063,6 +1294,51 @@ public class WorkOrderService {
         return equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .map(Equipment::getDepartmentId)
                 .orElse(null);
+    }
+
+    private UUID resolveEffectiveDepartmentId(WorkOrderRequest request, Equipment equipment) {
+        UUID equipmentDepartmentId = equipment.getDepartmentId();
+        UUID effectiveDepartmentId = request.departmentId() == null ? equipmentDepartmentId : request.departmentId();
+        if (effectiveDepartmentId == null) {
+            throw RestException.badRequest("departmentId is required because selected equipment has no department");
+        }
+        if (equipmentDepartmentId != null && request.departmentId() != null
+                && !equipmentDepartmentId.equals(request.departmentId())) {
+            throw RestException.badRequest("departmentId must match selected equipment department");
+        }
+        departmentRepository.findById(effectiveDepartmentId)
+                .orElseThrow(() -> RestException.notFound("Department not found: " + effectiveDepartmentId));
+        if (!scopeAccessService.isScopeAdmin() && !scopeAccessService.canAccessDepartment(effectiveDepartmentId)) {
+            throw RestException.forbidden("Access denied by work order department scope");
+        }
+        return effectiveDepartmentId;
+    }
+
+    private UUID resolveEffectiveLocationId(WorkOrderRequest request, Equipment equipment, UUID effectiveDepartmentId) {
+        UUID equipmentLocationId = equipment.getLocationId();
+        UUID effectiveLocationId = request.locationId() == null ? equipmentLocationId : request.locationId();
+        if (equipmentLocationId != null && request.locationId() != null
+                && !equipmentLocationId.equals(request.locationId())) {
+            throw RestException.badRequest("locationId must match selected equipment location");
+        }
+        if (effectiveLocationId == null) {
+            return null;
+        }
+        Location location = locationRepository.findByIdAndIsDeletedFalse(effectiveLocationId)
+                .orElseThrow(() -> RestException.notFound("Location not found: " + effectiveLocationId));
+        if (location.getDepartmentId() != null && effectiveDepartmentId != null
+                && !location.getDepartmentId().equals(effectiveDepartmentId)) {
+            throw RestException.badRequest("locationId belongs to a different department");
+        }
+        return effectiveLocationId;
+    }
+
+    private String normalizeNote(String note) {
+        if (note == null) {
+            return null;
+        }
+        String trimmed = note.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private UUID resolveEffectiveEquipmentNodeId(WorkOrderRequest request, Defect linkedDefect) {
@@ -1157,6 +1433,121 @@ public class WorkOrderService {
         if (request.type() == WorkOrderType.DEFECT && request.defectId() == null) {
             throw RestException.badRequest("defectId is required when work order type is DEFECT");
         }
+    }
+
+    private void generateTemplateTasksFromWorkOrderContext(WorkOrder workOrder) {
+        if (workOrder == null || workOrder.getId() == null || workOrder.getTasks() == null
+                || !workOrder.getTasks().isEmpty()) {
+            return;
+        }
+        resolveTemplateId(workOrder).flatMap(maintenanceTemplateRepository::findByIdAndIsDeletedFalse)
+                .ifPresent(template -> {
+                    List<MaintenanceOperation> operations = template.getOperations() == null
+                            ? List.of()
+                            : template.getOperations().stream()
+                                    .filter(operation -> !operation.isDeleted())
+                                    .sorted(java.util.Comparator.comparingInt(MaintenanceOperation::getSequence))
+                                    .toList();
+                    for (MaintenanceOperation operation : operations) {
+                        if (hasTaskForOperation(workOrder, operation)) {
+                            continue;
+                        }
+                        WorkOrderTask task = new WorkOrderTask();
+                        task.setWorkOrder(workOrder);
+                        task.setTitle(operation.getName());
+                        task.setDescription(operationDescription(operation));
+                        task.setStatus(TaskExecutionStatus.TODO);
+                        if (operation.getDurationHours() > 0) {
+                            task.setPlannedHours(operation.getDurationHours());
+                        }
+                        task.setSourceTemplateId(template.getId());
+                        task.setSourceOperationId(operation.getId());
+                        workOrder.getTasks().add(task);
+                    }
+                    if (!operations.isEmpty()) {
+                        repository.save(workOrder);
+                    }
+                });
+    }
+
+    private boolean hasTaskForOperation(WorkOrder workOrder, MaintenanceOperation operation) {
+        if (workOrder.getTasks() == null || operation == null) {
+            return false;
+        }
+        return workOrder.getTasks().stream().anyMatch(task ->
+                (operation.getId() != null && operation.getId().equals(task.getSourceOperationId()))
+                        || (task.getSourceOperationId() == null
+                            && task.getTitle() != null
+                            && task.getTitle().equals(operation.getName())));
+    }
+
+    private Optional<UUID> resolveTemplateId(WorkOrder workOrder) {
+        if (workOrder.getMaintenanceDueEventId() != null) {
+            MaintenanceDueEvent dueEvent = loadMaintenanceDueEvent(workOrder);
+            Optional<UUID> fromDueEvent = Optional.ofNullable(dueEvent == null ? null : dueEvent.getTemplateId());
+            if (fromDueEvent.isPresent()) {
+                return fromDueEvent;
+            }
+            Optional<UUID> fromRegulation = resolveTemplateIdFromRegulation(dueEvent == null ? null : dueEvent.getRegulationId());
+            if (fromRegulation.isPresent()) {
+                return fromRegulation;
+            }
+        }
+        if (workOrder.getPprTaskId() != null) {
+            Optional<PprTask> task = pprTaskRepository.findByIdAndIsDeletedFalse(workOrder.getPprTaskId());
+            Optional<UUID> fromDueEvent = task
+                    .map(PprTask::getMaintenanceDueEventId)
+                    .flatMap(dueEventId -> {
+                        WorkOrder probe = new WorkOrder();
+                        probe.setMaintenanceDueEventId(dueEventId);
+                        MaintenanceDueEvent dueEvent = loadMaintenanceDueEvent(probe);
+                        return dueEvent == null
+                                ? Optional.<UUID>empty()
+                                : Optional.ofNullable(dueEvent.getTemplateId())
+                                        .or(() -> resolveTemplateIdFromRegulation(dueEvent.getRegulationId()));
+                    });
+            if (fromDueEvent.isPresent()) {
+                return fromDueEvent;
+            }
+            return task.map(PprTask::getRegulationId).flatMap(this::resolveTemplateIdFromRegulation);
+        }
+        return Optional.empty();
+    }
+
+    private Optional<UUID> resolveTemplateIdFromRegulation(UUID regulationId) {
+        if (regulationId == null) {
+            return Optional.empty();
+        }
+        return maintenanceRegulationRepository.findByIdAndIsDeletedFalse(regulationId)
+                .map(MaintenanceRegulation::getTemplateId)
+                .filter(id -> id != null);
+    }
+
+    private String operationDescription(MaintenanceOperation operation) {
+        StringBuilder description = new StringBuilder();
+        appendLine(description, operation.getDescription());
+        appendLine(description, prefixed("Required skill", operation.getRequiredSkill()));
+        appendLine(description, prefixed("Safety", operation.getSafetyNotes()));
+        appendLine(description, prefixed("Tools", operation.getToolsRequired()));
+        appendLine(description, prefixed("Spare parts", operation.getSparePartsRequired()));
+        appendLine(description, prefixed("Consumables", operation.getConsumablesRequired()));
+        appendLine(description, prefixed("Control parameter", operation.getControlParameter()));
+        appendLine(description, prefixed("Instruction", operation.getInstructionUrl()));
+        return description.isEmpty() ? null : description.toString();
+    }
+
+    private String prefixed(String label, String value) {
+        return value == null || value.isBlank() ? null : label + ": " + value;
+    }
+
+    private void appendLine(StringBuilder builder, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        if (!builder.isEmpty()) {
+            builder.append('\n');
+        }
+        builder.append(value);
     }
 
     private void validateReplacementFields(WorkOrderRequest request, WorkType effectiveWorkType) {
@@ -1311,11 +1702,19 @@ public class WorkOrderService {
         String departmentName = departmentRepository.findById(entity.getDepartmentId())
                 .map(Department::getName)
                 .orElse(null);
+        String locationName = entity.getLocationId() == null
+                ? null
+                : locationRepository.findByIdAndIsDeletedFalse(entity.getLocationId())
+                        .map(Location::getName)
+                        .orElse(null);
         String replacementEquipmentName = entity.getReplacementEquipmentId() == null
                 ? null
                 : equipmentRepository.findById(entity.getReplacementEquipmentId())
                         .map(Equipment::getName)
                         .orElse(null);
+        DefectList linkedDefectList = entity.getDefectListId() == null
+                ? null
+                : defectListRepository.findByIdAndIsDeletedFalse(entity.getDefectListId()).orElse(null);
         return new WorkOrderDto(
                 entity.getId(), entity.getNumber(), entity.getTitle(), entity.getEquipmentId(),
                 entity.getEquipmentNodeId(),
@@ -1324,7 +1723,12 @@ public class WorkOrderService {
                 equipmentNode == null ? null : equipmentNode.getNodeType(),
                 entity.getDepartmentId(),
                 equipmentName, departmentName,
-                entity.getRepairRequestId(), entity.getDefectId(), entity.getPprTaskId(), entity.getContractorId(),
+                entity.getLocationId(), locationName, entity.getWorkLocationNote(),
+                entity.getRepairRequestId(), entity.getDefectId(),
+                entity.getDefectListId(),
+                linkedDefectList == null ? null : linkedDefectList.getCode(),
+                linkedDefectList == null ? null : linkedDefectList.getStatus(),
+                entity.getPprTaskId(), entity.getContractorId(),
                 performerId(entity), performerName(entity),
                 entity.getStatus(), entity.getType(), entity.getWorkType(), entity.getPriority(),
                 entity.getStartPlannedAt(), entity.getEndPlannedAt(), entity.getStartedAt(), entity.getCompletedAt(),

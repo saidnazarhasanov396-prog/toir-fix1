@@ -514,6 +514,9 @@ public class MaintenanceAutomationService {
             return;
         }
         for (MaintenanceOperation operation : operations) {
+            if (hasTaskForOperation(workOrder, operation)) {
+                continue;
+            }
             WorkOrderTask task = new WorkOrderTask();
             task.setWorkOrder(workOrder);
             task.setTitle(operation.getName());
@@ -527,6 +530,17 @@ public class MaintenanceAutomationService {
             workOrder.getTasks().add(task);
         }
         workOrderRepository.save(workOrder);
+    }
+
+    private boolean hasTaskForOperation(WorkOrder workOrder, MaintenanceOperation operation) {
+        if (workOrder.getTasks() == null || operation == null) {
+            return false;
+        }
+        return workOrder.getTasks().stream().anyMatch(task ->
+                (operation.getId() != null && operation.getId().equals(task.getSourceOperationId()))
+                        || (task.getSourceOperationId() == null
+                        && task.getTitle() != null
+                        && task.getTitle().equals(operation.getName())));
     }
 
     private String operationDescription(MaintenanceOperation operation) {

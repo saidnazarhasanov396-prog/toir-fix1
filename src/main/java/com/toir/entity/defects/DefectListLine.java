@@ -1,6 +1,7 @@
 package com.toir.entity.defects;
 
 import com.toir.entity.BaseEntity;
+import com.toir.enums.DefectOrigin;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -24,6 +25,10 @@ public class DefectListLine extends BaseEntity {
 
     @Column(name = "defect_id")
     private UUID defectId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "defect_origin", nullable = false)
+    private DefectOrigin defectOrigin = DefectOrigin.UNKNOWN;
 
     @Column(nullable = false, columnDefinition = "text")
     private String description;

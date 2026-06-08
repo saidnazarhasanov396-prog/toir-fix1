@@ -14,9 +14,12 @@ public record WorkOrderRequest(
         @NotBlank String title,
         @NotNull UUID equipmentId,
         UUID equipmentNodeId,
-        @NotNull UUID departmentId,
+        UUID locationId,
+        UUID departmentId,
+        String workLocationNote,
         UUID repairRequestId,
         UUID defectId,
+        UUID defectListId,
         UUID pprTaskId,
         UUID contractorId,
         UUID performerId,
@@ -32,6 +35,34 @@ public record WorkOrderRequest(
         UUID maintenanceDueEventId,
         String cycleKey
 ) {
+    public WorkOrderRequest(
+            @NotBlank String number,
+            @NotBlank String title,
+            @NotNull UUID equipmentId,
+            UUID equipmentNodeId,
+            UUID departmentId,
+            UUID repairRequestId,
+            UUID defectId,
+            UUID pprTaskId,
+            UUID contractorId,
+            UUID performerId,
+            @NotNull WorkOrderType type,
+            WorkType workType,
+            UUID warehouseId,
+            UUID replacementEquipmentId,
+            PriorityLevel priority,
+            Instant startPlannedAt,
+            Instant endPlannedAt,
+            @NotNull UUID createdById,
+            String summary,
+            UUID maintenanceDueEventId,
+            String cycleKey
+    ) {
+        this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId,
+                null, pprTaskId, contractorId, performerId, type, workType, warehouseId, replacementEquipmentId, priority,
+                startPlannedAt, endPlannedAt, createdById, summary, maintenanceDueEventId, cycleKey);
+    }
+
     public WorkOrderRequest(
             @NotBlank String number,
             @NotBlank String title,
@@ -54,7 +85,7 @@ public record WorkOrderRequest(
             UUID maintenanceDueEventId,
             String cycleKey
     ) {
-        this(number, title, equipmentId, equipmentNodeId, departmentId, repairRequestId, defectId, pprTaskId,
+        this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
                 contractorId, null, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
                 endPlannedAt, createdById, summary, maintenanceDueEventId, cycleKey);
     }
@@ -79,7 +110,7 @@ public record WorkOrderRequest(
             @NotNull UUID createdById,
             String summary
     ) {
-        this(number, title, equipmentId, equipmentNodeId, departmentId, repairRequestId, defectId, pprTaskId,
+        this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
                 contractorId, null, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
                 endPlannedAt, createdById, summary, null, null);
     }
@@ -105,7 +136,7 @@ public record WorkOrderRequest(
             @NotNull UUID createdById,
             String summary
     ) {
-        this(number, title, equipmentId, equipmentNodeId, departmentId, repairRequestId, defectId, pprTaskId,
+        this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
                 contractorId, performerId, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
                 endPlannedAt, createdById, summary, null, null);
     }
@@ -127,7 +158,7 @@ public record WorkOrderRequest(
                             Instant endPlannedAt,
                             @NotNull UUID createdById,
                             String summary) {
-        this(number, title, equipmentId, null, departmentId, repairRequestId, defectId, pprTaskId, contractorId, null, type,
+        this(number, title, equipmentId, null, null, departmentId, null, repairRequestId, defectId, null, pprTaskId, contractorId, null, type,
                 workType, warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
                 summary, null, null);
     }
