@@ -12,6 +12,7 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.DefectListStatus;
+import com.toir.enums.DefectOrigin;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectListLineRepository;
@@ -231,6 +232,7 @@ public class DefectListService {
         DefectListLine line = new DefectListLine();
         line.setDefectList(d);
         line.setDefectId(r.defectId());
+        line.setDefectOrigin(r.defectOrigin() == null ? DefectOrigin.UNKNOWN : r.defectOrigin());
         line.setDescription(r.description());
         line.setWorkScope(r.workScope());
         line.setMaterialSpecification(r.materialSpecification());

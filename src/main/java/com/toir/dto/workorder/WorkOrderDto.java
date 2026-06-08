@@ -3,6 +3,7 @@ package com.toir.dto.workorder;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.enums.PriorityLevel;
+import com.toir.enums.DefectListStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
@@ -26,8 +27,14 @@ public record WorkOrderDto(
         UUID departmentId,
         String equipmentName,
         String departmentName,
+        UUID locationId,
+        String locationName,
+        String workLocationNote,
         UUID repairRequestId,
         UUID defectId,
+        UUID defectListId,
+        String defectListNumber,
+        DefectListStatus defectListStatus,
         UUID pprTaskId,
         UUID contractorId,
         UUID performerId,
@@ -98,8 +105,8 @@ public record WorkOrderDto(
                         int operationsCount,
                         int materialsCount) {
         this(id, number, title, equipmentId, equipmentNodeId, equipmentNodeCode, equipmentNodeName,
-                equipmentNodeType, departmentId, equipmentName, departmentName, repairRequestId, defectId,
-                pprTaskId, contractorId, null, null, status, type, workType, priority, startPlannedAt, endPlannedAt,
+                equipmentNodeType, departmentId, equipmentName, departmentName, null, null, null, repairRequestId, defectId,
+                null, null, null, pprTaskId, contractorId, null, null, status, type, workType, priority, startPlannedAt, endPlannedAt,
                 startedAt, completedAt, summary, result, closureNotes, createdById, approvedById, warehouseId,
                 replacementEquipmentId, replacementEquipmentName, tasks, repairRequest, defect, operationsCount,
                 materialsCount, List.of(), null);
@@ -144,8 +151,8 @@ public record WorkOrderDto(
                         int operationsCount,
                         int materialsCount) {
         this(id, number, title, equipmentId, equipmentNodeId, equipmentNodeCode, equipmentNodeName,
-                equipmentNodeType, departmentId, equipmentName, departmentName, repairRequestId, defectId,
-                pprTaskId, contractorId, performerId, performerName, status, type, workType, priority, startPlannedAt, endPlannedAt,
+                equipmentNodeType, departmentId, equipmentName, departmentName, null, null, null, repairRequestId, defectId,
+                null, null, null, pprTaskId, contractorId, performerId, performerName, status, type, workType, priority, startPlannedAt, endPlannedAt,
                 startedAt, completedAt, summary, result, closureNotes, createdById, approvedById, warehouseId,
                 replacementEquipmentId, replacementEquipmentName, tasks, repairRequest, defect, operationsCount,
                 materialsCount, List.of(), null);
@@ -184,7 +191,8 @@ public record WorkOrderDto(
                         int operationsCount,
                         int materialsCount) {
         this(id, number, title, equipmentId, null, null, null, null, departmentId, equipmentName, departmentName,
-                repairRequestId, defectId, pprTaskId, contractorId, null, null, status, type, workType, priority,
+                null, null, null,
+                repairRequestId, defectId, null, null, null, pprTaskId, contractorId, null, null, status, type, workType, priority,
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
                 createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
                 tasks, repairRequest, defect, operationsCount, materialsCount, List.of(), null);
@@ -225,7 +233,8 @@ public record WorkOrderDto(
                         int operationsCount,
                         int materialsCount) {
         this(id, number, title, equipmentId, null, null, null, null, departmentId, equipmentName, departmentName,
-                repairRequestId, defectId, pprTaskId, contractorId, performerId, performerName, status, type, workType, priority,
+                null, null, null,
+                repairRequestId, defectId, null, null, null, pprTaskId, contractorId, performerId, performerName, status, type, workType, priority,
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
                 createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
                 tasks, repairRequest, defect, operationsCount, materialsCount, List.of(), null);

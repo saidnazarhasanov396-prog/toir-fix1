@@ -18,6 +18,9 @@ public class CompletionAct extends BaseEntity {
     @Column(name = "work_order_id", nullable = false, unique = true)
     private UUID workOrderId;
 
+    @Column(name = "repair_acceptance_id")
+    private UUID repairAcceptanceId;
+
     @Column(name = "act_number", nullable = false, unique = true)
     private String actNumber;
 
