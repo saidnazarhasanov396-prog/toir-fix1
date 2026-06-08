@@ -21,6 +21,7 @@ Implemented during this audit:
 - Runtime config note: final production DB/JWT/default-admin security configuration remains a TeamLead/DevOps responsibility. Security config was intentionally not changed in the current P0 demo-chain branch.
 - Runtime migration correction: `V20260606_1__actual_cost_source_traceability.sql` originally made all `(source_type, source_id)` pairs unique, which failed on legacy databases with multiple `WORK_ORDER` cost rows for one work order. The unique index now applies only to granular one-to-one auto sources while `WORK_ORDER` can keep multiple cost components.
 - Final production security/env hardening will be completed at the end by TeamLead/DevOps. Current priority is runnable local/demo P0 verification, with security config locked for this branch.
+- UAT evidence attempt: local backend focused tests and frontend test/build were rerun on 2026-06-06; Docker/Testcontainers/full-stack UI evidence remains blocked on this machine because Docker is unavailable. `docs/uat/evidence/2026-06-06-p0-demo/README.md` records the local results and pending screenshot/role evidence.
 
 Product scope correction:
 - MT-01 Operational Cockpit is deferred and PM decision pending. It is not part of the current fix pack; do not create a new cockpit endpoint, page, or merged operational queue unless PM explicitly approves it later.
@@ -451,6 +452,7 @@ Remaining UAT blockers:
 - Need Docker/Postgres execution of the new phase-5 seed idempotency test because local Docker is unavailable.
 - TeamLead/DevOps must still provide final production DB/JWT/admin env and secret-manager configuration for the `prod` profile, then re-enable the quarantined prod secret policy checks.
 - Need Docker/Postgres confirmation that `V20260606_1__actual_cost_source_traceability.sql` migrates existing data with duplicate `WORK_ORDER` actual costs; a Docker-gated test exists but skips locally without Docker.
+- Need final UAT screenshot pack and role walkthrough; local evidence run could not execute the UI-only script because Docker/Postgres full stack is unavailable on this machine.
 
 Adjusted leadership demo route:
 - Equipment Registry -> Equipment Card -> Passport completeness -> Due Event explanation -> Approval/Create WO -> WO Detail -> Labor/Materials -> Closure readiness -> Completion/Close -> Equipment Card next cycle/history -> Finance/Budget source rows.
