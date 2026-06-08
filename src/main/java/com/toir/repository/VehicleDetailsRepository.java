@@ -4,6 +4,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.VehicleRegistrationPlateType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +32,7 @@ public interface VehicleDetailsRepository extends JpaRepository<VehicleDetails, 
             and e.category = :category
             and (:departmentId is null or e.departmentId = :departmentId)
             and (:status is null or e.status = :status)
+            and (:plateType is null or vd.plateType = :plateType)
             and (cast(:search as string) is null or :search = '' or
                 lower(e.code) like lower(concat('%', cast(:search as string), '%')) or
                 lower(e.name) like lower(concat('%', cast(:search as string), '%')) or
@@ -47,6 +49,7 @@ public interface VehicleDetailsRepository extends JpaRepository<VehicleDetails, 
             """)
     Page<Equipment> searchVehicleEquipment(@Param("departmentId") UUID departmentId,
                                            @Param("status") EquipmentStatus status,
+                                           @Param("plateType") VehicleRegistrationPlateType plateType,
                                            @Param("category") EquipmentCategory category,
                                            @Param("search") String search,
                                            Pageable pageable);

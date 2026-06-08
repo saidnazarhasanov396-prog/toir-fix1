@@ -20,6 +20,7 @@ import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
+import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.enums.VehicleType;
 import com.toir.exception.RestException;
 import com.toir.repository.UploadedFileRepository;
@@ -159,6 +160,66 @@ class VehicleServiceTest {
 
         assertThat(result.equipment().category()).isEqualTo(EquipmentCategory.VEHICLE);
         assertThat(result.vehicleDetails().plateNumber()).isEqualTo("01A123AA");
+    }
+
+    @Test
+    void createVehiclePersistsAndReturnsPlateType() {
+        VehicleRequest request = withPlateType(
+                fullRequest("VH-PLATE-TYPE-001", "Truck Plate Type", "INV-VH-PLATE-TYPE-001", "95 123 ABC", null),
+                VehicleRegistrationPlateType.LEGAL_ENTITY
+        );
+
+        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-PLATE-TYPE-001")).thenReturn(false);
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-PLATE-TYPE-001")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("95 123 ABC")).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> {
+            VehicleDetails details = invocation.getArgument(0);
+            details.setId(UUID.randomUUID());
+            return details;
+        });
+        when(equipmentService.findById(any(UUID.class))).thenAnswer(invocation ->
+                EquipmentDto.from(equipment(invocation.getArgument(0), "VH-PLATE-TYPE-001", "Truck Plate Type", "INV-VH-PLATE-TYPE-001")));
+
+        VehicleDetailDto result = service.create(request);
+
+        ArgumentCaptor<VehicleDetails> detailsCaptor = ArgumentCaptor.forClass(VehicleDetails.class);
+        verify(vehicleDetailsRepository).save(detailsCaptor.capture());
+        assertThat(detailsCaptor.getValue().getPlateNumber()).isEqualTo("95 123 ABC");
+        assertThat(detailsCaptor.getValue().getPlateType()).isEqualTo(VehicleRegistrationPlateType.LEGAL_ENTITY);
+        assertThat(result.vehicleDetails().plateType()).isEqualTo(VehicleRegistrationPlateType.LEGAL_ENTITY);
+    }
+
+    @Test
+    void createVehicleDefaultsMissingPlateTypeToUnknown() {
+        VehicleRequest request = fullRequest("VH-PLATE-TYPE-002", "Truck Default Plate Type", "INV-VH-PLATE-TYPE-002", "LEGACY-123", null);
+
+        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-PLATE-TYPE-002")).thenReturn(false);
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-PLATE-TYPE-002")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("LEGACY-123")).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> {
+            VehicleDetails details = invocation.getArgument(0);
+            details.setId(UUID.randomUUID());
+            return details;
+        });
+        when(equipmentService.findById(any(UUID.class))).thenAnswer(invocation ->
+                EquipmentDto.from(equipment(invocation.getArgument(0), "VH-PLATE-TYPE-002", "Truck Default Plate Type", "INV-VH-PLATE-TYPE-002")));
+
+        VehicleDetailDto result = service.create(request);
+
+        ArgumentCaptor<VehicleDetails> detailsCaptor = ArgumentCaptor.forClass(VehicleDetails.class);
+        verify(vehicleDetailsRepository).save(detailsCaptor.capture());
+        assertThat(detailsCaptor.getValue().getPlateType()).isEqualTo(VehicleRegistrationPlateType.UNKNOWN);
+        assertThat(result.vehicleDetails().plateType()).isEqualTo(VehicleRegistrationPlateType.UNKNOWN);
     }
 
     @Test
@@ -643,6 +704,35 @@ class VehicleServiceTest {
     }
 
     @Test
+    void updateVehiclePersistsAndReturnsPlateTypeWithoutChangingPlateNumberBehavior() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-PLATE-TYPE-010", "Truck Plate Type", "INV-VH-PLATE-TYPE-010");
+        VehicleDetails details = details(equipmentId, "95 K 123 BA", "VIN-PLATE-TYPE-010");
+        VehicleRequest request = withPlateType(
+                withEquipmentTypeAndAttributes(
+                        fullRequest("VH-PLATE-TYPE-010", "Truck Plate Type Updated", "INV-VH-PLATE-TYPE-010", "95 K 123 BA", "VIN-PLATE-TYPE-010"),
+                        equipment.getEquipmentTypeId(),
+                        null
+                ),
+                VehicleRegistrationPlateType.INDIVIDUAL
+        );
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(equipment));
+
+        VehicleDetailDto result = service.update(equipmentId, request);
+
+        assertThat(details.getPlateNumber()).isEqualTo("95 K 123 BA");
+        assertThat(details.getPlateType()).isEqualTo(VehicleRegistrationPlateType.INDIVIDUAL);
+        assertThat(result.vehicleDetails().plateNumber()).isEqualTo("95 K 123 BA");
+        assertThat(result.vehicleDetails().plateType()).isEqualTo(VehicleRegistrationPlateType.INDIVIDUAL);
+        verify(vehicleDetailsRepository, never()).findByPlateNumberAndIsDeletedFalse("95 K 123 BA");
+    }
+
+    @Test
     void updateVehicleChangesDynamicMetricAttribute() {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-ATTR-003", "Truck Attr Update", "INV-VH-ATTR-003");
@@ -977,6 +1067,7 @@ class VehicleServiceTest {
         when(vehicleDetailsRepository.searchVehicleEquipment(
                 isNull(),
                 isNull(),
+                isNull(),
                 eq(EquipmentCategory.VEHICLE),
                 isNull(),
                 eq(pageRequest)
@@ -986,7 +1077,7 @@ class VehicleServiceTest {
         when(vehicleDetailsRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(completeId, incompleteId)))
                 .thenReturn(List.of(completeDetails));
 
-        Page<VehicleSummaryDto> result = service.list(null, null, null, 0, 20);
+        Page<VehicleSummaryDto> result = service.list(null, null, null, null, 0, 20);
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().getFirst().equipmentId()).isEqualTo(completeId);
@@ -1619,6 +1710,47 @@ class VehicleServiceTest {
                 request.gpsDeviceId(),
                 request.attributes(),
                 manualAttributes
+        );
+    }
+
+    private static VehicleRequest withPlateType(
+            VehicleRequest request,
+            VehicleRegistrationPlateType plateType
+    ) {
+        return new VehicleRequest(
+                request.code(),
+                request.name(),
+                request.inventoryNumber(),
+                request.technicalNumber(),
+                request.serialNumber(),
+                request.equipmentTypeId(),
+                request.departmentId(),
+                request.locationId(),
+                request.status(),
+                request.plateNumber(),
+                plateType,
+                request.vin(),
+                request.brand(),
+                request.model(),
+                request.manufactureYear(),
+                request.vehicleType(),
+                request.bodyNumber(),
+                request.chassisNumber(),
+                request.engineNumber(),
+                request.fuelType(),
+                request.fuelTankCapacity(),
+                request.carryingCapacity(),
+                request.seatCount(),
+                request.assignedDriverId(),
+                request.currentOdometerKm(),
+                request.currentEngineHours(),
+                request.registrationCertificateNumber(),
+                request.insurancePolicyNumber(),
+                request.insuranceExpiryDate(),
+                request.technicalInspectionExpiryDate(),
+                request.gpsDeviceId(),
+                request.attributes(),
+                request.manualAttributes()
         );
     }
 
