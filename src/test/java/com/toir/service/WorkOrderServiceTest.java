@@ -61,6 +61,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.projection.WorkOrderCountProjection;
+import com.toir.repository.projection.WorkOrderCalendarBucketProjection;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
@@ -83,6 +84,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -187,6 +190,104 @@ class WorkOrderServiceTest {
 
     @InjectMocks
     WorkOrderService service;
+
+    @Test
+    void calendarSummaryForMonthUsesTashkentBoundariesAndBuildsDayBuckets() {
+        Instant expectedFrom = Instant.parse("2026-05-31T19:00:00Z");
+        Instant expectedTo = Instant.parse("2026-06-30T19:00:00Z");
+        when(repository.getWorkOrderCalendarDayBuckets(
+                null,
+                null,
+                null,
+                "pump",
+                expectedFrom,
+                expectedTo))
+                .thenReturn(List.of(new CalendarBucketProjectionStub(
+                        null,
+                        LocalDate.of(2026, 6, 10),
+                        WorkOrderStatus.APPROVED.name(),
+                        2L)));
+
+        var result = service.calendarSummary(null, null, null, " pump ", 2026, 6);
+
+        assertThat(result.year()).isEqualTo(2026);
+        assertThat(result.month()).isEqualTo(6);
+        assertThat(result.days()).hasSize(30);
+        assertThat(result.totalOrders()).isEqualTo(2);
+        assertThat(result.statusCounts()).extracting("status").containsExactly(WorkOrderStatus.APPROVED);
+        assertThat(result.days().stream()
+                .filter(day -> LocalDate.of(2026, 6, 10).equals(day.date()))
+                .findFirst()
+                .orElseThrow()
+                .totalOrders()).isEqualTo(2);
+        verify(repository).getWorkOrderCalendarDayBuckets(
+                null,
+                null,
+                null,
+                "pump",
+                expectedFrom,
+                expectedTo);
+    }
+
+    @Test
+    void calendarSummaryForYearUsesTashkentYearBoundariesAndBuildsMonthBuckets() {
+        Instant expectedFrom = Instant.parse("2025-12-31T19:00:00Z");
+        Instant expectedTo = Instant.parse("2026-12-31T19:00:00Z");
+        when(repository.getWorkOrderCalendarMonthBuckets(
+                WorkOrderStatus.PLANNED,
+                null,
+                null,
+                null,
+                expectedFrom,
+                expectedTo))
+                .thenReturn(List.of(new CalendarBucketProjectionStub(
+                        6,
+                        null,
+                        WorkOrderStatus.PLANNED.name(),
+                        3L)));
+
+        var result = service.calendarSummary(WorkOrderStatus.PLANNED, null, null, "", 2026, null);
+
+        assertThat(result.year()).isEqualTo(2026);
+        assertThat(result.month()).isNull();
+        assertThat(result.months()).hasSize(12);
+        assertThat(result.totalOrders()).isEqualTo(3);
+        assertThat(result.months().get(5).month()).isEqualTo(6);
+        assertThat(result.months().get(5).totalOrders()).isEqualTo(3);
+        verify(repository).getWorkOrderCalendarMonthBuckets(
+                WorkOrderStatus.PLANNED,
+                null,
+                null,
+                null,
+                expectedFrom,
+                expectedTo);
+    }
+
+    private record CalendarBucketProjectionStub(
+            Integer bucketNumber,
+            LocalDate bucketDate,
+            String status,
+            Long count) implements WorkOrderCalendarBucketProjection {
+        @Override
+        public Integer getBucketNumber() {
+            return bucketNumber;
+        }
+
+        @Override
+        public LocalDate getBucketDate() {
+            return bucketDate;
+        }
+
+        @Override
+        public String getStatus() {
+            return status;
+        }
+
+        @Override
+        public Long getCount() {
+            return count;
+        }
+    }
 
     @Test
     void createOldStyleWorkOrderWithoutWorkTypeShouldSucceedAndPersistRepair() {

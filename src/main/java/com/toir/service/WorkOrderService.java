@@ -55,6 +55,7 @@ import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
+import com.toir.repository.projection.WorkOrderCalendarBucketProjection;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
@@ -72,8 +73,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -88,6 +93,7 @@ public class WorkOrderService {
 
     private static final String MODULE = "work-order";
     private static final String ENTITY = "WorkOrder";
+    private static final ZoneId CALENDAR_ZONE = ZoneId.of("Asia/Tashkent");
 
     private final WorkOrderRepository repository;
     private final EquipmentRepository equipmentRepository;
@@ -150,6 +156,79 @@ public class WorkOrderService {
                 normalizedSearch,
                 pageable);
         return toDtoPage(resultPage);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page,
+            int pageSize, String search, Instant plannedFrom, Instant plannedTo) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize);
+        String normalizedSearch = normalizeSearch(search);
+        Page<WorkOrder> resultPage = repository.searchPaginated(
+                status,
+                departmentId,
+                equipmentId,
+                normalizedSearch,
+                plannedFrom,
+                plannedTo,
+                pageable);
+        return toDtoPage(resultPage);
+    }
+
+    @Transactional(readOnly = true)
+    public WorkOrderCalendarSummaryResponse calendarSummary(
+            WorkOrderStatus status,
+            UUID departmentId,
+            UUID equipmentId,
+            String search,
+            int year,
+            Integer month) {
+        if (year < 1) {
+            throw RestException.badRequest("year must be positive");
+        }
+
+        String normalizedSearch = normalizeSearch(search);
+        if (month == null) {
+            Instant from = LocalDate.of(year, 1, 1).atStartOfDay(CALENDAR_ZONE).toInstant();
+            Instant to = LocalDate.of(year + 1, 1, 1).atStartOfDay(CALENDAR_ZONE).toInstant();
+            List<WorkOrderCalendarBucketProjection> rows = repository.getWorkOrderCalendarMonthBuckets(
+                    status,
+                    departmentId,
+                    equipmentId,
+                    normalizedSearch,
+                    from,
+                    to);
+            List<WorkOrderCalendarBucketDto> months = buildMonthBuckets(rows);
+            return new WorkOrderCalendarSummaryResponse(
+                    year,
+                    null,
+                    totalOrders(months),
+                    aggregateStatusCounts(rows),
+                    months,
+                    List.of());
+        }
+
+        if (month < 1 || month > 12) {
+            throw RestException.badRequest("month must be between 1 and 12");
+        }
+
+        YearMonth targetMonth = YearMonth.of(year, month);
+        Instant from = targetMonth.atDay(1).atStartOfDay(CALENDAR_ZONE).toInstant();
+        Instant to = targetMonth.plusMonths(1).atDay(1).atStartOfDay(CALENDAR_ZONE).toInstant();
+        List<WorkOrderCalendarBucketProjection> rows = repository.getWorkOrderCalendarDayBuckets(
+                status,
+                departmentId,
+                equipmentId,
+                normalizedSearch,
+                from,
+                to);
+        List<WorkOrderCalendarBucketDto> days = buildDayBuckets(targetMonth, rows);
+        return new WorkOrderCalendarSummaryResponse(
+                year,
+                month,
+                totalOrders(days),
+                aggregateStatusCounts(rows),
+                List.of(),
+                days);
     }
 
     @Transactional(readOnly = true)
@@ -1404,6 +1483,62 @@ public class WorkOrderService {
             return new PageImpl<>(List.of(), page.getPageable(), page.getTotalElements());
         }
         return new PageImpl<>(toDtos(page.getContent()), page.getPageable(), page.getTotalElements());
+    }
+
+    private List<WorkOrderCalendarBucketDto> buildMonthBuckets(List<WorkOrderCalendarBucketProjection> rows) {
+        List<WorkOrderCalendarBucketDto> buckets = new ArrayList<>();
+        for (int month = 1; month <= 12; month++) {
+            int currentMonth = month;
+            List<WorkOrderCalendarBucketProjection> monthRows = rows.stream()
+                    .filter(row -> row.getBucketNumber() != null && row.getBucketNumber() == currentMonth)
+                    .toList();
+            buckets.add(new WorkOrderCalendarBucketDto(
+                    currentMonth,
+                    null,
+                    totalCount(monthRows),
+                    aggregateStatusCounts(monthRows)));
+        }
+        return buckets;
+    }
+
+    private List<WorkOrderCalendarBucketDto> buildDayBuckets(
+            YearMonth month,
+            List<WorkOrderCalendarBucketProjection> rows) {
+        List<WorkOrderCalendarBucketDto> buckets = new ArrayList<>();
+        for (int day = 1; day <= month.lengthOfMonth(); day++) {
+            LocalDate date = month.atDay(day);
+            List<WorkOrderCalendarBucketProjection> dayRows = rows.stream()
+                    .filter(row -> date.equals(row.getBucketDate()))
+                    .toList();
+            buckets.add(new WorkOrderCalendarBucketDto(
+                    null,
+                    date,
+                    totalCount(dayRows),
+                    aggregateStatusCounts(dayRows)));
+        }
+        return buckets;
+    }
+
+    private long totalOrders(List<WorkOrderCalendarBucketDto> buckets) {
+        return buckets.stream().mapToLong(WorkOrderCalendarBucketDto::totalOrders).sum();
+    }
+
+    private long totalCount(List<WorkOrderCalendarBucketProjection> rows) {
+        return rows.stream().mapToLong(row -> row.getCount() == null ? 0L : row.getCount()).sum();
+    }
+
+    private List<WorkOrderStatusCountDto> aggregateStatusCounts(List<WorkOrderCalendarBucketProjection> rows) {
+        Map<WorkOrderStatus, Long> counts = new LinkedHashMap<>();
+        for (WorkOrderCalendarBucketProjection row : rows) {
+            if (row.getStatus() == null) {
+                continue;
+            }
+            WorkOrderStatus status = WorkOrderStatus.valueOf(row.getStatus());
+            counts.merge(status, row.getCount() == null ? 0L : row.getCount(), Long::sum);
+        }
+        return counts.entrySet().stream()
+                .map(entry -> new WorkOrderStatusCountDto(entry.getKey(), entry.getValue()))
+                .toList();
     }
 
     private String normalizeSearch(String search) {

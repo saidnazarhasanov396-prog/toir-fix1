@@ -1,7 +1,10 @@
 package com.toir.controller;
 
+import com.toir.dto.workorder.WorkOrderCalendarBucketDto;
+import com.toir.dto.workorder.WorkOrderCalendarSummaryResponse;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderPerformerOptionDto;
+import com.toir.dto.workorder.WorkOrderStatusCountDto;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.RepairRequestBriefDto;
 import com.toir.entity.maintenance.WorkOrder;
@@ -30,6 +33,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 import java.util.Optional;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -313,7 +317,7 @@ class WorkOrderControllerContractTest {
     void listWithBlankSearchReturns200() throws Exception {
         WorkOrderDto dto = workOrderDto(UUID.randomUUID(), null, null);
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(service.search(null, null, null, 0, 10, ""))
+        when(service.search(null, null, null, 0, 10, "", null, null))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
 
         mockMvc.perform(get("/api/v1/work-orders")
@@ -322,6 +326,56 @@ class WorkOrderControllerContractTest {
                         .param("search", ""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(dto.id().toString()));
+    }
+
+    @Test
+    void listForwardsPlannedDateRangeFilters() throws Exception {
+        Instant plannedFrom = Instant.parse("2026-06-09T19:00:00Z");
+        Instant plannedTo = Instant.parse("2026-06-10T19:00:00Z");
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, 0, 20, "pump", plannedFrom, plannedTo))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/work-orders")
+                        .param("page", "0")
+                        .param("size", "20")
+                        .param("search", "pump")
+                        .param("plannedFrom", plannedFrom.toString())
+                        .param("plannedTo", plannedTo.toString()))
+                .andExpect(status().isOk());
+
+        verify(service).search(null, null, null, 0, 20, "pump", plannedFrom, plannedTo);
+    }
+
+    @Test
+    void calendarSummaryReturnsWorkOrderBuckets() throws Exception {
+        WorkOrderCalendarSummaryResponse response = new WorkOrderCalendarSummaryResponse(
+                2026,
+                6,
+                4,
+                List.of(new WorkOrderStatusCountDto(WorkOrderStatus.APPROVED, 4)),
+                List.of(),
+                List.of(new WorkOrderCalendarBucketDto(
+                        null,
+                        LocalDate.of(2026, 6, 10),
+                        4,
+                        List.of(new WorkOrderStatusCountDto(WorkOrderStatus.APPROVED, 4)))));
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.calendarSummary(null, null, null, "pump", 2026, 6)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/work-orders/calendar-summary")
+                        .param("year", "2026")
+                        .param("month", "6")
+                        .param("search", "pump"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.year").value(2026))
+                .andExpect(jsonPath("$.month").value(6))
+                .andExpect(jsonPath("$.totalOrders").value(4))
+                .andExpect(jsonPath("$.statusCounts[0].status").value("APPROVED"))
+                .andExpect(jsonPath("$.days[0].date").value("2026-06-10"))
+                .andExpect(jsonPath("$.days[0].totalOrders").value(4));
+
+        verify(service).calendarSummary(null, null, null, "pump", 2026, 6);
     }
 
     @Test
@@ -335,7 +389,7 @@ class WorkOrderControllerContractTest {
                 1
         );
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(service.search(null, null, null, 0, 10, ""))
+        when(service.search(null, null, null, 0, 10, "", null, null))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
 
         mockMvc.perform(get("/api/v1/work-orders")
@@ -351,7 +405,7 @@ class WorkOrderControllerContractTest {
     void listResponseWorksWithoutPerformer() throws Exception {
         WorkOrderDto dto = workOrderDto(UUID.randomUUID(), null, null);
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(service.search(null, null, null, 0, 10, ""))
+        when(service.search(null, null, null, 0, 10, "", null, null))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
 
         mockMvc.perform(get("/api/v1/work-orders")
@@ -369,7 +423,7 @@ class WorkOrderControllerContractTest {
         UUID performerId = UUID.randomUUID();
         WorkOrderDto dto = workOrderDtoWithPerformer(UUID.randomUUID(), performerId, "Ivan Petrov");
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(service.search(null, null, null, 0, 10, ""))
+        when(service.search(null, null, null, 0, 10, "", null, null))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
 
         mockMvc.perform(get("/api/v1/work-orders")
@@ -386,7 +440,7 @@ class WorkOrderControllerContractTest {
         UUID missingRepairRequestId = UUID.randomUUID();
         WorkOrderDto dto = workOrderDtoWithIds(UUID.randomUUID(), missingRepairRequestId, null, null, null);
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(service.search(null, null, null, 0, 10, ""))
+        when(service.search(null, null, null, 0, 10, "", null, null))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
 
         mockMvc.perform(get("/api/v1/work-orders")
@@ -403,7 +457,7 @@ class WorkOrderControllerContractTest {
         UUID missingDefectId = UUID.randomUUID();
         WorkOrderDto dto = workOrderDtoWithIds(UUID.randomUUID(), null, missingDefectId, null, null);
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(service.search(null, null, null, 0, 10, ""))
+        when(service.search(null, null, null, 0, 10, "", null, null))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
 
         mockMvc.perform(get("/api/v1/work-orders")
@@ -418,7 +472,7 @@ class WorkOrderControllerContractTest {
     @Test
     void listWithNoDataReturnsStablePage() throws Exception {
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(service.search(null, null, null, 0, 10, ""))
+        when(service.search(null, null, null, 0, 10, "", null, null))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
 
         mockMvc.perform(get("/api/v1/work-orders")
