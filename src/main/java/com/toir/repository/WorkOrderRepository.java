@@ -3,6 +3,8 @@ package com.toir.repository;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
+import com.toir.repository.projection.WorkOrderCalendarBucketProjection;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -83,6 +85,14 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
             @Param("departmentId") UUID departmentId,
             @Param("equipmentId") UUID equipmentId);
 
+    default Page<WorkOrder> searchPaginated(WorkOrderStatus status,
+            UUID departmentId,
+            UUID equipmentId,
+            String search,
+            Pageable pageable) {
+        return searchPaginated(status, departmentId, equipmentId, search, null, null, pageable);
+    }
+
     @Query(nativeQuery = true, value = """
             select
                 w.id,
@@ -122,6 +132,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
                 and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
                 and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
                 and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
+                and (cast(:plannedFrom as timestamptz) is null or coalesce(w.end_planned_at, w.start_planned_at) >= cast(:plannedFrom as timestamptz))
+                and (cast(:plannedTo as timestamptz) is null or coalesce(w.end_planned_at, w.start_planned_at) < cast(:plannedTo as timestamptz))
                 and (
                     nullif(trim(cast(:search as varchar)), '') is null
                     or lower(coalesce(to_jsonb(w)->>'number', '')) like lower(concat('%', cast(:search as varchar), '%'))
@@ -138,6 +150,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
                 and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
                 and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
                 and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
+                and (cast(:plannedFrom as timestamptz) is null or coalesce(w.end_planned_at, w.start_planned_at) >= cast(:plannedFrom as timestamptz))
+                and (cast(:plannedTo as timestamptz) is null or coalesce(w.end_planned_at, w.start_planned_at) < cast(:plannedTo as timestamptz))
                 and (
                     nullif(trim(cast(:search as varchar)), '') is null
                     or lower(coalesce(to_jsonb(w)->>'number', '')) like lower(concat('%', cast(:search as varchar), '%'))
@@ -150,7 +164,77 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
             @Param("departmentId") UUID departmentId,
             @Param("equipmentId") UUID equipmentId,
             @Param("search") String search,
+            @Param("plannedFrom") Instant plannedFrom,
+            @Param("plannedTo") Instant plannedTo,
             Pageable pageable);
+
+    @Query(nativeQuery = true, value = """
+            select
+                extract(month from timezone('Asia/Tashkent', coalesce(w.end_planned_at, w.start_planned_at)))::int as bucketNumber,
+                null::date as bucketDate,
+                w.status as status,
+                count(w.id) as count
+            from work_orders w
+            where
+                w.is_deleted = false
+                and coalesce(w.end_planned_at, w.start_planned_at) is not null
+                and coalesce(w.end_planned_at, w.start_planned_at) >= cast(:plannedFrom as timestamptz)
+                and coalesce(w.end_planned_at, w.start_planned_at) < cast(:plannedTo as timestamptz)
+                and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
+                and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+                and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
+                and (
+                    nullif(trim(cast(:search as varchar)), '') is null
+                    or lower(coalesce(to_jsonb(w)->>'number', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'title', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'summary', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'result', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'closure_notes', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                )
+            group by bucketNumber, w.status
+            order by bucketNumber
+            """)
+    List<WorkOrderCalendarBucketProjection> getWorkOrderCalendarMonthBuckets(
+            @Param("status") WorkOrderStatus status,
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId,
+            @Param("search") String search,
+            @Param("plannedFrom") Instant plannedFrom,
+            @Param("plannedTo") Instant plannedTo);
+
+    @Query(nativeQuery = true, value = """
+            select
+                extract(day from timezone('Asia/Tashkent', coalesce(w.end_planned_at, w.start_planned_at)))::int as bucketNumber,
+                (timezone('Asia/Tashkent', coalesce(w.end_planned_at, w.start_planned_at)))::date as bucketDate,
+                w.status as status,
+                count(w.id) as count
+            from work_orders w
+            where
+                w.is_deleted = false
+                and coalesce(w.end_planned_at, w.start_planned_at) is not null
+                and coalesce(w.end_planned_at, w.start_planned_at) >= cast(:plannedFrom as timestamptz)
+                and coalesce(w.end_planned_at, w.start_planned_at) < cast(:plannedTo as timestamptz)
+                and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
+                and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+                and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
+                and (
+                    nullif(trim(cast(:search as varchar)), '') is null
+                    or lower(coalesce(to_jsonb(w)->>'number', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'title', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'summary', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'result', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                    or lower(coalesce(to_jsonb(w)->>'closure_notes', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                )
+            group by bucketNumber, bucketDate, w.status
+            order by bucketDate
+            """)
+    List<WorkOrderCalendarBucketProjection> getWorkOrderCalendarDayBuckets(
+            @Param("status") WorkOrderStatus status,
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId,
+            @Param("search") String search,
+            @Param("plannedFrom") Instant plannedFrom,
+            @Param("plannedTo") Instant plannedTo);
 
     @Query(nativeQuery = true, value = """
             select * from work_orders w where

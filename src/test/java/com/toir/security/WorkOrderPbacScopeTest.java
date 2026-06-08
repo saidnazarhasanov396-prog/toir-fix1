@@ -68,7 +68,7 @@ class WorkOrderPbacScopeTest {
         UUID currentDepartmentId = UUID.randomUUID();
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
         when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(currentDepartmentId);
-        when(service.search(null, currentDepartmentId, null, 0, 20, null))
+        when(service.search(null, currentDepartmentId, null, 0, 20, null, null, null))
                 .thenReturn(new PageImpl<>(List.of(dto(UUID.randomUUID(), currentDepartmentId)),
                         PageRequest.of(0, 20), 1));
 
@@ -76,7 +76,7 @@ class WorkOrderPbacScopeTest {
                         .param("departmentId", requestedDepartmentId.toString()))
                 .andExpect(status().isOk());
 
-        verify(service).search(null, currentDepartmentId, null, 0, 20, null);
+        verify(service).search(null, currentDepartmentId, null, 0, 20, null, null, null);
     }
 
     @Test
@@ -95,13 +95,13 @@ class WorkOrderPbacScopeTest {
     void systemAdminCanRequestGlobalList() throws Exception {
         when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(service.search(null, null, null, 0, 20, null))
+        when(service.search(null, null, null, 0, 20, null, null, null))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/work-orders"))
                 .andExpect(status().isOk());
 
-        verify(service).search(null, null, null, 0, 20, null);
+        verify(service).search(null, null, null, 0, 20, null, null, null);
     }
 
     @Test

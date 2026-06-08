@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
+import com.toir.dto.workorder.WorkOrderCalendarSummaryResponse;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderPerformerOptionDto;
 import com.toir.dto.workorder.WorkOrderRequest;
@@ -15,6 +16,7 @@ import com.toir.security.ScopeAccessService;
 import com.toir.service.WorkOrderService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,9 +47,37 @@ public class WorkOrderController {
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Instant plannedFrom,
+            @RequestParam(required = false) Instant plannedTo) {
         return ResponseEntity
-                .ok(service.search(status, scopedDepartment(departmentId), equipmentId, page, size, search));
+                .ok(service.search(
+                        status,
+                        scopedDepartment(departmentId),
+                        equipmentId,
+                        page,
+                        size,
+                        search,
+                        plannedFrom,
+                        plannedTo));
+    }
+
+    @GetMapping("/calendar-summary")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_READ')")
+    public ResponseEntity<WorkOrderCalendarSummaryResponse> calendarSummary(
+            @RequestParam(required = false) WorkOrderStatus status,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String search,
+            @RequestParam int year,
+            @RequestParam(required = false) Integer month) {
+        return ResponseEntity.ok(service.calendarSummary(
+                status,
+                scopedDepartment(departmentId),
+                equipmentId,
+                search,
+                year,
+                month));
     }
 
     @GetMapping("/stats")
