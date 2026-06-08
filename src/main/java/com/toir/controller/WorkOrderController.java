@@ -118,7 +118,9 @@ public class WorkOrderController {
     @PostMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_CREATE')")
     public ResponseEntity<WorkOrderDto> create(@Valid @RequestBody WorkOrderRequest request) {
-        assertCanAccessDepartmentForMutation(request.departmentId());
+        if (request.departmentId() != null) {
+            assertCanAccessDepartmentForMutation(request.departmentId());
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 

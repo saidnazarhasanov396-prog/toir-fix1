@@ -7,6 +7,7 @@ import com.toir.dto.workorder.WorkOrderRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.CompletionAct;
+import com.toir.entity.CertificationType;
 import com.toir.entity.Department;
 import com.toir.entity.LaborEntry;
 import com.toir.entity.PprPlan;
@@ -14,9 +15,11 @@ import com.toir.entity.PprTask;
 import com.toir.entity.Reservation;
 import com.toir.entity.SafetyPermit;
 import com.toir.entity.defects.Defect;
+import com.toir.entity.defects.DefectList;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
+import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderTask;
@@ -24,6 +27,7 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.BrigadeMember;
 import com.toir.entity.users.User;
+import com.toir.entity.users.UserCertification;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.EquipmentNodeType;
@@ -32,6 +36,7 @@ import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.MeterType;
 import com.toir.enums.PlanStatus;
+import com.toir.enums.DefectListStatus;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
@@ -44,7 +49,9 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.repository.CompletionActRepository;
+import com.toir.repository.CertificationTypeRepository;
 import com.toir.repository.LaborEntryRepository;
+import com.toir.repository.LocationRepository;
 import com.toir.repository.PprPlanRepository;
 import com.toir.exception.RestException;
 import com.toir.repository.PprTaskRepository;
@@ -55,21 +62,28 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.WorkExecutionRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
+import com.toir.repository.maintenance.MaintenanceOperationRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.repository.maintenance.MaintenanceTemplateRepository;
+import com.toir.repository.maintenance.RepairAcceptanceRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.projection.WorkOrderCountProjection;
 import com.toir.repository.projection.WorkOrderCalendarBucketProjection;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.repository.users.UserCertificationRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.service.maintanance.WorkOrderSparePartRequirementService;
 import com.toir.service.repair.RepairMaterialUsageService;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -114,6 +128,9 @@ class WorkOrderServiceTest {
     EquipmentNodeRepository equipmentNodeRepository;
 
     @Mock
+    LocationRepository locationRepository;
+
+    @Mock
     DepartmentRepository departmentRepository;
 
     @Mock
@@ -132,10 +149,19 @@ class WorkOrderServiceTest {
     DefectRepository defectRepository;
 
     @Mock
+    DefectListRepository defectListRepository;
+
+    @Mock
     BrigadeMemberRepository brigadeMemberRepository;
 
     @Mock
     UserRepository userRepository;
+
+    @Mock
+    UserCertificationRepository userCertificationRepository;
+
+    @Mock
+    CertificationTypeRepository certificationTypeRepository;
 
     @Mock
     WorkExecutionRepository workExecutionRepository;
@@ -174,10 +200,28 @@ class WorkOrderServiceTest {
     MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
 
     @Mock
+    MaintenanceOperationRepository maintenanceOperationRepository;
+
+    @Mock
+    MaintenanceRegulationRepository maintenanceRegulationRepository;
+
+    @Mock
+    MaintenanceTemplateRepository maintenanceTemplateRepository;
+
+    @Mock
+    RepairAcceptanceRepository repairAcceptanceRepository;
+
+    @Mock
     MaintenanceDueEventService maintenanceDueEventService;
 
     @Mock
     WorkOrderSparePartRequirementService workOrderSparePartRequirementService;
+
+    @Mock
+    SafetyChecklistService safetyChecklistService;
+
+    @Mock
+    ScopeAccessService scopeAccessService;
 
     @Mock
     ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
@@ -382,6 +426,113 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void createMediumRepairWithoutDefectListReturns400() {
+        WorkOrderRequest request = requestWithDefectList(WorkOrderType.MEDIUM_REPAIR, null, UUID.randomUUID());
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Approved DefectList is required for MEDIUM_REPAIR");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createCapitalRepairWithoutDefectListReturns400() {
+        WorkOrderRequest request = requestWithDefectList(WorkOrderType.CAPITAL_REPAIR, null, UUID.randomUUID());
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Approved DefectList is required for CAPITAL_REPAIR");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createMediumRepairWithApprovedDefectListSucceeds() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithDefectList(WorkOrderType.MEDIUM_REPAIR, defectListId, equipmentId);
+        DefectList defectList = defectList(defectListId, equipmentId, DefectListStatus.APPROVED);
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+        when(defectListRepository.findByIdAndIsDeletedFalse(defectListId)).thenReturn(Optional.of(defectList));
+
+        WorkOrderDto result = service.create(request);
+
+        ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
+        verify(repository, atLeastOnce()).save(captor.capture());
+        assertThat(captor.getAllValues().get(0).getDefectListId()).isEqualTo(defectListId);
+        assertThat(result.defectListId()).isEqualTo(defectListId);
+        assertThat(result.defectListNumber()).isEqualTo("DL-2026-0001");
+        assertThat(result.defectListStatus()).isEqualTo(DefectListStatus.APPROVED);
+    }
+
+    @Test
+    void createMediumRepairWithDefectListFromAnotherEquipmentReturns400() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithDefectList(WorkOrderType.MEDIUM_REPAIR, defectListId, equipmentId);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(defectListRepository.findByIdAndIsDeletedFalse(defectListId))
+                .thenReturn(Optional.of(defectList(defectListId, UUID.randomUUID(), DefectListStatus.APPROVED)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("DefectList belongs to a different equipment");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createCapitalRepairWithNonApprovedDefectListReturns400() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithDefectList(WorkOrderType.CAPITAL_REPAIR, defectListId, equipmentId);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(defectListRepository.findByIdAndIsDeletedFalse(defectListId))
+                .thenReturn(Optional.of(defectList(defectListId, equipmentId, DefectListStatus.DRAFT)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Approved DefectList is required for CAPITAL_REPAIR");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createInspectionWorkOrderWithoutDefectListKeepsExistingFlowUnaffected() {
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        WorkOrderRequest request = requestWithDefectList(WorkOrderType.INSPECTION, null, UUID.randomUUID());
+        mockSuccessfulCreateDependencies(request);
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.type()).isEqualTo(WorkOrderType.INSPECTION);
+        assertThat(result.defectListId()).isNull();
+        verify(defectListRepository, never()).findByIdAndIsDeletedFalse(any());
+    }
+
+    @Test
     void createWithValidRepairRequestSucceeds() {
         when(repository.save(any(WorkOrder.class)))
                 .thenAnswer(invocation -> {
@@ -566,6 +717,7 @@ class WorkOrderServiceTest {
         UUID performerId = UUID.randomUUID();
         WorkOrderRequest request = requestWithPerformer(performerId);
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        mockCreateEquipmentScope(request);
         when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.create(request))
@@ -583,6 +735,7 @@ class WorkOrderServiceTest {
         WorkOrderRequest request = requestWithPerformer(performerId);
         BrigadeMember performer = brigadeMember(performerId, UUID.randomUUID(), request.departmentId(), false, true);
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        mockCreateEquipmentScope(request);
         when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
 
         assertThatThrownBy(() -> service.create(request))
@@ -600,6 +753,7 @@ class WorkOrderServiceTest {
         WorkOrderRequest request = requestWithPerformer(performerId);
         BrigadeMember performer = brigadeMember(performerId, UUID.randomUUID(), UUID.randomUUID(), true, true);
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        mockCreateEquipmentScope(request);
         when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
 
         assertThatThrownBy(() -> service.create(request))
@@ -609,6 +763,112 @@ class WorkOrderServiceTest {
                 });
 
         verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createWithPerformerHavingRequiredSkillSucceeds() {
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID operationId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPerformer(performerId);
+        BrigadeMember performer = brigadeMember(performerId, userId, request.departmentId(), true, true);
+        MaintenanceOperation operation = operation(operationId, "Mechanic");
+        UserCertification certification = certification(userId, "MECH", "ACTIVE", LocalDate.now().plusDays(10));
+        CertificationType certificationType = certificationType("MECH", "Mechanic");
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            workOrder.getTasks().add(task(workOrder, operationId));
+            return workOrder;
+        });
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        mockCreateEquipmentScope(request);
+        when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
+        when(maintenanceOperationRepository.findByIdAndIsDeletedFalse(operationId)).thenReturn(Optional.of(operation));
+        when(userCertificationRepository.findAllByUserIdAndIsDeletedFalse(userId)).thenReturn(List.of(certification));
+        when(certificationTypeRepository.findByCodeAndIsDeletedFalse("MECH")).thenReturn(certificationType);
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.performerId()).isEqualTo(performerId);
+    }
+
+    @Test
+    void createWithPerformerMissingRequiredSkillReturns400() {
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID operationId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPerformer(performerId);
+        BrigadeMember performer = brigadeMember(performerId, userId, request.departmentId(), true, true);
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            workOrder.getTasks().add(task(workOrder, operationId));
+            return workOrder;
+        });
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        mockCreateEquipmentScope(request);
+        when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
+        when(maintenanceOperationRepository.findByIdAndIsDeletedFalse(operationId)).thenReturn(Optional.of(operation(operationId, "Welder")));
+        when(userCertificationRepository.findAllByUserIdAndIsDeletedFalse(userId)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Assigned performer does not have required skill: Welder");
+                });
+    }
+
+    @Test
+    void createWithExpiredPerformerCertificationReturns400() {
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID operationId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPerformer(performerId);
+        BrigadeMember performer = brigadeMember(performerId, userId, request.departmentId(), true, true);
+        UserCertification certification = certification(userId, "WELD", "ACTIVE", LocalDate.now().minusDays(1));
+        CertificationType certificationType = certificationType("WELD", "Welder");
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            workOrder.getTasks().add(task(workOrder, operationId));
+            return workOrder;
+        });
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        mockCreateEquipmentScope(request);
+        when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
+        when(maintenanceOperationRepository.findByIdAndIsDeletedFalse(operationId)).thenReturn(Optional.of(operation(operationId, "Welder")));
+        when(userCertificationRepository.findAllByUserIdAndIsDeletedFalse(userId)).thenReturn(List.of(certification));
+        when(certificationTypeRepository.findByCodeAndIsDeletedFalse("WELD")).thenReturn(certificationType);
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Assigned performer certification is expired: Welder");
+                });
+    }
+
+    @Test
+    void createWithPerformerAndNoRequiredSkillDoesNotBlock() {
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID operationId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithPerformer(performerId);
+        BrigadeMember performer = brigadeMember(performerId, userId, request.departmentId(), true, true);
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            workOrder.getTasks().add(task(workOrder, operationId));
+            return workOrder;
+        });
+        mockSuccessfulCreateDependencies(request);
+        when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
+        when(maintenanceOperationRepository.findByIdAndIsDeletedFalse(operationId)).thenReturn(Optional.of(operation(operationId, null)));
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.performerId()).isEqualTo(performerId);
+        verify(userCertificationRepository, never()).findAllByUserIdAndIsDeletedFalse(any());
     }
 
     @Test
@@ -1258,6 +1518,7 @@ class WorkOrderServiceTest {
         Equipment sourceEquipment = new Equipment();
         sourceEquipment.setId(request.equipmentId());
         sourceEquipment.setName("Source Equipment");
+        sourceEquipment.setDepartmentId(request.departmentId());
 
         Equipment replacementEquipment = new Equipment();
         replacementEquipment.setId(replacementEquipmentId);
@@ -1268,6 +1529,7 @@ class WorkOrderServiceTest {
         department.setName("Maintenance");
 
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(new Warehouse()));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())).thenReturn(Optional.of(sourceEquipment));
         when(equipmentRepository.findByIdAndIsDeletedFalse(replacementEquipmentId)).thenReturn(Optional.of(replacementEquipment));
         when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
                 .thenReturn(Optional.of(item));
@@ -1278,6 +1540,7 @@ class WorkOrderServiceTest {
         when(equipmentRepository.findById(request.equipmentId())).thenReturn(Optional.of(sourceEquipment));
         when(equipmentRepository.findById(replacementEquipmentId)).thenReturn(Optional.of(replacementEquipment));
         when(departmentRepository.findById(request.departmentId())).thenReturn(Optional.of(department));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
 
         WorkOrderDto result = service.create(request);
 
@@ -1490,6 +1753,84 @@ class WorkOrderServiceTest {
         assertThat(response.defect()).isNotNull();
         assertThat(response.defect().status()).isEqualTo(DefectStatus.CLOSED);
         verify(defectRepository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void startBlockedByPendingCriticalSafetyChecklist() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        org.mockito.Mockito.doThrow(RestException.badRequest(
+                        "Cannot start work order; critical safety checklist items are not passed"))
+                .when(safetyChecklistService).assertCanStart(workOrder);
+
+        assertThatThrownBy(() -> service.start(workOrderId))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("critical safety checklist items are not passed");
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void startAllowedWhenAllCriticalSafetyChecklistItemsPassed() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.start(workOrderId);
+
+        assertThat(response.status()).isEqualTo(WorkOrderStatus.IN_PROGRESS);
+        verify(safetyChecklistService).assertCanStart(workOrder);
+    }
+
+    @Test
+    void startFailsIfCertificationExpiredAfterApproval() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID operationId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        workOrder.setPerformer(brigadeMember(performerId, userId, workOrder.getDepartmentId(), true, true));
+        workOrder.getTasks().add(task(workOrder, operationId));
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(maintenanceOperationRepository.findByIdAndIsDeletedFalse(operationId)).thenReturn(Optional.of(operation(operationId, "Electrician")));
+        when(userCertificationRepository.findAllByUserIdAndIsDeletedFalse(userId))
+                .thenReturn(List.of(certification(userId, "ELEC", "ACTIVE", LocalDate.now().minusDays(1))));
+        when(certificationTypeRepository.findByCodeAndIsDeletedFalse("ELEC"))
+                .thenReturn(certificationType("ELEC", "Electrician"));
+
+        assertThatThrownBy(() -> service.start(workOrderId))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Assigned performer certification is expired: Electrician");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void startSucceedsWhenRequiredSkillsAreSatisfied() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID operationId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        workOrder.setPerformer(brigadeMember(performerId, userId, workOrder.getDepartmentId(), true, true));
+        workOrder.getTasks().add(task(workOrder, operationId));
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(maintenanceOperationRepository.findByIdAndIsDeletedFalse(operationId)).thenReturn(Optional.of(operation(operationId, "Mechanic")));
+        when(userCertificationRepository.findAllByUserIdAndIsDeletedFalse(userId))
+                .thenReturn(List.of(certification(userId, "MECH", "ACTIVE", LocalDate.now().plusDays(30))));
+        when(certificationTypeRepository.findByCodeAndIsDeletedFalse("MECH"))
+                .thenReturn(certificationType("MECH", "Mechanic"));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.start(workOrderId);
+
+        assertThat(response.status()).isEqualTo(WorkOrderStatus.IN_PROGRESS);
     }
 
     @Test
@@ -2174,6 +2515,44 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void closeBlockedByIncompleteSafetyChecklist() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(repairAcceptanceRepository.existsAcceptedFinalByWorkOrderId(workOrderId)).thenReturn(true);
+        when(laborEntryRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrderId))
+                .thenReturn(List.of(laborEntry(workOrderId)));
+        when(reservationRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+        when(safetyChecklistService.closeBlocker(workOrder)).thenReturn(Optional.of("Safety checklist must be COMPLETED"));
+
+        assertThatThrownBy(() -> service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Safety checklist must be COMPLETED");
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void closeAllowedAfterSafetyChecklistCompletedPlusExistingGates() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(safetyChecklistService.closeBlocker(workOrder)).thenReturn(Optional.empty());
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes"));
+
+        assertThat(response.status()).isEqualTo(WorkOrderStatus.CLOSED);
+        verify(safetyChecklistService).closeBlocker(workOrder);
+    }
+
+    @Test
     void closeWithBlankResultShouldFail() {
         UUID workOrderId = UUID.randomUUID();
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
@@ -2416,6 +2795,38 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void approveMediumRepairWithoutDefectListReturns400() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        workOrder.setType(WorkOrderType.MEDIUM_REPAIR);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.approve(workOrderId, UUID.randomUUID()))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Approved DefectList is required for MEDIUM_REPAIR");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void startCapitalRepairWithoutDefectListReturns400() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        workOrder.setType(WorkOrderType.CAPITAL_REPAIR);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.start(workOrderId))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Approved DefectList is required for CAPITAL_REPAIR");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
     void startReplacementWorkOrderWithInvalidWarehouseEquipmentStateShouldFail() {
         UUID workOrderId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
@@ -2630,6 +3041,47 @@ class WorkOrderServiceTest {
         );
     }
 
+    private WorkOrderRequest requestWithDefectList(WorkOrderType type, UUID defectListId, UUID equipmentId) {
+        WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        return new WorkOrderRequest(
+                base.number(),
+                base.title(),
+                equipmentId,
+                null,
+                null,
+                base.departmentId(),
+                base.workLocationNote(),
+                base.repairRequestId(),
+                base.defectId(),
+                defectListId,
+                base.pprTaskId(),
+                base.contractorId(),
+                base.performerId(),
+                type,
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                base.startPlannedAt(),
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary(),
+                base.maintenanceDueEventId(),
+                base.cycleKey()
+        );
+    }
+
+    private DefectList defectList(UUID id, UUID equipmentId, DefectListStatus status) {
+        DefectList defectList = new DefectList();
+        defectList.setId(id);
+        defectList.setCode("DL-2026-0001");
+        defectList.setTitle("Approved defect list");
+        defectList.setEquipmentId(equipmentId);
+        defectList.setCreatedById(UUID.randomUUID());
+        defectList.setStatus(status);
+        return defectList;
+    }
+
     private RepairRequest repairRequest(UUID id, RequestStatus status) {
         return repairRequest(id, status, null);
     }
@@ -2708,14 +3160,31 @@ class WorkOrderServiceTest {
         Equipment sourceEquipment = new Equipment();
         sourceEquipment.setId(request.equipmentId());
         sourceEquipment.setName("Source Equipment");
+        sourceEquipment.setDepartmentId(request.departmentId());
 
         Department department = new Department();
         department.setId(request.departmentId());
         department.setName("Maintenance");
 
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(eq(request.equipmentId()))).thenReturn(Optional.of(sourceEquipment));
         when(equipmentRepository.findById(eq(request.equipmentId()))).thenReturn(Optional.of(sourceEquipment));
         when(departmentRepository.findById(eq(request.departmentId()))).thenReturn(Optional.of(department));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+    }
+
+    private void mockCreateEquipmentScope(WorkOrderRequest request) {
+        Equipment sourceEquipment = new Equipment();
+        sourceEquipment.setId(request.equipmentId());
+        sourceEquipment.setDepartmentId(request.departmentId());
+
+        Department department = new Department();
+        department.setId(request.departmentId());
+        department.setName("Maintenance");
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(eq(request.equipmentId()))).thenReturn(Optional.of(sourceEquipment));
+        when(departmentRepository.findById(eq(request.departmentId()))).thenReturn(Optional.of(department));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
     }
 
     private WorkOrder lifecycleWorkOrder(UUID id,
@@ -2777,6 +3246,41 @@ class WorkOrderServiceTest {
         return task;
     }
 
+    private WorkOrderTask task(WorkOrder workOrder, UUID sourceOperationId) {
+        WorkOrderTask task = workOrderTask(workOrder, "Generated operation", TaskExecutionStatus.TODO);
+        task.setSourceOperationId(sourceOperationId);
+        return task;
+    }
+
+    private MaintenanceOperation operation(UUID id, String requiredSkill) {
+        MaintenanceOperation operation = new MaintenanceOperation();
+        ReflectionTestUtils.setField(operation, "id", id);
+        operation.setSequence(1);
+        operation.setName("Generated operation");
+        operation.setRequiredSkill(requiredSkill);
+        return operation;
+    }
+
+    private UserCertification certification(UUID userId, String typeCode, String status, LocalDate expiresAt) {
+        UserCertification certification = new UserCertification();
+        ReflectionTestUtils.setField(certification, "id", UUID.randomUUID());
+        certification.setUserId(userId);
+        certification.setTypeCode(typeCode);
+        certification.setCertificateNumber("CERT-" + typeCode);
+        certification.setIssuedAt(LocalDate.now().minusYears(1));
+        certification.setExpiresAt(expiresAt);
+        certification.setStatus(status);
+        return certification;
+    }
+
+    private CertificationType certificationType(String code, String name) {
+        CertificationType type = new CertificationType();
+        ReflectionTestUtils.setField(type, "id", UUID.randomUUID());
+        type.setCode(code);
+        type.setName(name);
+        return type;
+    }
+
     private SafetyPermit safetyPermit(UUID workOrderId, SafetyPermitStatus status) {
         SafetyPermit permit = new SafetyPermit();
         permit.setId(UUID.randomUUID());
@@ -2803,6 +3307,7 @@ class WorkOrderServiceTest {
         when(departmentRepository.findById(workOrder.getDepartmentId())).thenReturn(Optional.empty());
         if (workOrder.getStatus() == WorkOrderStatus.COMPLETED
                 && (workOrder.getWorkType() == WorkType.REPAIR || workOrder.getWorkType() == WorkType.REPLACEMENT)) {
+            when(repairAcceptanceRepository.existsAcceptedFinalByWorkOrderId(workOrder.getId())).thenReturn(true);
             when(laborEntryRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrder.getId()))
                     .thenReturn(List.of(laborEntry(workOrder.getId())));
             when(reservationRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrder.getId()))
