@@ -135,6 +135,10 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
                 w.completed_at,
                 w.summary,
                 w.result,
+                coalesce(nullif(to_jsonb(w)->>'repair_act_required', '')::boolean, false) as repair_act_required,
+                coalesce(nullif(to_jsonb(w)->>'stoppage_act_required', '')::boolean, false) as stoppage_act_required,
+                nullif(to_jsonb(w)->>'repair_act_file_asset_id', '')::uuid as repair_act_file_asset_id,
+                nullif(to_jsonb(w)->>'stoppage_act_file_asset_id', '')::uuid as stoppage_act_file_asset_id,
                 to_jsonb(w)->>'closure_notes' as closure_notes,
                 w.created_by_id,
                 w.approved_by_id

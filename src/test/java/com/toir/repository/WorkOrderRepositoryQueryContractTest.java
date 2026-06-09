@@ -90,6 +90,23 @@ class WorkOrderRepositoryQueryContractTest {
     }
 
     @Test
+    void searchPaginatedQueryMustProjectActRolloutColumnsForEntityMapping() {
+        Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
+                .filter(m -> m.getName().equals("searchPaginated") && m.getAnnotation(Query.class) != null)
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+
+        String sql = query.value().toLowerCase();
+        assertThat(sql).contains("as repair_act_required");
+        assertThat(sql).contains("as stoppage_act_required");
+        assertThat(sql).contains("as repair_act_file_asset_id");
+        assertThat(sql).contains("as stoppage_act_file_asset_id");
+    }
+
+    @Test
     void searchPaginatedQueryMustFilterByPlannedDateRange() {
         Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
                 .filter(m -> m.getName().equals("searchPaginated") && m.getAnnotation(Query.class) != null)
