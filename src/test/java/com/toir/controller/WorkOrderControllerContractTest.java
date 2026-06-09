@@ -18,8 +18,12 @@ import com.toir.enums.RequestStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.WorkOrderService;
+import org.springframework.core.MethodParameter;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,8 +31,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.support.WebDataBinderFactory;
+import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.method.support.ModelAndViewContainer;
 
 import java.util.List;
 import java.util.Optional;
@@ -61,21 +71,33 @@ class WorkOrderControllerContractTest {
     ScopeAccessService scopeAccessService;
 
     private MockMvc mockMvc;
+    private UUID currentUserId;
 
     @BeforeEach
     void setUp() {
+        currentUserId = UUID.randomUUID();
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         lenient().when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
         lenient().when(repository.findByIdAndIsDeletedFalse(any(UUID.class)))
                 .thenAnswer(invocation -> Optional.of(workOrderEntity(invocation.getArgument(0), UUID.randomUUID())));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedUser(currentUserId.toString(), "user", "user@example.com", "User", null, "USER", List.of()),
+                null
+        ));
         mockMvc = MockMvcBuilders.standaloneSetup(new WorkOrderController(service, repository, scopeAccessService))
+                .setCustomArgumentResolvers(new TestCurrentUserResolver(currentUserId))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
 
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
     @Test
     void createWithUnknownRepairRequestReturns404() throws Exception {
-        when(service.create(any())).thenThrow(RestException.notFound("Repair request not found: " + UUID.randomUUID()));
+        when(service.create(any(), eq(currentUserId))).thenThrow(RestException.notFound("Repair request not found: " + UUID.randomUUID()));
 
         mockMvc.perform(post("/api/v1/work-orders")
                         .contentType("application/json")
@@ -86,7 +108,7 @@ class WorkOrderControllerContractTest {
 
     @Test
     void createWithUnknownDefectReturns404() throws Exception {
-        when(service.create(any())).thenThrow(RestException.notFound("Defect not found: " + UUID.randomUUID()));
+        when(service.create(any(), eq(currentUserId))).thenThrow(RestException.notFound("Defect not found: " + UUID.randomUUID()));
 
         mockMvc.perform(post("/api/v1/work-orders")
                         .contentType("application/json")
@@ -97,7 +119,7 @@ class WorkOrderControllerContractTest {
 
     @Test
     void createWithMismatchedRepairRequestAndDefectReturns400() throws Exception {
-        when(service.create(any())).thenThrow(RestException.badRequest("Defect belongs to a different repair request"));
+        when(service.create(any(), eq(currentUserId))).thenThrow(RestException.badRequest("Defect belongs to a different repair request"));
 
         mockMvc.perform(post("/api/v1/work-orders")
                         .contentType("application/json")
@@ -108,7 +130,7 @@ class WorkOrderControllerContractTest {
 
     @Test
     void createEmergencyWorkOrderWithoutRepairRequestReturns400() throws Exception {
-        when(service.create(any())).thenThrow(RestException.badRequest(
+        when(service.create(any(), eq(currentUserId))).thenThrow(RestException.badRequest(
                 "repairRequestId is required when work order type is EMERGENCY"));
 
         mockMvc.perform(post("/api/v1/work-orders")
@@ -123,7 +145,7 @@ class WorkOrderControllerContractTest {
 
     @Test
     void createDefectWorkOrderWithoutDefectReturns400() throws Exception {
-        when(service.create(any())).thenThrow(RestException.badRequest(
+        when(service.create(any(), eq(currentUserId))).thenThrow(RestException.badRequest(
                 "defectId is required when work order type is DEFECT"));
 
         mockMvc.perform(post("/api/v1/work-orders")
@@ -140,7 +162,7 @@ class WorkOrderControllerContractTest {
     void createWorkOrder_acceptsEquipmentNodeId() throws Exception {
         UUID equipmentNodeId = UUID.randomUUID();
         WorkOrderDto response = workOrderDtoWithNode(UUID.randomUUID(), equipmentNodeId);
-        when(service.create(any())).thenReturn(response);
+        when(service.create(any(), eq(currentUserId))).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/work-orders")
                         .contentType("application/json")
@@ -149,7 +171,7 @@ class WorkOrderControllerContractTest {
                 .andExpect(jsonPath("$.equipmentNodeId").value(equipmentNodeId.toString()));
 
         org.mockito.ArgumentCaptor<com.toir.dto.workorder.WorkOrderRequest> captor = forClass(com.toir.dto.workorder.WorkOrderRequest.class);
-        verify(service).create(captor.capture());
+        verify(service).create(captor.capture(), eq(currentUserId));
         org.assertj.core.api.Assertions.assertThat(captor.getValue().equipmentNodeId()).isEqualTo(equipmentNodeId);
     }
 
@@ -157,7 +179,7 @@ class WorkOrderControllerContractTest {
     void createWorkOrder_acceptsPerformerId() throws Exception {
         UUID performerId = UUID.randomUUID();
         WorkOrderDto response = workOrderDtoWithPerformer(UUID.randomUUID(), performerId, "Ivan Petrov");
-        when(service.create(any())).thenReturn(response);
+        when(service.create(any(), eq(currentUserId))).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/work-orders")
                         .contentType("application/json")
@@ -167,7 +189,7 @@ class WorkOrderControllerContractTest {
                 .andExpect(jsonPath("$.performerName").value("Ivan Petrov"));
 
         org.mockito.ArgumentCaptor<com.toir.dto.workorder.WorkOrderRequest> captor = forClass(com.toir.dto.workorder.WorkOrderRequest.class);
-        verify(service).create(captor.capture());
+        verify(service).create(captor.capture(), eq(currentUserId));
         org.assertj.core.api.Assertions.assertThat(captor.getValue().performerId()).isEqualTo(performerId);
     }
 
@@ -760,6 +782,25 @@ class WorkOrderControllerContractTest {
         );
     }
 
+    private static class TestCurrentUserResolver implements HandlerMethodArgumentResolver {
+        private final UUID userId;
+
+        private TestCurrentUserResolver(UUID userId) {
+            this.userId = userId;
+        }
+
+        @Override
+        public boolean supportsParameter(MethodParameter parameter) {
+            return parameter.hasParameterAnnotation(CurrentUser.class);
+        }
+
+        @Override
+        public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+                                      NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
+            return new AuthenticatedUser(userId.toString(), "user", "user@example.com", "User", null, "USER", List.of());
+        }
+    }
+
     private WorkOrderDto workOrderDto(UUID id, RepairRequestBriefDto repairRequest, DefectBriefDto defect) {
         return workOrderDto(id, WorkOrderStatus.PLANNED, repairRequest, defect);
     }
@@ -981,3 +1022,4 @@ class WorkOrderControllerContractTest {
         verify(service).getStats(null, null, null, null);
     }
 }
+

@@ -50,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -90,6 +91,9 @@ class PprGeneratorServiceLifecycleTest {
 
     @Mock
     WorkOrderService workOrderService;
+
+    @Mock
+    WorkOrderNumberService workOrderNumberService;
 
     @Mock
     MaintenanceDueCalculationService maintenanceDueCalculationService;
@@ -387,7 +391,7 @@ class PprGeneratorServiceLifecycleTest {
                 regulation("MR-PREV", equipment.getEquipmentTypeId(), MaintenanceKind.PREVENTIVE, PeriodicityUnit.MONTH);
         regulation.setId(regulationId);
         stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
-        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderNumberService.nextPprNumber(anySet())).thenReturn("WO-PPR-2026-0001");
         when(workOrderService.create(any())).thenReturn(workOrderDto(workOrderId, task));
 
         PprGeneratorService.WorkOrderGenerationResult result =
@@ -425,7 +429,7 @@ class PprGeneratorServiceLifecycleTest {
                 regulation("MR-INSP", equipment.getEquipmentTypeId(), MaintenanceKind.INSPECTION, PeriodicityUnit.MONTH);
         regulation.setId(regulationId);
         stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
-        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderNumberService.nextPprNumber(anySet())).thenReturn("WO-PPR-2026-0001");
         when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID(), task));
 
         service.generateWorkOrdersForPlan(planId, createdById);
@@ -450,7 +454,7 @@ class PprGeneratorServiceLifecycleTest {
                 regulation("MR-CURRENT", equipment.getEquipmentTypeId(), MaintenanceKind.CURRENT_REPAIR, PeriodicityUnit.YEAR);
         regulation.setId(regulationId);
         stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
-        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderNumberService.nextPprNumber(anySet())).thenReturn("WO-PPR-2026-0001");
         when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID(), task));
 
         service.generateWorkOrdersForPlan(planId, createdById);
@@ -475,7 +479,7 @@ class PprGeneratorServiceLifecycleTest {
                 regulation("MR-OVERHAUL", equipment.getEquipmentTypeId(), MaintenanceKind.OVERHAUL, PeriodicityUnit.YEAR);
         regulation.setId(regulationId);
         stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
-        when(workOrderRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(workOrderNumberService.nextPprNumber(anySet())).thenReturn("WO-PPR-2026-0001");
         when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID(), task));
 
         service.generateWorkOrdersForPlan(planId, createdById);
@@ -748,3 +752,4 @@ class PprGeneratorServiceLifecycleTest {
         return target;
     }
 }
+

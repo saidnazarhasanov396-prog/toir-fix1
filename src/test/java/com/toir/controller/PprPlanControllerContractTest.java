@@ -16,20 +16,30 @@ import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
 
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
+import org.springframework.core.MethodParameter;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.support.WebDataBinderFactory;
+import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.method.support.ModelAndViewContainer;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -70,14 +80,26 @@ class PprPlanControllerContractTest {
     ScopeAccessService scopeAccessService;
 
     private MockMvc mockMvc;
+    private UUID currentUserId;
 
     @BeforeEach
     void setUp() {
+        currentUserId = UUID.randomUUID();
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         lenient().when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AuthenticatedUser(currentUserId.toString(), "user", "user@example.com", "User", null, "USER", List.of()),
+                null
+        ));
         mockMvc = MockMvcBuilders.standaloneSetup(new PprPlanController(service, generatorService, planRepository, taskRepository, scopeAccessService))
+                .setCustomArgumentResolvers(new TestCurrentUserResolver(currentUserId))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -542,7 +564,7 @@ class PprPlanControllerContractTest {
         UUID workOrderId = UUID.randomUUID();
         UUID skippedTaskId = UUID.randomUUID();
         when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, UUID.randomUUID())));
-        when(generatorService.generateWorkOrdersForPlan(planId, createdById))
+        when(generatorService.generateWorkOrdersForPlan(planId, currentUserId))
                 .thenReturn(new PprGeneratorService.WorkOrderGenerationResult(
                         planId,
                         1,
@@ -564,7 +586,7 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.skippedItems[0].pprTaskId").value(skippedTaskId.toString()))
                 .andExpect(jsonPath("$.skippedItems[0].reason").value("WORK_ORDER_ALREADY_EXISTS"));
 
-        verify(generatorService).generateWorkOrdersForPlan(planId, createdById);
+        verify(generatorService).generateWorkOrdersForPlan(planId, currentUserId);
     }
 
     @Test
@@ -743,4 +765,24 @@ class PprPlanControllerContractTest {
                 null
         );
     }
+
+    private static class TestCurrentUserResolver implements HandlerMethodArgumentResolver {
+        private final UUID userId;
+
+        private TestCurrentUserResolver(UUID userId) {
+            this.userId = userId;
+        }
+
+        @Override
+        public boolean supportsParameter(MethodParameter parameter) {
+            return parameter.hasParameterAnnotation(CurrentUser.class);
+        }
+
+        @Override
+        public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+                                      NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
+            return new AuthenticatedUser(userId.toString(), "user", "user@example.com", "User", null, "USER", List.of());
+        }
+    }
 }
+

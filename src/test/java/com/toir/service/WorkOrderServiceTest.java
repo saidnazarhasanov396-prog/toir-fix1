@@ -224,6 +224,9 @@ class WorkOrderServiceTest {
     ScopeAccessService scopeAccessService;
 
     @Mock
+    WorkOrderNumberService workOrderNumberService;
+
+    @Mock
     ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
 
     @Mock
@@ -358,6 +361,78 @@ class WorkOrderServiceTest {
         assertThat(result.repairRequestId()).isNull();
         assertThat(result.defectId()).isNull();
         verify(workOrderSparePartRequirementService).syncFromWorkOrderContext(captor.getValue());
+    }
+
+    @Test
+    void createWithoutNumberGeneratesManualNumber() {
+        WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        WorkOrderRequest request = new WorkOrderRequest(
+                null,
+                base.title(),
+                base.equipmentId(),
+                base.departmentId(),
+                base.repairRequestId(),
+                base.defectId(),
+                base.pprTaskId(),
+                base.contractorId(),
+                base.type(),
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                base.startPlannedAt(),
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary());
+        WorkOrderRequest generatedRequest = new WorkOrderRequest(
+                "WO-MANUAL-2026-0001",
+                request.title(),
+                request.equipmentId(),
+                request.departmentId(),
+                request.repairRequestId(),
+                request.defectId(),
+                request.pprTaskId(),
+                request.contractorId(),
+                request.type(),
+                request.workType(),
+                request.warehouseId(),
+                request.replacementEquipmentId(),
+                request.priority(),
+                request.startPlannedAt(),
+                request.endPlannedAt(),
+                request.createdById(),
+                request.summary());
+        when(workOrderNumberService.nextManualNumber()).thenReturn("WO-MANUAL-2026-0001");
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(generatedRequest);
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.number()).isEqualTo("WO-MANUAL-2026-0001");
+    }
+
+    @Test
+    void createWithAuthenticatedUserOverridesRequestCreatedById() {
+        WorkOrderRequest request = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        UUID authenticatedUserId = UUID.randomUUID();
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+
+        service.create(request, authenticatedUserId);
+
+        ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getCreatedById()).isEqualTo(authenticatedUserId);
     }
 
     @Test

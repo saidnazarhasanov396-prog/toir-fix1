@@ -62,13 +62,12 @@ public class PprGeneratorService {
     private final AuditBuilderService auditBuilderService;
     private final WorkOrderRepository workOrderRepository;
     private final WorkOrderService workOrderService;
+    private final WorkOrderNumberService workOrderNumberService;
     private final MaintenanceDueCalculationService maintenanceDueCalculationService;
     private static final Set<PlanStatus> PLAN_TASK_GENERATION_STATUSES =
             EnumSet.of(PlanStatus.DRAFT, PlanStatus.GENERATED);
     private static final Set<PlanStatus> PLAN_WORK_ORDER_GENERATION_STATUSES =
             EnumSet.of(PlanStatus.APPROVED, PlanStatus.IN_PROGRESS);
-    private static final int MAX_WORK_ORDER_NUMBER_GENERATION_ATTEMPTS = 5000;
-
     @Transactional
     public GenerationResult generateForPlan(UUID planId) {
         PprPlan plan = planRepository.findByIdAndIsDeletedFalse(planId)
@@ -403,7 +402,7 @@ public class PprGeneratorService {
         Map<UUID, MaintenanceRegulation> regulationById = loadRegulationById(candidates);
         Map<UUID, EquipmentMaintenanceRule> maintenanceRuleById = loadMaintenanceRuleById(candidates);
         List<UUID> createdWorkOrderIds = new ArrayList<>();
-        Set<String> reservedNumbers = new HashSet<>();
+        Set<String> reservedWorkOrderNumbers = new HashSet<>();
 
         for (PprTask task : candidates) {
             Equipment equipment = equipmentById.get(task.getEquipmentId());
@@ -418,8 +417,10 @@ public class PprGeneratorService {
             }
             MaintenanceRegulation regulation = regulationById.get(task.getRegulationId());
             EquipmentMaintenanceRule maintenanceRule = maintenanceRuleById.get(task.getEquipmentMaintenanceRuleId());
+            String workOrderNumber = workOrderNumberService.nextPprNumber(reservedWorkOrderNumbers);
+            reservedWorkOrderNumbers.add(workOrderNumber);
             WorkOrderRequest request = new WorkOrderRequest(
-                    generateWorkOrderNumber(reservedNumbers),
+                    workOrderNumber,
                     task.getTitle(),
                     task.getEquipmentId(),
                     null,
@@ -586,23 +587,6 @@ public class PprGeneratorService {
     private String workOrderSummary(PprPlan plan, PprTask task) {
         return "Generated from PPR plan %s (%s), task %s"
                 .formatted(plan.getCode(), plan.getName(), task.getCode());
-    }
-
-    private String generateWorkOrderNumber(Set<String> reservedNumbers) {
-        int year = Year.now().getValue();
-        String prefix = "WO-PPR-" + year + "-";
-        for (int sequence = 1; sequence <= MAX_WORK_ORDER_NUMBER_GENERATION_ATTEMPTS; sequence++) {
-            String number = prefix + String.format("%04d", sequence);
-            if (reservedNumbers.contains(number)) {
-                continue;
-            }
-            if (workOrderRepository.existsByNumberAndIsDeletedFalse(number)) {
-                continue;
-            }
-            reservedNumbers.add(number);
-            return number;
-        }
-        throw RestException.conflict("Could not generate unique PPR work order number");
     }
 
     private boolean isAllowedForSchedule(PprPlan plan,

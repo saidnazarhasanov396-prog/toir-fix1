@@ -147,6 +147,7 @@ public class WorkOrderService {
     private final WorkOrderSparePartRequirementService workOrderSparePartRequirementService;
     private final SafetyChecklistService safetyChecklistService;
     private final ScopeAccessService scopeAccessService;
+    private final WorkOrderNumberService workOrderNumberService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     private final ObjectMapper objectMapper;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
@@ -324,15 +325,25 @@ public class WorkOrderService {
 
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request) {
+        return create(request, request.createdById());
+    }
+
+    @Transactional
+    public WorkOrderDto create(WorkOrderRequest request, UUID createdById) {
         if (request.equipmentId() == null) {
             throw RestException.badRequest("Equipment is required to create a work order");
         }
+        UUID effectiveCreatedById = createdById == null ? request.createdById() : createdById;
+        if (effectiveCreatedById == null) {
+            throw RestException.badRequest("createdById is required to create a work order");
+        }
+        String effectiveNumber = normalizeWorkOrderNumber(request.number());
         equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create work order");
         WorkType effectiveWorkType = request.workType() != null ? request.workType() : WorkType.REPAIR;
         validateReplacementFields(request, effectiveWorkType);
         validateTypeRequiredRelations(request);
-        if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
-            throw RestException.conflict("Work order number already exists: " + request.number());
+        if (repository.existsByNumberAndIsDeletedFalse(effectiveNumber)) {
+            throw RestException.conflict("Work order number already exists: " + effectiveNumber);
         }
         Defect linkedDefect = validateCreateRelations(request);
         UUID effectiveEquipmentNodeId = resolveEffectiveEquipmentNodeId(request, linkedDefect);
@@ -351,7 +362,7 @@ public class WorkOrderService {
                 request.equipmentId());
         reserveReplacementEquipmentOnCreate(request, effectiveWorkType);
         WorkOrder entity = new WorkOrder();
-        entity.setNumber(request.number());
+        entity.setNumber(effectiveNumber);
         entity.setTitle(request.title());
         entity.setEquipmentId(request.equipmentId());
         entity.setEquipmentNodeId(effectiveEquipmentNodeId);
@@ -374,7 +385,7 @@ public class WorkOrderService {
             entity.setPriority(request.priority());
         entity.setStartPlannedAt(request.startPlannedAt());
         entity.setEndPlannedAt(request.endPlannedAt());
-        entity.setCreatedById(request.createdById());
+        entity.setCreatedById(effectiveCreatedById);
         entity.setSummary(request.summary());
         WorkOrder saved = repository.save(entity);
         generateTemplateTasksFromWorkOrderContext(saved);
@@ -1951,5 +1962,12 @@ public class WorkOrderService {
         }
         String trimmed = search.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeWorkOrderNumber(String number) {
+        if (number == null || number.isBlank()) {
+            return workOrderNumberService.nextManualNumber();
+        }
+        return number.trim();
     }
 }

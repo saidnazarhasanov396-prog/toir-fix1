@@ -11,6 +11,7 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.security.AuthenticatedUser;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.WorkOrderService;
@@ -26,6 +27,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -121,7 +124,9 @@ public class WorkOrderController {
         if (request.departmentId() != null) {
             assertCanAccessDepartmentForMutation(request.departmentId());
         }
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
+        UUID creatorId = currentUserId();
+        WorkOrderDto created = creatorId == null ? service.create(request) : service.create(request, creatorId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @PostMapping("/{id}/approve")
@@ -179,5 +184,16 @@ public class WorkOrderController {
         if (departmentId == null || !scopeAccessService.canAccessDepartment(departmentId)) {
             throw new AccessDeniedException("Access denied by work order department scope");
         }
+    }
+
+    private UUID currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser user)) {
+            return null;
+        }
+        if (user == null || user.id() == null || user.id().isBlank()) {
+            return null;
+        }
+        return UUID.fromString(user.id());
     }
 }
