@@ -460,7 +460,7 @@ class RbacReferenceDataSecurityTest {
         when(departmentService.findEmployeesByDepartment(any())).thenReturn(List.of());
         when(brigadeService.findAll(isNull(), isNull(), isNull())).thenReturn(List.of(brigadeDto(id)));
         when(brigadeService.listMembers(any())).thenReturn(List.of());
-        when(locationService.search(isNull(), isNull(), eq(0), eq(1)))
+        when(locationService.search(isNull(), isNull(), isNull(), eq(0), eq(1)))
                 .thenReturn(new PageImpl<>(List.of(locationDto(id)), PageRequest.of(0, 1), 1));
         when(equipmentTypeService.findAll(isNull(), isNull())).thenReturn(List.of(equipmentTypeDto(id)));
         when(criticalityClassService.findAll(isNull())).thenReturn(List.of(criticalityClassDto(id)));
