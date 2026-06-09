@@ -4,15 +4,10 @@ server:
 
 spring:
   datasource:
-    url: ${TOIR_DB_URL:${SPRING_DATASOURCE_URL:jdbc:postgresql://192.168.1.7:5432/toirdb}}
-    username: ${TOIR_DB_USERNAME:${SPRING_DATASOURCE_USERNAME:toir-user}}
-    password: ${TOIR_DB_PASSWORD:${SPRING_DATASOURCE_PASSWORD:5oe1z42pNm0D1ohP13Z1}}
+    url: jdbc:postgresql://192.168.1.7:5432/toirdb
+    username: toir-user
+    password: 5oe1z42pNm0D1ohP13Z1
     driver-class-name: org.postgresql.Driver
-  flyway:
-    user: ${TOIR_FLYWAY_USER:${SPRING_FLYWAY_USER:${TOIR_DB_USERNAME:${SPRING_DATASOURCE_USERNAME:toir-user}}}}
-    password: ${TOIR_FLYWAY_PASSWORD:${SPRING_FLYWAY_PASSWORD:${TOIR_DB_PASSWORD:${SPRING_DATASOURCE_PASSWORD:5oe1z42pNm0D1ohP13Z1}}}}
-    default-schema: ${TOIR_DB_SCHEMA:${SPRING_FLYWAY_DEFAULT_SCHEMA:public}}
-    schemas: ${TOIR_DB_SCHEMA:${SPRING_FLYWAY_SCHEMAS:${SPRING_FLYWAY_DEFAULT_SCHEMA:public}}}
   jpa:
     hibernate:
       ddl-auto: validate
