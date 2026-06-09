@@ -109,6 +109,18 @@ public class WorkOrder extends BaseEntity {
     @Column(columnDefinition = "text")
     private String result;
 
+    @Column(name = "repair_act_required", nullable = false, columnDefinition = "boolean default false")
+    private Boolean repairActRequired = false;
+
+    @Column(name = "stoppage_act_required", nullable = false, columnDefinition = "boolean default false")
+    private Boolean stoppageActRequired = false;
+
+    @Column(name = "repair_act_file_asset_id")
+    private UUID repairActFileAssetId;
+
+    @Column(name = "stoppage_act_file_asset_id")
+    private UUID stoppageActFileAssetId;
+
     @Column(name = "closure_notes", columnDefinition = "text")
     private String closureNotes;
 

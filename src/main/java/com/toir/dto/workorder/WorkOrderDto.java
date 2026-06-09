@@ -60,11 +60,17 @@ public record WorkOrderDto(
         DefectBriefDto defect,
         int operationsCount,
         int materialsCount,
+        Boolean repairActRequired,
+        Boolean stoppageActRequired,
+        UUID repairActFileId,
+        UUID stoppageActFileId,
         @JsonInclude(JsonInclude.Include.NON_EMPTY)
         List<RepairMaterialUsageDto> materialUsages,
         Instant updatedAt
 ) {
     public WorkOrderDto {
+        repairActRequired = Boolean.TRUE.equals(repairActRequired);
+        stoppageActRequired = Boolean.TRUE.equals(stoppageActRequired);
         materialUsages = materialUsages == null ? List.of() : List.copyOf(materialUsages);
     }
 
@@ -109,7 +115,7 @@ public record WorkOrderDto(
                 null, null, null, pprTaskId, contractorId, null, null, status, type, workType, priority, startPlannedAt, endPlannedAt,
                 startedAt, completedAt, summary, result, closureNotes, createdById, approvedById, warehouseId,
                 replacementEquipmentId, replacementEquipmentName, tasks, repairRequest, defect, operationsCount,
-                materialsCount, List.of(), null);
+                materialsCount, false, false, null, null, List.of(), null);
     }
 
     public WorkOrderDto(UUID id,
@@ -155,7 +161,7 @@ public record WorkOrderDto(
                 null, null, null, pprTaskId, contractorId, performerId, performerName, status, type, workType, priority, startPlannedAt, endPlannedAt,
                 startedAt, completedAt, summary, result, closureNotes, createdById, approvedById, warehouseId,
                 replacementEquipmentId, replacementEquipmentName, tasks, repairRequest, defect, operationsCount,
-                materialsCount, List.of(), null);
+                materialsCount, false, false, null, null, List.of(), null);
     }
 
     public WorkOrderDto(UUID id,
@@ -195,7 +201,7 @@ public record WorkOrderDto(
                 repairRequestId, defectId, null, null, null, pprTaskId, contractorId, null, null, status, type, workType, priority,
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
                 createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
-                tasks, repairRequest, defect, operationsCount, materialsCount, List.of(), null);
+                tasks, repairRequest, defect, operationsCount, materialsCount, false, false, null, null, List.of(), null);
     }
 
     public WorkOrderDto(UUID id,
@@ -237,7 +243,7 @@ public record WorkOrderDto(
                 repairRequestId, defectId, null, null, null, pprTaskId, contractorId, performerId, performerName, status, type, workType, priority,
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
                 createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
-                tasks, repairRequest, defect, operationsCount, materialsCount, List.of(), null);
+                tasks, repairRequest, defect, operationsCount, materialsCount, false, false, null, null, List.of(), null);
     }
 //    public static WorkOrderDto from(WorkOrder w) {
 //        return new WorkOrderDto(
