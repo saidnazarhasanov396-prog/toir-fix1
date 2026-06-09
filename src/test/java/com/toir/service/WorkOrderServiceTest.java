@@ -15,7 +15,6 @@ import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
 import com.toir.entity.Reservation;
 import com.toir.entity.SafetyPermit;
-import com.toir.entity.UploadedFile;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.defects.DefectList;
 import com.toir.entity.equipment.Equipment;
@@ -24,7 +23,6 @@ import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
-import com.toir.entity.maintenance.WorkOrderDocument;
 import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.Brigade;
@@ -34,7 +32,6 @@ import com.toir.entity.users.UserCertification;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.EquipmentNodeType;
-import com.toir.enums.FileCategory;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.MaintenanceTriggerSource;
@@ -62,7 +59,6 @@ import com.toir.exception.RestException;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ReservationRepository;
 import com.toir.repository.SafetyPermitRepository;
-import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -77,7 +73,6 @@ import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.RepairAcceptanceRepository;
-import com.toir.repository.maintenance.WorkOrderDocumentRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.projection.WorkOrderCountProjection;
 import com.toir.repository.projection.WorkOrderCalendarBucketProjection;
@@ -85,9 +80,6 @@ import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.repository.users.UserCertificationRepository;
-import com.toir.dto.file.UploadFileResponse;
-import com.toir.security.AuthenticatedUser;
-import com.toir.service.file_management.FileService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
@@ -102,11 +94,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
@@ -206,15 +196,6 @@ class WorkOrderServiceTest {
     FileAssetRepository fileAssetRepository;
 
     @Mock
-    FileService fileService;
-
-    @Mock
-    UploadedFileRepository uploadedFileRepository;
-
-    @Mock
-    WorkOrderDocumentRepository workOrderDocumentRepository;
-
-    @Mock
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @Mock
@@ -261,129 +242,6 @@ class WorkOrderServiceTest {
 
     @InjectMocks
     WorkOrderService service;
-
-    @Test
-    void attachDocumentsUploadsFilesWithJwtUserAndPersistsDocumentRows() {
-        UUID workOrderId = UUID.randomUUID();
-        UUID currentUserId = UUID.randomUUID();
-        UUID fileId = UUID.randomUUID();
-        WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), UUID.randomUUID());
-        UploadedFile uploadedFile = uploadedFile(fileId, currentUserId, "act.pdf");
-        MockMultipartFile file = new MockMultipartFile("files", "act.pdf", "application/pdf", "%PDF-1.4\n".getBytes());
-        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(fileService.upload(file, FileCategory.WORK_ORDER_DOCUMENT, currentUserId))
-                .thenReturn(UploadFileResponse.from(uploadedFile));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId)).thenReturn(Optional.of(uploadedFile));
-        when(workOrderDocumentRepository.saveAllAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-
-        var result = service.attachDocuments(
-                workOrderId,
-                List.of(file),
-                List.of(" Completion act "),
-                " ACT ",
-                authenticatedUser(currentUserId));
-
-        assertThat(result).hasSize(1);
-        assertThat(result.getFirst().workOrderId()).isEqualTo(workOrderId);
-        assertThat(result.getFirst().uploadedById()).isEqualTo(currentUserId);
-        assertThat(result.getFirst().documentName()).isEqualTo("Completion act");
-        assertThat(result.getFirst().documentType()).isEqualTo("ACT");
-        verify(fileService).upload(file, FileCategory.WORK_ORDER_DOCUMENT, currentUserId);
-    }
-
-    @Test
-    void attachDocumentsRejectsMismatchedDocumentNamesBeforeUpload() {
-        UUID workOrderId = UUID.randomUUID();
-        UUID currentUserId = UUID.randomUUID();
-        WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), UUID.randomUUID());
-        MockMultipartFile file = new MockMultipartFile("files", "act.pdf", "application/pdf", "%PDF-1.4\n".getBytes());
-        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-
-        assertThatThrownBy(() -> service.attachDocuments(
-                workOrderId,
-                List.of(file),
-                List.of("One", "Two"),
-                null,
-                authenticatedUser(currentUserId)))
-                .isInstanceOf(RestException.class)
-                .hasMessageContaining("files and documentNames must have the same length");
-
-        verifyNoInteractions(fileService);
-    }
-
-    @Test
-    void getDocumentsLoadsMetadataAndReturnsDownloadUrls() {
-        UUID workOrderId = UUID.randomUUID();
-        UUID currentUserId = UUID.randomUUID();
-        UUID fileId = UUID.randomUUID();
-        WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), UUID.randomUUID());
-        WorkOrderDocument document = workOrderDocument(workOrder, uploadedFile(fileId, currentUserId, "act.pdf"));
-        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(workOrderDocumentRepository.findAllByWorkOrderId(workOrderId)).thenReturn(List.of(document));
-
-        var result = service.getDocuments(workOrderId, authenticatedUser(currentUserId));
-
-        assertThat(result).hasSize(1);
-        assertThat(result.getFirst().downloadUrl()).contains("/api/v1/work-orders/" + workOrderId + "/documents/");
-        verify(fileService).getMetadata(fileId, currentUserId);
-    }
-
-    @Test
-    void downloadDocumentDelegatesToFileServiceForLinkedFile() {
-        UUID workOrderId = UUID.randomUUID();
-        UUID documentId = UUID.randomUUID();
-        UUID currentUserId = UUID.randomUUID();
-        UUID fileId = UUID.randomUUID();
-        WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), UUID.randomUUID());
-        WorkOrderDocument document = workOrderDocument(workOrder, uploadedFile(fileId, currentUserId, "act.pdf"));
-        document.setId(documentId);
-        ByteArrayResource resource = new ByteArrayResource("content".getBytes());
-        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(workOrderDocumentRepository.findByIdAndWorkOrderId(documentId, workOrderId)).thenReturn(Optional.of(document));
-        when(fileService.download(fileId, currentUserId)).thenReturn(resource);
-
-        var result = service.downloadDocument(workOrderId, documentId, authenticatedUser(currentUserId));
-
-        assertThat(result).isSameAs(resource);
-        verify(fileService).download(fileId, currentUserId);
-    }
-
-    @Test
-    void deleteDocumentDeletesLinkAndStoredFile() {
-        UUID workOrderId = UUID.randomUUID();
-        UUID documentId = UUID.randomUUID();
-        UUID currentUserId = UUID.randomUUID();
-        UUID fileId = UUID.randomUUID();
-        WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), UUID.randomUUID());
-        WorkOrderDocument document = workOrderDocument(workOrder, uploadedFile(fileId, currentUserId, "act.pdf"));
-        document.setId(documentId);
-        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(workOrderDocumentRepository.findByIdAndWorkOrderId(documentId, workOrderId)).thenReturn(Optional.of(document));
-
-        service.deleteDocument(workOrderId, documentId, authenticatedUser(currentUserId));
-
-        verify(workOrderDocumentRepository).delete(document);
-        verify(fileService).delete(fileId, currentUserId);
-    }
-
-    @Test
-    void getDocumentsRejectsWorkOrderOutsideDepartmentScope() {
-        UUID workOrderId = UUID.randomUUID();
-        UUID departmentId = UUID.randomUUID();
-        WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), departmentId);
-        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
-        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(false);
-        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-
-        assertThatThrownBy(() -> service.getDocuments(workOrderId, authenticatedUser(UUID.randomUUID())))
-                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
-                .hasMessageContaining("work order department scope");
-    }
 
     @Test
     void calendarSummaryForMonthUsesTashkentBoundariesAndBuildsDayBuckets() {
@@ -3403,52 +3261,6 @@ class WorkOrderServiceTest {
         defectList.setCreatedById(UUID.randomUUID());
         defectList.setStatus(status);
         return defectList;
-    }
-
-    private AuthenticatedUser authenticatedUser(UUID userId) {
-        return new AuthenticatedUser(userId.toString(), "user", "user@example.com", "User", null, "USER", List.of());
-    }
-
-    private WorkOrder workOrder(UUID id, UUID equipmentId, UUID departmentId) {
-        WorkOrder workOrder = new WorkOrder();
-        ReflectionTestUtils.setField(workOrder, "id", id);
-        workOrder.setNumber("WO-2026-1001");
-        workOrder.setTitle("Planned repair");
-        workOrder.setEquipmentId(equipmentId);
-        workOrder.setDepartmentId(departmentId);
-        workOrder.setStatus(WorkOrderStatus.PLANNED);
-        workOrder.setType(WorkOrderType.PLANNED);
-        workOrder.setWorkType(WorkType.REPAIR);
-        workOrder.setPriority(PriorityLevel.MEDIUM);
-        workOrder.setCreatedById(UUID.randomUUID());
-        return workOrder;
-    }
-
-    private UploadedFile uploadedFile(UUID id, UUID uploadedById, String originalName) {
-        return UploadedFile.builder()
-                .id(id)
-                .originalName(originalName)
-                .storedName(originalName)
-                .objectName("work-order-documents/2026/06/" + id + "-" + originalName)
-                .contentType("application/pdf")
-                .extension("pdf")
-                .size(128L)
-                .uploadedBy(uploadedById)
-                .category(FileCategory.WORK_ORDER_DOCUMENT)
-                .deleted(false)
-                .createdAt(java.time.LocalDateTime.parse("2026-06-09T10:00:00"))
-                .build();
-    }
-
-    private WorkOrderDocument workOrderDocument(WorkOrder workOrder, UploadedFile file) {
-        WorkOrderDocument document = WorkOrderDocument.builder()
-                .workOrder(workOrder)
-                .file(file)
-                .documentType("ACT")
-                .documentName("Completion act")
-                .build();
-        document.setId(UUID.randomUUID());
-        return document;
     }
 
     private RepairRequest repairRequest(UUID id, RequestStatus status) {

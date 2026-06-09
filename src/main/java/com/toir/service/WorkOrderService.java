@@ -6,7 +6,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.entity.Department;
 import com.toir.entity.Location;
-import com.toir.entity.UploadedFile;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.defects.DefectList;
 import com.toir.entity.equipment.Equipment;
@@ -17,7 +16,6 @@ import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
-import com.toir.entity.maintenance.WorkOrderDocument;
 import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
@@ -33,7 +31,6 @@ import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.repository.CompletionActRepository;
 import com.toir.repository.CertificationTypeRepository;
 import com.toir.repository.FileAssetRepository;
-import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.LaborEntryRepository;
 import com.toir.repository.LocationRepository;
@@ -51,7 +48,6 @@ import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.DefectListStatus;
 import com.toir.enums.EquipmentStatus;
-import com.toir.enums.FileCategory;
 import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
@@ -74,15 +70,12 @@ import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.RepairAcceptanceRepository;
-import com.toir.repository.maintenance.WorkOrderDocumentRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.projection.WorkOrderCalendarBucketProjection;
 import com.toir.repository.users.UserRepository;
 import com.toir.repository.users.UserCertificationRepository;
-import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
-import com.toir.service.file_management.FileService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.service.maintanance.WorkOrderSparePartRequirementService;
@@ -91,12 +84,10 @@ import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -108,7 +99,6 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -148,9 +138,6 @@ public class WorkOrderService {
     private final SafetyPermitRepository safetyPermitRepository;
     private final CompletionActRepository completionActRepository;
     private final FileAssetRepository fileAssetRepository;
-    private final FileService fileService;
-    private final UploadedFileRepository uploadedFileRepository;
-    private final WorkOrderDocumentRepository workOrderDocumentRepository;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final RepairMaterialUsageService repairMaterialUsageService;
     private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
@@ -302,105 +289,6 @@ public class WorkOrderService {
     public WorkOrderDto findById(UUID id) {
         WorkOrder entity = getOrThrow(id);
         return toDetailDto(entity);
-    }
-
-    @Transactional
-    public List<WorkOrderDocumentDto> attachDocuments(
-            UUID workOrderId,
-            List<MultipartFile> files,
-            List<String> documentNames,
-            String documentType,
-            AuthenticatedUser user
-    ) {
-        UUID currentUserId = currentUserId(user);
-        WorkOrder workOrder = getOrThrow(workOrderId);
-        assertCanAccessWorkOrder(workOrder);
-        if (files == null || files.isEmpty()) {
-            throw RestException.badRequest("At least one work order document file is required");
-        }
-        List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
-        String normalizedDocumentType = normalizeDocumentType(documentType);
-
-        List<UUID> uploadedFileIds = new ArrayList<>();
-        try {
-            List<WorkOrderDocument> documents = new ArrayList<>(files.size());
-            for (int i = 0; i < files.size(); i++) {
-                MultipartFile file = files.get(i);
-                var uploaded = fileService.upload(file, FileCategory.WORK_ORDER_DOCUMENT, currentUserId);
-                uploadedFileIds.add(uploaded.id());
-                UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
-                        .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
-                documents.add(WorkOrderDocument.builder()
-                        .workOrder(workOrder)
-                        .file(uploadedFile)
-                        .documentType(normalizedDocumentType)
-                        .documentName(normalizedDocumentNames.get(i))
-                        .build());
-            }
-
-            return workOrderDocumentRepository.saveAllAndFlush(documents).stream()
-                    .map(document -> WorkOrderDocumentDto.from(workOrderId, document))
-                    .filter(Objects::nonNull)
-                    .toList();
-        } catch (RuntimeException e) {
-            cleanupUploadedFiles(uploadedFileIds, currentUserId);
-            if (e instanceof RestException restException) {
-                throw restException;
-            }
-            throw RestException.conflict("Could not attach work order documents");
-        }
-    }
-
-    @Transactional(readOnly = true)
-    public List<WorkOrderDocumentDto> getDocuments(UUID workOrderId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
-        WorkOrder workOrder = getOrThrow(workOrderId);
-        assertCanAccessWorkOrder(workOrder);
-        return workOrderDocumentRepository.findAllByWorkOrderId(workOrderId)
-                .stream()
-                .map(document -> toDocumentDtoWithMetadata(workOrderId, document, currentUserId))
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public WorkOrderDocumentDto getDocument(UUID workOrderId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
-        WorkOrder workOrder = getOrThrow(workOrderId);
-        assertCanAccessWorkOrder(workOrder);
-        WorkOrderDocument document = findWorkOrderDocument(workOrderId, documentId);
-        return toDocumentDtoWithMetadata(workOrderId, document, currentUserId);
-    }
-
-    @Transactional(readOnly = true)
-    public com.toir.dto.file.PresignedUrlResponse getDocumentPresignedUrl(
-            UUID workOrderId,
-            UUID documentId,
-            AuthenticatedUser user
-    ) {
-        UUID currentUserId = currentUserId(user);
-        WorkOrder workOrder = getOrThrow(workOrderId);
-        assertCanAccessWorkOrder(workOrder);
-        WorkOrderDocument document = findWorkOrderDocument(workOrderId, documentId);
-        return fileService.getPresignedUrl(document.getFile().getId(), currentUserId);
-    }
-
-    @Transactional(readOnly = true)
-    public Resource downloadDocument(UUID workOrderId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
-        WorkOrder workOrder = getOrThrow(workOrderId);
-        assertCanAccessWorkOrder(workOrder);
-        WorkOrderDocument document = findWorkOrderDocument(workOrderId, documentId);
-        return fileService.download(document.getFile().getId(), currentUserId);
-    }
-
-    @Transactional
-    public void deleteDocument(UUID workOrderId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
-        WorkOrder workOrder = getOrThrow(workOrderId);
-        assertCanAccessWorkOrder(workOrder);
-        WorkOrderDocument document = findWorkOrderDocument(workOrderId, documentId);
-        workOrderDocumentRepository.delete(document);
-        fileService.delete(document.getFile().getId(), currentUserId);
     }
 
     @Transactional(readOnly = true)
@@ -1215,84 +1103,6 @@ public class WorkOrderService {
     private WorkOrder getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + id));
-    }
-
-    private WorkOrderDocument findWorkOrderDocument(UUID workOrderId, UUID documentId) {
-        return workOrderDocumentRepository.findByIdAndWorkOrderId(documentId, workOrderId)
-                .orElseThrow(() -> RestException.notFound("Work order document not found: " + documentId));
-    }
-
-    private WorkOrderDocumentDto toDocumentDtoWithMetadata(
-            UUID workOrderId,
-            WorkOrderDocument document,
-            UUID currentUserId
-    ) {
-        fileService.getMetadata(document.getFile().getId(), currentUserId);
-        return WorkOrderDocumentDto.from(workOrderId, document);
-    }
-
-    private void cleanupUploadedFiles(List<UUID> fileIds, UUID currentUserId) {
-        for (UUID fileId : fileIds) {
-            deleteDocumentQuietly(fileId, currentUserId);
-        }
-    }
-
-    private void deleteDocumentQuietly(UUID fileId, UUID currentUserId) {
-        try {
-            fileService.delete(fileId, currentUserId);
-        } catch (RuntimeException e) {
-            // Cleanup must not hide the original attach failure.
-        }
-    }
-
-    private UUID currentUserId(AuthenticatedUser user) {
-        if (user == null || user.id() == null || user.id().isBlank()) {
-            throw RestException.unauthorized("Authenticated user is required");
-        }
-        return UUID.fromString(user.id());
-    }
-
-    private String normalizeDocumentType(String documentType) {
-        if (documentType == null || documentType.isBlank()) {
-            return null;
-        }
-        String trimmed = documentType.trim();
-        if (trimmed.length() > 64) {
-            throw RestException.badRequest("documentType must be 64 characters or fewer");
-        }
-        return trimmed;
-    }
-
-    private List<String> normalizeDocumentNames(List<MultipartFile> files, List<String> documentNames) {
-        if (documentNames == null || documentNames.isEmpty()) {
-            throw RestException.badRequest("documentNames are required for work order document uploads");
-        }
-        if (documentNames.size() != files.size()) {
-            throw RestException.badRequest("files and documentNames must have the same length");
-        }
-        List<String> normalized = new ArrayList<>(documentNames.size());
-        for (int i = 0; i < documentNames.size(); i++) {
-            String documentName = documentNames.get(i);
-            if (documentName == null || documentName.isBlank()) {
-                throw RestException.badRequest("documentNames[" + i + "] must not be blank");
-            }
-            String trimmed = documentName.trim();
-            if (trimmed.length() > 255) {
-                throw RestException.badRequest("documentNames[" + i + "] must be 255 characters or fewer");
-            }
-            normalized.add(trimmed);
-        }
-        return normalized;
-    }
-
-    private void assertCanAccessWorkOrder(WorkOrder workOrder) {
-        if (scopeAccessService.isScopeAdmin()) {
-            return;
-        }
-        UUID departmentId = workOrder.getDepartmentId();
-        if (departmentId == null || !scopeAccessService.canAccessDepartment(departmentId)) {
-            throw new org.springframework.security.access.AccessDeniedException("Access denied by work order department scope");
-        }
     }
 
     private Defect validateCreateRelations(WorkOrderRequest request) {
