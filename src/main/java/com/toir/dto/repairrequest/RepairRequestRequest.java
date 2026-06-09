@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record RepairRequestRequest(
@@ -16,6 +17,10 @@ public record RepairRequestRequest(
         @NotBlank String description,
         @Schema(description = "Optional defect to link to the repair request", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         UUID defectId,
+        @Schema(description = "Optional inline defect to create with the repair request", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        InlineDefectRequest defect,
+        @Schema(description = "Optional inline defects to create with the repair request", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        List<InlineDefectRequest> defects,
         @NotNull UUID equipmentId,
         @NotNull UUID departmentId,
         UUID locationId,
@@ -24,4 +29,45 @@ public record RepairRequestRequest(
         CriticalityLevel criticality,
         RequestSource source,
         Instant targetCompletionAt
-) {}
+) {
+    public RepairRequestRequest(
+            String number,
+            String title,
+            String description,
+            UUID defectId,
+            UUID equipmentId,
+            UUID departmentId,
+            UUID locationId,
+            UUID reporterId,
+            PriorityLevel priority,
+            CriticalityLevel criticality,
+            RequestSource source,
+            Instant targetCompletionAt
+    ) {
+        this(
+                number,
+                title,
+                description,
+                defectId,
+                null,
+                null,
+                equipmentId,
+                departmentId,
+                locationId,
+                reporterId,
+                priority,
+                criticality,
+                source,
+                targetCompletionAt
+        );
+    }
+
+    public record InlineDefectRequest(
+            String title,
+            String description,
+            String category,
+            String severity,
+            String failureReason,
+            String rootCause
+    ) {}
+}

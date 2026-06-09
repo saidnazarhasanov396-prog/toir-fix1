@@ -37,7 +37,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
@@ -180,6 +182,162 @@ class RepairRequestServiceTest {
         assertThat(result.linkedDefects()).isEmpty();
         verify(defectRepository, never()).findByIdAndIsDeletedFalse(any());
         verify(defectRepository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void createWithInlineDefectCreatesAndLinksDefect() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequestWithInlineDefect(equipmentId, "Bearing wear", "Noise from bearing");
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        when(defectRepository.maxSequenceByCodePrefix("DEF-2026-")).thenReturn(0L);
+        when(defectRepository.existsByCode("DEF-2026-0001")).thenReturn(false);
+        when(defectRepository.save(any(Defect.class))).thenAnswer(invocation -> {
+            Defect saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            return saved;
+        });
+        stubNameLookups(repairRequestForCreate(savedRequestId, request));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenAnswer(invocation -> List.of(defect(savedRequestId)));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        RepairRequestDto result = service.create(request);
+
+        assertThat(result.id()).isEqualTo(savedRequestId);
+        verify(defectRepository).save(org.mockito.ArgumentMatchers.argThat(defect ->
+                savedRequestId.equals(defect.getRepairRequestId())
+                        && equipmentId.equals(defect.getEquipmentId())
+                        && "Bearing wear".equals(defect.getTitle())
+                        && "Noise from bearing".equals(defect.getDescription())
+                        && "DEF-2026-0001".equals(defect.getCode())
+        ));
+    }
+
+    @Test
+    void createIgnoresEmptyInlineDefectObject() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequestWithInlineDefect(equipmentId, "   ", " ", null, null);
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        stubNameLookups(repairRequestForCreate(savedRequestId, request));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        RepairRequestDto result = service.create(request);
+
+        assertThat(result.linkedDefects()).isEmpty();
+        verify(defectRepository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void createWithEmptyInlineDefectsArraySucceedsWithoutDefectAssociation() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequestWithInlineDefects(equipmentId, List.of());
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        stubNameLookups(repairRequestForCreate(savedRequestId, request));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        RepairRequestDto result = service.create(request);
+
+        assertThat(result.linkedDefects()).isEmpty();
+        verify(defectRepository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void createRejectsStartedInlineDefectWithoutDescription() {
+        UUID equipmentId = UUID.randomUUID();
+        RepairRequestRequest request = createRequestWithInlineDefect(equipmentId, "Bearing wear", " ");
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.create(request))
+                .hasMessageContaining("Defect description is required");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsDefectIdWithInlineDefects() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        RepairRequestRequest request = new RepairRequestRequest(
+                "RR-2026-0001",
+                "Pump vibration",
+                "Excess vibration on pump",
+                defectId,
+                null,
+                List.of(new RepairRequestRequest.InlineDefectRequest(
+                        "Bearing wear",
+                        "Noise from bearing",
+                        "Mechanical",
+                        "HIGH",
+                        null,
+                        null
+                )),
+                equipmentId,
+                UUID.randomUUID(),
+                null,
+                UUID.randomUUID(),
+                PriorityLevel.HIGH,
+                CriticalityLevel.HIGH,
+                RequestSource.MANUAL,
+                null
+        );
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.create(request))
+                .hasMessageContaining("Use either defectId or inline defects, not both");
+        verify(repository, never()).save(any());
+        verify(defectRepository, never()).findByIdAndIsDeletedFalse(defectId);
+    }
+
+    @Test
+    void createPropagatesInlineDefectSaveFailureForTransactionalRollback() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequestWithInlineDefect(equipmentId, "Bearing wear", "Noise from bearing");
+
+        Method createMethod = RepairRequestService.class.getMethod("create", RepairRequestRequest.class);
+        assertThat(createMethod.getAnnotation(Transactional.class)).isNotNull();
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        when(defectRepository.maxSequenceByCodePrefix("DEF-2026-")).thenReturn(0L);
+        when(defectRepository.existsByCode("DEF-2026-0001")).thenReturn(false);
+        when(defectRepository.save(any(Defect.class))).thenThrow(new RuntimeException("defect save failed"));
+
+        assertThatThrownBy(() -> service.create(request))
+                .hasMessageContaining("defect save failed");
     }
 
     @Test
@@ -924,6 +1082,54 @@ class RepairRequestServiceTest {
                 "Pump vibration",
                 "Excess vibration on pump",
                 defectId,
+                null,
+                null,
+                equipmentId,
+                UUID.randomUUID(),
+                null,
+                UUID.randomUUID(),
+                PriorityLevel.HIGH,
+                CriticalityLevel.HIGH,
+                RequestSource.MANUAL,
+                null
+        );
+    }
+
+    private RepairRequestRequest createRequestWithInlineDefect(UUID equipmentId, String defectTitle, String defectDescription) {
+        return createRequestWithInlineDefect(equipmentId, defectTitle, defectDescription, "Mechanical", "HIGH");
+    }
+
+    private RepairRequestRequest createRequestWithInlineDefect(
+            UUID equipmentId,
+            String defectTitle,
+            String defectDescription,
+            String category,
+            String severity
+    ) {
+        return createRequestWithInlineDefects(
+                equipmentId,
+                List.of(new RepairRequestRequest.InlineDefectRequest(
+                        defectTitle,
+                        defectDescription,
+                        category,
+                        severity,
+                        null,
+                        null
+                ))
+        );
+    }
+
+    private RepairRequestRequest createRequestWithInlineDefects(
+            UUID equipmentId,
+            List<RepairRequestRequest.InlineDefectRequest> defects
+    ) {
+        return new RepairRequestRequest(
+                "RR-2026-0001",
+                "Pump vibration",
+                "Excess vibration on pump",
+                null,
+                null,
+                defects,
                 equipmentId,
                 UUID.randomUUID(),
                 null,
