@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.dto.workorder.WorkOrderCalendarBucketDto;
 import com.toir.dto.workorder.WorkOrderCalendarSummaryResponse;
+import com.toir.dto.workorder.WorkOrderDocumentDto;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderPerformerOptionDto;
 import com.toir.dto.workorder.WorkOrderStatusCountDto;
@@ -31,6 +32,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -54,9 +56,13 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class WorkOrderControllerContractTest {
@@ -217,6 +223,97 @@ class WorkOrderControllerContractTest {
                 .andExpect(jsonPath("$.defect.id").value(response.defect().id().toString()))
                 .andExpect(jsonPath("$.defect.code").value(response.defect().code()))
                 .andExpect(jsonPath("$.defect.status").value(response.defect().status().name()));
+    }
+
+    @Test
+    void attachDocumentsUploadsMultipleMultipartFilesWithDocumentNames() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrderDocumentDto first = workOrderDocumentDto(workOrderId, "Defect photo");
+        WorkOrderDocumentDto second = workOrderDocumentDto(workOrderId, "Completion act");
+        when(service.attachDocuments(eq(workOrderId), any(), any(), eq("ACT"), any()))
+                .thenReturn(List.of(first, second));
+
+        mockMvc.perform(multipart("/api/v1/work-orders/{id}/documents", workOrderId)
+                        .file(new MockMultipartFile("files", "photo.png", "image/png", "png".getBytes()))
+                        .file(new MockMultipartFile("files", "act.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .param("documentNames", "Defect photo", "Completion act")
+                        .param("documentType", "ACT"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].workOrderId").value(workOrderId.toString()))
+                .andExpect(jsonPath("$[0].documentName").value("Defect photo"))
+                .andExpect(jsonPath("$[0].uploadedById").value(currentUserId.toString()))
+                .andExpect(jsonPath("$[1].documentName").value("Completion act"));
+
+        var userCaptor = forClass(AuthenticatedUser.class);
+        verify(service).attachDocuments(eq(workOrderId), any(), any(), eq("ACT"), userCaptor.capture());
+        org.assertj.core.api.Assertions.assertThat(userCaptor.getValue().id()).isEqualTo(currentUserId.toString());
+    }
+
+    @Test
+    void attachDocumentsWithMismatchedDocumentNamesReturnsBadRequest() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        when(service.attachDocuments(eq(workOrderId), any(), any(), isNull(), any()))
+                .thenThrow(RestException.badRequest("files and documentNames must have the same length"));
+
+        mockMvc.perform(multipart("/api/v1/work-orders/{id}/documents", workOrderId)
+                        .file(new MockMultipartFile("files", "act.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .param("documentNames", "One", "Two"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("files and documentNames must have the same length"));
+    }
+
+    @Test
+    void listDocumentsReturnsPagedWorkOrderDocumentDtos() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        when(service.getDocuments(eq(workOrderId), any()))
+                .thenReturn(List.of(workOrderDocumentDto(workOrderId, "Checklist")));
+
+        mockMvc.perform(get("/api/v1/work-orders/{id}/documents?page=0&size=20", workOrderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].workOrderId").value(workOrderId.toString()))
+                .andExpect(jsonPath("$.content[0].documentName").value("Checklist"))
+                .andExpect(jsonPath("$.content[0].downloadUrl").value(org.hamcrest.Matchers.containsString(
+                        "/api/v1/work-orders/" + workOrderId + "/documents/")))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void downloadDocumentReturnsBlobWithOriginalFilename() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        WorkOrderDocumentDto dto = workOrderDocumentDto(workOrderId, documentId, "Completion act", "act.pdf", "application/pdf");
+        when(service.getDocument(eq(workOrderId), eq(documentId), any())).thenReturn(dto);
+        when(service.downloadDocument(eq(workOrderId), eq(documentId), any()))
+                .thenReturn(new ByteArrayResource("%PDF-1.4\n".getBytes()));
+
+        mockMvc.perform(get("/api/v1/work-orders/{id}/documents/{documentId}/download", workOrderId, documentId))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("act.pdf")));
+    }
+
+    @Test
+    void deleteDocumentReturnsNoContent() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/work-orders/{id}/documents/{documentId}", workOrderId, documentId))
+                .andExpect(status().isNoContent());
+
+        verify(service).deleteDocument(eq(workOrderId), eq(documentId), any());
+    }
+
+    @Test
+    void documentEndpointsRejectWorkOrderOutsideDepartmentScope() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrderEntity(workOrderId, departmentId)));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(false);
+
+        mockMvc.perform(get("/api/v1/work-orders/{id}/documents", workOrderId))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -851,6 +948,47 @@ class WorkOrderControllerContractTest {
                 defect,
                 operationsCount,
                 materialsCount
+        );
+    }
+
+    private WorkOrderDocumentDto workOrderDocumentDto(UUID workOrderId, String documentName) {
+        return workOrderDocumentDto(workOrderId, UUID.randomUUID(), documentName, documentName + ".pdf", "application/pdf");
+    }
+
+    private WorkOrderDocumentDto workOrderDocumentDto(
+            UUID workOrderId,
+            UUID documentId,
+            String documentName,
+            String originalName,
+            String contentType
+    ) {
+        UUID fileId = UUID.randomUUID();
+        String downloadUrl = "/api/v1/work-orders/" + workOrderId + "/documents/" + documentId + "/download";
+        return new WorkOrderDocumentDto(
+                documentId,
+                fileId,
+                "ACT",
+                documentName,
+                originalName,
+                contentType,
+                128L,
+                downloadUrl,
+                "/api/v1/work-orders/" + workOrderId + "/documents/" + documentId + "/presigned-url",
+                java.time.LocalDateTime.parse("2026-06-09T10:00:00"),
+                java.time.LocalDateTime.parse("2026-06-09T10:00:00"),
+                workOrderId,
+                currentUserId,
+                documentName,
+                "ACT",
+                java.time.LocalDateTime.parse("2026-06-09T10:00:00"),
+                new WorkOrderDocumentDto.FileRef(
+                        fileId,
+                        originalName,
+                        originalName,
+                        contentType,
+                        128L,
+                        downloadUrl
+                )
         );
     }
 
