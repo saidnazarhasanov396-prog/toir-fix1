@@ -53,6 +53,7 @@ public interface LocationRepository extends JpaRepository<Location, UUID> {
     @Query("select l from Location l where " +
             "l.isDeleted = false and " +
             "(:locationType is null or l.type = :locationType) and " +
+            "(:departmentId is null or l.departmentId = :departmentId) and " +
             "(cast(:search as string) is null or " +
             "lower(l.code) like lower(concat('%', cast(:search as string), '%')) or " +
             "lower(l.name) like lower(concat('%', cast(:search as string), '%')) or " +
@@ -62,5 +63,6 @@ public interface LocationRepository extends JpaRepository<Location, UUID> {
             "order by l.updatedAt desc")
     Page<Location> search(@Param("locationType") LocationType locationType,
                           @Param("search") String search,
+                          @Param("departmentId") UUID departmentId,
                           Pageable pageable);
 }

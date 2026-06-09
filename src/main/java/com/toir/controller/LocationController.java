@@ -27,10 +27,11 @@ public class LocationController {
     public ResponseEntity<Page<LocationDto>> list(
             @RequestParam(required = false) LocationType locationType,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) UUID departmentId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(service.search(locationType, search, page, size));
+        return ResponseEntity.ok(service.search(locationType, search, departmentId, page, size));
     }
 
     @GetMapping("/{id}")
