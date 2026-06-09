@@ -42,6 +42,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.Year;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -86,6 +88,7 @@ public class RepairRequestService {
             DefectStatus.CLOSED,
             DefectStatus.CANCELLED
     );
+    private static final String DEFECT_CODE_PREFIX = "DEF";
 
 
     @Transactional(readOnly = true)
@@ -117,6 +120,10 @@ public class RepairRequestService {
             throw RestException.conflict("Request number already exists: " + request.number());
         }
         equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create repair request");
+        List<RepairRequestRequest.InlineDefectRequest> inlineDefects = normalizeInlineDefects(request);
+        if (request.defectId() != null && !inlineDefects.isEmpty()) {
+            throw RestException.badRequest("Use either defectId or inline defects, not both");
+        }
         Defect defect = getDefectForCreate(request);
 
         RepairRequest entity = new RepairRequest();
@@ -137,6 +144,7 @@ public class RepairRequestService {
             defect.setRepairRequestId(saved.getId());
             defectRepository.save(defect);
         }
+        createInlineDefects(saved, inlineDefects);
 
         auditBuilderService.log(
                 "repair_request",
@@ -158,6 +166,82 @@ public class RepairRequestService {
         );
 
         return toDtoWithLinks(saved);
+    }
+
+    private List<RepairRequestRequest.InlineDefectRequest> normalizeInlineDefects(RepairRequestRequest request) {
+        List<RepairRequestRequest.InlineDefectRequest> inlineDefects = new ArrayList<>();
+        if (hasInlineDefectValue(request.defect())) {
+            inlineDefects.add(validateInlineDefect(request.defect()));
+        }
+        if (request.defects() != null) {
+            for (RepairRequestRequest.InlineDefectRequest defect : request.defects()) {
+                if (hasInlineDefectValue(defect)) {
+                    inlineDefects.add(validateInlineDefect(defect));
+                }
+            }
+        }
+        return List.copyOf(inlineDefects);
+    }
+
+    private boolean hasInlineDefectValue(RepairRequestRequest.InlineDefectRequest defect) {
+        return defect != null
+                && (hasText(defect.title())
+                || hasText(defect.description())
+                || hasText(defect.category())
+                || hasText(defect.severity())
+                || hasText(defect.failureReason())
+                || hasText(defect.rootCause()));
+    }
+
+    private RepairRequestRequest.InlineDefectRequest validateInlineDefect(RepairRequestRequest.InlineDefectRequest defect) {
+        if (!hasText(defect.title())) {
+            throw RestException.badRequest("Defect title is required");
+        }
+        if (!hasText(defect.description())) {
+            throw RestException.badRequest("Defect description is required");
+        }
+        return defect;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private String clean(String value) {
+        return hasText(value) ? value.trim() : null;
+    }
+
+    private void createInlineDefects(RepairRequest saved, List<RepairRequestRequest.InlineDefectRequest> inlineDefects) {
+        if (inlineDefects.isEmpty()) {
+            return;
+        }
+
+        int year = Year.now().getValue();
+        String codePrefix = DEFECT_CODE_PREFIX + "-" + year + "-";
+        long sequence = defectRepository.maxSequenceByCodePrefix(codePrefix) + 1;
+
+        for (RepairRequestRequest.InlineDefectRequest request : inlineDefects) {
+            Defect defect = new Defect();
+            defect.setCode(nextDefectCode(year, sequence));
+            while (defectRepository.existsByCode(defect.getCode())) {
+                sequence++;
+                defect.setCode(nextDefectCode(year, sequence));
+            }
+            sequence++;
+            defect.setTitle(request.title().trim());
+            defect.setDescription(request.description().trim());
+            defect.setEquipmentId(saved.getEquipmentId());
+            defect.setRepairRequestId(saved.getId());
+            defect.setCategory(clean(request.category()));
+            defect.setSeverity(clean(request.severity()));
+            defect.setFailureReason(clean(request.failureReason()));
+            defect.setRootCause(clean(request.rootCause()));
+            defectRepository.save(defect);
+        }
+    }
+
+    private String nextDefectCode(int year, long sequence) {
+        return "%s-%d-%04d".formatted(DEFECT_CODE_PREFIX, year, sequence);
     }
 
     private Defect getDefectForCreate(RepairRequestRequest request) {

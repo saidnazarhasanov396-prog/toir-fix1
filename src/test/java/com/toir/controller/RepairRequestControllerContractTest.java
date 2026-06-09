@@ -20,6 +20,7 @@ import com.toir.service.repair.RepairRequestService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -380,6 +382,102 @@ class RepairRequestControllerContractTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(requestId.toString()))
                 .andExpect(jsonPath("$.linkedDefects[0].id").value(defectId.toString()));
+    }
+
+    @Test
+    void createEndpointAcceptsInlineDefectsArrayAndReturnsLinkedDefect() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID reporterId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithLinkedDefect(requestId, defectId);
+        when(service.create(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/repair-requests")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "number": "RR-2026-0001",
+                                  "title": "Pump vibration",
+                                  "description": "Excess vibration on pump",
+                                  "equipmentId": "%s",
+                                  "departmentId": "%s",
+                                  "reporterId": "%s",
+                                  "priority": "HIGH",
+                                  "criticality": "HIGH",
+                                  "source": "MANUAL",
+                                  "defects": [
+                                    {
+                                      "title": "Bearing wear",
+                                      "description": "Noise from bearing",
+                                      "category": "Mechanical",
+                                      "severity": "HIGH"
+                                    }
+                                  ]
+                                }
+                                """.formatted(equipmentId, departmentId, reporterId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(requestId.toString()))
+                .andExpect(jsonPath("$.linkedDefects[0].id").value(defectId.toString()));
+
+        ArgumentCaptor<com.toir.dto.repairrequest.RepairRequestRequest> captor =
+                ArgumentCaptor.forClass(com.toir.dto.repairrequest.RepairRequestRequest.class);
+        verify(service).create(captor.capture());
+        assertThat(captor.getValue().defects()).hasSize(1);
+        assertThat(captor.getValue().defects().getFirst().title()).isEqualTo("Bearing wear");
+        assertThat(captor.getValue().defectId()).isNull();
+    }
+
+    @Test
+    void createEndpointAcceptsEmptyInlineDefectsArray() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithoutLinks(requestId);
+        when(service.create(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/repair-requests")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "number": "RR-2026-0001",
+                                  "title": "Pump vibration",
+                                  "description": "Excess vibration on pump",
+                                  "equipmentId": "%s",
+                                  "departmentId": "%s",
+                                  "reporterId": "%s",
+                                  "defects": []
+                                }
+                                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.linkedDefects").isEmpty());
+    }
+
+    @Test
+    void createEndpointReturnsBadRequestForDefectIdAndInlineDefectConflict() throws Exception {
+        when(service.create(any())).thenThrow(
+                com.toir.exception.RestException.badRequest("Use either defectId or inline defects, not both"));
+
+        mockMvc.perform(post("/api/v1/repair-requests")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "number": "RR-2026-0001",
+                                  "title": "Pump vibration",
+                                  "description": "Excess vibration on pump",
+                                  "defectId": "%s",
+                                  "equipmentId": "%s",
+                                  "departmentId": "%s",
+                                  "reporterId": "%s",
+                                  "defects": [
+                                    {
+                                      "title": "Bearing wear",
+                                      "description": "Noise from bearing"
+                                    }
+                                  ]
+                                }
+                                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Use either defectId or inline defects, not both"));
     }
 
     private RepairRequest entityFromDto(RepairRequestDto dto) {
