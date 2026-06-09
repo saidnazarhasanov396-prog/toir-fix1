@@ -30,6 +30,7 @@ import com.toir.enums.PlanStatus;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.repository.CompletionActRepository;
 import com.toir.repository.CertificationTypeRepository;
+import com.toir.repository.FileAssetRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.LaborEntryRepository;
 import com.toir.repository.LocationRepository;
@@ -136,6 +137,7 @@ public class WorkOrderService {
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private final SafetyPermitRepository safetyPermitRepository;
     private final CompletionActRepository completionActRepository;
+    private final FileAssetRepository fileAssetRepository;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final RepairMaterialUsageService repairMaterialUsageService;
     private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
@@ -387,6 +389,8 @@ public class WorkOrderService {
         entity.setEndPlannedAt(request.endPlannedAt());
         entity.setCreatedById(effectiveCreatedById);
         entity.setSummary(request.summary());
+        entity.setRepairActRequired(Boolean.TRUE.equals(request.repairActRequired()));
+        entity.setStoppageActRequired(Boolean.TRUE.equals(request.stoppageActRequired()));
         WorkOrder saved = repository.save(entity);
         generateTemplateTasksFromWorkOrderContext(saved);
         validatePerformerSkillsForWorkOrder(saved);
@@ -471,6 +475,7 @@ public class WorkOrderService {
     public WorkOrderDto complete(UUID id, CompleteWorkOrderRequest request) {
         WorkOrder entity = getOrThrow(id);
         assertCanComplete(entity, request);
+        validateAndBindCompletionActFiles(entity, request);
         assertDefectListGate(entity);
         MaintenanceDueEvent dueEvent = loadMaintenanceDueEvent(entity);
         entity.setResult(request.result());
@@ -561,6 +566,36 @@ public class WorkOrderService {
             throw RestException.badRequest("Cannot complete work order; incomplete mandatory tasks/checklist items: "
                     + String.join(", ", incompleteTasks));
         }
+    }
+
+    private void validateAndBindCompletionActFiles(WorkOrder entity, CompleteWorkOrderRequest request) {
+        UUID repairActFileId = request.repairActFileId();
+        UUID stoppageActFileId = request.stoppageActFileId();
+        boolean repairActRequired = Boolean.TRUE.equals(entity.getRepairActRequired());
+        boolean stoppageActRequired = Boolean.TRUE.equals(entity.getStoppageActRequired());
+        boolean hasRepairActFile = entity.getRepairActFileAssetId() != null || repairActFileId != null;
+        boolean hasStoppageActFile = entity.getStoppageActFileAssetId() != null || stoppageActFileId != null;
+
+        if (repairActRequired && !hasRepairActFile) {
+            throw RestException.badRequest("Bu WorkOrder uchun ta'mirlash akti fayli talab qilinadi.");
+        }
+        if (stoppageActRequired && !hasStoppageActFile) {
+            throw RestException.badRequest("Bu WorkOrder uchun to'xtash akti fayli talab qilinadi.");
+        }
+
+        if (repairActFileId != null) {
+            assertFileAssetExists(repairActFileId);
+            entity.setRepairActFileAssetId(repairActFileId);
+        }
+        if (stoppageActFileId != null) {
+            assertFileAssetExists(stoppageActFileId);
+            entity.setStoppageActFileAssetId(stoppageActFileId);
+        }
+    }
+
+    private void assertFileAssetExists(UUID fileAssetId) {
+        fileAssetRepository.findByIdAndIsDeletedFalse(fileAssetId)
+                .orElseThrow(() -> RestException.notFound("File not found: " + fileAssetId));
     }
 
     private MaintenanceDueEvent loadMaintenanceDueEvent(WorkOrder workOrder) {
@@ -1751,6 +1786,10 @@ public class WorkOrderService {
                 TriadLinkMapper.toDefectBrief(linkedDefect),
                 operationsCount,
                 materialsCount,
+                entity.getRepairActRequired(),
+                entity.getStoppageActRequired(),
+                entity.getRepairActFileAssetId(),
+                entity.getStoppageActFileAssetId(),
                 materialUsages,
                 entity.getUpdatedAt());
     }

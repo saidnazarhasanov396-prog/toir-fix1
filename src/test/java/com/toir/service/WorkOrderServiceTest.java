@@ -9,6 +9,7 @@ import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.CompletionAct;
 import com.toir.entity.CertificationType;
 import com.toir.entity.Department;
+import com.toir.entity.FileAsset;
 import com.toir.entity.LaborEntry;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
@@ -50,6 +51,7 @@ import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.repository.CompletionActRepository;
 import com.toir.repository.CertificationTypeRepository;
+import com.toir.repository.FileAssetRepository;
 import com.toir.repository.LaborEntryRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.PprPlanRepository;
@@ -189,6 +191,9 @@ class WorkOrderServiceTest {
 
     @Mock
     CompletionActRepository completionActRepository;
+
+    @Mock
+    FileAssetRepository fileAssetRepository;
 
     @Mock
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
@@ -433,6 +438,54 @@ class WorkOrderServiceTest {
         ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getCreatedById()).isEqualTo(authenticatedUserId);
+    }
+
+    @Test
+    void createPersistsActRequirementsAsStructuredFields() {
+        WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        WorkOrderRequest request = new WorkOrderRequest(
+                base.number(),
+                base.title(),
+                base.equipmentId(),
+                base.equipmentNodeId(),
+                base.locationId(),
+                base.departmentId(),
+                base.workLocationNote(),
+                base.repairRequestId(),
+                base.defectId(),
+                base.defectListId(),
+                base.pprTaskId(),
+                base.contractorId(),
+                base.performerId(),
+                base.type(),
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                base.startPlannedAt(),
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary(),
+                base.maintenanceDueEventId(),
+                base.cycleKey(),
+                true,
+                true
+        );
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            return workOrder;
+        });
+        mockSuccessfulCreateDependencies(request);
+
+        WorkOrderDto result = service.create(request);
+
+        ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getRepairActRequired()).isTrue();
+        assertThat(captor.getValue().getStoppageActRequired()).isTrue();
+        assertThat(result.repairActRequired()).isTrue();
+        assertThat(result.stoppageActRequired()).isTrue();
     }
 
     @Test
@@ -2374,6 +2427,59 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void completeWithRequiredRepairActAndNoFileReturns400WithoutSavingCompletedStatus() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setRepairActRequired(true);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+
+        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("ta'mirlash akti fayli talab qilinadi");
+                });
+
+        assertThat(workOrder.getStatus()).isEqualTo(WorkOrderStatus.IN_PROGRESS);
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void completeWithRequiredActFilesStoresFileAssetIdsAndCompletes() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID repairFileId = UUID.randomUUID();
+        UUID stoppageFileId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setRepairActRequired(true);
+        workOrder.setStoppageActRequired(true);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(fileAssetRepository.findByIdAndIsDeletedFalse(repairFileId)).thenReturn(Optional.of(fileAsset(repairFileId)));
+        when(fileAssetRepository.findByIdAndIsDeletedFalse(stoppageFileId)).thenReturn(Optional.of(fileAsset(stoppageFileId)));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest(
+                "done",
+                "summary",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                repairFileId,
+                stoppageFileId
+        ));
+
+        assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
+        assertThat(workOrder.getRepairActFileAssetId()).isEqualTo(repairFileId);
+        assertThat(workOrder.getStoppageActFileAssetId()).isEqualTo(stoppageFileId);
+        assertThat(result.repairActFileId()).isEqualTo(repairFileId);
+        assertThat(result.stoppageActFileId()).isEqualTo(stoppageFileId);
+    }
+
+    @Test
     void completeWithMaterialUsagesIssuesMaterialsBeforeCompletion() {
         UUID workOrderId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
@@ -3325,6 +3431,17 @@ class WorkOrderServiceTest {
         WorkOrderTask task = workOrderTask(workOrder, "Generated operation", TaskExecutionStatus.TODO);
         task.setSourceOperationId(sourceOperationId);
         return task;
+    }
+
+    private FileAsset fileAsset(UUID id) {
+        FileAsset fileAsset = new FileAsset();
+        fileAsset.setId(id);
+        fileAsset.setFileName(id + ".pdf");
+        fileAsset.setOriginalName("act.pdf");
+        fileAsset.setMimeType("application/pdf");
+        fileAsset.setSizeBytes(128);
+        fileAsset.setStoragePath("/tmp/" + id + ".pdf");
+        return fileAsset;
     }
 
     private MaintenanceOperation operation(UUID id, String requiredSkill) {

@@ -20,14 +20,17 @@ public record CompleteWorkOrderRequest(
         Instant plannedDueAt,
         MaintenanceRecalculationPolicy recalculationPolicy,
         List<CompletionMeterSnapshotRequest> meterSnapshots,
-        List<@Valid RepairMaterialUsageDto> materialUsages
+        List<@Valid RepairMaterialUsageDto> materialUsages,
+        UUID repairActFileId,
+        UUID stoppageActFileId
 ) {
         public CompleteWorkOrderRequest(
                 String result,
                 String summary,
                 UUID oldEquipmentReturnWarehouseId
         ) {
-                this(result, summary, oldEquipmentReturnWarehouseId, null, null, null, null, null, null, null);
+                this(result, summary, oldEquipmentReturnWarehouseId, null, null, null, null, null, null, null,
+                                null, null);
         }
 
         public CompleteWorkOrderRequest(
@@ -42,6 +45,22 @@ public record CompleteWorkOrderRequest(
                 List<CompletionMeterSnapshotRequest> meterSnapshots
         ) {
                 this(result, summary, oldEquipmentReturnWarehouseId, regulationId, equipmentMaintenanceRuleId,
-                        performedAt, plannedDueAt, recalculationPolicy, meterSnapshots, null);
+                        performedAt, plannedDueAt, recalculationPolicy, meterSnapshots, null, null, null);
+        }
+
+        public CompleteWorkOrderRequest(
+                String result,
+                String summary,
+                UUID oldEquipmentReturnWarehouseId,
+                UUID regulationId,
+                UUID equipmentMaintenanceRuleId,
+                Instant performedAt,
+                Instant plannedDueAt,
+                MaintenanceRecalculationPolicy recalculationPolicy,
+                List<CompletionMeterSnapshotRequest> meterSnapshots,
+                List<@Valid RepairMaterialUsageDto> materialUsages
+        ) {
+                this(result, summary, oldEquipmentReturnWarehouseId, regulationId, equipmentMaintenanceRuleId,
+                        performedAt, plannedDueAt, recalculationPolicy, meterSnapshots, materialUsages, null, null);
         }
 }

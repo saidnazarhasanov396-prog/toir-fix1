@@ -33,8 +33,42 @@ public record WorkOrderRequest(
         UUID createdById,
         String summary,
         UUID maintenanceDueEventId,
-        String cycleKey
+        String cycleKey,
+        Boolean repairActRequired,
+        Boolean stoppageActRequired
 ) {
+    public WorkOrderRequest(
+            String number,
+            @NotBlank String title,
+            @NotNull UUID equipmentId,
+            UUID equipmentNodeId,
+            UUID locationId,
+            UUID departmentId,
+            String workLocationNote,
+            UUID repairRequestId,
+            UUID defectId,
+            UUID defectListId,
+            UUID pprTaskId,
+            UUID contractorId,
+            UUID performerId,
+            @NotNull WorkOrderType type,
+            WorkType workType,
+            UUID warehouseId,
+            UUID replacementEquipmentId,
+            PriorityLevel priority,
+            Instant startPlannedAt,
+            Instant endPlannedAt,
+            UUID createdById,
+            String summary,
+            UUID maintenanceDueEventId,
+            String cycleKey
+    ) {
+        this(number, title, equipmentId, equipmentNodeId, locationId, departmentId, workLocationNote,
+                repairRequestId, defectId, defectListId, pprTaskId, contractorId, performerId, type, workType,
+                warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
+                summary, maintenanceDueEventId, cycleKey, null, null);
+    }
+
     public WorkOrderRequest(
             String number,
             @NotBlank String title,
@@ -60,7 +94,7 @@ public record WorkOrderRequest(
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId,
                 null, pprTaskId, contractorId, performerId, type, workType, warehouseId, replacementEquipmentId, priority,
-                startPlannedAt, endPlannedAt, createdById, summary, maintenanceDueEventId, cycleKey);
+                startPlannedAt, endPlannedAt, createdById, summary, maintenanceDueEventId, cycleKey, null, null);
     }
 
     public WorkOrderRequest(
@@ -87,7 +121,7 @@ public record WorkOrderRequest(
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
                 contractorId, null, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
-                endPlannedAt, createdById, summary, maintenanceDueEventId, cycleKey);
+                endPlannedAt, createdById, summary, maintenanceDueEventId, cycleKey, null, null);
     }
 
     public WorkOrderRequest(
@@ -112,7 +146,7 @@ public record WorkOrderRequest(
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
                 contractorId, null, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
-                endPlannedAt, createdById, summary, null, null);
+                endPlannedAt, createdById, summary, null, null, null, null);
     }
 
     public WorkOrderRequest(
@@ -138,7 +172,7 @@ public record WorkOrderRequest(
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
                 contractorId, performerId, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
-                endPlannedAt, createdById, summary, null, null);
+                endPlannedAt, createdById, summary, null, null, null, null);
     }
 
     public WorkOrderRequest(String number,
@@ -160,6 +194,6 @@ public record WorkOrderRequest(
                             String summary) {
         this(number, title, equipmentId, null, null, departmentId, null, repairRequestId, defectId, null, pprTaskId, contractorId, null, type,
                 workType, warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
-                summary, null, null);
+                summary, null, null, null, null);
     }
 }
