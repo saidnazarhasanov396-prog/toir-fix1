@@ -38,6 +38,7 @@ import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.SecurityAccessService;
+import com.toir.service.WorkOrderNumberService;
 import com.toir.service.WorkOrderService;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -76,6 +77,7 @@ public class MaintenanceAutomationService {
     private final PprTaskRepository pprTaskRepository;
     private final WorkOrderRepository workOrderRepository;
     private final WorkOrderService workOrderService;
+    private final WorkOrderNumberService workOrderNumberService;
     private final UserRepository userRepository;
     private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
     private final SecurityAccessService securityAccessService;
@@ -264,9 +266,7 @@ public class MaintenanceAutomationService {
     public MaintenanceDueEventDto createWorkOrderFromEvent(UUID eventId, UUID userId) {
         MaintenanceDueEvent event = eventService.getOrThrow(eventId);
         eventService.assertCanAccessEvent(event);
-        if (isBlocked(event)) {
-            return blockedEventDto(event);
-        }
+        assertCanCreateWorkOrderForDueStatus(event);
         EquipmentMaintenanceEffectiveRule rule = effectiveRule(event);
         WorkOrderDto workOrder = createWorkOrder(event, rule, userId);
         if (workOrder != null) {
@@ -454,6 +454,7 @@ public class MaintenanceAutomationService {
         if (event.getCreatedWorkOrderId() != null) {
             return null;
         }
+        assertCanCreateWorkOrderForDueStatus(event);
         if (workOrderRepository.existsOpenByCycleKey(event.getCycleKey())) {
             event.setStatus(MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE);
             return null;
@@ -464,15 +465,16 @@ public class MaintenanceAutomationService {
             event.setExplanation(append(event.getExplanation(), "departmentId is required to create work order"));
             return null;
         }
+        UUID pprTaskId = validApprovedPprTaskId(event.getCreatedTaskId());
         WorkOrderRequest request = new WorkOrderRequest(
-                nextWorkOrderNumber(),
+                workOrderNumberService.nextAutoNumber(),
                 rule.name() + " - " + equipment.getCode(),
                 equipment.getId(),
                 null,
                 departmentId,
                 null,
                 null,
-                event.getCreatedTaskId(),
+                pprTaskId,
                 null,
                 workOrderType(rule),
                 workType(rule),
@@ -593,10 +595,30 @@ public class MaintenanceAutomationService {
     }
 
     private UUID effectiveDepartmentId(Equipment equipment, EquipmentMaintenanceEffectiveRule rule) {
-        if (rule.defaultDepartmentId() != null) {
-            return rule.defaultDepartmentId();
+        return equipment.getDepartmentId() != null ? equipment.getDepartmentId() : equipment.getResponsibleDepartmentId();
+    }
+
+    private UUID validApprovedPprTaskId(UUID taskId) {
+        if (taskId == null) {
+            return null;
         }
-        return equipment.getResponsibleDepartmentId() != null ? equipment.getResponsibleDepartmentId() : equipment.getDepartmentId();
+        return pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(taskId)
+                .filter(task -> task.getStatus() == PprTaskStatus.APPROVED)
+                .filter(task -> task.getPlan() != null)
+                .filter(task -> task.getPlan().getStatus() == PlanStatus.APPROVED
+                        || task.getPlan().getStatus() == PlanStatus.IN_PROGRESS)
+                .map(PprTask::getId)
+                .orElse(null);
+    }
+
+    private void assertCanCreateWorkOrderForDueStatus(MaintenanceDueEvent event) {
+        if (event.getDueStatus() == MaintenanceDueStatus.DUE || event.getDueStatus() == MaintenanceDueStatus.OVERDUE) {
+            return;
+        }
+        if (event.getDueStatus() == MaintenanceDueStatus.BLOCKED) {
+            event.setStatus(MaintenanceDueEventStatus.DETECTED);
+        }
+        throw RestException.badRequest("Work order can be created only for DUE or OVERDUE maintenance due events");
     }
 
     private Equipment equipment(MaintenanceDueEvent event) {
@@ -745,18 +767,6 @@ public class MaintenanceAutomationService {
         String prefix = "AT-" + year + "-";
         long seq = pprTaskRepository.maxSequenceByCodePrefix(prefix) + 1;
         return "%s%04d".formatted(prefix, seq);
-    }
-
-    private String nextWorkOrderNumber() {
-        int year = Year.now().getValue();
-        String prefix = "WO-AUTO-" + year + "-";
-        for (long seq = workOrderRepository.countByIsDeletedFalse() + 1; seq < workOrderRepository.countByIsDeletedFalse() + 5000; seq++) {
-            String number = "%s%04d".formatted(prefix, seq);
-            if (!workOrderRepository.existsByNumberAndIsDeletedFalse(number)) {
-                return number;
-            }
-        }
-        throw RestException.conflict("Could not generate automatic work order number");
     }
 
     private String append(String base, String addition) {

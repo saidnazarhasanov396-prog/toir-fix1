@@ -36,6 +36,15 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM work_orders WHERE number = cast(:number as varchar) AND is_deleted = false)", nativeQuery = true)
     boolean existsByNumberAndIsDeletedFalse(@Param("number") String number);
 
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(number FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM work_orders
+            WHERE number LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(number FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+              AND is_deleted = false
+            """, nativeQuery = true)
+    long maxSequenceByNumberPrefix(@Param("prefix") String prefix);
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM work_orders WHERE ppr_task_id = cast(:pprTaskId as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByPprTaskIdAndIsDeletedFalse(@Param("pprTaskId") UUID pprTaskId);
 

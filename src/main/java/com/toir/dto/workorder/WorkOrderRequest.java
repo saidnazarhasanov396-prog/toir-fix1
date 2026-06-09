@@ -10,7 +10,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record WorkOrderRequest(
-        @NotBlank String number,
+        String number,
         @NotBlank String title,
         @NotNull UUID equipmentId,
         UUID equipmentNodeId,
@@ -30,13 +30,13 @@ public record WorkOrderRequest(
         PriorityLevel priority,
         Instant startPlannedAt,
         Instant endPlannedAt,
-        @NotNull UUID createdById,
+        UUID createdById,
         String summary,
         UUID maintenanceDueEventId,
         String cycleKey
 ) {
     public WorkOrderRequest(
-            @NotBlank String number,
+            String number,
             @NotBlank String title,
             @NotNull UUID equipmentId,
             UUID equipmentNodeId,
@@ -53,7 +53,7 @@ public record WorkOrderRequest(
             PriorityLevel priority,
             Instant startPlannedAt,
             Instant endPlannedAt,
-            @NotNull UUID createdById,
+            UUID createdById,
             String summary,
             UUID maintenanceDueEventId,
             String cycleKey
@@ -64,7 +64,7 @@ public record WorkOrderRequest(
     }
 
     public WorkOrderRequest(
-            @NotBlank String number,
+            String number,
             @NotBlank String title,
             @NotNull UUID equipmentId,
             UUID equipmentNodeId,
@@ -80,7 +80,7 @@ public record WorkOrderRequest(
             PriorityLevel priority,
             Instant startPlannedAt,
             Instant endPlannedAt,
-            @NotNull UUID createdById,
+            UUID createdById,
             String summary,
             UUID maintenanceDueEventId,
             String cycleKey
@@ -91,7 +91,7 @@ public record WorkOrderRequest(
     }
 
     public WorkOrderRequest(
-            @NotBlank String number,
+            String number,
             @NotBlank String title,
             @NotNull UUID equipmentId,
             UUID equipmentNodeId,
@@ -107,7 +107,7 @@ public record WorkOrderRequest(
             PriorityLevel priority,
             Instant startPlannedAt,
             Instant endPlannedAt,
-            @NotNull UUID createdById,
+            UUID createdById,
             String summary
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
@@ -116,7 +116,7 @@ public record WorkOrderRequest(
     }
 
     public WorkOrderRequest(
-            @NotBlank String number,
+            String number,
             @NotBlank String title,
             @NotNull UUID equipmentId,
             UUID equipmentNodeId,
@@ -133,7 +133,7 @@ public record WorkOrderRequest(
             PriorityLevel priority,
             Instant startPlannedAt,
             Instant endPlannedAt,
-            @NotNull UUID createdById,
+            UUID createdById,
             String summary
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
@@ -141,7 +141,7 @@ public record WorkOrderRequest(
                 endPlannedAt, createdById, summary, null, null);
     }
 
-    public WorkOrderRequest(@NotBlank String number,
+    public WorkOrderRequest(String number,
                             @NotBlank String title,
                             @NotNull UUID equipmentId,
                             @NotNull UUID departmentId,
@@ -156,7 +156,7 @@ public record WorkOrderRequest(
                             PriorityLevel priority,
                             Instant startPlannedAt,
                             Instant endPlannedAt,
-                            @NotNull UUID createdById,
+                            UUID createdById,
                             String summary) {
         this(number, title, equipmentId, null, null, departmentId, null, repairRequestId, defectId, null, pprTaskId, contractorId, null, type,
                 workType, warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,

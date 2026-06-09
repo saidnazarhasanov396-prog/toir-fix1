@@ -12,6 +12,7 @@ import com.toir.entity.PprTask;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
@@ -27,6 +28,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -163,9 +166,13 @@ public class PprPlanController {
     @PreAuthorize(PPR_WORK_ORDER_GENERATE_AUTH)
     public ResponseEntity<PprGeneratorService.WorkOrderGenerationResult> generateWorkOrders(
             @PathVariable UUID id,
-            @RequestParam UUID createdById) {
+            @RequestParam(required = false) UUID createdById) {
         assertCanAccessPlan(planOrThrow(id));
-        return ResponseEntity.ok(generatorService.generateWorkOrdersForPlan(id, createdById));
+        UUID effectiveCreatedById = currentUserId();
+        if (effectiveCreatedById == null) {
+            effectiveCreatedById = createdById;
+        }
+        return ResponseEntity.ok(generatorService.generateWorkOrdersForPlan(id, effectiveCreatedById));
     }
 
     @GetMapping("/{id}/tasks")
@@ -269,6 +276,17 @@ public class PprPlanController {
             return;
         }
         scopeAccessService.assertCanAccessDepartment(departmentId);
+    }
+
+    private UUID currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser user)) {
+            return null;
+        }
+        if (user == null || user.id() == null || user.id().isBlank()) {
+            return null;
+        }
+        return UUID.fromString(user.id());
     }
 
     private PprPlanRequest requestWithScopedDepartment(PprPlanRequest request) {

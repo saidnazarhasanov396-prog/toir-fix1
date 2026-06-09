@@ -5,7 +5,6 @@ import com.toir.dto.maintenancedue.MaintenanceDueEventDto;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.security.AuthenticatedUser;
-import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
@@ -15,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -60,8 +61,8 @@ public class MaintenanceDueEventController {
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_EVENT_APPROVE')")
-    public ResponseEntity<MaintenanceDueEventDto> approve(@PathVariable UUID id, @CurrentUser AuthenticatedUser user) {
-        return ResponseEntity.ok(automationService.approveDueEvent(id, currentUserId(user)));
+    public ResponseEntity<MaintenanceDueEventDto> approve(@PathVariable UUID id) {
+        return ResponseEntity.ok(automationService.approveDueEvent(id, currentUserId()));
     }
 
     @PostMapping("/{id}/cancel")
@@ -73,11 +74,18 @@ public class MaintenanceDueEventController {
 
     @PostMapping("/{id}/work-order")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_CREATE') or hasAuthority('MAINTENANCE_EVENT_APPROVE')")
-    public ResponseEntity<MaintenanceDueEventDto> createWorkOrder(@PathVariable UUID id, @CurrentUser AuthenticatedUser user) {
-        return ResponseEntity.ok(automationService.createWorkOrderFromEvent(id, currentUserId(user)));
+    public ResponseEntity<MaintenanceDueEventDto> createWorkOrder(@PathVariable UUID id) {
+        return ResponseEntity.ok(automationService.createWorkOrderFromEvent(id, currentUserId()));
     }
 
-    private UUID currentUserId(AuthenticatedUser user) {
-        return user == null ? null : UUID.fromString(user.id());
+    private UUID currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser user)) {
+            return null;
+        }
+        if (user == null || user.id() == null || user.id().isBlank()) {
+            return null;
+        }
+        return UUID.fromString(user.id());
     }
 }
