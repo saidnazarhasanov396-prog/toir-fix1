@@ -3,33 +3,45 @@ package com.toir.controller;
 import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderCalendarSummaryResponse;
+import com.toir.dto.workorder.WorkOrderDocumentDto;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderPerformerOptionDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderStatsResponse;
+import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.security.AuthenticatedUser;
+import com.toir.security.CurrentUser;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.WorkOrderService;
+import com.toir.util.PaginationUtils;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1/work-orders")
@@ -116,6 +128,88 @@ public class WorkOrderController {
     public ResponseEntity<WorkOrderDto> get(@PathVariable UUID id) {
         assertCanAccessWorkOrder(workOrderOrThrow(id));
         return ResponseEntity.ok(service.findById(id));
+    }
+
+    @PostMapping(value = "/{id}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_UPDATE') or hasAuthority('WORK_ORDER_CREATE')")
+    @Operation(summary = "Attach work order documents with matching client-provided document names")
+    public ResponseEntity<List<WorkOrderDocumentDto>> attachDocuments(
+            @PathVariable UUID id,
+            @Parameter(description = "Document files. Must have the same item count as documentNames.")
+            @RequestParam("files") List<MultipartFile> files,
+            @Parameter(description = "Document names/titles in the same order as files.")
+            @RequestParam(value = "documentNames", required = false) List<String> documentNames,
+            @RequestParam(required = false) String documentType,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessWorkOrder(workOrderOrThrow(id));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.attachDocuments(id, files, documentNames, documentType, user));
+    }
+
+    @GetMapping("/{id}/documents")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_READ')")
+    public ResponseEntity<Page<WorkOrderDocumentDto>> getDocuments(
+            @PathVariable UUID id,
+            @CurrentUser AuthenticatedUser user,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        assertCanAccessWorkOrder(workOrderOrThrow(id));
+        return ResponseEntity.ok(PaginationUtils.page(service.getDocuments(id, user), page, size));
+    }
+
+    @GetMapping("/{id}/documents/{documentId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_READ')")
+    public ResponseEntity<WorkOrderDocumentDto> getDocument(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessWorkOrder(workOrderOrThrow(id));
+        return ResponseEntity.ok(service.getDocument(id, documentId, user));
+    }
+
+    @GetMapping("/{id}/documents/{documentId}/presigned-url")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_READ')")
+    public ResponseEntity<PresignedUrlResponse> getDocumentPresignedUrl(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessWorkOrder(workOrderOrThrow(id));
+        return ResponseEntity.ok(service.getDocumentPresignedUrl(id, documentId, user));
+    }
+
+    @GetMapping("/{id}/documents/{documentId}/download")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_READ')")
+    public ResponseEntity<Resource> downloadDocument(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessWorkOrder(workOrderOrThrow(id));
+        WorkOrderDocumentDto document = service.getDocument(id, documentId, user);
+        Resource resource = service.downloadDocument(id, documentId, user);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(document.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(document.originalName(), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .body(resource);
+    }
+
+    @DeleteMapping("/{id}/documents/{documentId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_UPDATE') or hasAuthority('WORK_ORDER_CREATE')")
+    public ResponseEntity<Void> deleteDocument(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessWorkOrder(workOrderOrThrow(id));
+        service.deleteDocument(id, documentId, user);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping
