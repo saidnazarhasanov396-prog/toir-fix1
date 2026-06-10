@@ -2,11 +2,13 @@ package com.toir.service.maintanance;
 
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateSparePartRequirementRequest;
 import com.toir.entity.SparePart;
+import com.toir.entity.maintenance.MaintenanceAction;
 import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
@@ -35,6 +37,8 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
     private MaintenanceTemplateRepository templateRepository;
     @Mock
     private MaintenanceOperationRepository operationRepository;
+    @Mock
+    private MaintenanceActionRepository actionRepository;
     @Mock
     private SparePartRepository sparePartRepository;
 
@@ -145,6 +149,31 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
                 true
         ))).isInstanceOf(RestException.class)
                 .hasMessageContaining("operation belongs to another template");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsMaintenanceActionIdSubmittedAsOperationId() {
+        UUID templateId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template(templateId)));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart(sparePartId)));
+        when(operationRepository.findByIdAndIsDeletedFalse(actionId)).thenReturn(Optional.empty());
+        when(actionRepository.findByIdAndIsDeletedFalse(actionId)).thenReturn(Optional.of(action(actionId)));
+
+        assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
+                actionId,
+                sparePartId,
+                1,
+                "pcs",
+                null,
+                null,
+                true
+        ))).isInstanceOf(RestException.class)
+                .hasMessageContaining("operationId must reference a maintenance operation, not a maintenance action");
 
         verify(repository, never()).save(any());
     }
@@ -316,6 +345,15 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         operation.setName("Inspect bearings");
         operation.setSequence(1);
         return operation;
+    }
+
+    private MaintenanceAction action(UUID id) {
+        MaintenanceAction action = new MaintenanceAction();
+        action.setId(id);
+        action.setCode("ACT-1");
+        action.setName("Inspect bearings");
+        action.setActive(true);
+        return action;
     }
 
     private SparePart sparePart(UUID id) {
