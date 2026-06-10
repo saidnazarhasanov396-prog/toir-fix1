@@ -12,6 +12,7 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.service.equipment.EquipmentService;
+import com.toir.service.equipment.EquipmentPictureService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,12 +62,15 @@ class EquipmentPbacScopeTest {
     @Mock
     EquipmentStatusLifecycleService statusLifecycleService;
 
+    @Mock
+    EquipmentPictureService pictureService;
+
     MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new EquipmentController(service, repository, scopeAccessService, statusLifecycleService),
+                        new EquipmentController(service, repository, scopeAccessService, statusLifecycleService, pictureService),
                         new EquipmentLabelController(repository, scopeAccessService),
                         new EquipmentScanCompatibilityController(repository, scopeAccessService)
                 )

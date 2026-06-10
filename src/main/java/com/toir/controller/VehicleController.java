@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleDocumentDto;
+import com.toir.dto.vehicle.VehiclePictureDto;
 import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.dto.vehicle.VehicleSummaryDto;
@@ -16,6 +17,7 @@ import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.VehicleService;
+import com.toir.service.VehiclePictureService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -56,6 +58,7 @@ public class VehicleController {
     private final VehicleService service;
     private final ScopeAccessService scopeAccessService;
     private final EquipmentRepository equipmentRepository;
+    private final VehiclePictureService pictureService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
@@ -205,6 +208,62 @@ public class VehicleController {
     ) {
         assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         service.deleteDocument(equipmentId, documentId, user);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping(value = "/{equipmentId}/pictures", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    @Operation(summary = "Attach vehicle pictures with optional matching client-provided picture names")
+    public ResponseEntity<List<VehiclePictureDto>> attachPictures(
+            @PathVariable UUID equipmentId,
+            @Parameter(description = "Image files. If pictureNames is provided, it must have the same item count as files.")
+            @RequestParam("files") List<MultipartFile> files,
+            @Parameter(description = "Picture names/titles in the same order as files.")
+            @RequestParam(value = "pictureNames", required = false) List<String> pictureNames,
+            @RequestParam(required = false) String pictureType,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(pictureService.uploadPictures(equipmentId, files, pictureNames, pictureType, user));
+    }
+
+    @GetMapping("/{equipmentId}/pictures")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Page<VehiclePictureDto>> getPictures(
+            @PathVariable UUID equipmentId,
+            @CurrentUser AuthenticatedUser user,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
+        return ResponseEntity.ok(PaginationUtils.page(pictureService.getPictures(equipmentId, user), page, size));
+    }
+
+    @GetMapping("/pictures/{pictureId}/download")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Resource> downloadPicture(
+            @PathVariable UUID pictureId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        VehiclePictureDto picture = pictureService.getPicture(pictureId, user);
+        Resource resource = pictureService.downloadPicture(pictureId, user);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(picture.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                        .filename(picture.originalName(), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .body(resource);
+    }
+
+    @DeleteMapping("/pictures/{pictureId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    public ResponseEntity<Void> deletePicture(
+            @PathVariable UUID pictureId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        pictureService.deletePicture(pictureId, user);
         return ResponseEntity.noContent().build();
     }
 

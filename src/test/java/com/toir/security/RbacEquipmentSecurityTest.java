@@ -10,6 +10,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.service.equipment.EquipmentPictureService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import org.junit.jupiter.api.Test;
@@ -66,6 +67,9 @@ class RbacEquipmentSecurityTest {
 
     @MockBean
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+
+    @MockBean
+    EquipmentPictureService equipmentPictureService;
 
     @MockBean
     ScopeAccessService scopeAccessService;

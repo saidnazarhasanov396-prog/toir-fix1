@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.controller.equipment.EquipmentController;
 import com.toir.dto.equipment.EquipmentDetailDto;
 import com.toir.dto.equipment.EquipmentDto;
+import com.toir.dto.equipment.EquipmentPictureDto;
 import com.toir.dto.equipment.EquipmentStatusHistoryResponse;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.entity.equipment.Equipment;
@@ -16,7 +17,10 @@ import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.CurrentUser;
 import com.toir.service.equipment.EquipmentService;
+import com.toir.service.equipment.EquipmentPictureService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,11 +32,20 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.core.NestedExceptionUtils;
+import org.springframework.core.MethodParameter;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.support.WebDataBinderFactory;
+import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.method.support.ModelAndViewContainer;
 import com.toir.dto.equipment.EquipmentStatsResponse;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,8 +58,10 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -69,14 +84,100 @@ class EquipmentControllerContractTest {
     @Mock
     EquipmentStatusLifecycleService statusLifecycleService;
 
+    @Mock
+    EquipmentPictureService pictureService;
+
     private MockMvc mockMvc;
+    private UUID currentUserId;
 
     @BeforeEach
     void setUp() {
+        currentUserId = UUID.randomUUID();
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        mockMvc = MockMvcBuilders.standaloneSetup(new EquipmentController(service, repository, scopeAccessService, statusLifecycleService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new EquipmentController(service, repository, scopeAccessService, statusLifecycleService, pictureService))
+                .setCustomArgumentResolvers(new TestCurrentUserResolver(currentUserId))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void attachPicturesUploadsMultipleImages() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID firstPictureId = UUID.randomUUID();
+        UUID secondPictureId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipmentEntity(equipmentId, UUID.randomUUID())));
+        when(pictureService.uploadPictures(eq(equipmentId), any(), eq(List.of("Front", "Nameplate")), eq("INSPECTION"), any()))
+                .thenReturn(List.of(
+                        equipmentPicture(equipmentId, firstPictureId, "Front", "front.png"),
+                        equipmentPicture(equipmentId, secondPictureId, "Nameplate", "nameplate.webp")
+                ));
+
+        mockMvc.perform(multipart("/api/v1/equipment/{equipmentId}/pictures", equipmentId)
+                        .file(new MockMultipartFile("files", "front.png", "image/png", "png".getBytes()))
+                        .file(new MockMultipartFile("files", "nameplate.webp", "image/webp", "webp".getBytes()))
+                        .param("pictureNames", "Front", "Nameplate")
+                        .param("pictureType", "INSPECTION"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].id").value(firstPictureId.toString()))
+                .andExpect(jsonPath("$[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$[0].pictureName").value("Front"))
+                .andExpect(jsonPath("$[0].downloadUrl").value("/api/v1/equipment/pictures/" + firstPictureId + "/download"))
+                .andExpect(jsonPath("$[1].pictureName").value("Nameplate"));
+
+        verify(pictureService).uploadPictures(eq(equipmentId), any(), eq(List.of("Front", "Nameplate")), eq("INSPECTION"), any());
+    }
+
+    @Test
+    void attachPicturesRejectsNonImageFile() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipmentEntity(equipmentId, UUID.randomUUID())));
+        when(pictureService.uploadPictures(eq(equipmentId), any(), eq(List.of("Bad")), eq(null), any()))
+                .thenThrow(RestException.badRequest("files[0] must be an image file (jpeg, png, webp, or gif)"));
+
+        mockMvc.perform(multipart("/api/v1/equipment/{equipmentId}/pictures", equipmentId)
+                        .file(new MockMultipartFile("files", "bad.pdf", "application/pdf", "%PDF".getBytes()))
+                        .param("pictureNames", "Bad"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("files[0] must be an image file (jpeg, png, webp, or gif)"));
+    }
+
+    @Test
+    void listPicturesReturnsPaginatedContent() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID pictureId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipmentEntity(equipmentId, UUID.randomUUID())));
+        when(pictureService.getPictures(eq(equipmentId), any()))
+                .thenReturn(List.of(equipmentPicture(equipmentId, pictureId, "Front", "front.png")));
+
+        mockMvc.perform(get("/api/v1/equipment/{equipmentId}/pictures", equipmentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(pictureId.toString()))
+                .andExpect(jsonPath("$.content[0].downloadUrl").value("/api/v1/equipment/pictures/" + pictureId + "/download"))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void downloadPictureReturnsInlineImage() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID pictureId = UUID.randomUUID();
+        when(pictureService.getPicture(eq(pictureId), any()))
+                .thenReturn(equipmentPicture(equipmentId, pictureId, "Front", "front.png"));
+        when(pictureService.downloadPicture(eq(pictureId), any()))
+                .thenReturn(new ByteArrayResource("png".getBytes()));
+
+        mockMvc.perform(get("/api/v1/equipment/pictures/{pictureId}/download", pictureId))
+                .andExpect(status().isOk())
+                .andExpect(result -> assertThat(result.getResponse().getContentType()).isEqualTo("image/png"));
+    }
+
+    @Test
+    void deletePictureReturnsNoContent() throws Exception {
+        UUID pictureId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/equipment/pictures/{pictureId}", pictureId))
+                .andExpect(status().isNoContent());
+
+        verify(pictureService).deletePicture(eq(pictureId), any());
     }
 
     @Test
@@ -1059,6 +1160,40 @@ class EquipmentControllerContractTest {
                 null,
                 placement
         );
+    }
+
+    private EquipmentPictureDto equipmentPicture(UUID equipmentId, UUID pictureId, String pictureName, String originalName) {
+        return new EquipmentPictureDto(
+                pictureId,
+                equipmentId,
+                pictureName,
+                "INSPECTION",
+                originalName,
+                "image/png",
+                123L,
+                LocalDateTime.now(),
+                currentUserId,
+                "/api/v1/equipment/pictures/" + pictureId + "/download"
+        );
+    }
+
+    private static class TestCurrentUserResolver implements HandlerMethodArgumentResolver {
+        private final UUID userId;
+
+        private TestCurrentUserResolver(UUID userId) {
+            this.userId = userId;
+        }
+
+        @Override
+        public boolean supportsParameter(MethodParameter parameter) {
+            return parameter.hasParameterAnnotation(CurrentUser.class);
+        }
+
+        @Override
+        public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+                                      NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
+            return new AuthenticatedUser(userId.toString(), "user", "user@example.com", "User", null, "USER", List.of());
+        }
     }
 
     private void assertCreateExpectedLifetimeHoursValidation(long value) throws Exception {

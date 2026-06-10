@@ -7,6 +7,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.service.VehiclePictureService;
 import com.toir.service.VehicleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,6 +54,9 @@ class VehicleControllerSecurityTest {
 
     @MockBean
     VehicleService vehicleService;
+
+    @MockBean
+    VehiclePictureService vehiclePictureService;
 
     @MockBean
     ScopeAccessService scopeAccessService;
