@@ -10,6 +10,9 @@ import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -29,18 +32,18 @@ public record MaintenanceRegulationRequest(
         Boolean active,
         @NotNull PeriodicityUnit periodicityUnit,
         @Positive int periodicityValue,
-        Integer toleranceDays,
+        @PositiveOrZero Integer toleranceDays,
         boolean requiresShutdown,
         MeterType triggerMeterType,
-        Double triggerMeterInterval,
+        @Positive Double triggerMeterInterval,
         MaintenanceTriggerPolicy triggerPolicy,
         MaintenanceRecalculationPolicy recalculationPolicy,
         MaintenanceInitialSchedulePolicy initialSchedulePolicy,
         AutomationAction automationAction,
         ApprovalResultAction approvalResultAction,
         DuplicatePolicy duplicatePolicy,
-        Integer leadTimeDays,
-        Double leadMeterPercent,
+        @PositiveOrZero Integer leadTimeDays,
+        @DecimalMin("0.0") @DecimalMax("100.0") Double leadMeterPercent,
         UUID defaultDepartmentId,
         UUID defaultResponsibleId,
         PriorityLevel defaultPriority,
@@ -169,5 +172,11 @@ public record MaintenanceRegulationRequest(
                         periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
                         triggerMeterInterval, null, null, null, null, null, null, null, null, null, null, null, null,
                         null, null, attributeConditions, null);
+        }
+
+        @AssertTrue(message = "triggerMeterType and triggerMeterInterval must be provided together")
+        public boolean isMeterTriggerPairValid() {
+                return (triggerMeterType == null && triggerMeterInterval == null)
+                        || (triggerMeterType != null && triggerMeterInterval != null);
         }
 }
