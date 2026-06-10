@@ -2050,8 +2050,8 @@ public class WorkOrderService {
         return safeTasks.stream()
                 .map(task -> WorkOrderTaskDto.from(
                         task,
-                        templatesById.get(task.getSourceTemplateId()),
-                        operationsById.get(task.getSourceOperationId())))
+                        task.getSourceTemplateId() == null ? null : templatesById.get(task.getSourceTemplateId()),
+                        task.getSourceOperationId() == null ? null : operationsById.get(task.getSourceOperationId())))
                 .toList();
     }
 
