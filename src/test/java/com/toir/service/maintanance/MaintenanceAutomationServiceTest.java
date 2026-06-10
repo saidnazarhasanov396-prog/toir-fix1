@@ -904,10 +904,12 @@ class MaintenanceAutomationServiceTest {
     }
 
     @Test
-    void createTaskActionWithoutTemplateDoesNotCreateTaskAndExplainsReason() {
+    void createTaskActionWithoutTemplateCreatesPprTask() {
         UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, typeId);
+        equipment.setResponsibleDepartmentId(departmentId);
         MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, AutomationAction.CREATE_TASK);
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         mockEffectiveRules(equipmentId, regulation);
@@ -916,16 +918,24 @@ class MaintenanceAutomationServiceTest {
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
         when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
+        when(pprTaskRepository.existsOpenByCycleKey(any())).thenReturn(false);
+        when(pprTaskRepository.maxSequenceByCodePrefix(any())).thenReturn(0L);
+        when(pprPlanRepository.findByCodeAndIsDeletedFalse(any())).thenReturn(Optional.of(pprPlan(departmentId)));
+        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignPprTaskId(invocation.getArgument(0, PprTask.class)));
         when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0, MaintenanceDueEvent.class));
 
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
 
-        assertThat(result.tasksCreated()).isZero();
+        assertThat(result.tasksCreated()).isEqualTo(1);
+        ArgumentCaptor<PprTask> taskCaptor = ArgumentCaptor.forClass(PprTask.class);
+        verify(pprTaskRepository).save(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getEquipmentId()).isEqualTo(equipmentId);
+        assertThat(taskCaptor.getValue().getRegulationId()).isEqualTo(regulation.getId());
+        assertThat(taskCaptor.getValue().getMaintenanceDueEventId()).isNotNull();
         ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
         verify(eventRepository).save(eventCaptor.capture());
-        assertThat(eventCaptor.getValue().getStatus()).isEqualTo(MaintenanceDueEventStatus.DETECTED);
-        assertThat(eventCaptor.getValue().getExplanation()).contains("templateId is required to create task");
-        verify(pprTaskRepository, never()).save(any());
+        assertThat(eventCaptor.getValue().getStatus()).isEqualTo(MaintenanceDueEventStatus.TASK_CREATED);
+        assertThat(eventCaptor.getValue().getCreatedTaskId()).isEqualTo(taskCaptor.getValue().getId());
     }
 
     @Test
@@ -1628,5 +1638,4 @@ class MaintenanceAutomationServiceTest {
         );
     }
 }
-
 

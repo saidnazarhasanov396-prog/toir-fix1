@@ -412,11 +412,6 @@ public class MaintenanceAutomationService {
         if (event.getCreatedTaskId() != null) {
             return pprTaskRepository.findByIdAndIsDeletedFalse(event.getCreatedTaskId()).orElse(null);
         }
-        if (rule.templateId() == null) {
-            event.setStatus(MaintenanceDueEventStatus.DETECTED);
-            event.setExplanation(append(event.getExplanation(), "templateId is required to create task"));
-            return null;
-        }
         if (pprTaskRepository.existsOpenByCycleKey(event.getCycleKey())) {
             event.setStatus(MaintenanceDueEventStatus.SUPPRESSED_DUPLICATE);
             return null;

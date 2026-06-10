@@ -7,12 +7,15 @@ import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationSparePartRequirementRequest;
+import com.toir.entity.SparePart;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
+import com.toir.entity.maintenance.MaintenanceRegulationSparePartRequirement;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
@@ -23,6 +26,7 @@ import com.toir.enums.MaintenanceRegulationConditionOperator;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
+import com.toir.repository.SparePartRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeEquipmentCountProjection;
@@ -30,6 +34,7 @@ import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirementRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.security.PermissionConstants;
 import com.toir.security.SecurityAccessService;
@@ -89,6 +94,12 @@ class MaintenanceRegulationServiceTest {
 
     @Mock
     MaintenanceTemplateRepository templateRepository;
+
+    @Mock
+    MaintenanceRegulationSparePartRequirementRepository regulationSparePartRequirementRepository;
+
+    @Mock
+    SparePartRepository sparePartRepository;
 
     @Mock
     SecurityAccessService securityAccessService;
@@ -518,6 +529,121 @@ class MaintenanceRegulationServiceTest {
     }
 
     @Test
+    void createWithoutTemplatePersistsRegulationSparePartRequirements() {
+        int year = Year.now().getValue();
+        String codePrefix = "MR-" + year + "-";
+        String expectedCode = "MR-" + year + "-0001";
+        UUID regulationId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        SparePart sparePart = sparePart(sparePartId, "BRG-001", "Bearing", "pcs");
+
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(repository.save(any(MaintenanceRegulation.class))).thenAnswer(invocation -> {
+            MaintenanceRegulation regulation = invocation.getArgument(0);
+            regulation.setId(regulationId);
+            return regulation;
+        });
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(regulationSparePartRequirementRepository.findActiveByRegulationId(regulationId))
+                .thenReturn(List.of())
+                .thenReturn(List.of(regulationSpareRequirement(regulationId, sparePart, 2.0)));
+
+        MaintenanceRegulationDto created = service.create(requestWithSpareParts(sparePartId, null));
+
+        assertThat(created.templateId()).isNull();
+        assertThat(created.sparePartRequirements()).hasSize(1);
+        assertThat(created.sparePartRequirements().getFirst().sparePartCode()).isEqualTo("BRG-001");
+        assertThat(created.sparePartRequirements().getFirst().sparePartName()).isEqualTo("Bearing");
+        assertThat(created.sparePartRequirements().getFirst().quantity()).isEqualTo(2.0);
+        assertThat(created.sparePartRequirements().getFirst().unit()).isEqualTo("pcs");
+
+        ArgumentCaptor<Iterable<MaintenanceRegulationSparePartRequirement>> captor =
+                ArgumentCaptor.forClass(Iterable.class);
+        verify(regulationSparePartRequirementRepository).saveAll(captor.capture());
+        MaintenanceRegulationSparePartRequirement saved =
+                ((List<MaintenanceRegulationSparePartRequirement>) captor.getValue()).getFirst();
+        assertThat(saved.getRegulationId()).isEqualTo(regulationId);
+        assertThat(saved.getSparePart()).isEqualTo(sparePart);
+        assertThat(saved.getQuantity()).isEqualTo(2.0);
+        assertThat(saved.getUnit()).isEqualTo("pcs");
+    }
+
+    @Test
+    void updateWithNullSparePartRequirementsKeepsExistingRequirements() {
+        UUID regulationId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        MaintenanceRegulation existing = regulation(regulationId, typeId, "MR-2026-0001", true);
+
+        when(repository.findByIdAndIsDeletedFalse(regulationId)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+        when(regulationSparePartRequirementRepository.findActiveByRegulationId(regulationId))
+                .thenReturn(List.of());
+
+        service.update(regulationId, requestWithNullableSpareParts(typeId, null));
+
+        verify(regulationSparePartRequirementRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void updateWithEmptySparePartRequirementsSoftDeletesExistingRequirements() {
+        UUID regulationId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        SparePart sparePart = sparePart(UUID.randomUUID(), "BRG-001", "Bearing", "pcs");
+        MaintenanceRegulation existing = regulation(regulationId, typeId, "MR-2026-0001", true);
+        MaintenanceRegulationSparePartRequirement existingRequirement =
+                regulationSpareRequirement(regulationId, sparePart, 1.0);
+
+        when(repository.findByIdAndIsDeletedFalse(regulationId)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+        when(regulationSparePartRequirementRepository.findActiveByRegulationId(regulationId))
+                .thenReturn(List.of(existingRequirement));
+
+        service.update(regulationId, requestWithNullableSpareParts(typeId, List.of()));
+
+        assertThat(existingRequirement.isDeleted()).isTrue();
+        verify(regulationSparePartRequirementRepository).saveAll(List.of(existingRequirement));
+    }
+
+    @Test
+    void createWithRegulationSparePartMismatchedUnitReturns400() {
+        UUID sparePartId = UUID.randomUUID();
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId))
+                .thenReturn(Optional.of(sparePart(sparePartId, "BRG-001", "Bearing", "pcs")));
+
+        assertThatThrownBy(() -> service.create(requestWithSpareParts(sparePartId, "kg")))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("unit must match spare part unit");
+                });
+
+        verify(regulationSparePartRequirementRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void createWorkOrderAutomationWithoutTemplateDoesNotReturn400() {
+        int year = Year.now().getValue();
+        String codePrefix = "MR-" + year + "-";
+        String expectedCode = "MR-" + year + "-0001";
+
+        when(securityAccessService.hasPermission(any(), eq(PermissionConstants.MAINTENANCE_AUTOMATION_CONFIGURE)))
+                .thenReturn(true);
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(repository.save(any(MaintenanceRegulation.class))).thenAnswer(invocation -> {
+            MaintenanceRegulation regulation = invocation.getArgument(0);
+            regulation.setId(UUID.randomUUID());
+            return regulation;
+        });
+
+        MaintenanceRegulationDto created = service.create(requestWithAutomationConfiguration());
+
+        assertThat(created.templateId()).isNull();
+        assertThat(created.automationAction()).isEqualTo(AutomationAction.CREATE_WORK_ORDER);
+        verify(repository).save(any(MaintenanceRegulation.class));
+    }
+
+    @Test
     void createWithCompatibleTemplateStoresTemplateId() {
         int year = Year.now().getValue();
         String codePrefix = "MR-" + year + "-";
@@ -730,6 +856,58 @@ class MaintenanceRegulationServiceTest {
         );
     }
 
+    private MaintenanceRegulationRequest requestWithSpareParts(UUID sparePartId, String unit) {
+        return requestWithNullableSpareParts(
+                UUID.randomUUID(),
+                List.of(new MaintenanceRegulationSparePartRequirementRequest(
+                        sparePartId,
+                        2.0,
+                        unit,
+                        "CRITICAL",
+                        "keep ready",
+                        true
+                ))
+        );
+    }
+
+    private MaintenanceRegulationRequest requestWithNullableSpareParts(
+            UUID typeId,
+            List<MaintenanceRegulationSparePartRequirementRequest> sparePartRequirements
+    ) {
+        return new MaintenanceRegulationRequest(
+                null,
+                "Monthly pump regulation",
+                "Regulation description",
+                typeId,
+                null,
+                MaintenanceKind.PREVENTIVE,
+                3.0,
+                true,
+                PeriodicityUnit.MONTH,
+                1,
+                3,
+                false,
+                MeterType.CUSTOM,
+                10.0,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                sparePartRequirements
+        );
+    }
+
     private MaintenanceRegulationRequest requestWithAutomationConfiguration() {
         return new MaintenanceRegulationRequest(
                 null,
@@ -807,6 +985,34 @@ class MaintenanceRegulationServiceTest {
         template.setMaintenanceKind(kind);
         template.setActive(active);
         return template;
+    }
+
+    private SparePart sparePart(UUID id, String code, String name, String unit) {
+        SparePart sparePart = new SparePart();
+        sparePart.setId(id);
+        sparePart.setCode(code);
+        sparePart.setName(name);
+        sparePart.setUnit(unit);
+        return sparePart;
+    }
+
+    private MaintenanceRegulationSparePartRequirement regulationSpareRequirement(
+            UUID regulationId,
+            SparePart sparePart,
+            double quantity
+    ) {
+        MaintenanceRegulationSparePartRequirement requirement =
+                new MaintenanceRegulationSparePartRequirement();
+        requirement.setId(UUID.randomUUID());
+        requirement.setRegulationId(regulationId);
+        requirement.setSparePart(sparePart);
+        requirement.setSparePartId(sparePart.getId());
+        requirement.setQuantity(quantity);
+        requirement.setUnit(sparePart.getUnit());
+        requirement.setCriticality("CRITICAL");
+        requirement.setNotes("keep ready");
+        requirement.setActive(true);
+        return requirement;
     }
 
     private MaintenanceRegulation regulation(UUID id, UUID typeId, String code, boolean active) {

@@ -8,6 +8,7 @@ import com.toir.dto.sparepartforecast.SparePartForecastSummaryDto;
 import com.toir.entity.SparePart;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
+import com.toir.entity.maintenance.MaintenanceRegulationSparePartRequirement;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
@@ -23,6 +24,7 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirementRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.OperationalIssueService;
@@ -65,6 +67,7 @@ public class SparePartForecastService {
 
     private final MaintenanceDueEventRepository eventRepository;
     private final MaintenanceTemplateSparePartRequirementRepository requirementRepository;
+    private final MaintenanceRegulationSparePartRequirementRepository regulationRequirementRepository;
     private final WarehouseStockRepository stockRepository;
     private final WarehouseRepository warehouseRepository;
     private final SparePartRepository sparePartRepository;
@@ -102,13 +105,25 @@ public class SparePartForecastService {
                 .distinct()
                 .toList();
         Map<UUID, List<MaintenanceTemplateSparePartRequirement>> requirementsByTemplate =
-                requirementRepository.findAllActiveByTemplateIdIn(templateIds).stream()
+                templateIds.isEmpty()
+                        ? Map.of()
+                        : requirementRepository.findAllActiveByTemplateIdIn(templateIds).stream()
                         .collect(Collectors.groupingBy(MaintenanceTemplateSparePartRequirement::getTemplateId));
-        if (requirementsByTemplate.isEmpty()) {
+        List<UUID> regulationIds = events.stream()
+                .map(MaintenanceDueEvent::getRegulationId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<UUID, List<MaintenanceRegulationSparePartRequirement>> requirementsByRegulation =
+                regulationIds.isEmpty()
+                        ? Map.of()
+                        : regulationRequirementRepository.findAllActiveByRegulationIdIn(regulationIds).stream()
+                        .collect(Collectors.groupingBy(MaintenanceRegulationSparePartRequirement::getRegulationId));
+        if (requirementsByTemplate.isEmpty() && requirementsByRegulation.isEmpty()) {
             return new SparePartForecastSummaryDto(period.start(), period.end(), List.of());
         }
 
-        List<DemandRow> demandRows = buildDemandRows(events, requirementsByTemplate, warehouseId);
+        List<DemandRow> demandRows = buildDemandRows(events, requirementsByTemplate, requirementsByRegulation, warehouseId);
         if (demandRows.isEmpty()) {
             return new SparePartForecastSummaryDto(period.start(), period.end(), List.of());
         }
@@ -272,14 +287,40 @@ public class SparePartForecastService {
 
     private List<DemandRow> buildDemandRows(List<MaintenanceDueEvent> events,
                                             Map<UUID, List<MaintenanceTemplateSparePartRequirement>> requirementsByTemplate,
+                                            Map<UUID, List<MaintenanceRegulationSparePartRequirement>> requirementsByRegulation,
                                             UUID warehouseId) {
         Set<String> seenKeys = new java.util.HashSet<>();
         List<DemandRow> rows = new ArrayList<>();
         for (MaintenanceDueEvent event : events) {
             List<MaintenanceTemplateSparePartRequirement> requirements =
-                    requirementsByTemplate.getOrDefault(event.getTemplateId(), List.of());
+                    event.getTemplateId() == null
+                            ? List.of()
+                            : requirementsByTemplate.getOrDefault(event.getTemplateId(), List.of());
             for (MaintenanceTemplateSparePartRequirement requirement : requirements) {
-                String key = event.getId() + ":" + requirement.getId();
+                String key = "T:" + event.getId() + ":" + requirement.getId();
+                if (!seenKeys.add(key)) {
+                    continue;
+                }
+                rows.add(new DemandRow(
+                        event.getId(),
+                        requirement.getId(),
+                        event.getTemplateId(),
+                        event.getEquipmentId(),
+                        event.getCreatedTaskId(),
+                        event.getCreatedWorkOrderId(),
+                        event.getDueAt(),
+                        requirement.getSparePartId(),
+                        warehouseId,
+                        requirement.getQuantity(),
+                        requirement.getUnit()
+                ));
+            }
+            List<MaintenanceRegulationSparePartRequirement> regulationRequirements =
+                    event.getRegulationId() == null
+                            ? List.of()
+                            : requirementsByRegulation.getOrDefault(event.getRegulationId(), List.of());
+            for (MaintenanceRegulationSparePartRequirement requirement : regulationRequirements) {
+                String key = "R:" + event.getId() + ":" + requirement.getId();
                 if (!seenKeys.add(key)) {
                     continue;
                 }
