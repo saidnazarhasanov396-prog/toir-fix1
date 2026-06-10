@@ -40,4 +40,21 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
 
     @Query(value = "SELECT COUNT(*) FROM procurement_requests WHERE status = :status AND is_deleted = false", nativeQuery = true)
     long countByStatusAndIsDeletedFalse(@Param("status") String status);
+
+    @Query(value = """
+            SELECT * FROM procurement_requests
+            WHERE is_deleted = false
+            AND (cast(:status as varchar) IS NULL OR status = cast(:status as varchar))
+            AND (cast(:departmentId as varchar) IS NULL OR department_id = cast(:departmentId as uuid))
+            AND (
+                nullif(trim(cast(:search as varchar)), '') IS NULL
+                OR lower(coalesce(number, '')) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                OR lower(coalesce(title, '')) LIKE lower(concat('%', cast(:search as varchar), '%'))
+            )
+            ORDER BY updated_at DESC
+            """, nativeQuery = true)
+    List<ProcurementRequest> search(
+            @Param("search") String search,
+            @Param("status") String status,
+            @Param("departmentId") UUID departmentId);
 }

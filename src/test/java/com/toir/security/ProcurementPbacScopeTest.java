@@ -30,6 +30,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -80,9 +81,9 @@ class ProcurementPbacScopeTest {
         ProcurementRequest first = request(UUID.randomUUID(), UUID.randomUUID(), null, ProcurementRequestStatus.DRAFT);
         ProcurementRequest second = request(UUID.randomUUID(), UUID.randomUUID(), null, ProcurementRequestStatus.SUBMITTED);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(first, second));
+        when(repository.search(isNull(), isNull(), isNull())).thenReturn(List.of(first, second));
 
-        var result = service.findAll(null, null);
+        var result = service.findAll(null, null, null);
 
         assertThat(result).extracting(dto -> dto.id()).containsExactly(first.getId(), second.getId());
     }
@@ -95,14 +96,13 @@ class ProcurementPbacScopeTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
         when(scopeAccessService.canAccessDepartment(currentDepartmentId)).thenReturn(true);
-        when(repository.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(currentDepartmentId))
-                .thenReturn(List.of(allowed));
+        when(repository.search(isNull(), isNull(), any())).thenReturn(List.of(allowed));
 
-        var result = service.findAll(null, requestedDepartmentId);
+        var result = service.findAll(null, requestedDepartmentId, null);
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().departmentId()).isEqualTo(currentDepartmentId);
-        verify(repository).findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(currentDepartmentId);
+        verify(repository).search(null, null, currentDepartmentId);
     }
 
     @Test
@@ -110,10 +110,10 @@ class ProcurementPbacScopeTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
 
-        assertThatThrownBy(() -> service.findAll(null, null))
+        assertThatThrownBy(() -> service.findAll(null, null, null))
                 .isInstanceOf(AccessDeniedException.class);
 
-        verify(repository, never()).findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        verify(repository, never()).search(any(), any(), any());
     }
 
     @Test

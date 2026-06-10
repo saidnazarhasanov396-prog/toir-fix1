@@ -34,9 +34,11 @@ public class ProcurementRequestController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_READ')")
     public ResponseEntity<Page<ProcurementRequestDto>> list(
             @RequestParam(required = false) ProcurementRequestStatus status,
-            @RequestParam(required = false) UUID departmentId, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findAll(status, departmentId), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(status, departmentId, search), page, size));
     }
 
     @GetMapping("/{id}")
@@ -54,7 +56,7 @@ public class ProcurementRequestController {
     @PostMapping("/{id}/lines")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_CREATE')")
     public ResponseEntity<ProcurementRequestDto> addLine(@PathVariable UUID id,
-            @Valid @RequestBody ProcurementLineRequest r) {
+                                                         @Valid @RequestBody ProcurementLineRequest r) {
         return ResponseEntity.ok(service.addLine(id, r));
     }
 
@@ -67,7 +69,7 @@ public class ProcurementRequestController {
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_APPROVE')")
     public ResponseEntity<ProcurementRequestDto> approve(@PathVariable UUID id,
-            @RequestParam(required = false) UUID approverId) {
+                                                         @RequestParam(required = false) UUID approverId) {
         ProcurementRequestDto current = service.validateCanApprove(id);
         approvalService.createOrReuseApprovalForDocument(
                 "PROCUREMENT_REQUEST",
