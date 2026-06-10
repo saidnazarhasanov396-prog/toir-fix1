@@ -12,6 +12,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,11 +38,13 @@ class FileServiceImplTest {
     FileValidator validator;
 
     private FileServiceImpl service;
+    private LocalFileResourceResolver localFileResourceResolver;
     private UUID ownerId;
 
     @BeforeEach
     void setUp() {
-        service = new FileServiceImpl(s3Service, repository, validator);
+        localFileResourceResolver = new LocalFileResourceResolver("uploads");
+        service = new FileServiceImpl(s3Service, repository, validator, localFileResourceResolver);
         ownerId = UUID.randomUUID();
     }
 
@@ -108,6 +113,44 @@ class FileServiceImplTest {
         service.delete(uploadedFile.getId(), ownerId);
 
         verify(s3Service).delete(uploadedFile.getObjectName());
+    }
+
+    @Test
+    void downloadUsesLocalResolverForLegacyFileUrlWithEncodedSpaces() throws Exception {
+        Path storageRoot = Files.createTempDirectory("toir-file-service");
+        Path filePath = storageRoot.resolve("Screenshot 2026.png");
+        Files.writeString(filePath, "image-bytes", StandardCharsets.UTF_8);
+        service = new FileServiceImpl(
+                s3Service,
+                repository,
+                validator,
+                new LocalFileResourceResolver(storageRoot.toString()));
+        UploadedFile uploadedFile = uploadedFile(ownerId);
+        uploadedFile.setObjectName(filePath.toUri().toString().replace("Screenshot%202026.png", "./Screenshot%202026.png"));
+        uploadedFile.setContentType("image/png");
+        when(repository.findByIdAndDeletedFalse(uploadedFile.getId())).thenReturn(Optional.of(uploadedFile));
+
+        var resource = service.download(uploadedFile.getId(), ownerId);
+
+        assertThat(resource.contentLength()).isEqualTo("image-bytes".getBytes(StandardCharsets.UTF_8).length);
+        assertThat(resource.getContentAsString(StandardCharsets.UTF_8)).isEqualTo("image-bytes");
+    }
+
+    @Test
+    void downloadReturnsNotFoundForMissingLegacyLocalFile() {
+        Path storageRoot = Path.of("uploads").toAbsolutePath().normalize();
+        service = new FileServiceImpl(
+                s3Service,
+                repository,
+                validator,
+                new LocalFileResourceResolver(storageRoot.toString()));
+        UploadedFile uploadedFile = uploadedFile(ownerId);
+        uploadedFile.setObjectName(storageRoot.resolve("missing file.pdf").toUri().toString());
+        when(repository.findByIdAndDeletedFalse(uploadedFile.getId())).thenReturn(Optional.of(uploadedFile));
+
+        assertThatThrownBy(() -> service.download(uploadedFile.getId(), ownerId))
+                .isInstanceOf(RestException.class)
+                .hasMessage("File not found");
     }
 
     private MockMultipartFile file(String name) {

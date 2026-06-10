@@ -6,8 +6,10 @@ import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.FileAssetRepository;
+import com.toir.service.file_management.LocalFileResourceResolver;
 import com.toir.util.AuditBuilderService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -24,13 +26,16 @@ public class FileAssetService {
 
     private final FileAssetRepository repository;
     private final AuditBuilderService auditBuilderService;
+    private final LocalFileResourceResolver localFileResourceResolver;
     private final Path storageRoot;
 
     public FileAssetService(FileAssetRepository repository,
                             AuditBuilderService auditBuilderService,
+                            LocalFileResourceResolver localFileResourceResolver,
                             @Value("${app.files.storage-path:uploads}") String storagePath) {
         this.repository = repository;
         this.auditBuilderService = auditBuilderService;
+        this.localFileResourceResolver = localFileResourceResolver;
         this.storageRoot = Paths.get(storagePath).toAbsolutePath();
         try {
             Files.createDirectories(this.storageRoot);
@@ -79,6 +84,13 @@ public class FileAssetService {
         );
 
         return FileAssetDto.from(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public Resource download(UUID id) {
+        FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("File not found: " + id));
+        return localFileResourceResolver.load(asset.getStoragePath());
     }
 
     @Transactional

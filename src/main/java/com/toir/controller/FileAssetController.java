@@ -9,15 +9,14 @@ import com.toir.security.CurrentUser;
 import com.toir.service.FileAssetService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.net.MalformedURLException;
-import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.Page;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -84,17 +83,15 @@ public class FileAssetController {
     @GetMapping("/assets/{id}/download")
     public ResponseEntity<Resource> download(@PathVariable UUID id) {
         FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
-                .orElseThrow(() -> new RuntimeException("File not found"));
-        try {
-            Resource resource = new UrlResource(Path.of(asset.getStoragePath()).toUri());
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(asset.getMimeType()))
-                    .header(HttpHeaders.CONTENT_DISPOSITION,
-                            "attachment; filename=\"" + asset.getOriginalName() + "\"")
-                    .body(resource);
-        } catch (MalformedURLException e) {
-            throw new RuntimeException("Cannot read file", e);
-        }
+                .orElseThrow(() -> com.toir.exception.RestException.notFound("File not found: " + id));
+        Resource resource = service.download(id);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(asset.getMimeType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(asset.getOriginalName(), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .body(resource);
     }
 
     @DeleteMapping("/{id}")
