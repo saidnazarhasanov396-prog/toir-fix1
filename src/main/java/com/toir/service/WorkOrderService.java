@@ -94,6 +94,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -208,6 +209,7 @@ public class WorkOrderService {
     public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page,
                                      int pageSize, String search, Instant plannedFrom, Instant plannedTo, Sort sort) {
         var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
+        var nativeQueryPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         String normalizedSearch = normalizeSearch(search);
         Page<WorkOrder> resultPage = repository.searchPaginated(
                 status,
@@ -216,7 +218,7 @@ public class WorkOrderService {
                 normalizedSearch,
                 plannedFrom,
                 plannedTo,
-                pageable);
+                nativeQueryPageable);
         return toDtoPage(resultPage);
     }
 
