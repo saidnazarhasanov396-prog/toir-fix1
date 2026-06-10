@@ -30,6 +30,7 @@ import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -64,7 +65,12 @@ public class WorkOrderController {
             @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Instant plannedFrom,
-            @RequestParam(required = false) Instant plannedTo) {
+            @RequestParam(required = false) Instant plannedTo,
+            @RequestParam(required = false, defaultValue = "updatedAt") String sortBy,
+            @RequestParam(required = false, defaultValue = "desc") String sortDir) {
+        Sort sort = sortDir.equalsIgnoreCase("asc")
+                ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
         return ResponseEntity
                 .ok(service.search(
                         status,
@@ -74,7 +80,8 @@ public class WorkOrderController {
                         size,
                         search,
                         plannedFrom,
-                        plannedTo));
+                        plannedTo,
+                        sort));
     }
 
     @GetMapping("/calendar-summary")
@@ -241,7 +248,7 @@ public class WorkOrderController {
     @PostMapping("/{id}/complete")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_COMPLETE')")
     public ResponseEntity<WorkOrderDto> complete(@PathVariable UUID id,
-            @Valid @RequestBody CompleteWorkOrderRequest request) {
+                                                 @Valid @RequestBody CompleteWorkOrderRequest request) {
         assertCanAccessWorkOrder(workOrderOrThrow(id));
         return ResponseEntity.ok(service.complete(id, request));
     }
@@ -249,7 +256,7 @@ public class WorkOrderController {
     @PostMapping("/{id}/close")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_CLOSE')")
     public ResponseEntity<WorkOrderDto> close(@PathVariable UUID id,
-            @Valid @RequestBody CloseWorkOrderRequest request) {
+                                              @Valid @RequestBody CloseWorkOrderRequest request) {
         assertCanAccessWorkOrder(workOrderOrThrow(id));
         return ResponseEntity.ok(service.close(id, request));
     }
