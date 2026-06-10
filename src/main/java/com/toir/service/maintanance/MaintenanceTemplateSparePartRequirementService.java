@@ -119,14 +119,12 @@ public class MaintenanceTemplateSparePartRequirementService {
                        MaintenanceTemplateSparePartRequirementRequest request,
                        SparePart sparePart) {
         entity.setQuantity(request.quantity());
-        String sparePartUnit = sparePart.getUnit();
+        String sparePartUnit = StringUtils.hasText(sparePart.getUnit()) ? sparePart.getUnit().trim() : null;
         String requestedUnit = StringUtils.hasText(request.unit()) ? request.unit().trim() : null;
-        if (requestedUnit != null
-                && StringUtils.hasText(sparePartUnit)
-                && !requestedUnit.equalsIgnoreCase(sparePartUnit.trim())) {
+        if (requestedUnit != null && !requestedUnit.equals(sparePartUnit)) {
             throw RestException.badRequest("unit must match spare part unit");
         }
-        entity.setUnit(requestedUnit == null ? sparePartUnit : requestedUnit);
+        entity.setUnit(sparePartUnit);
         entity.setCriticality(StringUtils.hasText(request.criticality()) ? request.criticality().trim() : null);
         entity.setNotes(StringUtils.hasText(request.notes()) ? request.notes().trim() : null);
         entity.setActive(request.active() == null || request.active());
