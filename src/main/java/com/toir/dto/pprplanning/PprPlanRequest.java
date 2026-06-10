@@ -14,7 +14,7 @@ import java.util.UUID;
 public record PprPlanRequest(
         @NotBlank String name,
         UUID departmentId,
-        @NotNull UUID createdById,
+        UUID createdById,
         String notes,
         @NotNull LocalDate fromDate,
         @NotNull LocalDate toDate,

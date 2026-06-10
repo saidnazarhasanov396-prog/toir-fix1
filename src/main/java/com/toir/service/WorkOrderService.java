@@ -94,6 +94,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -191,7 +192,7 @@ public class WorkOrderService {
 
     @Transactional(readOnly = true)
     public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page,
-            int pageSize, String search) {
+                                     int pageSize, String search) {
         var pageable = PaginationUtils.pageRequest(page, pageSize);
         String normalizedSearch = normalizeSearch(search);
         Page<WorkOrder> resultPage = repository.searchPaginated(
@@ -205,7 +206,23 @@ public class WorkOrderService {
 
     @Transactional(readOnly = true)
     public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page,
-            int pageSize, String search, Instant plannedFrom, Instant plannedTo) {
+                                     int pageSize, String search, Instant plannedFrom, Instant plannedTo, Sort sort) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
+        String normalizedSearch = normalizeSearch(search);
+        Page<WorkOrder> resultPage = repository.searchPaginated(
+                status,
+                departmentId,
+                equipmentId,
+                normalizedSearch,
+                plannedFrom,
+                plannedTo,
+                pageable);
+        return toDtoPage(resultPage);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page,
+                                     int pageSize, String search, Instant plannedFrom, Instant plannedTo) {
         var pageable = PaginationUtils.pageRequest(page, pageSize);
         String normalizedSearch = normalizeSearch(search);
         Page<WorkOrder> resultPage = repository.searchPaginated(
@@ -417,7 +434,7 @@ public class WorkOrderService {
         Map<UUID, User> usersById = userIds.isEmpty()
                 ? Map.of()
                 : userRepository.findAllByIdInAndIsDeletedFalse(userIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity()));
+                .collect(Collectors.toMap(User::getId, Function.identity()));
         return performers.stream()
                 .map(member -> {
                     Brigade brigade = member.getBrigade();
@@ -425,8 +442,8 @@ public class WorkOrderService {
                     String departmentName = performerDepartmentId == null
                             ? null
                             : departmentRepository.findById(performerDepartmentId)
-                                    .map(Department::getName)
-                                    .orElse(null);
+                            .map(Department::getName)
+                            .orElse(null);
                     return new WorkOrderPerformerOptionDto(
                             member.getId(),
                             performerDisplayName(member, usersById),
@@ -439,17 +456,13 @@ public class WorkOrderService {
 
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request) {
-        return create(request, request.createdById());
+        return create(request, null);
     }
 
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request, UUID createdById) {
         if (request.equipmentId() == null) {
             throw RestException.badRequest("Equipment is required to create a work order");
-        }
-        UUID effectiveCreatedById = createdById == null ? request.createdById() : createdById;
-        if (effectiveCreatedById == null) {
-            throw RestException.badRequest("createdById is required to create a work order");
         }
         String effectiveNumber = normalizeWorkOrderNumber(request.number());
         equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create work order");
@@ -499,7 +512,9 @@ public class WorkOrderService {
             entity.setPriority(request.priority());
         entity.setStartPlannedAt(request.startPlannedAt());
         entity.setEndPlannedAt(request.endPlannedAt());
-        entity.setCreatedById(effectiveCreatedById);
+        if (createdById != null) {
+            entity.setCreatedById(createdById);
+        }
         entity.setSummary(request.summary());
         entity.setRepairActRequired(Boolean.TRUE.equals(request.repairActRequired()));
         entity.setStoppageActRequired(Boolean.TRUE.equals(request.stoppageActRequired()));
@@ -776,7 +791,7 @@ public class WorkOrderService {
     }
 
     private Optional<MaintenanceCompletionAnchor> findExistingMaintenanceCompletionAnchor(WorkOrder workOrder,
-                                                                                         MaintenanceDueEvent dueEvent) {
+                                                                                          MaintenanceDueEvent dueEvent) {
         if (dueEvent != null && dueEvent.getId() != null) {
             Optional<MaintenanceCompletionAnchor> byEvent =
                     maintenanceCompletionAnchorRepository.findByMaintenanceDueEventIdAndIsDeletedFalse(dueEvent.getId());
@@ -1656,8 +1671,8 @@ public class WorkOrderService {
                     .badRequest("warehouseId and replacementEquipmentId are required for replacement work orders");
         }
         return warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
-                workOrder.getWarehouseId(),
-                workOrder.getReplacementEquipmentId())
+                        workOrder.getWarehouseId(),
+                        workOrder.getReplacementEquipmentId())
                 .orElseThrow(
                         () -> RestException.badRequest("Replacement equipment item not found in selected warehouse"));
     }
@@ -1681,9 +1696,9 @@ public class WorkOrderService {
                     List<MaintenanceOperation> operations = template.getOperations() == null
                             ? List.of()
                             : template.getOperations().stream()
-                                    .filter(operation -> !operation.isDeleted())
-                                    .sorted(java.util.Comparator.comparingInt(MaintenanceOperation::getSequence))
-                                    .toList();
+                            .filter(operation -> !operation.isDeleted())
+                            .sorted(java.util.Comparator.comparingInt(MaintenanceOperation::getSequence))
+                            .toList();
                     for (MaintenanceOperation operation : operations) {
                         if (hasTaskForOperation(workOrder, operation)) {
                             continue;
@@ -1713,8 +1728,8 @@ public class WorkOrderService {
         return workOrder.getTasks().stream().anyMatch(task ->
                 (operation.getId() != null && operation.getId().equals(task.getSourceOperationId()))
                         || (task.getSourceOperationId() == null
-                            && task.getTitle() != null
-                            && task.getTitle().equals(operation.getName())));
+                        && task.getTitle() != null
+                        && task.getTitle().equals(operation.getName())));
     }
 
     private Optional<UUID> resolveTemplateId(WorkOrder workOrder) {
@@ -1740,7 +1755,7 @@ public class WorkOrderService {
                         return dueEvent == null
                                 ? Optional.<UUID>empty()
                                 : Optional.ofNullable(dueEvent.getTemplateId())
-                                        .or(() -> resolveTemplateIdFromRegulation(dueEvent.getRegulationId()));
+                                .or(() -> resolveTemplateIdFromRegulation(dueEvent.getRegulationId()));
                     });
             if (fromDueEvent.isPresent()) {
                 return fromDueEvent;
@@ -1917,21 +1932,21 @@ public class WorkOrderService {
     }
 
     private WorkOrderDto toDto(WorkOrder entity,
-            EquipmentNode equipmentNode,
-            RepairRequest linkedRepairRequest,
-            Defect linkedDefect,
-            int operationsCount,
-            int materialsCount) {
+                               EquipmentNode equipmentNode,
+                               RepairRequest linkedRepairRequest,
+                               Defect linkedDefect,
+                               int operationsCount,
+                               int materialsCount) {
         return toDto(entity, equipmentNode, linkedRepairRequest, linkedDefect, operationsCount, materialsCount, List.of());
     }
 
     private WorkOrderDto toDto(WorkOrder entity,
-            EquipmentNode equipmentNode,
-            RepairRequest linkedRepairRequest,
-            Defect linkedDefect,
-            int operationsCount,
-            int materialsCount,
-            List<com.toir.dto.materialusage.RepairMaterialUsageDto> materialUsages) {
+                               EquipmentNode equipmentNode,
+                               RepairRequest linkedRepairRequest,
+                               Defect linkedDefect,
+                               int operationsCount,
+                               int materialsCount,
+                               List<com.toir.dto.materialusage.RepairMaterialUsageDto> materialUsages) {
         String equipmentName = equipmentRepository.findById(entity.getEquipmentId())
                 .map(Equipment::getName)
                 .orElse(null);
@@ -1941,13 +1956,13 @@ public class WorkOrderService {
         String locationName = entity.getLocationId() == null
                 ? null
                 : locationRepository.findByIdAndIsDeletedFalse(entity.getLocationId())
-                        .map(Location::getName)
-                        .orElse(null);
+                .map(Location::getName)
+                .orElse(null);
         String replacementEquipmentName = entity.getReplacementEquipmentId() == null
                 ? null
                 : equipmentRepository.findById(entity.getReplacementEquipmentId())
-                        .map(Equipment::getName)
-                        .orElse(null);
+                .map(Equipment::getName)
+                .orElse(null);
         DefectList linkedDefectList = entity.getDefectListId() == null
                 ? null
                 : defectListRepository.findByIdAndIsDeletedFalse(entity.getDefectListId()).orElse(null);
@@ -2012,8 +2027,8 @@ public class WorkOrderService {
         Map<UUID, RepairRequest> repairRequestById = repairRequestIds.isEmpty()
                 ? Map.of()
                 : repairRequestRepository.findAllByIdInAndIsDeletedFalse(repairRequestIds)
-                        .stream()
-                        .collect(Collectors.toMap(RepairRequest::getId, Function.identity()));
+                .stream()
+                .collect(Collectors.toMap(RepairRequest::getId, Function.identity()));
 
         List<UUID> defectIds = entities.stream()
                 .map(WorkOrder::getDefectId)
@@ -2023,8 +2038,8 @@ public class WorkOrderService {
         Map<UUID, Defect> defectById = defectIds.isEmpty()
                 ? Map.of()
                 : defectRepository.findAllByIdInAndIsDeletedFalse(defectIds)
-                        .stream()
-                        .collect(Collectors.toMap(Defect::getId, Function.identity()));
+                .stream()
+                .collect(Collectors.toMap(Defect::getId, Function.identity()));
 
         List<UUID> equipmentNodeIds = entities.stream()
                 .map(WorkOrder::getEquipmentNodeId)
@@ -2034,8 +2049,8 @@ public class WorkOrderService {
         Map<UUID, EquipmentNode> equipmentNodeById = equipmentNodeIds.isEmpty()
                 ? Map.of()
                 : equipmentNodeRepository.findAllByIdInAndIsDeletedFalse(equipmentNodeIds)
-                        .stream()
-                        .collect(Collectors.toMap(EquipmentNode::getId, Function.identity()));
+                .stream()
+                .collect(Collectors.toMap(EquipmentNode::getId, Function.identity()));
 
         return entities.stream()
                 .map(entity -> toDto(

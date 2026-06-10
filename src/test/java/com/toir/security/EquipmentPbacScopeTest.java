@@ -448,7 +448,7 @@ class EquipmentPbacScopeTest {
                   "name": "Pump A",
                   "inventoryNumber": "INV-1",
                   "equipmentTypeId": "%s",
-                  "averageOperatingLifeHours": 10000,
+                  "expectedLifetimeHours": 10000,
                 %s%s  "status": "ACTIVE"
                 }
                 """.formatted(UUID.randomUUID(), department, warehouse);
@@ -467,3 +467,4 @@ class EquipmentPbacScopeTest {
                 """.formatted(department);
     }
 }
+

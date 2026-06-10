@@ -307,7 +307,7 @@ class RbacEquipmentSecurityTest {
                   "name": "Pump A",
                   "inventoryNumber": "INV-1",
                   "equipmentTypeId": "%s",
-                  "averageOperatingLifeHours": 10000,
+                  "expectedLifetimeHours": 10000,
                   "departmentId": "%s"
                 }
                 """.formatted(UUID.randomUUID(), UUID.randomUUID());
@@ -324,3 +324,4 @@ class RbacEquipmentSecurityTest {
                 """.formatted(UUID.randomUUID());
     }
 }
+

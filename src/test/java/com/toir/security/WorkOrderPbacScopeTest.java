@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -68,7 +69,7 @@ class WorkOrderPbacScopeTest {
         UUID currentDepartmentId = UUID.randomUUID();
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
         when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(currentDepartmentId);
-        when(service.search(null, currentDepartmentId, null, 0, 20, null, null, null))
+        when(service.search(null, currentDepartmentId, null, 0, 20, null, null, null, Sort.by("updatedAt").descending()))
                 .thenReturn(new PageImpl<>(List.of(dto(UUID.randomUUID(), currentDepartmentId)),
                         PageRequest.of(0, 20), 1));
 
@@ -76,7 +77,7 @@ class WorkOrderPbacScopeTest {
                         .param("departmentId", requestedDepartmentId.toString()))
                 .andExpect(status().isOk());
 
-        verify(service).search(null, currentDepartmentId, null, 0, 20, null, null, null);
+        verify(service).search(null, currentDepartmentId, null, 0, 20, null, null, null, Sort.by("updatedAt").descending());
     }
 
     @Test
@@ -95,13 +96,13 @@ class WorkOrderPbacScopeTest {
     void systemAdminCanRequestGlobalList() throws Exception {
         when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(service.search(null, null, null, 0, 20, null, null, null))
+        when(service.search(null, null, null, 0, 20, null, null, null, Sort.by("updatedAt").descending()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/work-orders"))
                 .andExpect(status().isOk());
 
-        verify(service).search(null, null, null, 0, 20, null, null, null);
+        verify(service).search(null, null, null, 0, 20, null, null, null, Sort.by("updatedAt").descending());
     }
 
     @Test
