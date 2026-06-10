@@ -47,7 +47,8 @@ public record MaintenanceRegulationRequest(
         Boolean requiresApproval,
         String approvalRole,
         String approvalPermission,
-        List<MaintenanceRegulationAttributeConditionRequest> attributeConditions
+        List<MaintenanceRegulationAttributeConditionRequest> attributeConditions,
+        List<MaintenanceRegulationSparePartRequirementRequest> sparePartRequirements
 ) {
         public MaintenanceRegulationRequest(
                 String code,
@@ -83,7 +84,46 @@ public record MaintenanceRegulationRequest(
                         triggerMeterInterval, triggerPolicy, recalculationPolicy, null, automationAction,
                         null, duplicatePolicy,
                         leadTimeDays, leadMeterPercent, defaultDepartmentId, defaultResponsibleId, defaultPriority,
-                        requiresApproval, approvalRole, approvalPermission, attributeConditions);
+                        requiresApproval, approvalRole, approvalPermission, attributeConditions, null);
+        }
+
+        public MaintenanceRegulationRequest(
+                String code,
+                @NotBlank String name,
+                String description,
+                @NotNull UUID equipmentTypeId,
+                UUID templateId,
+                @NotNull MaintenanceKind maintenanceKind,
+                @PositiveOrZero double normativeLaborHours,
+                Boolean active,
+                @NotNull PeriodicityUnit periodicityUnit,
+                @Positive int periodicityValue,
+                Integer toleranceDays,
+                boolean requiresShutdown,
+                MeterType triggerMeterType,
+                Double triggerMeterInterval,
+                MaintenanceTriggerPolicy triggerPolicy,
+                MaintenanceRecalculationPolicy recalculationPolicy,
+                MaintenanceInitialSchedulePolicy initialSchedulePolicy,
+                AutomationAction automationAction,
+                ApprovalResultAction approvalResultAction,
+                DuplicatePolicy duplicatePolicy,
+                Integer leadTimeDays,
+                Double leadMeterPercent,
+                UUID defaultDepartmentId,
+                UUID defaultResponsibleId,
+                PriorityLevel defaultPriority,
+                Boolean requiresApproval,
+                String approvalRole,
+                String approvalPermission,
+                List<MaintenanceRegulationAttributeConditionRequest> attributeConditions
+        ) {
+                this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours, active,
+                        periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
+                        triggerMeterInterval, triggerPolicy, recalculationPolicy, initialSchedulePolicy, automationAction,
+                        approvalResultAction, duplicatePolicy, leadTimeDays, leadMeterPercent, defaultDepartmentId,
+                        defaultResponsibleId, defaultPriority, requiresApproval, approvalRole, approvalPermission,
+                        attributeConditions, null);
         }
 
         public MaintenanceRegulationRequest(
@@ -105,7 +145,7 @@ public record MaintenanceRegulationRequest(
                 this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours, active,
                         periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
                         triggerMeterInterval, null, null, null, null, null, null, null, null, null, null, null, null,
-                        null, null, null);
+                        null, null, null, null);
         }
 
         public MaintenanceRegulationRequest(
@@ -128,6 +168,6 @@ public record MaintenanceRegulationRequest(
                 this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours, active,
                         periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
                         triggerMeterInterval, null, null, null, null, null, null, null, null, null, null, null, null,
-                        null, null, attributeConditions);
+                        null, null, attributeConditions, null);
         }
 }

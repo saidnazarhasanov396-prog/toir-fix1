@@ -5,6 +5,7 @@ import com.toir.entity.PprTask;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.entity.maintenance.MaintenanceRegulationSparePartRequirement;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderSparePartRequirement;
@@ -16,6 +17,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirementRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
 import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
 import com.toir.security.ScopeAccessService;
@@ -34,6 +36,7 @@ public class WorkOrderSparePartRequirementService {
     private final WorkOrderSparePartRequirementRepository repository;
     private final WorkOrderRepository workOrderRepository;
     private final MaintenanceTemplateSparePartRequirementRepository templateRequirementRepository;
+    private final MaintenanceRegulationSparePartRequirementRepository regulationRequirementRepository;
     private final MaintenanceDueEventRepository maintenanceDueEventRepository;
     private final MaintenanceRegulationRepository maintenanceRegulationRepository;
     private final EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
@@ -73,11 +76,35 @@ public class WorkOrderSparePartRequirementService {
     }
 
     @Transactional
+    public void syncFromRegulation(UUID workOrderId, UUID regulationId) {
+        if (workOrderId == null || regulationId == null) {
+            return;
+        }
+        WorkOrder workOrder = workOrderOrThrow(workOrderId);
+        List<MaintenanceRegulationSparePartRequirement> regulationRequirements =
+                regulationRequirementRepository.findActiveByRegulationId(regulationId);
+        for (MaintenanceRegulationSparePartRequirement regulationRequirement : regulationRequirements) {
+            UUID regulationRequirementId = regulationRequirement.getId();
+            if (regulationRequirementId == null || repository
+                    .findByWorkOrderIdAndSourceTypeAndRegulationRequirementIdAndIsDeletedFalse(
+                            workOrderId,
+                            WorkOrderSparePartRequirementSourceType.REGULATION_REQUIRED_SPARE_PART,
+                            regulationRequirementId
+                    )
+                    .isPresent()) {
+                continue;
+            }
+            repository.save(fromRegulationRequirement(workOrder, regulationRequirement));
+        }
+    }
+
+    @Transactional
     public void syncFromWorkOrderContext(WorkOrder workOrder) {
         if (workOrder == null || workOrder.getId() == null) {
             return;
         }
         resolveTemplateId(workOrder).ifPresent(templateId -> syncFromTemplate(workOrder.getId(), templateId));
+        resolveRegulationId(workOrder).ifPresent(regulationId -> syncFromRegulation(workOrder.getId(), regulationId));
     }
 
     private WorkOrderSparePartRequirement fromTemplateRequirement(
@@ -95,6 +122,23 @@ public class WorkOrderSparePartRequirementService {
         requirement.setUnit(templateRequirement.getUnit());
         requirement.setCriticality(templateRequirement.getCriticality());
         requirement.setNotes(templateRequirement.getNotes());
+        requirement.setStatus(WorkOrderSparePartRequirementStatus.PLANNED);
+        return requirement;
+    }
+
+    private WorkOrderSparePartRequirement fromRegulationRequirement(
+            WorkOrder workOrder,
+            MaintenanceRegulationSparePartRequirement regulationRequirement
+    ) {
+        WorkOrderSparePartRequirement requirement = new WorkOrderSparePartRequirement();
+        requirement.setWorkOrder(workOrder);
+        requirement.setSourceType(WorkOrderSparePartRequirementSourceType.REGULATION_REQUIRED_SPARE_PART);
+        requirement.setRegulationRequirement(regulationRequirement);
+        requirement.setSparePart(regulationRequirement.getSparePart());
+        requirement.setRequiredQty(regulationRequirement.getQuantity());
+        requirement.setUnit(regulationRequirement.getUnit());
+        requirement.setCriticality(regulationRequirement.getCriticality());
+        requirement.setNotes(regulationRequirement.getNotes());
         requirement.setStatus(WorkOrderSparePartRequirementStatus.PLANNED);
         return requirement;
     }
@@ -162,6 +206,32 @@ public class WorkOrderSparePartRequirementService {
         return maintenanceRegulationRepository.findByIdAndIsDeletedFalse(regulationId)
                 .map(MaintenanceRegulation::getTemplateId)
                 .filter(templateId -> templateId != null);
+    }
+
+    private Optional<UUID> resolveRegulationId(WorkOrder workOrder) {
+        Optional<UUID> fromDueEvent = resolveRegulationIdFromDueEvent(workOrder.getMaintenanceDueEventId());
+        if (fromDueEvent.isPresent()) {
+            return fromDueEvent;
+        }
+        return resolveRegulationIdFromPprTask(workOrder.getPprTaskId());
+    }
+
+    private Optional<UUID> resolveRegulationIdFromDueEvent(UUID dueEventId) {
+        if (dueEventId == null) {
+            return Optional.empty();
+        }
+        return maintenanceDueEventRepository.findByIdAndIsDeletedFalse(dueEventId)
+                .map(MaintenanceDueEvent::getRegulationId)
+                .filter(regulationId -> regulationId != null);
+    }
+
+    private Optional<UUID> resolveRegulationIdFromPprTask(UUID pprTaskId) {
+        if (pprTaskId == null) {
+            return Optional.empty();
+        }
+        return pprTaskRepository.findByIdAndIsDeletedFalse(pprTaskId)
+                .map(PprTask::getRegulationId)
+                .filter(regulationId -> regulationId != null);
     }
 
     private WorkOrder workOrderOrThrow(UUID workOrderId) {

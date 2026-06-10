@@ -21,6 +21,7 @@ public interface WorkOrderSparePartRequirementRepository
             left join fetch r.operation
             left join fetch r.template
             left join fetch r.sourceRequirement
+            left join fetch r.regulationRequirement
             where r.isDeleted = false
               and r.workOrderId = :workOrderId
             order by r.updatedAt desc
@@ -31,4 +32,9 @@ public interface WorkOrderSparePartRequirementRepository
             UUID workOrderId,
             WorkOrderSparePartRequirementSourceType sourceType,
             UUID sourceRequirementId);
+
+    Optional<WorkOrderSparePartRequirement> findByWorkOrderIdAndSourceTypeAndRegulationRequirementIdAndIsDeletedFalse(
+            UUID workOrderId,
+            WorkOrderSparePartRequirementSourceType sourceType,
+            UUID regulationRequirementId);
 }

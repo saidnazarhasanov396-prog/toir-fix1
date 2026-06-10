@@ -5,6 +5,8 @@ import com.toir.entity.OperationalIssue;
 import com.toir.entity.SparePart;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
+import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.entity.maintenance.MaintenanceRegulationSparePartRequirement;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.entity.warehouse.Warehouse;
@@ -21,6 +23,7 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirementRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.OperationalIssueService;
@@ -59,6 +62,8 @@ class SparePartForecastServiceTest {
     private MaintenanceDueEventRepository eventRepository;
     @Mock
     private MaintenanceTemplateSparePartRequirementRepository requirementRepository;
+    @Mock
+    private MaintenanceRegulationSparePartRequirementRepository regulationRequirementRepository;
     @Mock
     private WarehouseStockRepository stockRepository;
     @Mock
@@ -145,6 +150,69 @@ class SparePartForecastServiceTest {
         assertThat(item.sourceCount()).isEqualTo(1);
         assertThat(item.sources().get(0).maintenanceDueEventId()).isEqualTo(eventId);
         assertThat(item.sources().get(0).requiredQty()).isEqualTo(5);
+    }
+
+    @Test
+    void forecastDueEventAndRegulationRequirementCalculatesShortageWithoutTemplate() {
+        UUID regulationId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-04T00:00:00Z");
+        Instant dueAt = Instant.parse("2026-06-10T09:00:00Z");
+        MaintenanceDueEvent event = event(eventId, null, equipmentId, dueAt);
+        event.setRegulationId(regulationId);
+
+        when(eventRepository.findForecastCandidates(
+                now,
+                now.plusSeconds(30L * 24 * 60 * 60),
+                null,
+                null,
+                null,
+                List.of(
+                        MaintenanceDueEventStatus.DETECTED,
+                        MaintenanceDueEventStatus.AWAITING_APPROVAL,
+                        MaintenanceDueEventStatus.TASK_CREATED,
+                        MaintenanceDueEventStatus.WORK_ORDER_CREATED
+                ),
+                List.of(MaintenanceDueStatus.UPCOMING, MaintenanceDueStatus.DUE, MaintenanceDueStatus.OVERDUE)
+        )).thenReturn(List.of(event));
+        lenient().when(requirementRepository.findAllActiveByTemplateIdIn(List.of())).thenReturn(List.of());
+        when(regulationRequirementRepository.findAllActiveByRegulationIdIn(List.of(regulationId)))
+                .thenReturn(List.of(regulationRequirement(requirementId, regulationId, sparePartId, 6)));
+        when(stockRepository.findAllBySparePartIdInAndWarehouseIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                List.of(sparePartId),
+                warehouseId
+        )).thenReturn(List.of(stock(warehouseId, sparePartId, 2, 0)));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(List.of(sparePartId)))
+                .thenReturn(List.of(sparePart(sparePartId)));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId)))
+                .thenReturn(List.of(warehouse(warehouseId)));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment(equipmentId)));
+
+        var summary = service.forecast(new SparePartForecastRequest(
+                30,
+                now,
+                null,
+                warehouseId,
+                null,
+                null,
+                null,
+                false
+        ));
+
+        assertThat(summary.items()).hasSize(1);
+        var item = summary.items().get(0);
+        assertThat(item.sparePartId()).isEqualTo(sparePartId);
+        assertThat(item.requiredQty()).isEqualTo(6);
+        assertThat(item.availableQty()).isEqualTo(2);
+        assertThat(item.shortageQty()).isEqualTo(4);
+        assertThat(item.sources().get(0).maintenanceDueEventId()).isEqualTo(eventId);
+        assertThat(item.sources().get(0).templateId()).isNull();
+        assertThat(item.sources().get(0).requiredQty()).isEqualTo(6);
     }
 
     @Test
@@ -628,6 +696,28 @@ class SparePartForecastServiceTest {
         requirement.setId(id);
         requirement.setTemplate(template);
         requirement.setTemplateId(templateId);
+        requirement.setSparePart(sparePart);
+        requirement.setSparePartId(sparePartId);
+        requirement.setQuantity(quantity);
+        requirement.setUnit("pcs");
+        requirement.setActive(true);
+        return requirement;
+    }
+
+    private MaintenanceRegulationSparePartRequirement regulationRequirement(
+            UUID id,
+            UUID regulationId,
+            UUID sparePartId,
+            double quantity
+    ) {
+        MaintenanceRegulation regulation = new MaintenanceRegulation();
+        regulation.setId(regulationId);
+        SparePart sparePart = sparePart(sparePartId);
+        MaintenanceRegulationSparePartRequirement requirement =
+                new MaintenanceRegulationSparePartRequirement();
+        requirement.setId(id);
+        requirement.setRegulation(regulation);
+        requirement.setRegulationId(regulationId);
         requirement.setSparePart(sparePart);
         requirement.setSparePartId(sparePartId);
         requirement.setQuantity(quantity);
