@@ -141,6 +141,7 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
                 nullif(to_jsonb(w)->>'stoppage_act_file_asset_id', '')::uuid as stoppage_act_file_asset_id,
                 to_jsonb(w)->>'closure_notes' as closure_notes,
                 w.created_by_id,
+                w.updated_by_id,
                 w.approved_by_id
             from work_orders w
             where

@@ -449,6 +449,28 @@ class WorkOrderControllerContractTest {
     }
 
     @Test
+    void listWithDefaultPagingReturns200() throws Exception {
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, 0, 20, null, null, null, Sort.by("updatedAt").descending()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/work-orders"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void listWithUpdatedAtSortReturns200() throws Exception {
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, 0, 20, null, null, null, Sort.by("updatedAt").descending()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/work-orders")
+                        .param("sortBy", "updatedAt")
+                        .param("sortDir", "desc"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void listForwardsPlannedDateRangeFilters() throws Exception {
         Instant plannedFrom = Instant.parse("2026-06-09T19:00:00Z");
         Instant plannedTo = Instant.parse("2026-06-10T19:00:00Z");
@@ -1161,4 +1183,3 @@ class WorkOrderControllerContractTest {
         verify(service).getStats(null, null, null, null);
     }
 }
-

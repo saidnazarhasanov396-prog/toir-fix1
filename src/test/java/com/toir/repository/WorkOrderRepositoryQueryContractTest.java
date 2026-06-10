@@ -107,6 +107,35 @@ class WorkOrderRepositoryQueryContractTest {
     }
 
     @Test
+    void searchPaginatedQueryMustProjectUpdatedByForActorStampedEntityMapping() {
+        Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
+                .filter(m -> m.getName().equals("searchPaginated") && m.getAnnotation(Query.class) != null)
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+
+        String sql = query.value().toLowerCase();
+        assertThat(sql).contains("w.updated_by_id");
+    }
+
+    @Test
+    void searchPaginatedQueryMustNotUseJavaPropertyNamesInNativeSql() {
+        Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
+                .filter(m -> m.getName().equals("searchPaginated") && m.getAnnotation(Query.class) != null)
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+
+        String sql = query.value();
+        assertThat(sql).doesNotContain("w.updatedAt");
+        assertThat(sql.toLowerCase()).contains("order by w.updated_at desc");
+    }
+
+    @Test
     void searchPaginatedQueryMustFilterByPlannedDateRange() {
         Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
                 .filter(m -> m.getName().equals("searchPaginated") && m.getAnnotation(Query.class) != null)
