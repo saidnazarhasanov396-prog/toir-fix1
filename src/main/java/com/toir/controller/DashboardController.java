@@ -1,5 +1,6 @@
 package com.toir.controller;
 import com.toir.dto.dashboard.DashboardOverview;
+import com.toir.dto.dashboard.WorkOrdersByEquipmentTypeResponse;
 import com.toir.service.DashboardService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
@@ -26,5 +27,13 @@ public class DashboardController {
             @RequestParam(required = false) UUID departmentId
     ) {
         return ResponseEntity.ok(service.overview(departmentId));
+    }
+
+    @GetMapping("/work-orders/by-equipment-type")
+    public ResponseEntity<WorkOrdersByEquipmentTypeResponse> workOrdersByEquipmentType(
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(defaultValue = "ACTIVE") String statusScope
+    ) {
+        return ResponseEntity.ok(service.workOrdersByEquipmentType(departmentId, statusScope));
     }
 }

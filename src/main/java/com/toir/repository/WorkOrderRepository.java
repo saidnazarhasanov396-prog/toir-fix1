@@ -317,4 +317,23 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
             @Param("departmentId") UUID departmentId,
             @Param("equipmentId") UUID equipmentId,
             @Param("search") String search);
+
+    @Query("""
+            select
+                e.equipmentTypeId as equipmentTypeId,
+                coalesce(et.name, 'Unspecified') as equipmentTypeName,
+                count(w.id) as workOrderCount
+            from WorkOrder w
+            join Equipment e on e.id = w.equipmentId and e.isDeleted = false
+            left join EquipmentType et on et.id = e.equipmentTypeId and et.isDeleted = false
+            where w.isDeleted = false
+              and w.status in :statuses
+              and (:departmentId is null or w.departmentId = :departmentId)
+              and (e.equipmentTypeId is null or et.id is not null)
+            group by e.equipmentTypeId, et.name
+            order by count(w.id) desc, coalesce(et.name, 'Unspecified') asc
+            """)
+    List<WorkOrderEquipmentTypeCountProjection> countByEquipmentTypeForDashboard(
+            @Param("departmentId") UUID departmentId,
+            @Param("statuses") Collection<WorkOrderStatus> statuses);
 }
