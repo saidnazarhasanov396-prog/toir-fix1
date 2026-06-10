@@ -400,7 +400,6 @@ public class EquipmentService {
                 request.location()
         );
         validateClientProvidedCode(request.code());
-        validateAverageOperatingLifeForCreate(request.averageOperatingLifeHours());
         assertCanAccessLocationBeforePersistence(location);
         validateLocationReferences(location);
         if (repository.existsByInventoryNumberAndIsDeletedFalse(request.inventoryNumber())) {
@@ -453,7 +452,6 @@ public class EquipmentService {
         EquipmentLocationRequest location = resolveUpdateLocation(request);
         validateClientProvidedCode(request.code());
         validateNoDirectStatusChange(entity, request.status());
-        validateAverageOperatingLifeForUpdate(request.averageOperatingLifeHours());
         if (location != null) {
             assertCanAccessLocationBeforePersistence(location);
             validateLocationReferences(location);
@@ -910,11 +908,15 @@ public class EquipmentService {
         entity.setWarrantyAttachmentId(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyAttachmentId() : null);
         entity.setWarrantyStartDate(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyStartDate() : null);
         entity.setWarrantyEndDate(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyEndDate() : null);
-        entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours());
         entity.setOperationStartDate(request.operationStartDate());
         entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths());
         entity.setExpectedLifetimeYears(request.expectedLifetimeYears());
         entity.setExpectedLifetimeHours(request.expectedLifetimeHours());
+        entity.setAverageOperatingLifeHours(calculateAverageOperatingLifeHours(
+                request.expectedLifetimeYears(),
+                request.expectedLifetimeMonths(),
+                request.expectedLifetimeHours()
+        ));
         entity.setDescription(request.description());
     }
 
@@ -1352,19 +1354,6 @@ public class EquipmentService {
         }
     }
 
-    private void validateAverageOperatingLifeForCreate(Long averageOperatingLifeHours) {
-        if (averageOperatingLifeHours == null) {
-            throw RestException.badRequest("averageOperatingLifeHours is required");
-        }
-        validateAverageOperatingLifeForUpdate(averageOperatingLifeHours);
-    }
-
-    private void validateAverageOperatingLifeForUpdate(Long averageOperatingLifeHours) {
-        if (averageOperatingLifeHours != null && averageOperatingLifeHours <= 0) {
-            throw RestException.badRequest("averageOperatingLifeHours must be positive");
-        }
-    }
-
     private void validateDepartmentExists(UUID departmentId) {
         if (departmentId == null) {
             return;
@@ -1415,22 +1404,50 @@ public class EquipmentService {
         entity.setArrivalDate(request.arrivalDate() != null ? request.arrivalDate() : entity.getArrivalDate());
         entity.setWarrantyUntil(request.warrantyUntil() != null ? request.warrantyUntil() : entity.getWarrantyUntil());
         applyWarrantyForUpdate(entity, request);
-        entity.setAverageOperatingLifeHours(request.averageOperatingLifeHours() != null
-                ? request.averageOperatingLifeHours()
-                : entity.getAverageOperatingLifeHours());
         entity.setOperationStartDate(request.operationStartDate() != null
                 ? request.operationStartDate()
                 : entity.getOperationStartDate());
-        entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths() != null
+        Integer expectedLifetimeMonths = request.expectedLifetimeMonths() != null
                 ? request.expectedLifetimeMonths()
-                : entity.getExpectedLifetimeMonths());
-        entity.setExpectedLifetimeYears(request.expectedLifetimeYears() != null
+                : entity.getExpectedLifetimeMonths();
+        Integer expectedLifetimeYears = request.expectedLifetimeYears() != null
                 ? request.expectedLifetimeYears()
-                : entity.getExpectedLifetimeYears());
-        entity.setExpectedLifetimeHours(request.expectedLifetimeHours() != null
+                : entity.getExpectedLifetimeYears();
+        Long expectedLifetimeHours = request.expectedLifetimeHours() != null
                 ? request.expectedLifetimeHours()
-                : entity.getExpectedLifetimeHours());
+                : entity.getExpectedLifetimeHours();
+        entity.setExpectedLifetimeMonths(expectedLifetimeMonths);
+        entity.setExpectedLifetimeYears(expectedLifetimeYears);
+        entity.setExpectedLifetimeHours(expectedLifetimeHours);
+        if (hasExpectedLifetimeChange(request)) {
+            entity.setAverageOperatingLifeHours(calculateAverageOperatingLifeHours(
+                    expectedLifetimeYears,
+                    expectedLifetimeMonths,
+                    expectedLifetimeHours
+            ));
+        }
         entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
+    }
+
+    private boolean hasExpectedLifetimeChange(EquipmentUpdateRequest request) {
+        return request.expectedLifetimeYears() != null
+                || request.expectedLifetimeMonths() != null
+                || request.expectedLifetimeHours() != null;
+    }
+
+    private long calculateAverageOperatingLifeHours(
+            Integer expectedLifetimeYears,
+            Integer expectedLifetimeMonths,
+            Long expectedLifetimeHours
+    ) {
+        long yearsHours = expectedLifetimeYears == null ? 0 : expectedLifetimeYears * 365L * 24L;
+        long monthsHours = expectedLifetimeMonths == null ? 0 : expectedLifetimeMonths * 30L * 24L;
+        long directHours = expectedLifetimeHours == null ? 0 : expectedLifetimeHours;
+        long total = yearsHours + monthsHours + directHours;
+        if (total <= 0) {
+            throw RestException.badRequest("Expected lifetime must be specified and greater than zero");
+        }
+        return total;
     }
 
     private void validateWarrantyAttachment(Boolean hasWarranty, UUID warrantyAttachmentId) {

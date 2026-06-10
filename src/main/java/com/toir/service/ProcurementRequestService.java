@@ -53,25 +53,26 @@ public class ProcurementRequestService {
     private final CostCategoryRepository costCategoryRepository;
 
     @Transactional(readOnly = true)
-    public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId) {
-        List<ProcurementRequest> list;
+    public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId, String search) {
+        String normalizedSearch = (search != null && !search.isBlank()) ? search.trim() : null;
+
         if (scopeAccessService.isScopeAdmin()) {
-            if (status != null) list = repo.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(status);
-            else if (departmentId != null) list = repo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(departmentId);
-            else list = repo.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
-            return list.stream().map(ProcurementRequestDto::from).toList();
+            return repo.search(
+                    normalizedSearch,
+                    status != null ? status.name() : null,
+                    departmentId
+            ).stream().map(ProcurementRequestDto::from).toList();
         }
 
         UUID scopedDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
-        if (status == null) {
-            if (scopedDepartmentId == null) {
-                throw forbidden();
-            }
-            list = repo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(scopedDepartmentId);
-        } else {
-            list = repo.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(status);
+        if (status == null && scopedDepartmentId == null) {
+            throw forbidden();
         }
-        return list.stream()
+        return repo.search(
+                        normalizedSearch,
+                        status != null ? status.name() : null,
+                        scopedDepartmentId
+                ).stream()
                 .filter(this::canRead)
                 .map(ProcurementRequestDto::from)
                 .toList();
@@ -316,8 +317,8 @@ public class ProcurementRequestService {
     }
 
     private void syncProcurementReceiptActualCost(ProcurementRequest request,
-                                                 ProcurementRequestLine line,
-                                                 StockMovement movement) {
+                                                  ProcurementRequestLine line,
+                                                  StockMovement movement) {
         if (line.getUnitPrice() == null || line.getUnitPrice() <= 0 || line.getQuantity() <= 0
                 || movement == null || movement.getId() == null) {
             return;
@@ -576,9 +577,9 @@ public class ProcurementRequestService {
     private boolean canAccessWarehouse(Warehouse warehouse) {
         return scopeAccessService.isScopeAdmin()
                 || (warehouse.getDepartmentId() != null
-                    && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId()))
+                && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId()))
                 || (warehouse.getResponsibleId() != null
-                    && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId()));
+                && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId()));
     }
 
     private Optional<Warehouse> loadWarehouseOrNull(UUID warehouseId) {

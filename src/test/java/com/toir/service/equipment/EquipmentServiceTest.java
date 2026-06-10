@@ -1109,35 +1109,55 @@ class EquipmentServiceTest {
     }
 
     @Test
-    void createPersistsAverageOperatingLifeHours() {
+    void createWithExpectedLifetimeYearsOnlyCalculatesAverageOperatingLifeHours() {
         UUID departmentId = UUID.randomUUID();
-        EquipmentCreateRequest request = createRequest(null, "INV-AVG-1", departmentId, null, 10_000L);
+        EquipmentCreateRequest request = createRequestWithExpectedLifetime("INV-AVG-1", departmentId, 2, null, null);
         stubCreateFlow("INV-AVG-1");
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
 
         EquipmentDto created = service.create(request);
 
-        assertThat(created.averageOperatingLifeHours()).isEqualTo(10_000L);
+        assertThat(created.averageOperatingLifeHours()).isEqualTo(17_520L);
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
-        assertThat(entityCaptor.getValue().getAverageOperatingLifeHours()).isEqualTo(10_000L);
+        assertThat(entityCaptor.getValue().getAverageOperatingLifeHours()).isEqualTo(17_520L);
     }
 
     @Test
-    void createPersistsExpectedLifetimeHours() {
+    void createWithYearsMonthsAndHoursCalculatesAverageOperatingLifeHours() {
         UUID departmentId = UUID.randomUUID();
-        EquipmentCreateRequest request = createRequestWithExpectedLifetimeHours("INV-LIFE-HOURS-1", departmentId, 18_000L);
+        EquipmentCreateRequest request = createRequestWithExpectedLifetime("INV-LIFE-HOURS-1", departmentId, 1, 6, 100L);
         stubCreateFlow("INV-LIFE-HOURS-1");
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
 
         EquipmentDto created = service.create(request);
 
-        assertThat(created.expectedLifetimeHours()).isEqualTo(18_000L);
+        assertThat(created.averageOperatingLifeHours()).isEqualTo(13_180L);
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
-        assertThat(entityCaptor.getValue().getExpectedLifetimeHours()).isEqualTo(18_000L);
+        assertThat(entityCaptor.getValue().getExpectedLifetimeYears()).isEqualTo(1);
+        assertThat(entityCaptor.getValue().getExpectedLifetimeMonths()).isEqualTo(6);
+        assertThat(entityCaptor.getValue().getExpectedLifetimeHours()).isEqualTo(100L);
+        assertThat(entityCaptor.getValue().getAverageOperatingLifeHours()).isEqualTo(13_180L);
+    }
+
+    @Test
+    void createWithoutExpectedLifetimeReturnsBadRequest() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequestWithoutExpectedLifetime("INV-LIFE-MISSING-1", departmentId);
+        int year = Year.now().getValue();
+        String expectedCode = "EQ-" + year + "-0020";
+        when(repository.existsByInventoryNumberAndIsDeletedFalse("INV-LIFE-MISSING-1")).thenReturn(false);
+        when(repository.maxSequenceByCodePrefix("EQ-" + year + "-")).thenReturn(19L);
+        when(repository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Expected lifetime must be specified and greater than zero"));
     }
 
     @Test
@@ -1405,10 +1425,10 @@ class EquipmentServiceTest {
                 true,
                 warrantyAttachmentId,
                 "Pump",
+                null,
+                null,
+                null,
                 10_000L,
-                null,
-                null,
-                null,
                 null,
                 null,
                 null
@@ -1450,10 +1470,10 @@ class EquipmentServiceTest {
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2027, 6, 1),
                 "Pump",
+                null,
+                null,
+                null,
                 10_000L,
-                null,
-                null,
-                null,
                 null,
                 null,
                 null
@@ -1499,10 +1519,10 @@ class EquipmentServiceTest {
                 LocalDate.of(2027, 6, 1),
                 LocalDate.of(2026, 6, 1),
                 "Pump",
+                null,
+                null,
+                null,
                 10_000L,
-                null,
-                null,
-                null,
                 null,
                 null,
                 null
@@ -1699,42 +1719,28 @@ class EquipmentServiceTest {
     }
 
     @Test
-    void updateChangesAverageOperatingLifeHoursWhenProvided() {
+    void updateChangingExpectedLifetimeMonthsOnlyRecalculatesAverageOperatingLifeHours() {
         UUID id = UUID.randomUUID();
         Equipment existing = equipment("EQ-AVG-UPDATE");
         existing.setId(id);
-        existing.setAverageOperatingLifeHours(8_000L);
+        existing.setExpectedLifetimeYears(10);
+        existing.setExpectedLifetimeMonths(0);
+        existing.setExpectedLifetimeHours(0L);
+        existing.setAverageOperatingLifeHours(87_600L);
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
         when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubEnrichment();
-        EquipmentUpdateRequest request = new EquipmentUpdateRequest(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                12_000L
-        );
+        EquipmentUpdateRequest request = updateRequestWithExpectedLifetimeMonths(6);
 
         EquipmentDto updated = service.update(id, request);
 
-        assertThat(updated.averageOperatingLifeHours()).isEqualTo(12_000L);
+        assertThat(updated.averageOperatingLifeHours()).isEqualTo(91_920L);
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
-        assertThat(entityCaptor.getValue().getAverageOperatingLifeHours()).isEqualTo(12_000L);
+        assertThat(entityCaptor.getValue().getExpectedLifetimeYears()).isEqualTo(10);
+        assertThat(entityCaptor.getValue().getExpectedLifetimeMonths()).isEqualTo(6);
+        assertThat(entityCaptor.getValue().getExpectedLifetimeHours()).isEqualTo(0L);
+        assertThat(entityCaptor.getValue().getAverageOperatingLifeHours()).isEqualTo(91_920L);
     }
 
     @Test
@@ -1742,6 +1748,8 @@ class EquipmentServiceTest {
         UUID id = UUID.randomUUID();
         Equipment existing = equipment("EQ-LIFE-HOURS-UPDATE");
         existing.setId(id);
+        existing.setExpectedLifetimeYears(1);
+        existing.setExpectedLifetimeMonths(2);
         existing.setExpectedLifetimeHours(8_000L);
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
         when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -1751,9 +1759,27 @@ class EquipmentServiceTest {
         EquipmentDto updated = service.update(id, request);
 
         assertThat(updated.expectedLifetimeHours()).isEqualTo(12_000L);
+        assertThat(updated.averageOperatingLifeHours()).isEqualTo(22_200L);
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
         assertThat(entityCaptor.getValue().getExpectedLifetimeHours()).isEqualTo(12_000L);
+        assertThat(entityCaptor.getValue().getAverageOperatingLifeHours()).isEqualTo(22_200L);
+    }
+
+    @Test
+    void updateExpectedLifetimeToZeroTotalReturnsBadRequest() {
+        UUID id = UUID.randomUUID();
+        Equipment existing = equipment("EQ-LIFE-ZERO-UPDATE");
+        existing.setId(id);
+        existing.setExpectedLifetimeYears(0);
+        existing.setExpectedLifetimeMonths(0);
+        existing.setExpectedLifetimeHours(0L);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
+        EquipmentUpdateRequest request = updateRequestWithExpectedLifetimeHours(0L);
+
+        assertThatThrownBy(() -> service.update(id, request))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Expected lifetime must be specified and greater than zero"));
     }
 
     @Test
@@ -2610,9 +2636,9 @@ class EquipmentServiceTest {
             String inventoryNumber,
             UUID departmentId,
             UUID warehouseId,
-            Long averageOperatingLifeHours
+            Long expectedLifetimeHours
     ) {
-        return createRequest(code, inventoryNumber, departmentId, warehouseId, averageOperatingLifeHours, null);
+        return createRequest(code, inventoryNumber, departmentId, warehouseId, expectedLifetimeHours, null);
     }
 
     private EquipmentCreateRequest createRequest(
@@ -2620,7 +2646,7 @@ class EquipmentServiceTest {
             String inventoryNumber,
             UUID departmentId,
             UUID warehouseId,
-            Long averageOperatingLifeHours,
+            Long expectedLifetimeHours,
             List<EquipmentAttributeValueRequest> attributes
     ) {
         return new EquipmentCreateRequest(
@@ -2642,9 +2668,19 @@ class EquipmentServiceTest {
                 EquipmentCategory.PRODUCTION_EQUIPMENT,
                 null,
                 null,
+                null,
+                false,
+                null,
+                null,
+                null,
                 "test",
-                averageOperatingLifeHours,
-                attributes
+                null,
+                null,
+                null,
+                expectedLifetimeHours,
+                attributes,
+                null,
+                null
         );
     }
 
@@ -2668,16 +2704,35 @@ class EquipmentServiceTest {
                 EquipmentCategory.PRODUCTION_EQUIPMENT,
                 null,
                 null,
+                null,
+                false,
+                null,
+                null,
+                null,
                 "test",
+                null,
+                null,
+                null,
                 10_000L,
                 null,
-                manualAttributes
+                manualAttributes,
+                null
         );
     }
 
     private EquipmentCreateRequest createRequestWithExpectedLifetimeHours(
             String inventoryNumber,
             UUID departmentId,
+            Long expectedLifetimeHours
+    ) {
+        return createRequestWithExpectedLifetime(inventoryNumber, departmentId, null, null, expectedLifetimeHours);
+    }
+
+    private EquipmentCreateRequest createRequestWithExpectedLifetime(
+            String inventoryNumber,
+            UUID departmentId,
+            Integer expectedLifetimeYears,
+            Integer expectedLifetimeMonths,
             Long expectedLifetimeHours
     ) {
         return new EquipmentCreateRequest(
@@ -2705,15 +2760,18 @@ class EquipmentServiceTest {
                 null,
                 null,
                 "test",
-                10_000L,
                 null,
-                null,
-                null,
+                expectedLifetimeMonths,
+                expectedLifetimeYears,
                 expectedLifetimeHours,
                 null,
                 null,
                 null
         );
+    }
+
+    private EquipmentCreateRequest createRequestWithoutExpectedLifetime(String inventoryNumber, UUID departmentId) {
+        return createRequestWithExpectedLifetime(inventoryNumber, departmentId, null, null, null);
     }
 
     private String stubCreateFlow(String inventoryNumber) {
@@ -2832,63 +2890,106 @@ class EquipmentServiceTest {
 
     private EquipmentUpdateRequest updateRequestWithManualAttributes(List<EquipmentManualAttributeRequest> manualAttributes) {
         return new EquipmentUpdateRequest(
-                null,
-                "Compressor Updated",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                manualAttributes
+                null, // code
+                "Compressor Updated", // name
+                null, // inventoryNumber
+                null, // technicalNumber
+                null, // serialNumber
+                null, // model
+                null, // equipmentTypeId
+                null, // departmentId
+                null, // locationId
+                null, // parentId
+                null, // criticalityClassId
+                null, // responsibleId
+                null, // manufacturer
+                null, // status
+                null, // category
+                null, // commissionedAt
+                null, // arrivalDate
+                null, // warrantyUntil
+                null, // hasWarranty
+                null, // warrantyAttachmentId
+                null, // warrantyStartDate
+                null, // warrantyEndDate
+                null, // description
+                null, // operationStartDate
+                null, // expectedLifetimeMonths
+                null, // expectedLifetimeYears
+                null, // expectedLifetimeHours
+                null, // attributes
+                manualAttributes,
+                null // location
         );
     }
 
     private EquipmentUpdateRequest updateRequestWithExpectedLifetimeHours(Long expectedLifetimeHours) {
         return new EquipmentUpdateRequest(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                null, // code
+                null, // name
+                null, // inventoryNumber
+                null, // technicalNumber
+                null, // serialNumber
+                null, // model
+                null, // equipmentTypeId
+                null, // departmentId
+                null, // locationId
+                null, // parentId
+                null, // criticalityClassId
+                null, // responsibleId
+                null, // manufacturer
+                null, // status
+                null, // category
+                null, // commissionedAt
+                null, // arrivalDate
+                null, // warrantyUntil
+                null, // hasWarranty
+                null, // warrantyAttachmentId
+                null, // warrantyStartDate
+                null, // warrantyEndDate
+                null, // description
+                null, // operationStartDate
+                null, // expectedLifetimeMonths
+                null, // expectedLifetimeYears
                 expectedLifetimeHours,
-                null,
-                null,
-                null
+                null, // attributes
+                null, // manualAttributes
+                null // location
+        );
+    }
+
+    private EquipmentUpdateRequest updateRequestWithExpectedLifetimeMonths(Integer expectedLifetimeMonths) {
+        return new EquipmentUpdateRequest(
+                null, // code
+                null, // name
+                null, // inventoryNumber
+                null, // technicalNumber
+                null, // serialNumber
+                null, // model
+                null, // equipmentTypeId
+                null, // departmentId
+                null, // locationId
+                null, // parentId
+                null, // criticalityClassId
+                null, // responsibleId
+                null, // manufacturer
+                null, // status
+                null, // category
+                null, // commissionedAt
+                null, // arrivalDate
+                null, // warrantyUntil
+                null, // hasWarranty
+                null, // warrantyAttachmentId
+                null, // warrantyStartDate
+                null, // warrantyEndDate
+                null, // description
+                null, // operationStartDate
+                expectedLifetimeMonths,
+                null, // expectedLifetimeYears
+                null, // expectedLifetimeHours
+                null, // attributes
+                null, // manualAttributes
+                null // location
         );
     }
 
