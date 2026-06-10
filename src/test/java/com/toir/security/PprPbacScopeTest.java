@@ -260,7 +260,7 @@ class PprPbacScopeTest {
         UUID createdById = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, departmentId)));
-        when(generatorService.generateWorkOrdersForPlan(planId, createdById))
+        when(generatorService.generateWorkOrdersForPlan(eq(planId), isNull()))
                 .thenReturn(new PprGeneratorService.WorkOrderGenerationResult(planId, 1, 0, List.of(UUID.randomUUID()), List.of()));
 
         mockMvc.perform(post("/api/v1/ppr-plans/{id}/work-orders/generate", planId)
@@ -268,7 +268,7 @@ class PprPbacScopeTest {
                 .andExpect(status().isOk());
 
         verify(scopeAccessService).assertCanAccessDepartment(departmentId);
-        verify(generatorService).generateWorkOrdersForPlan(planId, createdById);
+        verify(generatorService).generateWorkOrdersForPlan(eq(planId), isNull());
     }
 
     @Test

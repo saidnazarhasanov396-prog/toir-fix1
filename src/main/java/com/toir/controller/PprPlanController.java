@@ -169,9 +169,6 @@ public class PprPlanController {
             @RequestParam(required = false) UUID createdById) {
         assertCanAccessPlan(planOrThrow(id));
         UUID effectiveCreatedById = currentUserId();
-        if (effectiveCreatedById == null) {
-            effectiveCreatedById = createdById;
-        }
         return ResponseEntity.ok(generatorService.generateWorkOrdersForPlan(id, effectiveCreatedById));
     }
 
@@ -300,7 +297,7 @@ public class PprPlanController {
         return new PprPlanRequest(
                 request.name(),
                 currentDepartmentId,
-                request.createdById(),
+                null,
                 request.notes(),
                 request.fromDate(),
                 request.toDate(),

@@ -14,7 +14,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class StockMovement extends BaseEntity {
+public class StockMovement extends ActorStampedEntity {
 
     @Column(name = "warehouse_id", nullable = false)
     private UUID warehouseId;
@@ -37,9 +37,6 @@ public class StockMovement extends BaseEntity {
 
     @Column(name = "document_number")
     private String documentNumber;
-
-    @Column(name = "created_by_id")
-    private UUID createdById;
 
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt = Instant.now();

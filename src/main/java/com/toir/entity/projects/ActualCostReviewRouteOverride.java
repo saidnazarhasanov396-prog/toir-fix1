@@ -1,5 +1,5 @@
 package com.toir.entity.projects;
-import com.toir.entity.BaseEntity;
+import com.toir.entity.ActorStampedEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -13,7 +13,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class ActualCostReviewRouteOverride extends BaseEntity {
+public class ActualCostReviewRouteOverride extends ActorStampedEntity {
 
     @Column(name = "actual_cost_id", nullable = false)
     private UUID actualCostId;
@@ -35,9 +35,6 @@ public class ActualCostReviewRouteOverride extends BaseEntity {
 
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
-
-    @Column(name = "created_by_id")
-    private UUID createdById;
 
     @Column(name = "deactivated_by_id")
     private UUID deactivatedById;

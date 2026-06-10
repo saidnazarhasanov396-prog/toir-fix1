@@ -71,7 +71,6 @@ public class ContractorWorkService {
         w.setContractorId(r.contractorId());
         w.setWorkOrderId(r.workOrderId());
         w.setDescription(r.description());
-        w.setCreatedById(r.createdById());
         ContractorWork saved = repository.save(w);
 
         auditBuilderService.log(

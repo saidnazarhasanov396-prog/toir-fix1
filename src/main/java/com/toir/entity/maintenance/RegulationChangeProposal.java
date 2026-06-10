@@ -1,6 +1,6 @@
 package com.toir.entity.maintenance;
 
-import com.toir.entity.BaseEntity;
+import com.toir.entity.ActorStampedEntity;
 import com.toir.enums.RegulationChangeProposalStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -15,7 +15,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class RegulationChangeProposal extends BaseEntity {
+public class RegulationChangeProposal extends ActorStampedEntity {
 
     @Column(name = "regulation_id", nullable = false)
     private UUID regulationId;
@@ -46,9 +46,6 @@ public class RegulationChangeProposal extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RegulationChangeProposalStatus status = RegulationChangeProposalStatus.DRAFT;
-
-    @Column(name = "created_by_id")
-    private UUID createdById;
 
     @Column(name = "reviewed_by_id")
     private UUID reviewedById;

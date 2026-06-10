@@ -583,6 +583,24 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void createWithoutAuthenticatedUserDoesNotTrustRequestCreatedById() {
+        WorkOrderRequest request = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+
+        service.create(request);
+
+        ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getCreatedById()).isNull();
+    }
+
+    @Test
     void createPersistsActRequirementsAsStructuredFields() {
         WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
         WorkOrderRequest request = new WorkOrderRequest(
