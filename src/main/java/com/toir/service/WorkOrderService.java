@@ -123,6 +123,9 @@ public class WorkOrderService {
 
     private static final String MODULE = "work-order";
     private static final String ENTITY = "WorkOrder";
+
+    public record TemplateTaskSyncResult(int operationsCount, int createdCount) {
+    }
     private static final ZoneId CALENDAR_ZONE = ZoneId.of("Asia/Tashkent");
 
     private final WorkOrderRepository repository;
@@ -537,6 +540,15 @@ public class WorkOrderService {
         workOrderSparePartRequirementService.syncFromWorkOrderContext(saved);
 
         return toDetailDto(saved);
+    }
+
+    @Transactional
+    public TemplateTaskSyncResult syncTemplateTasks(UUID workOrderId, UUID templateId) {
+        if (workOrderId == null || templateId == null) {
+            return new TemplateTaskSyncResult(0, 0);
+        }
+        WorkOrder workOrder = getOrThrow(workOrderId);
+        return syncTemplateTasks(workOrder, templateId);
     }
 
     @Transactional
@@ -1688,39 +1700,50 @@ public class WorkOrderService {
         }
     }
 
-    private void generateTemplateTasksFromWorkOrderContext(WorkOrder workOrder) {
-        if (workOrder == null || workOrder.getId() == null || workOrder.getTasks() == null
-                || !workOrder.getTasks().isEmpty()) {
-            return;
+    private TemplateTaskSyncResult generateTemplateTasksFromWorkOrderContext(WorkOrder workOrder) {
+        if (workOrder == null || workOrder.getId() == null) {
+            return new TemplateTaskSyncResult(0, 0);
         }
-        resolveTemplateId(workOrder).flatMap(maintenanceTemplateRepository::findByIdAndIsDeletedFalse)
-                .ifPresent(template -> {
-                    List<MaintenanceOperation> operations = template.getOperations() == null
-                            ? List.of()
-                            : template.getOperations().stream()
-                            .filter(operation -> !operation.isDeleted())
-                            .sorted(java.util.Comparator.comparingInt(MaintenanceOperation::getSequence))
-                            .toList();
-                    for (MaintenanceOperation operation : operations) {
-                        if (hasTaskForOperation(workOrder, operation)) {
-                            continue;
-                        }
-                        WorkOrderTask task = new WorkOrderTask();
-                        task.setWorkOrder(workOrder);
-                        task.setTitle(operation.getName());
-                        task.setDescription(operationDescription(operation));
-                        task.setStatus(TaskExecutionStatus.TODO);
-                        if (operation.getDurationHours() > 0) {
-                            task.setPlannedHours(operation.getDurationHours());
-                        }
-                        task.setSourceTemplateId(template.getId());
-                        task.setSourceOperationId(operation.getId());
-                        workOrder.getTasks().add(task);
-                    }
-                    if (!operations.isEmpty()) {
-                        repository.save(workOrder);
-                    }
-                });
+        return resolveTemplateId(workOrder)
+                .map(templateId -> syncTemplateTasks(workOrder, templateId))
+                .orElseGet(() -> new TemplateTaskSyncResult(0, 0));
+    }
+
+    private TemplateTaskSyncResult syncTemplateTasks(WorkOrder workOrder, UUID templateId) {
+        if (workOrder == null || workOrder.getId() == null || templateId == null) {
+            return new TemplateTaskSyncResult(0, 0);
+        }
+        if (workOrder.getTasks() == null) {
+            workOrder.setTasks(new ArrayList<>());
+        }
+        List<MaintenanceOperation> operations = maintenanceOperationRepository
+                .findAllByTemplateIdInAndIsDeletedFalse(List.of(templateId))
+                .stream()
+                .filter(operation -> !operation.isDeleted())
+                .sorted(java.util.Comparator.comparingInt(MaintenanceOperation::getSequence))
+                .toList();
+        int created = 0;
+        for (MaintenanceOperation operation : operations) {
+            if (hasTaskForOperation(workOrder, operation)) {
+                continue;
+            }
+            WorkOrderTask task = new WorkOrderTask();
+            task.setWorkOrder(workOrder);
+            task.setTitle(operation.getName());
+            task.setDescription(operationDescription(operation));
+            task.setStatus(TaskExecutionStatus.TODO);
+            if (operation.getDurationHours() > 0) {
+                task.setPlannedHours(operation.getDurationHours());
+            }
+            task.setSourceTemplateId(templateId);
+            task.setSourceOperationId(operation.getId());
+            workOrder.getTasks().add(task);
+            created++;
+        }
+        if (created > 0) {
+            repository.save(workOrder);
+        }
+        return new TemplateTaskSyncResult(operations.size(), created);
     }
 
     private boolean hasTaskForOperation(WorkOrder workOrder, MaintenanceOperation operation) {
@@ -1988,7 +2011,7 @@ public class WorkOrderService {
                 entity.getSummary(), entity.getResult(), entity.getClosureNotes(),
                 entity.getCreatedById(), entity.getApprovedById(),
                 entity.getWarehouseId(), entity.getReplacementEquipmentId(), replacementEquipmentName,
-                entity.getTasks().stream().map(WorkOrderTaskDto::from).toList(),
+                taskDtos(entity.getTasks()),
                 TriadLinkMapper.toRepairRequestBrief(linkedRepairRequest),
                 TriadLinkMapper.toDefectBrief(linkedDefect),
                 operationsCount,
@@ -1999,6 +2022,37 @@ public class WorkOrderService {
                 entity.getStoppageActFileAssetId(),
                 materialUsages,
                 entity.getUpdatedAt());
+    }
+
+    private List<WorkOrderTaskDto> taskDtos(List<WorkOrderTask> tasks) {
+        List<WorkOrderTask> safeTasks = safeList(tasks);
+        if (safeTasks.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> operationIds = safeTasks.stream()
+                .map(WorkOrderTask::getSourceOperationId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, MaintenanceOperation> operationsById = operationIds.isEmpty()
+                ? Map.of()
+                : safeList(maintenanceOperationRepository.findAllByIdInAndIsDeletedFalse(operationIds))
+                .stream()
+                .collect(Collectors.toMap(MaintenanceOperation::getId, Function.identity(), (left, ignored) -> left));
+        Set<UUID> templateIds = safeTasks.stream()
+                .map(WorkOrderTask::getSourceTemplateId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, MaintenanceTemplate> templatesById = templateIds.isEmpty()
+                ? Map.of()
+                : safeList(maintenanceTemplateRepository.findAllByIdInAndIsDeletedFalse(templateIds))
+                .stream()
+                .collect(Collectors.toMap(MaintenanceTemplate::getId, Function.identity(), (left, ignored) -> left));
+        return safeTasks.stream()
+                .map(task -> WorkOrderTaskDto.from(
+                        task,
+                        task.getSourceTemplateId() == null ? null : templatesById.get(task.getSourceTemplateId()),
+                        task.getSourceOperationId() == null ? null : operationsById.get(task.getSourceOperationId())))
+                .toList();
     }
 
     private List<com.toir.dto.materialusage.RepairMaterialUsageDto> materialUsagesFor(WorkOrder entity) {

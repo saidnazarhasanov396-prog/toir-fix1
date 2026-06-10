@@ -19,7 +19,13 @@ public interface MaintenanceOperationRepository extends JpaRepository<Maintenanc
     @Query(value = "SELECT * FROM maintenance_operations WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<MaintenanceOperation> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-    @Query(value = "SELECT * FROM maintenance_operations WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    @Query("""
+            select distinct o
+            from MaintenanceOperation o
+            left join fetch o.action
+            where o.isDeleted = false
+              and o.id in :ids
+            """)
     List<MaintenanceOperation> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
     @Query("""
@@ -27,6 +33,7 @@ public interface MaintenanceOperationRepository extends JpaRepository<Maintenanc
             from MaintenanceOperation o
             join fetch o.template t
             where o.isDeleted = false
+              and t.isDeleted = false
               and t.id in :templateIds
             order by t.id, o.sequence
             """)

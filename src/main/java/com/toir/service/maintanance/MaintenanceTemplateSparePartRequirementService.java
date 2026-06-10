@@ -8,6 +8,7 @@ import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
@@ -25,6 +26,7 @@ public class MaintenanceTemplateSparePartRequirementService {
     private final MaintenanceTemplateSparePartRequirementRepository repository;
     private final MaintenanceTemplateRepository templateRepository;
     private final MaintenanceOperationRepository operationRepository;
+    private final MaintenanceActionRepository actionRepository;
     private final SparePartRepository sparePartRepository;
 
     @Transactional(readOnly = true)
@@ -96,7 +98,14 @@ public class MaintenanceTemplateSparePartRequirementService {
             return null;
         }
         MaintenanceOperation operation = operationRepository.findByIdAndIsDeletedFalse(operationId)
-                .orElseThrow(() -> RestException.notFound("Maintenance operation not found: " + operationId));
+                .orElse(null);
+        if (operation == null) {
+            if (actionRepository.findByIdAndIsDeletedFalse(operationId).isPresent()) {
+                throw RestException.badRequest(
+                        "operationId must reference a maintenance operation, not a maintenance action: " + operationId);
+            }
+            throw RestException.notFound("Maintenance operation not found: " + operationId);
+        }
         if (operation.getTemplate() == null || !templateId.equals(operation.getTemplate().getId())) {
             throw RestException.badRequest("operation belongs to another template");
         }

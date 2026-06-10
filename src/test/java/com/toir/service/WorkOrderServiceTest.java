@@ -20,8 +20,10 @@ import com.toir.entity.defects.Defect;
 import com.toir.entity.defects.DefectList;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
+import com.toir.entity.maintenance.MaintenanceAction;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.MaintenanceOperation;
+import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderDocument;
@@ -1001,6 +1003,51 @@ class WorkOrderServiceTest {
     }
 
     @Test
+    void createFromDueEventCopiesTemplateOperationsToTasks() {
+        UUID eventId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID inspectOperationId = UUID.randomUUID();
+        UUID lubricateOperationId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithDueEvent(eventId, equipmentId, departmentId);
+        MaintenanceDueEvent event = new MaintenanceDueEvent();
+        ReflectionTestUtils.setField(event, "id", eventId);
+        event.setTemplateId(templateId);
+        MaintenanceOperation inspect = operation(inspectOperationId, null);
+        inspect.setName("Inspect coupling");
+        inspect.setSequence(2);
+        inspect.setDurationHours(1.25);
+        MaintenanceOperation lubricate = operation(lubricateOperationId, null);
+        lubricate.setName("Lubricate bearings");
+        lubricate.setSequence(1);
+        lubricate.setDurationHours(0.75);
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            if (workOrder.getId() == null) {
+                ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            }
+            return workOrder;
+        });
+        mockSuccessfulCreateDependencies(request);
+        when(maintenanceDueEventService.getOrThrow(eventId)).thenReturn(event);
+        when(maintenanceOperationRepository.findAllByTemplateIdInAndIsDeletedFalse(List.of(templateId)))
+                .thenReturn(List.of(lubricate, inspect));
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.tasks()).hasSize(2);
+        assertThat(result.tasks().get(0).title()).isEqualTo("Lubricate bearings");
+        assertThat(result.tasks().get(0).plannedHours()).isEqualTo(0.75);
+        assertThat(result.tasks().get(0).sourceTemplateId()).isEqualTo(templateId);
+        assertThat(result.tasks().get(0).sourceOperationId()).isEqualTo(lubricateOperationId);
+        assertThat(result.tasks().get(1).title()).isEqualTo("Inspect coupling");
+        assertThat(result.tasks().get(1).plannedHours()).isEqualTo(1.25);
+        assertThat(result.tasks().get(1).sourceTemplateId()).isEqualTo(templateId);
+        assertThat(result.tasks().get(1).sourceOperationId()).isEqualTo(inspectOperationId);
+    }
+
+    @Test
     void createWorkOrderWithUnknownPerformerReturns404() {
         UUID performerId = UUID.randomUUID();
         WorkOrderRequest request = requestWithPerformer(performerId);
@@ -1453,6 +1500,36 @@ class WorkOrderServiceTest {
         assertThat(response.defect()).isNotNull();
         assertThat(response.defect().id()).isEqualTo(defectId);
         assertThat(response.defect().code()).isEqualTo("DEF-2026-1001");
+    }
+
+    @Test
+    void detailEnrichesTemplateTaskSourceLabels() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        UUID operationId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        WorkOrderTask task = workOrderTask(workOrder, "Inspect coupling", TaskExecutionStatus.TODO);
+        task.setSourceTemplateId(templateId);
+        task.setSourceOperationId(operationId);
+        workOrder.getTasks().add(task);
+        MaintenanceTemplate template = maintenanceTemplate(templateId, "MT-2026-0001", "Pump PM template");
+        MaintenanceAction action = maintenanceAction("ACT-INSPECT", "Visual inspection");
+        MaintenanceOperation operation = operation(operationId, null);
+        operation.setName("Inspect coupling");
+        operation.setTemplate(template);
+        operation.setAction(action);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(maintenanceOperationRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(operation));
+        when(maintenanceTemplateRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(template));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.findById(workOrderId);
+
+        assertThat(response.tasks()).hasSize(1);
+        assertThat(response.tasks().getFirst().sourceTemplateCode()).isEqualTo("MT-2026-0001");
+        assertThat(response.tasks().getFirst().sourceTemplateName()).isEqualTo("Pump PM template");
+        assertThat(response.tasks().getFirst().sourceOperationCode()).isEqualTo("ACT-INSPECT");
+        assertThat(response.tasks().getFirst().sourceOperationName()).isEqualTo("Inspect coupling");
     }
 
     @Test
@@ -3333,6 +3410,36 @@ class WorkOrderServiceTest {
         );
     }
 
+    private WorkOrderRequest requestWithDueEvent(UUID dueEventId, UUID equipmentId, UUID departmentId) {
+        WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        return new WorkOrderRequest(
+                base.number(),
+                base.title(),
+                equipmentId,
+                base.equipmentNodeId(),
+                null,
+                departmentId,
+                base.workLocationNote(),
+                base.repairRequestId(),
+                base.defectId(),
+                base.defectListId(),
+                base.pprTaskId(),
+                base.contractorId(),
+                base.performerId(),
+                base.type(),
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                base.startPlannedAt(),
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary(),
+                dueEventId,
+                "cycle-template-work-order"
+        );
+    }
+
     private WorkOrderRequest requestWithNode(UUID equipmentId, UUID equipmentNodeId) {
         WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
         return new WorkOrderRequest(
@@ -3657,6 +3764,23 @@ class WorkOrderServiceTest {
         operation.setName("Generated operation");
         operation.setRequiredSkill(requiredSkill);
         return operation;
+    }
+
+    private MaintenanceTemplate maintenanceTemplate(UUID id, String code, String name) {
+        MaintenanceTemplate template = new MaintenanceTemplate();
+        ReflectionTestUtils.setField(template, "id", id);
+        template.setCode(code);
+        template.setName(name);
+        return template;
+    }
+
+    private MaintenanceAction maintenanceAction(String code, String name) {
+        MaintenanceAction action = new MaintenanceAction();
+        ReflectionTestUtils.setField(action, "id", UUID.randomUUID());
+        action.setCode(code);
+        action.setName(name);
+        action.setActive(true);
+        return action;
     }
 
     private UserCertification certification(UUID userId, String typeCode, String status, LocalDate expiresAt) {
