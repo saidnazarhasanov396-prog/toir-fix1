@@ -495,12 +495,12 @@ class EquipmentServiceTest {
                 .title("Replace bearing")
                 .equipmentId(equipmentId)
                 .departmentId(UUID.randomUUID())
-                .createdById(UUID.randomUUID())
                 .type(WorkOrderType.DEFECT)
                 .status(WorkOrderStatus.IN_PROGRESS)
                 .summary("Bearing replacement in progress")
                 .build();
         workOrder.setId(UUID.randomUUID());
+        workOrder.setCreatedById(UUID.randomUUID());
 
         when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
         when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());

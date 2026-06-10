@@ -1,6 +1,6 @@
 package com.toir.entity.defects;
 
-import com.toir.entity.BaseEntity;
+import com.toir.entity.ActorStampedEntity;
 import com.toir.enums.DefectListStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -20,7 +20,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class DefectList extends BaseEntity {
+public class DefectList extends ActorStampedEntity {
 
     @Column(nullable = false, unique = true)
     private String code;
@@ -36,9 +36,6 @@ public class DefectList extends BaseEntity {
 
     @Column(name = "work_order_id")
     private UUID workOrderId;
-
-    @Column(name = "created_by_id", nullable = false)
-    private UUID createdById;
 
     @Column(name = "approved_by_id")
     private UUID approvedById;

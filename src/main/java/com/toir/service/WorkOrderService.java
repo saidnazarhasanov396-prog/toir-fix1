@@ -456,17 +456,13 @@ public class WorkOrderService {
 
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request) {
-        return create(request, request.createdById());
+        return create(request, null);
     }
 
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request, UUID createdById) {
         if (request.equipmentId() == null) {
             throw RestException.badRequest("Equipment is required to create a work order");
-        }
-        UUID effectiveCreatedById = createdById == null ? request.createdById() : createdById;
-        if (effectiveCreatedById == null) {
-            throw RestException.badRequest("createdById is required to create a work order");
         }
         String effectiveNumber = normalizeWorkOrderNumber(request.number());
         equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create work order");
@@ -516,7 +512,9 @@ public class WorkOrderService {
             entity.setPriority(request.priority());
         entity.setStartPlannedAt(request.startPlannedAt());
         entity.setEndPlannedAt(request.endPlannedAt());
-        entity.setCreatedById(effectiveCreatedById);
+        if (createdById != null) {
+            entity.setCreatedById(createdById);
+        }
         entity.setSummary(request.summary());
         entity.setRepairActRequired(Boolean.TRUE.equals(request.repairActRequired()));
         entity.setStoppageActRequired(Boolean.TRUE.equals(request.stoppageActRequired()));

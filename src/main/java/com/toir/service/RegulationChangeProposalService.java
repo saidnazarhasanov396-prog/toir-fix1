@@ -63,7 +63,6 @@ public class RegulationChangeProposalService {
         proposal.setProposedTemplateId(request.proposedTemplateId());
         proposal.setChangeReason(request.changeReason());
         proposal.setStatus(RegulationChangeProposalStatus.DRAFT);
-        proposal.setCreatedById(currentUserId());
 
         RegulationChangeProposal saved = repository.save(proposal);
         auditBuilderService.log(

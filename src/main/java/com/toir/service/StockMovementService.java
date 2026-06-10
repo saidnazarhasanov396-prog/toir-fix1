@@ -126,7 +126,6 @@ public class StockMovementService {
         movement.setQuantity(request.quantity());
         movement.setUnitCost(request.unitCost());
         movement.setDocumentNumber(request.documentNumber());
-        movement.setCreatedById(request.createdById());
         movement.setNotes(request.notes());
         StockMovement saved = repository.save(movement);
 

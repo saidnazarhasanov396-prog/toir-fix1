@@ -237,7 +237,7 @@ public class PprPlanService {
         if (plan.getStatus() != PlanStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT plans can be edited");
         }
-        applyPlanMutableFields(plan, request, false);
+        applyPlanMutableFields(plan, request);
 
         PprPlan saved = planRepository.saveAndFlush(plan);
         auditBuilderService.log(
@@ -737,7 +737,7 @@ public class PprPlanService {
 
             PprPlan plan = new PprPlan();
             plan.setCode(code);
-            applyPlanMutableFields(plan, request, true);
+            applyPlanMutableFields(plan, request);
 
             try {
                 return planRepository.saveAndFlush(plan);
@@ -752,7 +752,7 @@ public class PprPlanService {
         throw RestException.conflict("Could not generate unique PPR plan code");
     }
 
-    private void applyPlanMutableFields(PprPlan plan, PprPlanRequest request, boolean includeCreatedBy) {
+    private void applyPlanMutableFields(PprPlan plan, PprPlanRequest request) {
         LocalDate fromDate = resolvePlanStartDate(request);
         LocalDate toDate = resolvePlanEndDate(request);
         validatePlanDateRange(fromDate, toDate);
@@ -761,9 +761,6 @@ public class PprPlanService {
         plan.setStartDate(fromDate);
         plan.setEndDate(toDate);
         plan.setDepartmentId(request.departmentId());
-        if (includeCreatedBy) {
-            plan.setCreatedById(request.createdById());
-        }
         plan.setNotes(request.notes());
         applyPlanContractFields(plan, request);
         replacePlanTargets(plan, request);
