@@ -2,11 +2,18 @@ package com.toir.security;
 
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.entity.ReliabilityMetric;
+import com.toir.entity.StockMovement;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
+import com.toir.enums.RequestStatus;
+import com.toir.enums.StockMovementType;
+import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CalibrationRecordRepository;
 import com.toir.repository.ConditionReadingRepository;
@@ -38,6 +45,9 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -224,6 +234,54 @@ class AnalyticsPbacScopeTest {
     }
 
     @Test
+    void dashboardOpenRequestsCountsOnlyOpenRepairRequestsInScopedDepartment() {
+        UUID departmentId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repairRequestRepository.search(null, departmentId, null)).thenReturn(List.of(
+                repairRequest(RequestStatus.OPEN),
+                repairRequest(RequestStatus.OPEN),
+                repairRequest(RequestStatus.IN_PROGRESS)
+        ));
+
+        var overview = dashboardService.overview(departmentId);
+
+        assertThat(overview.counters().openRequests()).isEqualTo(2);
+        verify(repairRequestRepository).search(null, departmentId, null);
+    }
+
+    @Test
+    void dashboardThisMonthCountersUseCalendarMonthInsteadOfRollingThirtyDays() {
+        UUID departmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Instant currentMonth = LocalDate.now()
+                .withDayOfMonth(1)
+                .plusDays(1)
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant();
+        Instant previousMonth = LocalDate.now()
+                .withDayOfMonth(1)
+                .minusDays(1)
+                .atTime(12, 0)
+                .atZone(ZoneId.systemDefault())
+                .toInstant();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(warehouse(warehouseId, departmentId)));
+        when(workOrderRepository.search(null, departmentId, null)).thenReturn(List.of(
+                closedWorkOrder(currentMonth, departmentId),
+                closedWorkOrder(previousMonth, departmentId)
+        ));
+        when(stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                stockIssue(warehouseId, currentMonth, 3),
+                stockIssue(warehouseId, previousMonth, 7)
+        ));
+
+        var overview = dashboardService.overview(departmentId);
+
+        assertThat(overview.counters().repairsThisMonth()).isEqualTo(1);
+        assertThat(overview.counters().materialIssuedThisMonth()).isEqualTo(3);
+    }
+
+    @Test
     void adminCanAccessAnyEquipmentAnalytics() {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, null);
@@ -387,6 +445,54 @@ class AnalyticsPbacScopeTest {
         equipment.setStatus(EquipmentStatus.ACTIVE);
         equipment.setCategory(EquipmentCategory.PRODUCTION_EQUIPMENT);
         return equipment;
+    }
+
+    private RepairRequest repairRequest(RequestStatus status) {
+        RepairRequest request = new RepairRequest();
+        request.setId(UUID.randomUUID());
+        request.setNumber("RR-" + UUID.randomUUID());
+        request.setTitle("Pump issue");
+        request.setDescription("Pump issue");
+        request.setDepartmentId(UUID.randomUUID());
+        request.setEquipmentId(UUID.randomUUID());
+        request.setReporterId(UUID.randomUUID());
+        request.setStatus(status);
+        request.setCreatedAt(Instant.parse("2026-06-10T00:00:00Z"));
+        request.setUpdatedAt(Instant.parse("2026-06-10T01:00:00Z"));
+        request.setDetectedAt(Instant.parse("2026-06-10T00:00:00Z"));
+        return request;
+    }
+
+    private WorkOrder closedWorkOrder(Instant completedAt, UUID departmentId) {
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(UUID.randomUUID());
+        workOrder.setDepartmentId(departmentId);
+        workOrder.setEquipmentId(UUID.randomUUID());
+        workOrder.setNumber("WO-" + UUID.randomUUID());
+        workOrder.setTitle("Repair");
+        workOrder.setStatus(WorkOrderStatus.CLOSED);
+        workOrder.setCompletedAt(completedAt);
+        return workOrder;
+    }
+
+    private StockMovement stockIssue(UUID warehouseId, Instant occurredAt, double quantity) {
+        StockMovement movement = new StockMovement();
+        movement.setId(UUID.randomUUID());
+        movement.setWarehouseId(warehouseId);
+        movement.setSparePartId(UUID.randomUUID());
+        movement.setType(StockMovementType.ISSUE);
+        movement.setOccurredAt(occurredAt);
+        movement.setQuantity(quantity);
+        return movement;
+    }
+
+    private Warehouse warehouse(UUID id, UUID departmentId) {
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(id);
+        warehouse.setCode("WH-1");
+        warehouse.setName("Warehouse");
+        warehouse.setDepartmentId(departmentId);
+        return warehouse;
     }
 
     private AnalyticsService analyticsServiceWithRealScope() {

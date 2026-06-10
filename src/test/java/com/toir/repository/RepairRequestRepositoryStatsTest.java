@@ -73,6 +73,25 @@ class RepairRequestRepositoryStatsTest {
                 RequestStatus.CLOSED,
                 PriorityLevel.LOW
         );
+        saveRepairRequest(
+                "RR-005",
+                "In progress request",
+                "Already being repaired",
+                departmentId,
+                equipmentId,
+                RequestStatus.IN_PROGRESS,
+                PriorityLevel.MEDIUM
+        );
+        saveRepairRequest(
+                "RR-006",
+                "Deleted open request",
+                "Soft-deleted open request",
+                departmentId,
+                equipmentId,
+                RequestStatus.OPEN,
+                PriorityLevel.MEDIUM,
+                true
+        );
 
         saveWorkOrder(openEmergencyWithWo.getId(), departmentId, equipmentId);
         saveWorkOrder(approvedEmergency.getId(), departmentId, equipmentId);
@@ -85,7 +104,7 @@ class RepairRequestRepositoryStatsTest {
                 RequestStatus.OPEN.name()
         );
 
-        assertThat(stats.getTotalRequests()).isEqualTo(4);
+        assertThat(stats.getTotalRequests()).isEqualTo(5);
         assertThat(stats.getEmergency()).isEqualTo(2);
         assertThat(stats.getOpen()).isEqualTo(2);
         assertThat(stats.getWithWorkOrder()).isEqualTo(2);
@@ -198,6 +217,19 @@ class RepairRequestRepositoryStatsTest {
             RequestStatus status,
             PriorityLevel priority
     ) {
+        return saveRepairRequest(number, title, description, departmentId, equipmentId, status, priority, false);
+    }
+
+    private RepairRequest saveRepairRequest(
+            String number,
+            String title,
+            String description,
+            UUID departmentId,
+            UUID equipmentId,
+            RequestStatus status,
+            PriorityLevel priority,
+            boolean deleted
+    ) {
         RepairRequest request = new RepairRequest();
         request.setId(UUID.randomUUID());
         request.setNumber(number);
@@ -208,7 +240,7 @@ class RepairRequestRepositoryStatsTest {
         request.setReporterId(UUID.randomUUID());
         request.setStatus(status);
         request.setPriority(priority);
-        request.setDeleted(false);
+        request.setDeleted(deleted);
 
         return repository.save(request);
     }
