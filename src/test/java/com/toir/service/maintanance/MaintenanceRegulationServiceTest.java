@@ -241,6 +241,42 @@ class MaintenanceRegulationServiceTest {
     }
 
     @Test
+    void equipmentWithRegulationsIncludesStandaloneEquipmentRules() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID ruleId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, typeId);
+        EquipmentType type = new EquipmentType();
+        type.setId(typeId);
+        type.setName("Pump");
+        EquipmentMaintenanceRule rule = rule(ruleId, equipmentId, null, null, true);
+        rule.setName("Pump A individual PM");
+        rule.setNormativeLaborHours(2.4);
+
+        when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
+        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of(type));
+        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null))
+                .thenReturn(List.of(rule));
+
+        var page = service.equipmentWithRegulations(null, null, null, null);
+
+        assertThat(page.getContent()).hasSize(1);
+        EquipmentWithRegulationsDto dto = page.getContent().getFirst();
+        assertThat(dto.equipmentId()).isEqualTo(equipmentId);
+        assertThat(dto.equipmentTypeName()).isEqualTo("Pump");
+        assertThat(dto.regulations()).singleElement().satisfies(summary -> {
+            assertThat(summary.id()).isEqualTo(ruleId);
+            assertThat(summary.code()).isEqualTo("EMR-2026-0001");
+            assertThat(summary.name()).isEqualTo("Pump A individual PM");
+            assertThat(summary.category()).isEqualTo("PREVENTIVE");
+            assertThat(summary.defaultDurationHours()).isEqualTo(3);
+            assertThat(summary.active()).isTrue();
+        });
+        verify(repository, never()).findAllByIdInAndIsDeletedFalse(any());
+        verify(operationRepository, never()).findAllByTemplateIdInAndIsDeletedFalse(any());
+    }
+
+    @Test
     void equipmentWithRegulationsRejectsPartialPagination() {
         assertThatThrownBy(() -> service.equipmentWithRegulations(null, null, 0, null))
                 .isInstanceOfSatisfying(RestException.class, ex -> {

@@ -1,5 +1,6 @@
 package com.toir.dto.maintenanceregulation;
 
+import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import java.util.UUID;
 
@@ -36,11 +37,39 @@ public record MaintenanceRegulationSummaryDto(
         );
     }
 
+    public static MaintenanceRegulationSummaryDto from(EquipmentMaintenanceRule rule,
+                                                       OperationSummary operationSummary) {
+        if (rule == null) {
+            return null;
+        }
+        return new MaintenanceRegulationSummaryDto(
+                rule.getId(),
+                rule.getCode(),
+                rule.getName(),
+                rule.getMaintenanceKind() == null ? null : rule.getMaintenanceKind().name(),
+                durationHours(rule),
+                operationSummary == null ? null : operationSummary.requiredSkill(),
+                operationSummary == null ? null : operationSummary.safetyNotes(),
+                operationSummary == null ? null : operationSummary.toolsRequired(),
+                operationSummary == null ? null : operationSummary.sparePartsRequired(),
+                operationSummary == null ? null : operationSummary.consumablesRequired(),
+                rule.isActive()
+        );
+    }
+
     private static Integer durationHours(MaintenanceRegulation regulation) {
         if (regulation == null) {
             return null;
         }
         double hours = regulation.getNormativeLaborHours();
+        return hours <= 0 ? null : (int) Math.ceil(hours);
+    }
+
+    private static Integer durationHours(EquipmentMaintenanceRule rule) {
+        if (rule == null) {
+            return null;
+        }
+        double hours = rule.getNormativeLaborHours();
         return hours <= 0 ? null : (int) Math.ceil(hours);
     }
 
