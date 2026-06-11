@@ -6,6 +6,7 @@ import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.entity.maintenance.MaintenanceRegulationSparePartRequirement;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.entity.maintenance.WorkOrder;
@@ -16,6 +17,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirementRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
 import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
 import com.toir.security.ScopeAccessService;
@@ -58,6 +60,8 @@ class WorkOrderSparePartRequirementServiceTest {
     private WorkOrderRepository workOrderRepository;
     @Mock
     private MaintenanceTemplateSparePartRequirementRepository templateRequirementRepository;
+    @Mock
+    private MaintenanceRegulationSparePartRequirementRepository regulationRequirementRepository;
     @Mock
     private MaintenanceDueEventRepository maintenanceDueEventRepository;
     @Mock
@@ -116,6 +120,73 @@ class WorkOrderSparePartRequirementServiceTest {
         service.syncFromWorkOrderContext(workOrder);
 
         verify(templateRequirementRepository, never()).findActiveByTemplateId(any());
+        verify(regulationRequirementRepository, never()).findActiveByRegulationId(any());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void dueEventWithoutTemplateAddsRegulationSparePartRequirements() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID dueEventId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        WorkOrder workOrder = workOrder(workOrderId);
+        workOrder.setMaintenanceDueEventId(dueEventId);
+        MaintenanceDueEvent dueEvent = new MaintenanceDueEvent();
+        dueEvent.setRegulationId(regulationId);
+        MaintenanceRegulationSparePartRequirement regulationRequirement =
+                regulationRequirement(regulationId);
+
+        when(maintenanceDueEventRepository.findByIdAndIsDeletedFalse(dueEventId)).thenReturn(Optional.of(dueEvent));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(regulationRequirementRepository.findActiveByRegulationId(regulationId))
+                .thenReturn(List.of(regulationRequirement));
+        when(repository.findByWorkOrderIdAndSourceTypeAndRegulationRequirementIdAndIsDeletedFalse(
+                workOrderId,
+                WorkOrderSparePartRequirementSourceType.REGULATION_REQUIRED_SPARE_PART,
+                regulationRequirement.getId()
+        )).thenReturn(Optional.empty());
+
+        service.syncFromWorkOrderContext(workOrder);
+
+        ArgumentCaptor<WorkOrderSparePartRequirement> captor =
+                ArgumentCaptor.forClass(WorkOrderSparePartRequirement.class);
+        verify(repository).save(captor.capture());
+        WorkOrderSparePartRequirement saved = captor.getValue();
+        assertThat(saved.getWorkOrder()).isEqualTo(workOrder);
+        assertThat(saved.getSourceType())
+                .isEqualTo(WorkOrderSparePartRequirementSourceType.REGULATION_REQUIRED_SPARE_PART);
+        assertThat(saved.getRegulationRequirement()).isEqualTo(regulationRequirement);
+        assertThat(saved.getSparePart()).isEqualTo(regulationRequirement.getSparePart());
+        assertThat(saved.getRequiredQty()).isEqualTo(regulationRequirement.getQuantity());
+        assertThat(saved.getUnit()).isEqualTo(regulationRequirement.getUnit());
+        assertThat(saved.getCriticality()).isEqualTo(regulationRequirement.getCriticality());
+        assertThat(saved.getNotes()).isEqualTo(regulationRequirement.getNotes());
+    }
+
+    @Test
+    void syncDoesNotDuplicateRegulationRequirements() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID dueEventId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        WorkOrder workOrder = workOrder(workOrderId);
+        workOrder.setMaintenanceDueEventId(dueEventId);
+        MaintenanceDueEvent dueEvent = new MaintenanceDueEvent();
+        dueEvent.setRegulationId(regulationId);
+        MaintenanceRegulationSparePartRequirement regulationRequirement =
+                regulationRequirement(regulationId);
+
+        when(maintenanceDueEventRepository.findByIdAndIsDeletedFalse(dueEventId)).thenReturn(Optional.of(dueEvent));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(regulationRequirementRepository.findActiveByRegulationId(regulationId))
+                .thenReturn(List.of(regulationRequirement));
+        when(repository.findByWorkOrderIdAndSourceTypeAndRegulationRequirementIdAndIsDeletedFalse(
+                workOrderId,
+                WorkOrderSparePartRequirementSourceType.REGULATION_REQUIRED_SPARE_PART,
+                regulationRequirement.getId()
+        )).thenReturn(Optional.of(new WorkOrderSparePartRequirement()));
+
+        service.syncFromWorkOrderContext(workOrder);
+
         verify(repository, never()).save(any());
     }
 
@@ -248,6 +319,32 @@ class WorkOrderSparePartRequirementServiceTest {
         requirement.setUnit("pcs");
         requirement.setCriticality("CRITICAL");
         requirement.setNotes("keep ready");
+        requirement.setActive(true);
+        return requirement;
+    }
+
+    private MaintenanceRegulationSparePartRequirement regulationRequirement(UUID regulationId) {
+        UUID sparePartId = UUID.randomUUID();
+        SparePart sparePart = new SparePart();
+        sparePart.setId(sparePartId);
+        sparePart.setCode("BRG-002");
+        sparePart.setName("Bearing kit");
+        sparePart.setUnit("pcs");
+
+        MaintenanceRegulation regulation = new MaintenanceRegulation();
+        regulation.setId(regulationId);
+
+        MaintenanceRegulationSparePartRequirement requirement =
+                new MaintenanceRegulationSparePartRequirement();
+        requirement.setId(UUID.randomUUID());
+        requirement.setRegulation(regulation);
+        requirement.setRegulationId(regulationId);
+        requirement.setSparePart(sparePart);
+        requirement.setSparePartId(sparePartId);
+        requirement.setQuantity(4.0);
+        requirement.setUnit("pcs");
+        requirement.setCriticality("NORMAL");
+        requirement.setNotes("planned stock");
         requirement.setActive(true);
         return requirement;
     }

@@ -1,6 +1,7 @@
 package com.toir.service.repair;
 
 import com.toir.dto.repairrequest.RepairRequestDto;
+import com.toir.dto.repairrequest.RepairRequestClarificationRequest;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestRequest;
@@ -8,11 +9,13 @@ import com.toir.dto.triad.DefectBriefDto;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.User;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.UserStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
@@ -472,6 +475,70 @@ class RepairRequestServiceTest {
     }
 
     @Test
+    void requestClarificationNotifiesReporterWhenRecipientIsNotSelected() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+
+        stubFindSaveAndDtoLookups(id, entity);
+
+        service.requestClarification(id, "Need serial number");
+
+        verify(notificationService).notifyUser(
+                eq(entity.getReporterId()),
+                org.mockito.ArgumentMatchers.contains("Clarification requested"),
+                org.mockito.ArgumentMatchers.contains("Need serial number"),
+                eq(com.toir.enums.NotificationSeverity.INFO),
+                eq("RepairRequest"),
+                eq(id.toString())
+        );
+    }
+
+    @Test
+    void requestClarificationUsesSelectedRecipientFromPayload() {
+        UUID id = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        User recipient = new User();
+        recipient.setId(recipientId);
+
+        stubFindSaveAndDtoLookups(id, entity);
+        when(userRepository.findByIdAndIsDeletedFalse(recipientId)).thenReturn(Optional.of(recipient));
+
+        RepairRequestDto result = service.requestClarification(
+                id,
+                new RepairRequestClarificationRequest(recipientId, "Need oil pressure trend", "APPROVAL")
+        );
+
+        assertThat(result.status()).isEqualTo(RequestStatus.NEEDS_CLARIFICATION);
+        assertThat(result.clarificationReason()).isEqualTo("Need oil pressure trend");
+        verify(notificationService).notifyUser(
+                eq(recipientId),
+                org.mockito.ArgumentMatchers.contains("Clarification requested"),
+                org.mockito.ArgumentMatchers.contains("Need oil pressure trend"),
+                eq(com.toir.enums.NotificationSeverity.INFO),
+                eq("RepairRequest"),
+                eq(id.toString())
+        );
+    }
+
+    @Test
+    void requestClarificationRejectsSelectedRecipientThatDoesNotExist() {
+        UUID id = UUID.randomUUID();
+        UUID recipientId = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(userRepository.findByIdAndIsDeletedFalse(recipientId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.requestClarification(
+                id,
+                new RepairRequestClarificationRequest(recipientId, "Need oil pressure trend", "APPROVAL")
+        )).hasMessageContaining("Clarification recipient not found");
+
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void requestClarificationClearsRejectionReason() {
         UUID id = UUID.randomUUID();
         RepairRequest entity = repairRequest(id);
@@ -594,8 +661,12 @@ class RepairRequestServiceTest {
         UUID assigneeId = UUID.randomUUID();
         RepairRequest entity = repairRequest(id);
         entity.setStatus(RequestStatus.APPROVED);
+        User assignee = new User();
+        assignee.setId(assigneeId);
+        assignee.setStatus(UserStatus.ACTIVE);
 
         stubFindSaveAndDtoLookups(id, entity);
+        when(userRepository.findByIdAndIsDeletedFalse(assigneeId)).thenReturn(Optional.of(assignee));
 
         RepairRequestDto result = service.assign(id, assigneeId);
 
@@ -609,6 +680,39 @@ class RepairRequestServiceTest {
                 eq("RepairRequest"),
                 eq(id.toString())
         );
+    }
+
+    @Test
+    void assignRejectsUnknownAssignee() {
+        UUID id = UUID.randomUUID();
+        UUID assigneeId = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.APPROVED);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(userRepository.findByIdAndIsDeletedFalse(assigneeId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.assign(id, assigneeId))
+                .hasMessageContaining("Assignee not found");
+
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void assignRejectsInactiveAssignee() {
+        UUID id = UUID.randomUUID();
+        UUID assigneeId = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.APPROVED);
+        User assignee = new User();
+        assignee.setId(assigneeId);
+        assignee.setStatus(UserStatus.INACTIVE);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(userRepository.findByIdAndIsDeletedFalse(assigneeId)).thenReturn(Optional.of(assignee));
+
+        assertThatThrownBy(() -> service.assign(id, assigneeId))
+                .hasMessageContaining("Assignee is inactive");
+
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any());
     }
 
     @Test

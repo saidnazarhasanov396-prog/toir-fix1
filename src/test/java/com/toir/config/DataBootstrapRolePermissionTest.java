@@ -61,6 +61,31 @@ class DataBootstrapRolePermissionTest {
     }
 
     @Test
+    void bootstrapCreatesTechnicianRoleWithOperationalNotificationPermissions() {
+        bootstrapProperties.setCreateDefaultAdmin(false);
+        stubRoleRepository();
+
+        bootstrap().run();
+
+        assertThat(roles.get("TECHNICIAN").getPermissions())
+                .contains(
+                        PermissionConstants.REPAIR_REQUEST_READ,
+                        PermissionConstants.WORK_ORDER_READ,
+                        PermissionConstants.WORK_ORDER_START,
+                        PermissionConstants.WORK_ORDER_COMPLETE,
+                        PermissionConstants.WORK_ORDER_UPDATE,
+                        PermissionConstants.NOTIFICATION_READ,
+                        PermissionConstants.NOTIFICATION_MARK_READ
+                )
+                .doesNotContain(
+                        PermissionConstants.REPAIR_REQUEST_ASSIGN,
+                        PermissionConstants.WORK_ORDER_CREATE,
+                        PermissionConstants.WORK_ORDER_APPROVE,
+                        PermissionConstants.WORK_ORDER_CLOSE
+                );
+    }
+
+    @Test
     void bootstrapRepairsExistingLegacyReadOnlyRolesWithoutDeletingCustomPermissions() {
         bootstrapProperties.setCreateDefaultAdmin(false);
         roles.put("WORKSHOP_HEAD", role("WORKSHOP_HEAD", PermissionConstants.READ_LEGACY, "CUSTOM_PERMISSION"));

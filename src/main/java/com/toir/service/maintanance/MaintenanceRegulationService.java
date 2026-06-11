@@ -6,12 +6,16 @@ import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationSparePartRequirementDto;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationSparePartRequirementRequest;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationSummaryDto;
+import com.toir.entity.SparePart;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceOperation;
+import com.toir.entity.maintenance.MaintenanceRegulationSparePartRequirement;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -25,6 +29,7 @@ import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.entity.equipment.EquipmentType;
+import com.toir.repository.SparePartRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
@@ -33,6 +38,7 @@ import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirementRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.security.PermissionConstants;
 import com.toir.security.SecurityAccessService;
@@ -48,10 +54,13 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.Year;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -74,6 +83,8 @@ public class MaintenanceRegulationService {
     private final EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
     private final MaintenanceTemplateRepository templateRepository;
     private final MaintenanceOperationRepository operationRepository;
+    private final MaintenanceRegulationSparePartRequirementRepository sparePartRequirementRepository;
+    private final SparePartRepository sparePartRepository;
     private final AuditBuilderService auditBuilderService;
     private final SecurityAccessService securityAccessService;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
@@ -165,8 +176,11 @@ public class MaintenanceRegulationService {
     public MaintenanceRegulationDto create(MaintenanceRegulationRequest request) {
         validateClientProvidedCode(request.code());
         validateAutomationConfigurationPermissionForCreate(request);
+        List<ValidatedRegulationSparePartRequirement> sparePartRequirements =
+                validateSparePartRequests(request.sparePartRequirements());
         MaintenanceRegulation saved = saveWithGeneratedCode(request);
         replaceConditions(saved.getId(), saved.getEquipmentTypeId(), request.attributeConditions());
+        replaceSparePartRequirements(saved, request.sparePartRequirements(), sparePartRequirements);
 
         auditBuilderService.log(
                 "maintenance_regulation",
@@ -185,10 +199,13 @@ public class MaintenanceRegulationService {
         validateClientProvidedCode(request.code());
         MaintenanceRegulation entity = getOrThrow(id);
         validateAutomationConfigurationPermissionForUpdate(entity, request);
+        List<ValidatedRegulationSparePartRequirement> sparePartRequirements =
+                validateSparePartRequests(request.sparePartRequirements());
         applyMutableFields(entity, request);
 
         MaintenanceRegulation save = repository.save(entity);
         replaceConditions(save.getId(), save.getEquipmentTypeId(), request.attributeConditions());
+        replaceSparePartRequirements(save, request.sparePartRequirements(), sparePartRequirements);
 
         auditBuilderService.log(
                 "maintenance_regulation",
@@ -683,6 +700,92 @@ public class MaintenanceRegulationService {
         }
     }
 
+    private List<ValidatedRegulationSparePartRequirement> validateSparePartRequests(
+            List<MaintenanceRegulationSparePartRequirementRequest> requests) {
+        if (requests == null) {
+            return null;
+        }
+        List<ValidatedRegulationSparePartRequirement> validated = new ArrayList<>();
+        Set<UUID> activeSparePartIds = new HashSet<>();
+        for (MaintenanceRegulationSparePartRequirementRequest request : requests) {
+            if (request == null) {
+                throw RestException.badRequest("Spare part requirement is required");
+            }
+            if (request.sparePartId() == null) {
+                throw RestException.badRequest("sparePartId is required");
+            }
+            if (request.quantity() <= 0) {
+                throw RestException.badRequest("quantity must be positive");
+            }
+            SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(request.sparePartId())
+                    .orElseThrow(() -> RestException.notFound("Spare part not found: " + request.sparePartId()));
+            String sparePartUnit = StringUtils.hasText(sparePart.getUnit()) ? sparePart.getUnit().trim() : null;
+            String requestedUnit = StringUtils.hasText(request.unit()) ? request.unit().trim() : null;
+            if (requestedUnit != null && !requestedUnit.equals(sparePartUnit)) {
+                throw RestException.badRequest("unit must match spare part unit");
+            }
+            boolean active = request.active() == null || request.active();
+            if (active && !activeSparePartIds.add(request.sparePartId())) {
+                throw RestException.badRequest("Maintenance regulation spare part requirement already exists");
+            }
+            validated.add(new ValidatedRegulationSparePartRequirement(
+                    request,
+                    sparePart,
+                    sparePartUnit,
+                    active
+            ));
+        }
+        return validated;
+    }
+
+    private void replaceSparePartRequirements(
+            MaintenanceRegulation regulation,
+            List<MaintenanceRegulationSparePartRequirementRequest> requests,
+            List<ValidatedRegulationSparePartRequirement> validatedRequests
+    ) {
+        if (requests == null) {
+            return;
+        }
+        UUID regulationId = regulation.getId();
+        List<MaintenanceRegulationSparePartRequirement> existing =
+                sparePartRequirementRepository.findActiveByRegulationId(regulationId);
+        if (!existing.isEmpty()) {
+            for (MaintenanceRegulationSparePartRequirement requirement : existing) {
+                requirement.setActive(false);
+                requirement.setDeleted(true);
+            }
+            sparePartRequirementRepository.saveAll(existing);
+            sparePartRequirementRepository.flush();
+        }
+        if (validatedRequests == null || validatedRequests.isEmpty()) {
+            return;
+        }
+        List<MaintenanceRegulationSparePartRequirement> toSave = validatedRequests.stream()
+                .map(validated -> toSparePartRequirement(regulation, validated))
+                .toList();
+        if (!toSave.isEmpty()) {
+            sparePartRequirementRepository.saveAll(toSave);
+        }
+    }
+
+    private MaintenanceRegulationSparePartRequirement toSparePartRequirement(
+            MaintenanceRegulation regulation,
+            ValidatedRegulationSparePartRequirement validated
+    ) {
+        MaintenanceRegulationSparePartRequirement requirement =
+                new MaintenanceRegulationSparePartRequirement();
+        requirement.setRegulation(regulation);
+        requirement.setRegulationId(regulation.getId());
+        requirement.setSparePart(validated.sparePart());
+        requirement.setSparePartId(validated.sparePart().getId());
+        requirement.setQuantity(validated.request().quantity());
+        requirement.setUnit(validated.unit());
+        requirement.setCriticality(blankToNull(validated.request().criticality()));
+        requirement.setNotes(blankToNull(validated.request().notes()));
+        requirement.setActive(validated.active());
+        return requirement;
+    }
+
     private MaintenanceRegulationAttributeCondition toCondition(UUID regulationId,
                                                                UUID equipmentTypeId,
                                                                MaintenanceRegulationAttributeConditionRequest request) {
@@ -883,6 +986,7 @@ public class MaintenanceRegulationService {
     private MaintenanceRegulationDto toDto(MaintenanceRegulation r) {
         if (r == null) return null;
         List<MaintenanceRegulationAttributeConditionDto> conditions = conditionDtos(r.getId());
+        List<MaintenanceRegulationSparePartRequirementDto> sparePartRequirements = sparePartDtos(r.getId());
         String equipmentTypeName = r.getEquipmentTypeId() == null ? null : equipmentTypeRepository.findByIdAndIsDeletedFalse(r.getEquipmentTypeId())
                 .map(EquipmentType::getName)
                 .orElse(null);
@@ -893,7 +997,8 @@ public class MaintenanceRegulationService {
                 equipmentTypeName,
                 template == null ? null : template.getCode(),
                 template == null ? null : template.getName(),
-                conditions
+                conditions,
+                sparePartRequirements
         );
     }
 
@@ -918,11 +1023,7 @@ public class MaintenanceRegulationService {
     }
 
     private void validateAutomationTemplate(MaintenanceRegulation entity) {
-        AutomationAction action = entity.getAutomationAction();
-        if ((action == AutomationAction.CREATE_TASK || action == AutomationAction.CREATE_WORK_ORDER)
-                && entity.getTemplateId() == null) {
-            throw RestException.badRequest("templateId is required for automatic task or work order creation");
-        }
+        // Template is optional for automation; template operations are copied only when present.
     }
 
     private List<MaintenanceRegulationDto> toDtoList(List<MaintenanceRegulation> regulations) {
@@ -944,6 +1045,8 @@ public class MaintenanceRegulationService {
         Set<UUID> regulationIds = regulations.stream().map(MaintenanceRegulation::getId).collect(Collectors.toSet());
         Map<UUID, List<MaintenanceRegulationAttributeConditionDto>> conditionsByRegulationId =
                 conditionDtosByRegulationId(regulationIds);
+        Map<UUID, List<MaintenanceRegulationSparePartRequirementDto>> sparePartsByRegulationId =
+                sparePartDtosByRegulationId(regulationIds);
         return regulations.stream()
                 .map(r -> {
                     MaintenanceTemplate template = r.getTemplateId() == null ? null : templates.get(r.getTemplateId());
@@ -952,7 +1055,8 @@ public class MaintenanceRegulationService {
                             r.getEquipmentTypeId() == null ? null : eqTypeNames.get(r.getEquipmentTypeId()),
                             template == null ? null : template.getCode(),
                             template == null ? null : template.getName(),
-                            conditionsByRegulationId.getOrDefault(r.getId(), List.of())
+                            conditionsByRegulationId.getOrDefault(r.getId(), List.of()),
+                            sparePartsByRegulationId.getOrDefault(r.getId(), List.of())
                     );
                 })
                 .toList();
@@ -972,6 +1076,20 @@ public class MaintenanceRegulationService {
                 .toList();
     }
 
+    private List<MaintenanceRegulationSparePartRequirementDto> sparePartDtos(UUID regulationId) {
+        if (sparePartRequirementRepository == null) {
+            return List.of();
+        }
+        List<MaintenanceRegulationSparePartRequirement> requirements =
+                sparePartRequirementRepository.findActiveByRegulationId(regulationId);
+        if (requirements == null || requirements.isEmpty()) {
+            return List.of();
+        }
+        return requirements.stream()
+                .map(MaintenanceRegulationSparePartRequirementDto::from)
+                .toList();
+    }
+
     private Map<UUID, List<MaintenanceRegulationAttributeConditionDto>> conditionDtosByRegulationId(Set<UUID> regulationIds) {
         if (conditionRepository == null || regulationIds.isEmpty()) {
             return Map.of();
@@ -987,4 +1105,28 @@ public class MaintenanceRegulationService {
                         Collectors.mapping(MaintenanceRegulationAttributeConditionDto::from, Collectors.toList())
                 ));
     }
+
+    private Map<UUID, List<MaintenanceRegulationSparePartRequirementDto>> sparePartDtosByRegulationId(
+            Set<UUID> regulationIds) {
+        if (sparePartRequirementRepository == null || regulationIds.isEmpty()) {
+            return Map.of();
+        }
+        List<MaintenanceRegulationSparePartRequirement> requirements =
+                sparePartRequirementRepository.findAllActiveByRegulationIdIn(regulationIds);
+        if (requirements == null || requirements.isEmpty()) {
+            return Map.of();
+        }
+        return requirements.stream()
+                .collect(Collectors.groupingBy(
+                        MaintenanceRegulationSparePartRequirement::getRegulationId,
+                        Collectors.mapping(MaintenanceRegulationSparePartRequirementDto::from, Collectors.toList())
+                ));
+    }
+
+    private record ValidatedRegulationSparePartRequirement(
+            MaintenanceRegulationSparePartRequirementRequest request,
+            SparePart sparePart,
+            String unit,
+            boolean active
+    ) {}
 }

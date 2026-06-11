@@ -15,6 +15,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Year;
@@ -24,6 +27,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -150,6 +154,24 @@ class LocationServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().departmentId()).isEqualTo(departmentId);
         assertThat(result.getFirst().departmentName()).isEqualTo("Maintenance");
+    }
+
+    @Test
+    void searchFiltersByDepartmentId() {
+        UUID departmentId = UUID.randomUUID();
+        Location location = location(departmentId);
+        Page<Location> page = new PageImpl<>(List.of(location));
+
+        when(repository.search(eq(LocationType.WORKSHOP), eq("main"), eq(departmentId), any(Pageable.class)))
+                .thenReturn(page);
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(List.of(departmentId)))
+                .thenReturn(List.of(department(departmentId, "Maintenance")));
+
+        Page<LocationDto> result = service.search(LocationType.WORKSHOP, "main", departmentId, 0, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().departmentId()).isEqualTo(departmentId);
+        verify(repository).search(eq(LocationType.WORKSHOP), eq("main"), eq(departmentId), any(Pageable.class));
     }
 
     private LocationRequest request() {

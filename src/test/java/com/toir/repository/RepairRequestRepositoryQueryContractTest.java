@@ -46,6 +46,18 @@ class RepairRequestRepositoryQueryContractTest {
     }
 
     @Test
+    void dashboardSearchQueryFiltersIsDeletedFalseAndDepartment() {
+        Query query = queryOf("search", 3);
+
+        String sql = query.value().toLowerCase();
+
+        assertThat(sql).contains("is_deleted = false");
+        assertThat(sql).contains("department_id");
+        assertThat(sql).contains(":departmentid");
+        assertThat(sql).contains("status = cast(:status as varchar)");
+    }
+
+    @Test
     void queryCombinesFiltersWithCorrectAndOrPrecedence() {
         Query query = queryOf("searchPaginated");
 
@@ -64,8 +76,13 @@ class RepairRequestRepositoryQueryContractTest {
     }
 
     private Query queryOf(String methodName) {
+        return queryOf(methodName, -1);
+    }
+
+    private Query queryOf(String methodName, int parameterCount) {
         Method method = Arrays.stream(RepairRequestRepository.class.getMethods())
                 .filter(m -> m.getName().equals(methodName))
+                .filter(m -> parameterCount < 0 || m.getParameterCount() == parameterCount)
                 .findFirst()
                 .orElseThrow();
 

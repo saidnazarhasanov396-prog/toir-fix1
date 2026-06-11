@@ -10,6 +10,7 @@ import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -26,10 +27,10 @@ public record EquipmentMaintenanceRuleRequest(
         Boolean active,
         @NotNull PeriodicityUnit periodicityUnit,
         @Positive int periodicityValue,
-        Integer toleranceDays,
+        @PositiveOrZero Integer toleranceDays,
         boolean requiresShutdown,
         MeterType triggerMeterType,
-        Double triggerMeterInterval,
+        @Positive Double triggerMeterInterval,
         MaintenanceTriggerPolicy triggerPolicy,
         MaintenanceRecalculationPolicy recalculationPolicy,
         Boolean disablesBaseRegulation,
@@ -46,4 +47,35 @@ public record EquipmentMaintenanceRuleRequest(
         Boolean requiresApproval,
         String approvalRole,
         String approvalPermission
-) {}
+) {
+    public EquipmentMaintenanceRuleRequest(
+            UUID baseRegulationId,
+            UUID templateId,
+            String name,
+            String description,
+            MaintenanceKind maintenanceKind,
+            double normativeLaborHours,
+            Boolean active,
+            PeriodicityUnit periodicityUnit,
+            int periodicityValue,
+            Integer toleranceDays,
+            boolean requiresShutdown,
+            MeterType triggerMeterType,
+            Double triggerMeterInterval,
+            MaintenanceTriggerPolicy triggerPolicy,
+            MaintenanceRecalculationPolicy recalculationPolicy,
+            Boolean disablesBaseRegulation,
+            String overrideReason
+    ) {
+        this(baseRegulationId, templateId, name, description, maintenanceKind, normativeLaborHours, active,
+                periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
+                triggerMeterInterval, triggerPolicy, recalculationPolicy, disablesBaseRegulation, overrideReason,
+                null, null, null, null, null, null, null, null, null, null, null, null);
+    }
+
+    @AssertTrue(message = "triggerMeterType and triggerMeterInterval must be provided together")
+    public boolean isMeterTriggerPairValid() {
+        return (triggerMeterType == null && triggerMeterInterval == null)
+                || (triggerMeterType != null && triggerMeterInterval != null);
+    }
+}

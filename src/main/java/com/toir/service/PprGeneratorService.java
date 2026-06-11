@@ -436,10 +436,10 @@ public class PprGeneratorService {
                     task.getPriority(),
                     task.getScheduledStart().atZone(ZoneId.systemDefault()).toInstant(),
                     task.getScheduledEnd().atZone(ZoneId.systemDefault()).toInstant(),
-                    createdById,
+                    null,
                     workOrderSummary(plan, task)
             );
-            WorkOrderDto created = workOrderService.create(request);
+            WorkOrderDto created = workOrderService.create(request, createdById);
             createdWorkOrderIds.add(created.id());
         }
 

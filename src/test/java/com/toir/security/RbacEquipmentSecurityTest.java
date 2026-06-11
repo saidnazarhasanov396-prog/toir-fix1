@@ -10,6 +10,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.service.equipment.EquipmentPictureService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import org.junit.jupiter.api.Test;
@@ -66,6 +67,9 @@ class RbacEquipmentSecurityTest {
 
     @MockBean
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+
+    @MockBean
+    EquipmentPictureService equipmentPictureService;
 
     @MockBean
     ScopeAccessService scopeAccessService;
@@ -307,7 +311,7 @@ class RbacEquipmentSecurityTest {
                   "name": "Pump A",
                   "inventoryNumber": "INV-1",
                   "equipmentTypeId": "%s",
-                  "averageOperatingLifeHours": 10000,
+                  "expectedLifetimeHours": 10000,
                   "departmentId": "%s"
                 }
                 """.formatted(UUID.randomUUID(), UUID.randomUUID());
@@ -324,3 +328,4 @@ class RbacEquipmentSecurityTest {
                 """.formatted(UUID.randomUUID());
     }
 }
+

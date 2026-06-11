@@ -11,6 +11,6 @@ public record DefectListRequest(
         @NotNull UUID equipmentId,
         UUID repairRequestId,
         UUID workOrderId,
-        @NotNull UUID createdById,
+        UUID createdById,
         String notes
 ) {}

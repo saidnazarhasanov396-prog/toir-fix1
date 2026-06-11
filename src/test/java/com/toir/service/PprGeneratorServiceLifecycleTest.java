@@ -51,6 +51,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -392,7 +393,7 @@ class PprGeneratorServiceLifecycleTest {
         regulation.setId(regulationId);
         stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
         when(workOrderNumberService.nextPprNumber(anySet())).thenReturn("WO-PPR-2026-0001");
-        when(workOrderService.create(any())).thenReturn(workOrderDto(workOrderId, task));
+        when(workOrderService.create(any(), eq(createdById))).thenReturn(workOrderDto(workOrderId, task));
 
         PprGeneratorService.WorkOrderGenerationResult result =
                 service.generateWorkOrdersForPlan(planId, createdById);
@@ -402,12 +403,12 @@ class PprGeneratorServiceLifecycleTest {
         assertThat(result.skippedCount()).isZero();
         assertThat(result.createdWorkOrderIds()).containsExactly(workOrderId);
         ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
-        verify(workOrderService).create(requestCaptor.capture());
+        verify(workOrderService).create(requestCaptor.capture(), eq(createdById));
         WorkOrderRequest request = requestCaptor.getValue();
         assertThat(request.pprTaskId()).isEqualTo(task.getId());
         assertThat(request.equipmentId()).isEqualTo(equipmentId);
         assertThat(request.departmentId()).isEqualTo(departmentId);
-        assertThat(request.createdById()).isEqualTo(createdById);
+        assertThat(request.createdById()).isNull();
         assertThat(request.startPlannedAt()).isEqualTo(task.getScheduledStart().atZone(ZoneId.systemDefault()).toInstant());
         assertThat(request.endPlannedAt()).isEqualTo(task.getScheduledEnd().atZone(ZoneId.systemDefault()).toInstant());
         assertThat(request.type()).isEqualTo(com.toir.enums.WorkOrderType.PLANNED);
@@ -430,12 +431,12 @@ class PprGeneratorServiceLifecycleTest {
         regulation.setId(regulationId);
         stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
         when(workOrderNumberService.nextPprNumber(anySet())).thenReturn("WO-PPR-2026-0001");
-        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID(), task));
+        when(workOrderService.create(any(), eq(createdById))).thenReturn(workOrderDto(UUID.randomUUID(), task));
 
         service.generateWorkOrdersForPlan(planId, createdById);
 
         ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
-        verify(workOrderService).create(requestCaptor.capture());
+        verify(workOrderService).create(requestCaptor.capture(), eq(createdById));
         assertThat(requestCaptor.getValue().type()).isEqualTo(com.toir.enums.WorkOrderType.INSPECTION);
         assertThat(requestCaptor.getValue().workType()).isEqualTo(com.toir.enums.WorkType.DIAGNOSTICS);
     }
@@ -455,12 +456,12 @@ class PprGeneratorServiceLifecycleTest {
         regulation.setId(regulationId);
         stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
         when(workOrderNumberService.nextPprNumber(anySet())).thenReturn("WO-PPR-2026-0001");
-        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID(), task));
+        when(workOrderService.create(any(), eq(createdById))).thenReturn(workOrderDto(UUID.randomUUID(), task));
 
         service.generateWorkOrdersForPlan(planId, createdById);
 
         ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
-        verify(workOrderService).create(requestCaptor.capture());
+        verify(workOrderService).create(requestCaptor.capture(), eq(createdById));
         assertThat(requestCaptor.getValue().type()).isEqualTo(com.toir.enums.WorkOrderType.PLANNED);
         assertThat(requestCaptor.getValue().workType()).isEqualTo(com.toir.enums.WorkType.REPAIR);
     }
@@ -480,12 +481,12 @@ class PprGeneratorServiceLifecycleTest {
         regulation.setId(regulationId);
         stubWorkOrderGeneration(plan, List.of(task), List.of(equipment), List.of(regulation));
         when(workOrderNumberService.nextPprNumber(anySet())).thenReturn("WO-PPR-2026-0001");
-        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID(), task));
+        when(workOrderService.create(any(), eq(createdById))).thenReturn(workOrderDto(UUID.randomUUID(), task));
 
         service.generateWorkOrdersForPlan(planId, createdById);
 
         ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
-        verify(workOrderService).create(requestCaptor.capture());
+        verify(workOrderService).create(requestCaptor.capture(), eq(createdById));
         assertThat(requestCaptor.getValue().type()).isEqualTo(com.toir.enums.WorkOrderType.OVERHAUL);
         assertThat(requestCaptor.getValue().workType()).isEqualTo(com.toir.enums.WorkType.REPAIR);
     }
@@ -752,4 +753,3 @@ class PprGeneratorServiceLifecycleTest {
         return target;
     }
 }
-

@@ -30,6 +30,7 @@ public class FileServiceImpl implements FileService {
     private final S3Service s3Service;
     private final UploadedFileRepository uploadedFileRepository;
     private final FileValidator fileValidator;
+    private final LocalFileResourceResolver localFileResourceResolver;
 
     @Override
     @Transactional
@@ -98,6 +99,12 @@ public class FileServiceImpl implements FileService {
     @Transactional(readOnly = true)
     public Resource download(UUID fileId, UUID currentUserId) {
         UploadedFile file = findOwnedFile(fileId, currentUserId);
+        if (LocalFileResourceResolver.looksLikeLocalReference(file.getObjectName())) {
+            return localFileResourceResolver.load(file.getObjectName());
+        }
+        if (LocalFileResourceResolver.looksLikeLocalReference(file.getUrl())) {
+            return localFileResourceResolver.load(file.getUrl());
+        }
         return s3Service.load(file.getObjectName());
     }
 

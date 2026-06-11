@@ -1,6 +1,6 @@
 package com.toir.entity.contractors;
 
-import com.toir.entity.BaseEntity;
+import com.toir.entity.ActorStampedEntity;
 import com.toir.enums.ContractorWorkStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -15,7 +15,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class ContractorWork extends BaseEntity {
+public class ContractorWork extends ActorStampedEntity {
 
     @Column(name = "contractor_id", nullable = false)
     private UUID contractorId;
@@ -43,9 +43,6 @@ public class ContractorWork extends BaseEntity {
 
     @Column(name = "acceptance_comment", columnDefinition = "text")
     private String acceptanceComment;
-
-    @Column(name = "created_by_id")
-    private UUID createdById;
 
     @Column(name = "accepted_by_id")
     private UUID acceptedById;

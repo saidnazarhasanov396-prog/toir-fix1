@@ -48,6 +48,13 @@ public class WorkOrderSparePartRequirement extends BaseEntity {
     private UUID sourceRequirementId;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "regulation_requirement_id")
+    private MaintenanceRegulationSparePartRequirement regulationRequirement;
+
+    @Column(name = "regulation_requirement_id", insertable = false, updatable = false)
+    private UUID regulationRequirementId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "template_id")
     private MaintenanceTemplate template;
 

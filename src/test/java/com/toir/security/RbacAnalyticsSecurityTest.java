@@ -5,6 +5,7 @@ import com.toir.controller.DashboardController;
 import com.toir.controller.DowntimeAnalyticsCompatibilityController;
 import com.toir.controller.ParetoController;
 import com.toir.service.AnalyticsService;
+import com.toir.service.DashboardLifecycleService;
 import com.toir.service.DashboardService;
 import com.toir.service.ParetoService;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,9 @@ class RbacAnalyticsSecurityTest {
 
     @Autowired
     MockMvc mockMvc;
+
+    @MockBean
+    DashboardLifecycleService lifecycleService;
 
     @MockBean
     JwtService jwtService;

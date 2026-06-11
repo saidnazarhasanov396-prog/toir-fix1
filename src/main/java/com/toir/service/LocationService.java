@@ -44,9 +44,9 @@ public class LocationService {
     }
 
     @Transactional(readOnly = true)
-    public Page<LocationDto> search(LocationType locationType, String search, int page, int pageSize) {
+    public Page<LocationDto> search(LocationType locationType, String search, UUID departmentId, int page, int pageSize) {
         var pageable = PaginationUtils.pageRequest(page, pageSize);
-        Page<Location> locations = repository.search(locationType, search, pageable);
+        Page<Location> locations = repository.search(locationType, search, departmentId, pageable);
         return new PageImpl<>(
                 toDtos(locations.getContent()),
                 locations.getPageable(),

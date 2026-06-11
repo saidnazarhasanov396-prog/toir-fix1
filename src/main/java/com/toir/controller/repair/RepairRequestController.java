@@ -1,5 +1,6 @@
 package com.toir.controller.repair;
 import com.toir.dto.repairrequest.CloseRequestRequest;
+import com.toir.dto.repairrequest.RepairRequestClarificationRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
@@ -118,9 +119,16 @@ public class RepairRequestController {
 
     @PostMapping("/{id}/request-clarification")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_UPDATE')")
-    public ResponseEntity<RepairRequestDto> requestClarification(@PathVariable UUID id, @RequestParam String comment) {
+    public ResponseEntity<RepairRequestDto> requestClarification(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String comment,
+            @RequestBody(required = false) RepairRequestClarificationRequest request
+    ) {
         assertCanMutateRequest(requestOrThrow(id));
-        return ResponseEntity.ok(service.requestClarification(id, comment));
+        if (request == null) {
+            return ResponseEntity.ok(service.requestClarification(id, comment));
+        }
+        return ResponseEntity.ok(service.requestClarification(id, request));
     }
 
     private UUID resolveDepartmentFilter(UUID departmentId, UUID equipmentId) {
@@ -145,6 +153,9 @@ public class RepairRequestController {
         }
         UUID currentUserId = scopeAccessService.currentUserIdOrNull();
         if (request.getReporterId() != null && request.getReporterId().equals(currentUserId)) {
+            return;
+        }
+        if (request.getAssignedToId() != null && request.getAssignedToId().equals(currentUserId)) {
             return;
         }
         throw new AccessDeniedException("Access denied by repair request scope");

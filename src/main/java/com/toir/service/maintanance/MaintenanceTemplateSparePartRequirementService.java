@@ -8,9 +8,11 @@ import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
+import com.toir.service.UnitOfMeasurementService;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +27,9 @@ public class MaintenanceTemplateSparePartRequirementService {
     private final MaintenanceTemplateSparePartRequirementRepository repository;
     private final MaintenanceTemplateRepository templateRepository;
     private final MaintenanceOperationRepository operationRepository;
+    private final MaintenanceActionRepository actionRepository;
     private final SparePartRepository sparePartRepository;
+    private final UnitOfMeasurementService unitOfMeasurementService;
 
     @Transactional(readOnly = true)
     public List<MaintenanceTemplateSparePartRequirementDto> findByTemplate(UUID templateId) {
@@ -96,7 +100,14 @@ public class MaintenanceTemplateSparePartRequirementService {
             return null;
         }
         MaintenanceOperation operation = operationRepository.findByIdAndIsDeletedFalse(operationId)
-                .orElseThrow(() -> RestException.notFound("Maintenance operation not found: " + operationId));
+                .orElse(null);
+        if (operation == null) {
+            if (actionRepository.findByIdAndIsDeletedFalse(operationId).isPresent()) {
+                throw RestException.badRequest(
+                        "operationId must reference a maintenance operation, not a maintenance action: " + operationId);
+            }
+            throw RestException.notFound("Maintenance operation not found: " + operationId);
+        }
         if (operation.getTemplate() == null || !templateId.equals(operation.getTemplate().getId())) {
             throw RestException.badRequest("operation belongs to another template");
         }
@@ -119,14 +130,14 @@ public class MaintenanceTemplateSparePartRequirementService {
                        MaintenanceTemplateSparePartRequirementRequest request,
                        SparePart sparePart) {
         entity.setQuantity(request.quantity());
-        String sparePartUnit = sparePart.getUnit();
-        String requestedUnit = StringUtils.hasText(request.unit()) ? request.unit().trim() : null;
-        if (requestedUnit != null
-                && StringUtils.hasText(sparePartUnit)
-                && !requestedUnit.equalsIgnoreCase(sparePartUnit.trim())) {
+        String sparePartUnit = StringUtils.hasText(sparePart.getUnit()) ? sparePart.getUnit().trim() : null;
+        String requestedUnit = StringUtils.hasText(request.unit())
+                ? unitOfMeasurementService.normalizeOptionalUnitOrNull(request.unit())
+                : null;
+        if (requestedUnit != null && !requestedUnit.equals(sparePartUnit)) {
             throw RestException.badRequest("unit must match spare part unit");
         }
-        entity.setUnit(requestedUnit == null ? sparePartUnit : requestedUnit);
+        entity.setUnit(sparePartUnit);
         entity.setCriticality(StringUtils.hasText(request.criticality()) ? request.criticality().trim() : null);
         entity.setNotes(StringUtils.hasText(request.notes()) ? request.notes().trim() : null);
         entity.setActive(request.active() == null || request.active());

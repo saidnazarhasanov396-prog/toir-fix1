@@ -37,6 +37,7 @@ public class DataBootstrap implements CommandLineRunner {
             {"WORKSHOP_HEAD",             "Начальник цеха",             "Workshop Head",               "Sex boshlig'i"},
             {"SECTION_HEAD",              "Начальник участка",          "Section Head",                "Uchastka boshlig'i"},
             {"FOREMAN",                   "Мастер",                     "Foreman",                     "Usta"},
+            {"TECHNICIAN",                "Техник",                     "Technician",                  "Texnik"},
             {"RELIABILITY_ENGINEER",      "Инженер по надёжности",      "Reliability Engineer",        "Ishonchlilik muhandisi"},
             {"PPR_ENGINEER",              "Инженер по ППР",             "PPR Engineer",                "PPR muhandisi"},
             {"TECHNICIAN",                 "Техник",                     "Technician",                  "Texnik"},

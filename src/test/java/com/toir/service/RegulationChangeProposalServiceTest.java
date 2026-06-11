@@ -57,7 +57,6 @@ class RegulationChangeProposalServiceTest {
         when(regulationRepository.findByIdAndIsDeletedFalse(regulationId))
                 .thenReturn(Optional.of(regulation(regulationId)));
         when(repository.save(any())).thenAnswer(i -> { RegulationChangeProposal p = i.getArgument(0); if (p.getId() == null) p.setId(UUID.randomUUID()); return p; });
-        when(securityScope.currentUser()).thenReturn(null);
 
         var result = service.create(new RegulationChangeProposalRequest(
                 regulationId, null, "Test title", "desc", null, null, null, "reason"

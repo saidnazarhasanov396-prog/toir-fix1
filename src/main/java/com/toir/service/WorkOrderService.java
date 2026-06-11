@@ -95,6 +95,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -123,6 +124,9 @@ public class WorkOrderService {
 
     private static final String MODULE = "work-order";
     private static final String ENTITY = "WorkOrder";
+
+    public record TemplateTaskSyncResult(int operationsCount, int createdCount) {
+    }
     private static final ZoneId CALENDAR_ZONE = ZoneId.of("Asia/Tashkent");
 
     private final WorkOrderRepository repository;
@@ -210,6 +214,7 @@ public class WorkOrderService {
     public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page,
                                      int pageSize, String search, Instant plannedFrom, Instant plannedTo, Sort sort) {
         var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
+        var nativeQueryPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         String normalizedSearch = normalizeSearch(search);
         Page<WorkOrder> resultPage = repository.searchPaginated(
                 status,
@@ -218,7 +223,7 @@ public class WorkOrderService {
                 normalizedSearch,
                 plannedFrom,
                 plannedTo,
-                pageable);
+                nativeQueryPageable);
         return toDtoPage(resultPage);
     }
 
@@ -458,17 +463,13 @@ public class WorkOrderService {
 
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request) {
-        return create(request, request.createdById());
+        return create(request, null);
     }
 
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request, UUID createdById) {
         if (request.equipmentId() == null) {
             throw RestException.badRequest("Equipment is required to create a work order");
-        }
-        UUID effectiveCreatedById = createdById == null ? request.createdById() : createdById;
-        if (effectiveCreatedById == null) {
-            throw RestException.badRequest("createdById is required to create a work order");
         }
         String effectiveNumber = normalizeWorkOrderNumber(request.number());
         equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create work order");
@@ -518,7 +519,9 @@ public class WorkOrderService {
             entity.setPriority(request.priority());
         entity.setStartPlannedAt(request.startPlannedAt());
         entity.setEndPlannedAt(request.endPlannedAt());
-        entity.setCreatedById(effectiveCreatedById);
+        if (createdById != null) {
+            entity.setCreatedById(createdById);
+        }
         entity.setSummary(request.summary());
         entity.setRepairActRequired(Boolean.TRUE.equals(request.repairActRequired()));
         entity.setStoppageActRequired(Boolean.TRUE.equals(request.stoppageActRequired()));
@@ -537,9 +540,66 @@ public class WorkOrderService {
                 saved);
 
         workOrderSparePartRequirementService.syncFromWorkOrderContext(saved);
-        notifyAssignedPerformer(saved);
+        notifyAssignedPerformer(saved, equipment);
 
         return toDetailDto(saved);
+    }
+
+    private void notifyAssignedPerformer(WorkOrder workOrder, Equipment equipment) {
+        if (workOrder == null || workOrder.getId() == null || workOrder.getPerformer() == null) {
+            return;
+        }
+        UUID performerUserId = workOrder.getPerformer().getUserId();
+        if (performerUserId == null) {
+            return;
+        }
+        notificationService.notifyUser(
+                performerUserId,
+                "WorkOrder biriktirildi: " + workOrder.getNumber(),
+                performerNotificationMessage(workOrder, equipment),
+                NotificationSeverity.INFO,
+                ENTITY,
+                workOrder.getId().toString()
+        );
+    }
+
+    private void notifyAssignedPerformer(WorkOrder workOrder) {
+        notifyAssignedPerformer(workOrder, null);
+    }
+
+    private String performerNotificationMessage(WorkOrder workOrder, Equipment equipment) {
+        String equipmentName = equipment != null
+                ? formatEquipmentName(equipment)
+                : equipmentRepository.findByIdAndIsDeletedFalse(workOrder.getEquipmentId())
+                .map(this::formatEquipmentName)
+                .orElse("ushbu qurilma");
+        String timing = plannedTimingText(workOrder.getStartPlannedAt());
+        return "%s bo'yicha texnik ko'rikdan o'tkazish yoki ta'mirlashni %s."
+                .formatted(equipmentName, timing);
+    }
+
+    private String formatEquipmentName(Equipment equipment) {
+        if (equipment == null) {
+            return "ushbu qurilma";
+        }
+        String code = equipment.getCode();
+        String name = equipment.getName();
+        if (code != null && !code.isBlank() && name != null && !name.isBlank()) {
+            return "%s - %s".formatted(code, name);
+        }
+        if (name != null && !name.isBlank()) {
+            return name;
+        }
+        return "ushbu qurilma";
+    }
+
+    @Transactional
+    public TemplateTaskSyncResult syncTemplateTasks(UUID workOrderId, UUID templateId) {
+        if (workOrderId == null || templateId == null) {
+            return new TemplateTaskSyncResult(0, 0);
+        }
+        WorkOrder workOrder = getOrThrow(workOrderId);
+        return syncTemplateTasks(workOrder, templateId);
     }
 
     @Transactional
@@ -1692,39 +1752,50 @@ public class WorkOrderService {
         }
     }
 
-    private void generateTemplateTasksFromWorkOrderContext(WorkOrder workOrder) {
-        if (workOrder == null || workOrder.getId() == null || workOrder.getTasks() == null
-                || !workOrder.getTasks().isEmpty()) {
-            return;
+    private TemplateTaskSyncResult generateTemplateTasksFromWorkOrderContext(WorkOrder workOrder) {
+        if (workOrder == null || workOrder.getId() == null) {
+            return new TemplateTaskSyncResult(0, 0);
         }
-        resolveTemplateId(workOrder).flatMap(maintenanceTemplateRepository::findByIdAndIsDeletedFalse)
-                .ifPresent(template -> {
-                    List<MaintenanceOperation> operations = template.getOperations() == null
-                            ? List.of()
-                            : template.getOperations().stream()
-                            .filter(operation -> !operation.isDeleted())
-                            .sorted(java.util.Comparator.comparingInt(MaintenanceOperation::getSequence))
-                            .toList();
-                    for (MaintenanceOperation operation : operations) {
-                        if (hasTaskForOperation(workOrder, operation)) {
-                            continue;
-                        }
-                        WorkOrderTask task = new WorkOrderTask();
-                        task.setWorkOrder(workOrder);
-                        task.setTitle(operation.getName());
-                        task.setDescription(operationDescription(operation));
-                        task.setStatus(TaskExecutionStatus.TODO);
-                        if (operation.getDurationHours() > 0) {
-                            task.setPlannedHours(operation.getDurationHours());
-                        }
-                        task.setSourceTemplateId(template.getId());
-                        task.setSourceOperationId(operation.getId());
-                        workOrder.getTasks().add(task);
-                    }
-                    if (!operations.isEmpty()) {
-                        repository.save(workOrder);
-                    }
-                });
+        return resolveTemplateId(workOrder)
+                .map(templateId -> syncTemplateTasks(workOrder, templateId))
+                .orElseGet(() -> new TemplateTaskSyncResult(0, 0));
+    }
+
+    private TemplateTaskSyncResult syncTemplateTasks(WorkOrder workOrder, UUID templateId) {
+        if (workOrder == null || workOrder.getId() == null || templateId == null) {
+            return new TemplateTaskSyncResult(0, 0);
+        }
+        if (workOrder.getTasks() == null) {
+            workOrder.setTasks(new ArrayList<>());
+        }
+        List<MaintenanceOperation> operations = maintenanceOperationRepository
+                .findAllByTemplateIdInAndIsDeletedFalse(List.of(templateId))
+                .stream()
+                .filter(operation -> !operation.isDeleted())
+                .sorted(java.util.Comparator.comparingInt(MaintenanceOperation::getSequence))
+                .toList();
+        int created = 0;
+        for (MaintenanceOperation operation : operations) {
+            if (hasTaskForOperation(workOrder, operation)) {
+                continue;
+            }
+            WorkOrderTask task = new WorkOrderTask();
+            task.setWorkOrder(workOrder);
+            task.setTitle(operation.getName());
+            task.setDescription(operationDescription(operation));
+            task.setStatus(TaskExecutionStatus.TODO);
+            if (operation.getDurationHours() > 0) {
+                task.setPlannedHours(operation.getDurationHours());
+            }
+            task.setSourceTemplateId(templateId);
+            task.setSourceOperationId(operation.getId());
+            workOrder.getTasks().add(task);
+            created++;
+        }
+        if (created > 0) {
+            repository.save(workOrder);
+        }
+        return new TemplateTaskSyncResult(operations.size(), created);
     }
 
     private boolean hasTaskForOperation(WorkOrder workOrder, MaintenanceOperation operation) {
@@ -1992,7 +2063,7 @@ public class WorkOrderService {
                 entity.getSummary(), entity.getResult(), entity.getClosureNotes(),
                 entity.getCreatedById(), entity.getApprovedById(),
                 entity.getWarehouseId(), entity.getReplacementEquipmentId(), replacementEquipmentName,
-                entity.getTasks().stream().map(WorkOrderTaskDto::from).toList(),
+                taskDtos(entity.getTasks()),
                 TriadLinkMapper.toRepairRequestBrief(linkedRepairRequest),
                 TriadLinkMapper.toDefectBrief(linkedDefect),
                 operationsCount,
@@ -2003,6 +2074,37 @@ public class WorkOrderService {
                 entity.getStoppageActFileAssetId(),
                 materialUsages,
                 entity.getUpdatedAt());
+    }
+
+    private List<WorkOrderTaskDto> taskDtos(List<WorkOrderTask> tasks) {
+        List<WorkOrderTask> safeTasks = safeList(tasks);
+        if (safeTasks.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> operationIds = safeTasks.stream()
+                .map(WorkOrderTask::getSourceOperationId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, MaintenanceOperation> operationsById = operationIds.isEmpty()
+                ? Map.of()
+                : safeList(maintenanceOperationRepository.findAllByIdInAndIsDeletedFalse(operationIds))
+                .stream()
+                .collect(Collectors.toMap(MaintenanceOperation::getId, Function.identity(), (left, ignored) -> left));
+        Set<UUID> templateIds = safeTasks.stream()
+                .map(WorkOrderTask::getSourceTemplateId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, MaintenanceTemplate> templatesById = templateIds.isEmpty()
+                ? Map.of()
+                : safeList(maintenanceTemplateRepository.findAllByIdInAndIsDeletedFalse(templateIds))
+                .stream()
+                .collect(Collectors.toMap(MaintenanceTemplate::getId, Function.identity(), (left, ignored) -> left));
+        return safeTasks.stream()
+                .map(task -> WorkOrderTaskDto.from(
+                        task,
+                        task.getSourceTemplateId() == null ? null : templatesById.get(task.getSourceTemplateId()),
+                        task.getSourceOperationId() == null ? null : operationsById.get(task.getSourceOperationId())))
+                .toList();
     }
 
     private List<com.toir.dto.materialusage.RepairMaterialUsageDto> materialUsagesFor(WorkOrder entity) {
@@ -2134,30 +2236,6 @@ public class WorkOrderService {
         }
         User user = usersById.get(member.getUserId());
         return user == null ? member.getUserId().toString() : user.getFullName();
-    }
-
-    private void notifyAssignedPerformer(WorkOrder workOrder) {
-        BrigadeMember performer = workOrder.getPerformer();
-        if (performer == null || performer.getUserId() == null || workOrder.getId() == null) {
-            return;
-        }
-        notificationService.notifyUser(
-                performer.getUserId(),
-                "WorkOrder biriktirildi: " + workOrder.getNumber(),
-                performerNotificationMessage(workOrder),
-                NotificationSeverity.INFO,
-                ENTITY,
-                workOrder.getId().toString()
-        );
-    }
-
-    private String performerNotificationMessage(WorkOrder workOrder) {
-        String equipmentName = equipmentRepository.findByIdAndIsDeletedFalse(workOrder.getEquipmentId())
-                .map(equipment -> "%s - %s".formatted(equipment.getCode(), equipment.getName()))
-                .orElse("ushbu qurilma");
-        String timing = plannedTimingText(workOrder.getStartPlannedAt());
-        return "%s bo'yicha texnik ko'rikdan o'tkazish yoki ta'mirlashni %s."
-                .formatted(equipmentName, timing);
     }
 
     private String plannedTimingText(Instant startPlannedAt) {

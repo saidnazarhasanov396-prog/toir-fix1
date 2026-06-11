@@ -2,14 +2,17 @@ package com.toir.service.maintanance;
 
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateSparePartRequirementRequest;
 import com.toir.entity.SparePart;
+import com.toir.entity.maintenance.MaintenanceAction;
 import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
+import com.toir.service.UnitOfMeasurementService;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -36,7 +39,11 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
     @Mock
     private MaintenanceOperationRepository operationRepository;
     @Mock
+    private MaintenanceActionRepository actionRepository;
+    @Mock
     private SparePartRepository sparePartRepository;
+    @Mock
+    private UnitOfMeasurementService unitOfMeasurementService;
 
     @InjectMocks
     private MaintenanceTemplateSparePartRequirementService service;
@@ -150,6 +157,31 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
     }
 
     @Test
+    void createRejectsMaintenanceActionIdSubmittedAsOperationId() {
+        UUID templateId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template(templateId)));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart(sparePartId)));
+        when(operationRepository.findByIdAndIsDeletedFalse(actionId)).thenReturn(Optional.empty());
+        when(actionRepository.findByIdAndIsDeletedFalse(actionId)).thenReturn(Optional.of(action(actionId)));
+
+        assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
+                actionId,
+                sparePartId,
+                1,
+                "pcs",
+                null,
+                null,
+                true
+        ))).isInstanceOf(RestException.class)
+                .hasMessageContaining("operationId must reference a maintenance operation, not a maintenance action");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
     void createDefaultsBlankUnitToSparePartUnit() {
         UUID templateId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
@@ -177,6 +209,35 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
     }
 
     @Test
+    void createAcceptsRequestedUnitCodeWhenItNormalizesToSparePartUnit() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId);
+        SparePart sparePart = sparePart(sparePartId);
+        sparePart.setUnit("piece");
+
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(repository.existsActiveByTemplateOperationAndSparePart(templateId, null, sparePartId, null))
+                .thenReturn(false);
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull("NAV-PC")).thenReturn("piece");
+        when(repository.save(any(MaintenanceTemplateSparePartRequirement.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var dto = service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
+                null,
+                sparePartId,
+                1,
+                "NAV-PC",
+                null,
+                null,
+                true
+        ));
+
+        assertThat(dto.unit()).isEqualTo("piece");
+    }
+
+    @Test
     void createRejectsUnitDifferentFromSparePartUnit() {
         UUID templateId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
@@ -185,6 +246,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
 
         when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull("kg")).thenReturn("kg");
 
         assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 null,
@@ -198,6 +260,96 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
                 .hasMessageContaining("unit must match spare part unit");
 
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createAcceptsRequestedUnitWithDifferentCaseWhenItNormalizesToSparePartUnit() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId);
+        SparePart sparePart = sparePart(sparePartId);
+
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(repository.existsActiveByTemplateOperationAndSparePart(templateId, null, sparePartId, null))
+                .thenReturn(false);
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull("PCS")).thenReturn("pcs");
+        when(repository.save(any(MaintenanceTemplateSparePartRequirement.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var dto = service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
+                null,
+                sparePartId,
+                1,
+                "PCS",
+                null,
+                null,
+                true
+        ));
+
+        assertThat(dto.unit()).isEqualTo("pcs");
+    }
+
+    @Test
+    void createRejectsInvalidSparePartId() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId);
+
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
+                null,
+                sparePartId,
+                1,
+                null,
+                null,
+                null,
+                true
+        ))).isInstanceOf(RestException.class)
+                .hasMessageContaining("Spare part not found");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateQuantityDoesNotCorruptUnit() {
+        UUID templateId = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId);
+        SparePart sparePart = sparePart(sparePartId);
+        MaintenanceTemplateSparePartRequirement entity = requirement(
+                requirementId,
+                template,
+                null,
+                sparePart,
+                1
+        );
+
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(repository.findByIdAndTemplateIdAndIsDeletedFalse(requirementId, templateId))
+                .thenReturn(Optional.of(entity));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(repository.existsActiveByTemplateOperationAndSparePart(templateId, null, sparePartId, requirementId))
+                .thenReturn(false);
+        when(repository.save(any(MaintenanceTemplateSparePartRequirement.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var dto = service.update(templateId, requirementId, new MaintenanceTemplateSparePartRequirementRequest(
+                null,
+                sparePartId,
+                3,
+                null,
+                "CRITICAL",
+                "updated qty",
+                true
+        ));
+
+        assertThat(dto.quantity()).isEqualTo(3);
+        assertThat(dto.unit()).isEqualTo("pcs");
+        assertThat(entity.getUnit()).isEqualTo("pcs");
     }
 
     @Test
@@ -230,6 +382,15 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         operation.setName("Inspect bearings");
         operation.setSequence(1);
         return operation;
+    }
+
+    private MaintenanceAction action(UUID id) {
+        MaintenanceAction action = new MaintenanceAction();
+        action.setId(id);
+        action.setCode("ACT-1");
+        action.setName("Inspect bearings");
+        action.setActive(true);
+        return action;
     }
 
     private SparePart sparePart(UUID id) {

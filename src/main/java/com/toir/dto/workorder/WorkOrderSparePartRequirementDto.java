@@ -31,6 +31,7 @@ public record WorkOrderSparePartRequirementDto(
     public static WorkOrderSparePartRequirementDto from(WorkOrderSparePartRequirement requirement) {
         var workOrder = requirement.getWorkOrder();
         var sourceRequirement = requirement.getSourceRequirement();
+        var regulationRequirement = requirement.getRegulationRequirement();
         var template = requirement.getTemplate();
         var operation = requirement.getOperation();
         var sparePart = requirement.getSparePart();
@@ -40,9 +41,7 @@ public record WorkOrderSparePartRequirementDto(
                         ? requirement.getWorkOrderId()
                         : workOrder == null ? null : workOrder.getId(),
                 requirement.getSourceType(),
-                requirement.getSourceRequirementId() != null
-                        ? requirement.getSourceRequirementId()
-                        : sourceRequirement == null ? null : sourceRequirement.getId(),
+                sourceRequirementId(requirement),
                 requirement.getTemplateId() != null
                         ? requirement.getTemplateId()
                         : template == null ? null : template.getId(),
@@ -81,5 +80,18 @@ public record WorkOrderSparePartRequirementDto(
                 base.requiredQty(), base.unit(), base.criticality(), base.notes(), base.status(),
                 issuedQty, issuedSparePartId, issuedSparePartCode, issuedSparePartName, isReplacement
         );
+    }
+
+    private static UUID sourceRequirementId(WorkOrderSparePartRequirement requirement) {
+        if (requirement.getSourceRequirementId() != null) {
+            return requirement.getSourceRequirementId();
+        }
+        if (requirement.getSourceRequirement() != null) {
+            return requirement.getSourceRequirement().getId();
+        }
+        if (requirement.getRegulationRequirementId() != null) {
+            return requirement.getRegulationRequirementId();
+        }
+        return requirement.getRegulationRequirement() == null ? null : requirement.getRegulationRequirement().getId();
     }
 }

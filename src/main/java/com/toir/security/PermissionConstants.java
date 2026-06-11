@@ -53,6 +53,7 @@ public final class PermissionConstants {
     public static final String DEFECT_LIST_DELETE = "DEFECT_LIST_DELETE";
     public static final String WORK_ORDER_READ = "WORK_ORDER_READ";
     public static final String WORK_ORDER_CREATE = "WORK_ORDER_CREATE";
+    public static final String WORK_ORDER_UPDATE = "WORK_ORDER_UPDATE";
     public static final String WORK_ORDER_APPROVE = "WORK_ORDER_APPROVE";
     public static final String WORK_ORDER_START = "WORK_ORDER_START";
     public static final String WORK_ORDER_COMPLETE = "WORK_ORDER_COMPLETE";

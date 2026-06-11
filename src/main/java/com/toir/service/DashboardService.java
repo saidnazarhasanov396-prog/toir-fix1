@@ -1,5 +1,6 @@
 package com.toir.service;
 import com.toir.dto.dashboard.DashboardOverview;
+import com.toir.dto.dashboard.WorkOrdersByEquipmentTypeResponse;
 
 import com.toir.entity.*;
 import com.toir.entity.contractors.Contractor;
@@ -24,6 +25,7 @@ import com.toir.enums.ReservationStatus;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
+import com.toir.exception.RestException;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
@@ -34,6 +36,7 @@ import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.repository.WorkOrderEquipmentTypeCountProjection;
 import com.toir.security.ScopeAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -42,9 +45,10 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
+import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -53,6 +57,14 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class DashboardService {
+
+    private static final String ACTIVE_WORK_ORDER_SCOPE = "ACTIVE";
+    private static final List<WorkOrderStatus> ACTIVE_WORK_ORDER_STATUSES = List.of(
+            WorkOrderStatus.PLANNED,
+            WorkOrderStatus.APPROVED,
+            WorkOrderStatus.IN_PROGRESS,
+            WorkOrderStatus.SUSPENDED
+    );
 
     private final RepairRequestRepository repairRequestRepository;
     private final DefectRepository defectRepository;
@@ -81,7 +93,10 @@ public class DashboardService {
 
     public DashboardOverview overview(UUID requestedDepartmentId) {
         UUID departmentId = scopedDepartment(requestedDepartmentId);
-        Instant monthAgo = Instant.now().minus(30, ChronoUnit.DAYS);
+        Instant currentMonthStart = LocalDate.now()
+                .withDayOfMonth(1)
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant();
         LocalDateTime now = LocalDateTime.now();
 
         // Pre-load mappings for filtering
@@ -99,7 +114,7 @@ public class DashboardService {
         List<RepairRequest> allRequests = repairRequestRepository.search(null, departmentId, null);
         
         long openRequests = allRequests.stream()
-                .filter(r -> r.getStatus() == RequestStatus.OPEN || r.getStatus() == RequestStatus.IN_PROGRESS)
+                .filter(r -> r.getStatus() == RequestStatus.OPEN)
                 .count();
         long emergencyRequests = allRequests.stream()
                 .filter(r -> r.getStatus() != RequestStatus.CLOSED && r.getStatus() != RequestStatus.CANCELLED)
@@ -114,7 +129,7 @@ public class DashboardService {
         List<WorkOrder> allWorkOrders = workOrderRepository.search(null, departmentId, null);
         long repairsThisMonth = allWorkOrders.stream()
                 .filter(w -> w.getStatus() == WorkOrderStatus.CLOSED)
-                .filter(w -> w.getCompletedAt() != null && w.getCompletedAt().isAfter(monthAgo))
+                .filter(w -> w.getCompletedAt() != null && !w.getCompletedAt().isBefore(currentMonthStart))
                 .count();
 
         long activeReservations = reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ReservationStatus.ACTIVE).size();
@@ -142,7 +157,7 @@ public class DashboardService {
 
         long materialIssuedThisMonth = stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(m -> m.getType() == StockMovementType.ISSUE)
-                .filter(m -> m.getOccurredAt().isAfter(monthAgo))
+                .filter(m -> m.getOccurredAt() != null && !m.getOccurredAt().isBefore(currentMonthStart))
                 .filter(m -> departmentId == null || (whById.containsKey(m.getWarehouseId()) && departmentId.equals(whById.get(m.getWarehouseId()).getDepartmentId())))
                 .mapToLong(m -> (long) m.getQuantity())
                 .sum();
@@ -413,6 +428,49 @@ public class DashboardService {
                 counters, planFact, kpis, topProblem, downtimeByEq, latestDowntimes, latestMovements,
                 contractorLoad, List.of(), List.of(),
                 List.of(), lowStockItems, repeatedDefects, maintenanceKpis, maintenanceDueCounts);
+    }
+
+    public WorkOrdersByEquipmentTypeResponse workOrdersByEquipmentType(UUID requestedDepartmentId, String requestedStatusScope) {
+        UUID departmentId = scopedDepartment(requestedDepartmentId);
+        String statusScope = normalizeWorkOrderStatusScope(requestedStatusScope);
+        List<WorkOrderStatus> statuses = workOrderStatusesForScope(statusScope);
+
+        List<WorkOrderEquipmentTypeCountProjection> rows =
+                workOrderRepository.countByEquipmentTypeForDashboard(departmentId, statuses);
+        List<WorkOrdersByEquipmentTypeResponse.Item> items = rows.stream()
+                .map(row -> new WorkOrdersByEquipmentTypeResponse.Item(
+                        row.getEquipmentTypeId(),
+                        row.getEquipmentTypeName() == null || row.getEquipmentTypeName().isBlank()
+                                ? "Unspecified"
+                                : row.getEquipmentTypeName(),
+                        row.getWorkOrderCount()
+                ))
+                .toList();
+        long totalWorkOrders = items.stream()
+                .mapToLong(WorkOrdersByEquipmentTypeResponse.Item::workOrderCount)
+                .sum();
+
+        return new WorkOrdersByEquipmentTypeResponse(
+                departmentId,
+                statusScope,
+                statuses.stream().map(Enum::name).toList(),
+                totalWorkOrders,
+                items
+        );
+    }
+
+    private String normalizeWorkOrderStatusScope(String requestedStatusScope) {
+        if (requestedStatusScope == null || requestedStatusScope.isBlank()) {
+            return ACTIVE_WORK_ORDER_SCOPE;
+        }
+        return requestedStatusScope.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private List<WorkOrderStatus> workOrderStatusesForScope(String statusScope) {
+        if (ACTIVE_WORK_ORDER_SCOPE.equals(statusScope)) {
+            return ACTIVE_WORK_ORDER_STATUSES;
+        }
+        throw RestException.badRequest("Unsupported dashboard work order statusScope: " + statusScope);
     }
 
     private MaintenanceDueCounts maintenanceDueCounts(UUID departmentId) {

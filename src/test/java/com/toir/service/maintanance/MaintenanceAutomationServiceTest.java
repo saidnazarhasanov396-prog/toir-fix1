@@ -8,17 +8,13 @@ import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
-import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceRegulation;
-import com.toir.entity.maintenance.WorkOrder;
-import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.enums.*;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
-import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.SecurityAccessService;
@@ -63,9 +59,6 @@ class MaintenanceAutomationServiceTest {
 
     @Mock
     MaintenanceDueEventRepository eventRepository;
-
-    @Mock
-    MaintenanceOperationRepository maintenanceOperationRepository;
 
     @Mock
     MaintenanceDueEventService eventService;
@@ -537,10 +530,6 @@ class MaintenanceAutomationServiceTest {
         equipment.setResponsibleDepartmentId(departmentId);
         MaintenanceRegulation regulation = regulation(regulationId, typeId, AutomationAction.CREATE_WORK_ORDER);
         regulation.setTemplateId(templateId);
-        WorkOrder createdWorkOrder = new WorkOrder();
-        ReflectionTestUtils.setField(createdWorkOrder, "id", workOrderId);
-        MaintenanceOperation inspect = operation(templateId, "Inspect coupling", 1.25);
-        MaintenanceOperation lubricate = operation(templateId, "Lubricate bearings", 0.75);
 
         when(eventService.getOrThrow(eventId)).thenReturn(event);
         when(effectiveRuleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(
@@ -550,30 +539,14 @@ class MaintenanceAutomationServiceTest {
         when(workOrderRepository.existsOpenByCycleKey("cycle-template-work-order")).thenReturn(false);
         when(workOrderNumberService.nextAutoNumber()).thenReturn("WO-AUTO-2026-0001");
         when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
-        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(createdWorkOrder));
-        when(maintenanceOperationRepository.findAllByTemplateIdInAndIsDeletedFalse(List.of(templateId)))
-                .thenReturn(List.of(inspect, lubricate));
-        when(workOrderRepository.save(createdWorkOrder)).thenReturn(createdWorkOrder);
+        when(workOrderService.syncTemplateTasks(workOrderId, templateId))
+                .thenReturn(new WorkOrderService.TemplateTaskSyncResult(2, 2));
         when(eventRepository.save(event)).thenReturn(event);
         when(eventService.toDto(event)).thenReturn(null);
 
         service.createWorkOrderFromEvent(eventId, UUID.randomUUID());
 
-        assertThat(createdWorkOrder.getTasks()).hasSize(2);
-        WorkOrderTask first = createdWorkOrder.getTasks().get(0);
-        assertThat(first.getTitle()).isEqualTo("Inspect coupling");
-        assertThat(first.getPlannedHours()).isEqualTo(1.25);
-        assertThat(first.getSourceTemplateId()).isEqualTo(templateId);
-        assertThat(first.getSourceOperationId()).isEqualTo(inspect.getId());
-        WorkOrderTask second = createdWorkOrder.getTasks().get(1);
-        assertThat(second.getTitle()).isEqualTo("Lubricate bearings");
-        assertThat(second.getPlannedHours()).isEqualTo(0.75);
-        assertThat(second.getSourceTemplateId()).isEqualTo(templateId);
-        assertThat(second.getSourceOperationId()).isEqualTo(lubricate.getId());
-
-        first.setTitle("Edited in WO");
-        assertThat(inspect.getName()).isEqualTo("Inspect coupling");
-        verify(workOrderRepository).save(createdWorkOrder);
+        verify(workOrderService).syncTemplateTasks(workOrderId, templateId);
     }
 
     @Test
@@ -598,8 +571,6 @@ class MaintenanceAutomationServiceTest {
         equipment.setResponsibleDepartmentId(departmentId);
         MaintenanceRegulation regulation = regulation(regulationId, typeId, AutomationAction.CREATE_WORK_ORDER);
         regulation.setTemplateId(templateId);
-        WorkOrder createdWorkOrder = new WorkOrder();
-        ReflectionTestUtils.setField(createdWorkOrder, "id", workOrderId);
 
         when(eventService.getOrThrow(eventId)).thenReturn(event);
         when(effectiveRuleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(
@@ -609,17 +580,15 @@ class MaintenanceAutomationServiceTest {
         when(workOrderRepository.existsOpenByCycleKey("cycle-empty-template-work-order")).thenReturn(false);
         when(workOrderNumberService.nextAutoNumber()).thenReturn("WO-AUTO-2026-0001");
         when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
-        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(createdWorkOrder));
-        when(maintenanceOperationRepository.findAllByTemplateIdInAndIsDeletedFalse(List.of(templateId)))
-                .thenReturn(List.of());
+        when(workOrderService.syncTemplateTasks(workOrderId, templateId))
+                .thenReturn(new WorkOrderService.TemplateTaskSyncResult(0, 0));
         when(eventRepository.save(event)).thenReturn(event);
         when(eventService.toDto(event)).thenReturn(null);
 
         service.createWorkOrderFromEvent(eventId, UUID.randomUUID());
 
-        assertThat(createdWorkOrder.getTasks()).isEmpty();
         assertThat(event.getExplanation()).contains("template has no operations/checklist items");
-        verify(workOrderRepository, never()).save(createdWorkOrder);
+        verify(workOrderService).syncTemplateTasks(workOrderId, templateId);
     }
 
     @Test
@@ -944,10 +913,12 @@ class MaintenanceAutomationServiceTest {
     }
 
     @Test
-    void createTaskActionWithoutTemplateDoesNotCreateTaskAndExplainsReason() {
+    void createTaskActionWithoutTemplateCreatesPprTask() {
         UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, typeId);
+        equipment.setResponsibleDepartmentId(departmentId);
         MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, AutomationAction.CREATE_TASK);
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         mockEffectiveRules(equipmentId, regulation);
@@ -956,16 +927,24 @@ class MaintenanceAutomationServiceTest {
         when(eventRepository.findByScopeAndCycleKey(
                 eq(equipmentId), eq(regulation.getId()), eq(null), any())).thenReturn(Optional.empty());
         when(eventService.saveEvent(any(), eq(equipment))).thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
+        when(pprTaskRepository.existsOpenByCycleKey(any())).thenReturn(false);
+        when(pprTaskRepository.maxSequenceByCodePrefix(any())).thenReturn(0L);
+        when(pprPlanRepository.findByCodeAndIsDeletedFalse(any())).thenReturn(Optional.of(pprPlan(departmentId)));
+        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignPprTaskId(invocation.getArgument(0, PprTask.class)));
         when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0, MaintenanceDueEvent.class));
 
         var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
 
-        assertThat(result.tasksCreated()).isZero();
+        assertThat(result.tasksCreated()).isEqualTo(1);
+        ArgumentCaptor<PprTask> taskCaptor = ArgumentCaptor.forClass(PprTask.class);
+        verify(pprTaskRepository).save(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getEquipmentId()).isEqualTo(equipmentId);
+        assertThat(taskCaptor.getValue().getRegulationId()).isEqualTo(regulation.getId());
+        assertThat(taskCaptor.getValue().getMaintenanceDueEventId()).isNotNull();
         ArgumentCaptor<MaintenanceDueEvent> eventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
         verify(eventRepository).save(eventCaptor.capture());
-        assertThat(eventCaptor.getValue().getStatus()).isEqualTo(MaintenanceDueEventStatus.DETECTED);
-        assertThat(eventCaptor.getValue().getExplanation()).contains("templateId is required to create task");
-        verify(pprTaskRepository, never()).save(any());
+        assertThat(eventCaptor.getValue().getStatus()).isEqualTo(MaintenanceDueEventStatus.TASK_CREATED);
+        assertThat(eventCaptor.getValue().getCreatedTaskId()).isEqualTo(taskCaptor.getValue().getId());
     }
 
     @Test
@@ -1410,17 +1389,6 @@ class MaintenanceAutomationServiceTest {
         return regulation;
     }
 
-    private MaintenanceOperation operation(UUID templateId, String name, double durationHours) {
-        MaintenanceOperation operation = new MaintenanceOperation();
-        ReflectionTestUtils.setField(operation, "id", UUID.randomUUID());
-        operation.setName(name);
-        operation.setDescription(name + " description");
-        operation.setDurationHours(durationHours);
-        operation.setSafetyNotes("Lockout required");
-        operation.setToolsRequired("Standard toolset");
-        return operation;
-    }
-
     private MaintenanceDueCalculationDto due(UUID equipmentId, UUID regulationId) {
         return due(equipmentId, regulationId, null);
     }
@@ -1691,4 +1659,3 @@ class MaintenanceAutomationServiceTest {
         );
     }
 }
-

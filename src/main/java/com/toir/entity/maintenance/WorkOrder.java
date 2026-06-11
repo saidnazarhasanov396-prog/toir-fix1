@@ -1,5 +1,5 @@
 package com.toir.entity.maintenance;
-import com.toir.entity.BaseEntity;
+import com.toir.entity.ActorStampedEntity;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
 
@@ -21,7 +21,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class WorkOrder extends BaseEntity {
+public class WorkOrder extends ActorStampedEntity {
 
     @Column(nullable = false, unique = true)
     private String number;
@@ -123,9 +123,6 @@ public class WorkOrder extends BaseEntity {
 
     @Column(name = "closure_notes", columnDefinition = "text")
     private String closureNotes;
-
-    @Column(name = "created_by_id", nullable = false)
-    private UUID createdById;
 
     @Column(name = "approved_by_id")
     private UUID approvedById;

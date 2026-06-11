@@ -50,6 +50,7 @@ public record MaintenanceRegulationDto(
         String approvalRole,
         String approvalPermission,
         List<MaintenanceRegulationAttributeConditionDto> attributeConditions,
+        List<MaintenanceRegulationSparePartRequirementDto> sparePartRequirements,
         String scope,
         UUID equipmentId,
         String equipmentName,
@@ -95,7 +96,7 @@ public record MaintenanceRegulationDto(
                 requiresShutdown, triggerMeterType, triggerMeterInterval, triggerPolicy, recalculationPolicy,
                 initialSchedulePolicy, automationAction, approvalResultAction, duplicatePolicy, leadTimeDays,
                 leadMeterPercent, defaultDepartmentId, defaultResponsibleId, defaultPriority, requiresApproval,
-                approvalRole, approvalPermission, attributeConditions, "TYPE", null, null, null);
+                approvalRole, approvalPermission, attributeConditions, List.of(), "TYPE", null, null, null);
     }
 
     public MaintenanceRegulationDto(
@@ -137,7 +138,8 @@ public record MaintenanceRegulationDto(
                 requiresShutdown, triggerMeterType, triggerMeterInterval, triggerPolicy, recalculationPolicy,
                 MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, automationAction, approvalResultAction,
                 duplicatePolicy, leadTimeDays, leadMeterPercent, defaultDepartmentId, defaultResponsibleId,
-                defaultPriority, requiresApproval, approvalRole, approvalPermission, attributeConditions);
+                defaultPriority, requiresApproval, approvalRole, approvalPermission, attributeConditions, List.of(),
+                "TYPE", null, null, null);
     }
 
     public MaintenanceRegulationDto(
@@ -167,7 +169,7 @@ public record MaintenanceRegulationDto(
                 MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, AutomationAction.REQUIRE_APPROVAL,
                 ApprovalResultAction.CREATE_TASK, DuplicatePolicy.ONE_ITEM_PER_CYCLE,
                 null, null, null, null, null, true, null, null,
-                List.of());
+                List.of(), List.of(), "TYPE", null, null, null);
     }
 
     public MaintenanceRegulationDto(
@@ -198,7 +200,7 @@ public record MaintenanceRegulationDto(
                 MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, AutomationAction.REQUIRE_APPROVAL,
                 ApprovalResultAction.CREATE_TASK, DuplicatePolicy.ONE_ITEM_PER_CYCLE,
                 null, null, null, null, null, true, null, null,
-                attributeConditions == null ? List.of() : attributeConditions);
+                attributeConditions == null ? List.of() : attributeConditions, List.of(), "TYPE", null, null, null);
     }
 
     public static MaintenanceRegulationDto from(MaintenanceRegulation r, String equipmentTypeName) {
@@ -210,6 +212,15 @@ public record MaintenanceRegulationDto(
                                                 String templateCode,
                                                 String templateName,
                                                 List<MaintenanceRegulationAttributeConditionDto> attributeConditions) {
+        return from(r, equipmentTypeName, templateCode, templateName, attributeConditions, List.of());
+    }
+
+    public static MaintenanceRegulationDto from(MaintenanceRegulation r,
+                                                String equipmentTypeName,
+                                                String templateCode,
+                                                String templateName,
+                                                List<MaintenanceRegulationAttributeConditionDto> attributeConditions,
+                                                List<MaintenanceRegulationSparePartRequirementDto> sparePartRequirements) {
         return new MaintenanceRegulationDto(
                 r.getId(), r.getCode(), r.getName(), r.getDescription(),
                 r.getEquipmentTypeId(), equipmentTypeName, r.getTemplateId(), templateCode, templateName,
@@ -235,7 +246,12 @@ public record MaintenanceRegulationDto(
                 r.isRequiresApproval(),
                 r.getApprovalRole(),
                 r.getApprovalPermission(),
-                attributeConditions == null ? List.of() : attributeConditions
+                attributeConditions == null ? List.of() : attributeConditions,
+                sparePartRequirements == null ? List.of() : sparePartRequirements,
+                "TYPE",
+                null,
+                null,
+                null
         );
     }
 
@@ -286,6 +302,7 @@ public record MaintenanceRegulationDto(
                 rule.getRequiresApproval() == null || rule.getRequiresApproval(),
                 rule.getApprovalRole(),
                 rule.getApprovalPermission(),
+                List.of(),
                 List.of(),
                 "EQUIPMENT",
                 rule.getEquipmentId(),

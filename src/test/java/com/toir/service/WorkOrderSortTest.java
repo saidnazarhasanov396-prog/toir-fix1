@@ -26,7 +26,7 @@ class WorkOrderSortTest {
     @InjectMocks WorkOrderService service;
 
     @Test
-    void searchWithDescSortPassesDescPageableToRepository() {
+    void searchWithDescSortPassesUnsortedPageableToNativeRepositoryQuery() {
         Sort sort = Sort.by("updatedAt").descending();
         when(repository.searchPaginated(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
@@ -35,12 +35,13 @@ class WorkOrderSortTest {
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
         verify(repository).searchPaginated(any(), any(), any(), any(), any(), any(), captor.capture());
-        assertThat(captor.getValue().getSort().getOrderFor("updatedAt").getDirection())
-                .isEqualTo(Sort.Direction.DESC);
+        assertThat(captor.getValue().getSort().isUnsorted()).isTrue();
+        assertThat(captor.getValue().getPageNumber()).isEqualTo(0);
+        assertThat(captor.getValue().getPageSize()).isEqualTo(20);
     }
 
     @Test
-    void searchWithAscSortPassesAscPageableToRepository() {
+    void searchWithAscSortPassesUnsortedPageableToNativeRepositoryQuery() {
         Sort sort = Sort.by("plannedStart").ascending();
         when(repository.searchPaginated(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
@@ -49,7 +50,6 @@ class WorkOrderSortTest {
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
         verify(repository).searchPaginated(any(), any(), any(), any(), any(), any(), captor.capture());
-        assertThat(captor.getValue().getSort().getOrderFor("plannedStart").getDirection())
-                .isEqualTo(Sort.Direction.ASC);
+        assertThat(captor.getValue().getSort().isUnsorted()).isTrue();
     }
 }

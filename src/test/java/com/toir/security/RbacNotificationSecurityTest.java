@@ -2,8 +2,12 @@ package com.toir.security;
 
 import com.toir.controller.NotificationController;
 import com.toir.dto.notification.NotificationDispatchResponse;
+import com.toir.dto.notification.NotificationDto;
 import com.toir.dto.notification.NotificationEvaluationResponse;
 import com.toir.dto.notification.NotificationSummaryDto;
+import com.toir.enums.NotificationChannel;
+import com.toir.enums.NotificationSeverity;
+import com.toir.enums.NotificationStatus;
 import com.toir.service.NotificationFacadeService;
 import com.toir.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +24,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -86,7 +91,7 @@ class RbacNotificationSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.NOTIFICATION_READ)
-    void notificationReadCanReadInboxSummaryAndUnreadCount() throws Exception {
+    void notificationReadCanReadListSummaryAndUnreadCount() throws Exception {
         mockMvc.perform(get("/api/v1/notifications"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/notifications/summary"))
@@ -97,8 +102,12 @@ class RbacNotificationSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.NOTIFICATION_READ)
-    void notificationReadCannotMarkReadOrRunAdminEndpoints() throws Exception {
-        mockMvc.perform(post("/api/v1/notifications/00000000-0000-0000-0000-000000000001/read"))
+    void notificationReadCannotCreateMarkReadOrRunAdminEndpoints() throws Exception {
+        mockMvc.perform(post("/api/v1/notifications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(notificationPayload()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/notifications/{id}/read", UUID.randomUUID()))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/notifications/evaluate"))
                 .andExpect(status().isForbidden());
@@ -109,9 +118,10 @@ class RbacNotificationSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.NOTIFICATION_MARK_READ)
     void notificationMarkReadCanMarkReadOnly() throws Exception {
-        when(notificationService.markRead(any(), any(), eq(false))).thenReturn(null);
+        UUID notificationId = UUID.randomUUID();
+        when(notificationService.markRead(eq(notificationId), any(), eq(false))).thenReturn(notificationDto(notificationId));
 
-        mockMvc.perform(post("/api/v1/notifications/00000000-0000-0000-0000-000000000001/read"))
+        mockMvc.perform(post("/api/v1/notifications/{id}/read", notificationId))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/notifications"))
                 .andExpect(status().isForbidden());
@@ -119,16 +129,13 @@ class RbacNotificationSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.NOTIFICATION_ADMIN)
-    void notificationAdminCanRunAdminEndpoints() throws Exception {
+    void notificationAdminCanCreateAndRunAdminEndpoints() throws Exception {
+        UUID notificationId = UUID.randomUUID();
+        when(notificationService.send(any())).thenReturn(notificationDto(notificationId));
+
         mockMvc.perform(post("/api/v1/notifications")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "recipientId": "00000000-0000-0000-0000-000000000002",
-                                  "title": "Manual",
-                                  "message": "Admin notification"
-                                }
-                                """))
+                        .content(notificationPayload()))
                 .andExpect(status().isCreated());
         mockMvc.perform(get("/api/v1/notifications/sla-rules"))
                 .andExpect(status().isOk());
@@ -136,5 +143,34 @@ class RbacNotificationSecurityTest {
                 .andExpect(status().isOk());
         mockMvc.perform(post("/api/v1/notifications/dispatch-pending"))
                 .andExpect(status().isOk());
+    }
+
+    private String notificationPayload() {
+        return """
+                {
+                  "recipientId": "%s",
+                  "title": "Title",
+                  "message": "Message",
+                  "channel": "WEB",
+                  "severity": "INFO",
+                  "entityType": "WorkOrder",
+                  "entityId": "%s"
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID());
+    }
+
+    private NotificationDto notificationDto(UUID id) {
+        return new NotificationDto(
+                id,
+                UUID.randomUUID(),
+                "Title",
+                "Message",
+                NotificationChannel.WEB,
+                NotificationStatus.SENT,
+                NotificationSeverity.INFO,
+                "WorkOrder",
+                UUID.randomUUID().toString(),
+                null
+        );
     }
 }

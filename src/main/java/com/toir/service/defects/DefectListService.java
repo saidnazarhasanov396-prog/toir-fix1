@@ -128,7 +128,6 @@ public class DefectListService {
         d.setEquipmentId(request.equipmentId());
         d.setRepairRequestId(request.repairRequestId());
         d.setWorkOrderId(request.workOrderId());
-        d.setCreatedById(request.createdById());
         d.setNotes(request.notes());
         DefectList saved = repository.save(d);
 

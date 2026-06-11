@@ -20,8 +20,10 @@ import com.toir.entity.defects.Defect;
 import com.toir.entity.defects.DefectList;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
+import com.toir.entity.maintenance.MaintenanceAction;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.MaintenanceOperation;
+import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderDocument;
@@ -49,6 +51,7 @@ import com.toir.enums.RequestStatus;
 import com.toir.enums.ReservationStatus;
 import com.toir.enums.SafetyPermitStatus;
 import com.toir.enums.TaskExecutionStatus;
+import com.toir.enums.NotificationSeverity;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -264,6 +267,9 @@ class WorkOrderServiceTest {
 
     @Mock
     ObjectMapper objectMapper;
+
+    @Mock
+    NotificationService notificationService;
 
     @InjectMocks
     WorkOrderService service;
@@ -586,6 +592,24 @@ class WorkOrderServiceTest {
         ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getCreatedById()).isEqualTo(authenticatedUserId);
+    }
+
+    @Test
+    void createWithoutAuthenticatedUserDoesNotTrustRequestCreatedById() {
+        WorkOrderRequest request = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+
+        service.create(request);
+
+        ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getCreatedById()).isNull();
     }
 
     @Test
@@ -965,6 +989,46 @@ class WorkOrderServiceTest {
         assertThat(captor.getValue().getPerformer()).isSameAs(performer);
         assertThat(result.performerId()).isEqualTo(performerId);
         assertThat(result.performerName()).isEqualTo("Ivan Petrov");
+        verify(notificationService).notifyUser(
+                eq(userId),
+                org.mockito.ArgumentMatchers.contains("Work order assigned"),
+                org.mockito.ArgumentMatchers.contains(request.number()),
+                eq(NotificationSeverity.INFO),
+                eq("WorkOrder"),
+                eq(result.id().toString())
+        );
+    }
+
+    @Test
+    void createWorkOrderWithTodayPerformerPlanSendsTodayTaskMessage() {
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Instant todayInTashkent = LocalDate.now(java.time.ZoneId.of("Asia/Tashkent"))
+                .atTime(9, 0)
+                .atZone(java.time.ZoneId.of("Asia/Tashkent"))
+                .toInstant();
+        WorkOrderRequest request = requestWithPerformerAndStart(performerId, todayInTashkent);
+        BrigadeMember performer = brigadeMember(performerId, userId, request.departmentId(), true, true);
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+        when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
+        when(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(Optional.of(user(userId, "Ivan Petrov")));
+
+        WorkOrderDto result = service.create(request);
+
+        verify(notificationService).notifyUser(
+                eq(userId),
+                org.mockito.ArgumentMatchers.contains("Work order assigned"),
+                org.mockito.ArgumentMatchers.contains("Bugun"),
+                eq(NotificationSeverity.INFO),
+                eq("WorkOrder"),
+                eq(result.id().toString())
+        );
     }
 
     @Test
@@ -1018,6 +1082,51 @@ class WorkOrderServiceTest {
         assertThat(result.performerId()).isNull();
         assertThat(result.performerName()).isNull();
         verify(brigadeMemberRepository, never()).findByIdAndIsDeletedFalse(any());
+    }
+
+    @Test
+    void createFromDueEventCopiesTemplateOperationsToTasks() {
+        UUID eventId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID inspectOperationId = UUID.randomUUID();
+        UUID lubricateOperationId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithDueEvent(eventId, equipmentId, departmentId);
+        MaintenanceDueEvent event = new MaintenanceDueEvent();
+        ReflectionTestUtils.setField(event, "id", eventId);
+        event.setTemplateId(templateId);
+        MaintenanceOperation inspect = operation(inspectOperationId, null);
+        inspect.setName("Inspect coupling");
+        inspect.setSequence(2);
+        inspect.setDurationHours(1.25);
+        MaintenanceOperation lubricate = operation(lubricateOperationId, null);
+        lubricate.setName("Lubricate bearings");
+        lubricate.setSequence(1);
+        lubricate.setDurationHours(0.75);
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            if (workOrder.getId() == null) {
+                ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            }
+            return workOrder;
+        });
+        mockSuccessfulCreateDependencies(request);
+        when(maintenanceDueEventService.getOrThrow(eventId)).thenReturn(event);
+        when(maintenanceOperationRepository.findAllByTemplateIdInAndIsDeletedFalse(List.of(templateId)))
+                .thenReturn(List.of(lubricate, inspect));
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.tasks()).hasSize(2);
+        assertThat(result.tasks().get(0).title()).isEqualTo("Lubricate bearings");
+        assertThat(result.tasks().get(0).plannedHours()).isEqualTo(0.75);
+        assertThat(result.tasks().get(0).sourceTemplateId()).isEqualTo(templateId);
+        assertThat(result.tasks().get(0).sourceOperationId()).isEqualTo(lubricateOperationId);
+        assertThat(result.tasks().get(1).title()).isEqualTo("Inspect coupling");
+        assertThat(result.tasks().get(1).plannedHours()).isEqualTo(1.25);
+        assertThat(result.tasks().get(1).sourceTemplateId()).isEqualTo(templateId);
+        assertThat(result.tasks().get(1).sourceOperationId()).isEqualTo(inspectOperationId);
     }
 
     @Test
@@ -1473,6 +1582,36 @@ class WorkOrderServiceTest {
         assertThat(response.defect()).isNotNull();
         assertThat(response.defect().id()).isEqualTo(defectId);
         assertThat(response.defect().code()).isEqualTo("DEF-2026-1001");
+    }
+
+    @Test
+    void detailEnrichesTemplateTaskSourceLabels() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        UUID operationId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.DRAFT, null, null);
+        WorkOrderTask task = workOrderTask(workOrder, "Inspect coupling", TaskExecutionStatus.TODO);
+        task.setSourceTemplateId(templateId);
+        task.setSourceOperationId(operationId);
+        workOrder.getTasks().add(task);
+        MaintenanceTemplate template = maintenanceTemplate(templateId, "MT-2026-0001", "Pump PM template");
+        MaintenanceAction action = maintenanceAction("ACT-INSPECT", "Visual inspection");
+        MaintenanceOperation operation = operation(operationId, null);
+        operation.setName("Inspect coupling");
+        operation.setTemplate(template);
+        operation.setAction(action);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(maintenanceOperationRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(operation));
+        when(maintenanceTemplateRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(template));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.findById(workOrderId);
+
+        assertThat(response.tasks()).hasSize(1);
+        assertThat(response.tasks().getFirst().sourceTemplateCode()).isEqualTo("MT-2026-0001");
+        assertThat(response.tasks().getFirst().sourceTemplateName()).isEqualTo("Pump PM template");
+        assertThat(response.tasks().getFirst().sourceOperationCode()).isEqualTo("ACT-INSPECT");
+        assertThat(response.tasks().getFirst().sourceOperationName()).isEqualTo("Inspect coupling");
     }
 
     @Test
@@ -3383,6 +3522,36 @@ class WorkOrderServiceTest {
         );
     }
 
+    private WorkOrderRequest requestWithDueEvent(UUID dueEventId, UUID equipmentId, UUID departmentId) {
+        WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        return new WorkOrderRequest(
+                base.number(),
+                base.title(),
+                equipmentId,
+                base.equipmentNodeId(),
+                null,
+                departmentId,
+                base.workLocationNote(),
+                base.repairRequestId(),
+                base.defectId(),
+                base.defectListId(),
+                base.pprTaskId(),
+                base.contractorId(),
+                base.performerId(),
+                base.type(),
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                base.startPlannedAt(),
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary(),
+                dueEventId,
+                "cycle-template-work-order"
+        );
+    }
+
     private WorkOrderRequest requestWithNode(UUID equipmentId, UUID equipmentNodeId) {
         WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
         return new WorkOrderRequest(
@@ -3429,6 +3598,31 @@ class WorkOrderServiceTest {
                 base.pprTaskId(),
                 base.contractorId(),
                 performerId,
+                base.type(),
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                startPlannedAt,
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary()
+        );
+    }
+
+    private WorkOrderRequest requestWithPerformerAndStart(UUID performerId, Instant startPlannedAt) {
+        WorkOrderRequest base = requestWithPerformer(performerId);
+        return new WorkOrderRequest(
+                base.number(),
+                base.title(),
+                base.equipmentId(),
+                base.equipmentNodeId(),
+                base.departmentId(),
+                base.repairRequestId(),
+                base.defectId(),
+                base.pprTaskId(),
+                base.contractorId(),
+                base.performerId(),
                 base.type(),
                 base.workType(),
                 base.warehouseId(),
@@ -3716,6 +3910,23 @@ class WorkOrderServiceTest {
         operation.setName("Generated operation");
         operation.setRequiredSkill(requiredSkill);
         return operation;
+    }
+
+    private MaintenanceTemplate maintenanceTemplate(UUID id, String code, String name) {
+        MaintenanceTemplate template = new MaintenanceTemplate();
+        ReflectionTestUtils.setField(template, "id", id);
+        template.setCode(code);
+        template.setName(name);
+        return template;
+    }
+
+    private MaintenanceAction maintenanceAction(String code, String name) {
+        MaintenanceAction action = new MaintenanceAction();
+        ReflectionTestUtils.setField(action, "id", UUID.randomUUID());
+        action.setCode(code);
+        action.setName(name);
+        action.setActive(true);
+        return action;
     }
 
     private UserCertification certification(UUID userId, String typeCode, String status, LocalDate expiresAt) {

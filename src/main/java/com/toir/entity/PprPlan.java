@@ -21,7 +21,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class PprPlan extends BaseEntity {
+public class PprPlan extends ActorStampedEntity {
 
     @Column(nullable = false, unique = true)
     private String code;
@@ -41,9 +41,6 @@ public class PprPlan extends BaseEntity {
 
     @Column(name = "department_id")
     private UUID departmentId;
-
-    @Column(name = "created_by_id", nullable = false)
-    private UUID createdById;
 
     @Column(name = "approved_by_id")
     private UUID approvedById;
