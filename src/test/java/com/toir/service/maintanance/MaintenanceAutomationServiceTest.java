@@ -802,6 +802,46 @@ class MaintenanceAutomationServiceTest {
     }
 
     @Test
+    void individualEquipmentRuleCreateWorkOrderPolicyCreatesWorkOrder() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID ruleId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, UUID.randomUUID());
+        equipment.setResponsibleDepartmentId(departmentId);
+        EquipmentMaintenanceRule rule = individualRule(equipmentId, ruleId, AutomationAction.CREATE_WORK_ORDER);
+        EquipmentMaintenanceEffectiveRule effectiveRule = EquipmentMaintenanceEffectiveRule.fromIndividual(rule);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(effectiveRuleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(effectiveRule));
+        when(dueCalculationService.calculate(any(EquipmentMaintenanceEffectiveRule.class)))
+                .thenReturn(due(equipmentId, null, ruleId));
+        when(eventRepository.findByScopeAndCycleKey(eq(equipmentId), eq(null), eq(ruleId), any()))
+                .thenReturn(Optional.empty());
+        when(eventService.saveEvent(any(), eq(equipment)))
+                .thenAnswer(invocation -> assignDueEventId(invocation.getArgument(0, MaintenanceDueEvent.class)));
+        when(workOrderNumberService.nextAutoNumber()).thenReturn("WO-AUTO-2026-0001");
+        when(workOrderRepository.existsOpenByCycleKey(any())).thenReturn(false);
+        when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
+        when(eventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0, MaintenanceDueEvent.class));
+
+        var result = service.evaluateEquipment(equipmentId, MaintenanceTriggerSource.CALENDAR_JOB);
+
+        assertThat(result.workOrdersCreated()).isEqualTo(1);
+        ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
+        verify(workOrderService).create(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().equipmentId()).isEqualTo(equipmentId);
+        assertThat(requestCaptor.getValue().maintenanceDueEventId()).isNotNull();
+        assertThat(requestCaptor.getValue().cycleKey()).contains(equipmentId.toString(), ruleId.toString());
+        ArgumentCaptor<MaintenanceDueEvent> savedEventCaptor = ArgumentCaptor.forClass(MaintenanceDueEvent.class);
+        verify(eventRepository).save(savedEventCaptor.capture());
+        assertThat(savedEventCaptor.getValue().getRegulationId()).isNull();
+        assertThat(savedEventCaptor.getValue().getEquipmentMaintenanceRuleId()).isEqualTo(ruleId);
+        assertThat(savedEventCaptor.getValue().getStatus()).isEqualTo(MaintenanceDueEventStatus.WORK_ORDER_CREATED);
+        assertThat(savedEventCaptor.getValue().getCreatedWorkOrderId()).isEqualTo(workOrderId);
+    }
+
+    @Test
     void createTaskActionDueStatusCreatesPprTask() {
         UUID equipmentId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
@@ -1350,10 +1390,14 @@ class MaintenanceAutomationServiceTest {
     }
 
     private MaintenanceDueCalculationDto due(UUID equipmentId, UUID regulationId) {
+        return due(equipmentId, regulationId, null);
+    }
+
+    private MaintenanceDueCalculationDto due(UUID equipmentId, UUID regulationId, UUID equipmentMaintenanceRuleId) {
         return new MaintenanceDueCalculationDto(
                 equipmentId,
                 regulationId,
-                null,
+                equipmentMaintenanceRuleId,
                 MaintenanceDueStatus.DUE,
                 true,
                 false,
@@ -1370,6 +1414,25 @@ class MaintenanceAutomationServiceTest {
                 null,
                 "due by calendar"
         );
+    }
+
+    private EquipmentMaintenanceRule individualRule(UUID equipmentId, UUID ruleId, AutomationAction automationAction) {
+        EquipmentMaintenanceRule rule = new EquipmentMaintenanceRule();
+        ReflectionTestUtils.setField(rule, "id", ruleId);
+        rule.setEquipmentId(equipmentId);
+        rule.setCode("EMR-2026-0001");
+        rule.setName("Equipment-specific service");
+        rule.setMaintenanceKind(MaintenanceKind.PREVENTIVE);
+        rule.setNormativeLaborHours(2.0);
+        rule.setActive(true);
+        rule.setPeriodicityUnit(PeriodicityUnit.MONTH);
+        rule.setPeriodicityValue(1);
+        rule.setTriggerPolicy(MaintenanceTriggerPolicy.ANY);
+        rule.setAutomationAction(automationAction);
+        rule.setDuplicatePolicy(DuplicatePolicy.ONE_ITEM_PER_CYCLE);
+        rule.setDefaultPriority(PriorityLevel.HIGH);
+        rule.setRequiresApproval(false);
+        return rule;
     }
 
     private MaintenanceDueCalculationDto blockedDue(UUID equipmentId, UUID regulationId) {
