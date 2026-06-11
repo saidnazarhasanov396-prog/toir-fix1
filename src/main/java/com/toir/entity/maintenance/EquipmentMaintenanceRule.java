@@ -1,11 +1,16 @@
 package com.toir.entity.maintenance;
 
 import com.toir.entity.BaseEntity;
+import com.toir.enums.ApprovalResultAction;
+import com.toir.enums.AutomationAction;
+import com.toir.enums.DuplicatePolicy;
+import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
+import com.toir.enums.PriorityLevel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -89,4 +94,45 @@ public class EquipmentMaintenanceRule extends BaseEntity {
 
     @Column(name = "override_reason", columnDefinition = "text")
     private String overrideReason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "initial_schedule_policy")
+    private MaintenanceInitialSchedulePolicy initialSchedulePolicy;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "automation_action")
+    private AutomationAction automationAction;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_result_action")
+    private ApprovalResultAction approvalResultAction;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "duplicate_policy")
+    private DuplicatePolicy duplicatePolicy;
+
+    @Column(name = "lead_time_days")
+    private Integer leadTimeDays;
+
+    @Column(name = "lead_meter_percent")
+    private Double leadMeterPercent;
+
+    @Column(name = "default_department_id")
+    private UUID defaultDepartmentId;
+
+    @Column(name = "default_responsible_id")
+    private UUID defaultResponsibleId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "default_priority")
+    private PriorityLevel defaultPriority;
+
+    @Column(name = "requires_approval")
+    private Boolean requiresApproval;
+
+    @Column(name = "approval_role")
+    private String approvalRole;
+
+    @Column(name = "approval_permission")
+    private String approvalPermission;
 }

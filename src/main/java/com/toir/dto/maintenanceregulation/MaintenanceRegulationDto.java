@@ -1,6 +1,7 @@
 package com.toir.dto.maintenanceregulation;
 
 import com.toir.enums.MaintenanceKind;
+import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
@@ -48,8 +49,55 @@ public record MaintenanceRegulationDto(
         Boolean requiresApproval,
         String approvalRole,
         String approvalPermission,
-        List<MaintenanceRegulationAttributeConditionDto> attributeConditions
+        List<MaintenanceRegulationAttributeConditionDto> attributeConditions,
+        String scope,
+        UUID equipmentId,
+        String equipmentName,
+        UUID baseRegulationId
 ) {
+    public MaintenanceRegulationDto(
+            UUID id,
+            String code,
+            String name,
+            String description,
+            UUID equipmentTypeId,
+            String equipmentTypeName,
+            UUID templateId,
+            String templateCode,
+            String templateName,
+            MaintenanceKind maintenanceKind,
+            double normativeLaborHours,
+            boolean active,
+            PeriodicityUnit periodicityUnit,
+            int periodicityValue,
+            Integer toleranceDays,
+            boolean requiresShutdown,
+            MeterType triggerMeterType,
+            Double triggerMeterInterval,
+            MaintenanceTriggerPolicy triggerPolicy,
+            MaintenanceRecalculationPolicy recalculationPolicy,
+            MaintenanceInitialSchedulePolicy initialSchedulePolicy,
+            AutomationAction automationAction,
+            ApprovalResultAction approvalResultAction,
+            DuplicatePolicy duplicatePolicy,
+            Integer leadTimeDays,
+            Double leadMeterPercent,
+            UUID defaultDepartmentId,
+            UUID defaultResponsibleId,
+            PriorityLevel defaultPriority,
+            Boolean requiresApproval,
+            String approvalRole,
+            String approvalPermission,
+            List<MaintenanceRegulationAttributeConditionDto> attributeConditions
+    ) {
+        this(id, code, name, description, equipmentTypeId, equipmentTypeName, templateId, templateCode, templateName,
+                maintenanceKind, normativeLaborHours, active, periodicityUnit, periodicityValue, toleranceDays,
+                requiresShutdown, triggerMeterType, triggerMeterInterval, triggerPolicy, recalculationPolicy,
+                initialSchedulePolicy, automationAction, approvalResultAction, duplicatePolicy, leadTimeDays,
+                leadMeterPercent, defaultDepartmentId, defaultResponsibleId, defaultPriority, requiresApproval,
+                approvalRole, approvalPermission, attributeConditions, "TYPE", null, null, null);
+    }
+
     public MaintenanceRegulationDto(
             UUID id,
             String code,
@@ -193,5 +241,56 @@ public record MaintenanceRegulationDto(
 
     public static MaintenanceRegulationDto from(MaintenanceRegulation r) {
         return from(r, null);
+    }
+
+    public static MaintenanceRegulationDto from(EquipmentMaintenanceRule rule,
+                                                UUID equipmentTypeId,
+                                                String equipmentTypeName,
+                                                String equipmentName,
+                                                String templateCode,
+                                                String templateName) {
+        return new MaintenanceRegulationDto(
+                rule.getId(),
+                rule.getCode(),
+                rule.getName(),
+                rule.getDescription(),
+                equipmentTypeId,
+                equipmentTypeName,
+                rule.getTemplateId(),
+                templateCode,
+                templateName,
+                rule.getMaintenanceKind(),
+                rule.getNormativeLaborHours(),
+                rule.isActive(),
+                rule.getPeriodicityUnit(),
+                rule.getPeriodicityValue(),
+                rule.getToleranceDays(),
+                rule.isRequiresShutdown(),
+                rule.getTriggerMeterType(),
+                rule.getTriggerMeterInterval(),
+                rule.getTriggerPolicy() == null ? MaintenanceTriggerPolicy.ANY : rule.getTriggerPolicy(),
+                rule.getRecalculationPolicy() == null
+                        ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
+                        : rule.getRecalculationPolicy(),
+                rule.getInitialSchedulePolicy() == null
+                        ? MaintenanceInitialSchedulePolicy.FROM_OPERATION_START
+                        : rule.getInitialSchedulePolicy(),
+                rule.getAutomationAction() == null ? AutomationAction.REQUIRE_APPROVAL : rule.getAutomationAction(),
+                rule.getApprovalResultAction() == null ? ApprovalResultAction.CREATE_TASK : rule.getApprovalResultAction(),
+                rule.getDuplicatePolicy() == null ? DuplicatePolicy.ONE_ITEM_PER_CYCLE : rule.getDuplicatePolicy(),
+                rule.getLeadTimeDays(),
+                rule.getLeadMeterPercent(),
+                rule.getDefaultDepartmentId(),
+                rule.getDefaultResponsibleId(),
+                rule.getDefaultPriority(),
+                rule.getRequiresApproval() == null || rule.getRequiresApproval(),
+                rule.getApprovalRole(),
+                rule.getApprovalPermission(),
+                List.of(),
+                "EQUIPMENT",
+                rule.getEquipmentId(),
+                equipmentName,
+                rule.getBaseRegulationId()
+        );
     }
 }

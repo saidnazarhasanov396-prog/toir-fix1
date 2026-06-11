@@ -182,6 +182,18 @@ public class EquipmentMaintenanceProfileService {
                 : request.recalculationPolicy());
         rule.setDisablesBaseRegulation(Boolean.TRUE.equals(request.disablesBaseRegulation()));
         rule.setOverrideReason(blankToNull(request.overrideReason()));
+        rule.setInitialSchedulePolicy(request.initialSchedulePolicy());
+        rule.setAutomationAction(request.automationAction());
+        rule.setApprovalResultAction(request.approvalResultAction());
+        rule.setDuplicatePolicy(request.duplicatePolicy());
+        rule.setLeadTimeDays(request.leadTimeDays());
+        rule.setLeadMeterPercent(request.leadMeterPercent());
+        rule.setDefaultDepartmentId(request.defaultDepartmentId());
+        rule.setDefaultResponsibleId(request.defaultResponsibleId());
+        rule.setDefaultPriority(request.defaultPriority());
+        rule.setRequiresApproval(request.requiresApproval());
+        rule.setApprovalRole(blankToNull(request.approvalRole()));
+        rule.setApprovalPermission(blankToNull(request.approvalPermission()));
     }
 
     private List<EffectiveMaintenanceRuleDto> effectiveRules(Equipment equipment, List<EquipmentMaintenanceRule> individualRules) {

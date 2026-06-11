@@ -117,6 +117,46 @@ class MaintenanceRegulationServiceTest {
     }
 
     @Test
+    void searchIncludesStandaloneEquipmentRulesAsEquipmentScopedRegulations() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID ruleId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, equipmentTypeId);
+        equipment.setName("Pump A");
+        EquipmentType equipmentType = new EquipmentType();
+        equipmentType.setId(equipmentTypeId);
+        equipmentType.setName("Pump");
+        EquipmentMaintenanceRule rule = rule(ruleId, equipmentId, null, null, true);
+        rule.setName("Pump A individual PM");
+        rule.setAutomationAction(AutomationAction.CREATE_WORK_ORDER);
+        rule.setDuplicatePolicy(DuplicatePolicy.ONE_ITEM_PER_CYCLE);
+        rule.setDefaultPriority(PriorityLevel.HIGH);
+
+        when(repository.searchPaginated(eq(null), eq(true), eq("PREVENTIVE"), eq("pump"), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
+        when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
+        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), true))
+                .thenReturn(List.of(rule));
+        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(equipmentTypeId)))
+                .thenReturn(List.of(equipmentType));
+
+        var page = service.search(0, 20, "pump", null, true, "PREVENTIVE");
+
+        assertThat(page.getContent()).singleElement().satisfies(dto -> {
+            assertThat(dto.id()).isEqualTo(ruleId);
+            assertThat(dto.code()).isEqualTo("EMR-2026-0001");
+            assertThat(dto.name()).isEqualTo("Pump A individual PM");
+            assertThat(dto.equipmentTypeId()).isEqualTo(equipmentTypeId);
+            assertThat(dto.equipmentTypeName()).isEqualTo("Pump");
+            assertThat(dto.automationAction()).isEqualTo(AutomationAction.CREATE_WORK_ORDER);
+            assertThat(dto.defaultPriority()).isEqualTo(PriorityLevel.HIGH);
+            assertThat(dto.scope()).isEqualTo("EQUIPMENT");
+            assertThat(dto.equipmentId()).isEqualTo(equipmentId);
+            assertThat(dto.equipmentName()).isEqualTo("Pump A");
+        });
+    }
+
+    @Test
     void searchWithUnknownEquipmentTypeReturns404() {
         UUID equipmentTypeId = UUID.randomUUID();
         when(equipmentTypeRepository.existsByIdAndIsDeletedFalse(equipmentTypeId)).thenReturn(false);

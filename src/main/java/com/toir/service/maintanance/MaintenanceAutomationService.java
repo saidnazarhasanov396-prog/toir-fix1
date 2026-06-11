@@ -595,7 +595,13 @@ public class MaintenanceAutomationService {
     }
 
     private UUID effectiveDepartmentId(Equipment equipment, EquipmentMaintenanceEffectiveRule rule) {
-        return equipment.getDepartmentId() != null ? equipment.getDepartmentId() : equipment.getResponsibleDepartmentId();
+        if (equipment.getDepartmentId() != null) {
+            return equipment.getDepartmentId();
+        }
+        if (equipment.getResponsibleDepartmentId() != null) {
+            return equipment.getResponsibleDepartmentId();
+        }
+        return rule.defaultDepartmentId();
     }
 
     private UUID validApprovedPprTaskId(UUID taskId) {
