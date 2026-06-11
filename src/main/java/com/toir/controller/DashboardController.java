@@ -5,6 +5,10 @@ import com.toir.service.DashboardService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 
+import com.toir.dto.dashboard.EquipmentLifecycleSummaryResponse;
+import com.toir.service.DashboardLifecycleService;
+
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class DashboardController {
 
     private final DashboardService service;
+    private final DashboardLifecycleService lifecycleService;
 
     @GetMapping("/overview")
     public ResponseEntity<DashboardOverview> overview(
@@ -35,5 +40,10 @@ public class DashboardController {
             @RequestParam(defaultValue = "ACTIVE") String statusScope
     ) {
         return ResponseEntity.ok(service.workOrdersByEquipmentType(departmentId, statusScope));
+    }
+
+    @GetMapping("/equipment-lifecycle")
+    public ResponseEntity<EquipmentLifecycleSummaryResponse> equipmentLifecycle() {
+        return ResponseEntity.ok(lifecycleService.getLifecycleSummary());
     }
 }
