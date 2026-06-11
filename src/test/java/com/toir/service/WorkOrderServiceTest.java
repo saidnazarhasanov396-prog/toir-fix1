@@ -268,9 +268,6 @@ class WorkOrderServiceTest {
     @Mock
     ObjectMapper objectMapper;
 
-    @Mock
-    NotificationService notificationService;
-
     @InjectMocks
     WorkOrderService service;
 
@@ -1023,8 +1020,8 @@ class WorkOrderServiceTest {
 
         verify(notificationService).notifyUser(
                 eq(userId),
-                org.mockito.ArgumentMatchers.contains("Work order assigned"),
-                org.mockito.ArgumentMatchers.contains("Bugun"),
+                contains(result.number()),
+                contains("bugun bajarishingiz kerak"),
                 eq(NotificationSeverity.INFO),
                 eq("WorkOrder"),
                 eq(result.id().toString())
@@ -3598,31 +3595,6 @@ class WorkOrderServiceTest {
                 base.pprTaskId(),
                 base.contractorId(),
                 performerId,
-                base.type(),
-                base.workType(),
-                base.warehouseId(),
-                base.replacementEquipmentId(),
-                base.priority(),
-                startPlannedAt,
-                base.endPlannedAt(),
-                base.createdById(),
-                base.summary()
-        );
-    }
-
-    private WorkOrderRequest requestWithPerformerAndStart(UUID performerId, Instant startPlannedAt) {
-        WorkOrderRequest base = requestWithPerformer(performerId);
-        return new WorkOrderRequest(
-                base.number(),
-                base.title(),
-                base.equipmentId(),
-                base.equipmentNodeId(),
-                base.departmentId(),
-                base.repairRequestId(),
-                base.defectId(),
-                base.pprTaskId(),
-                base.contractorId(),
-                base.performerId(),
                 base.type(),
                 base.workType(),
                 base.warehouseId(),
