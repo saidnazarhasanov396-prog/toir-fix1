@@ -49,6 +49,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -104,14 +105,18 @@ public class MaintenanceRegulationService {
                                                  Boolean active,
                                                  String category) {
         validateEquipmentTypeIfProvided(equipmentTypeId);
-        var pageable = PaginationUtils.pageRequest(page, pageSize);
-        return repository.searchPaginated(
+        Page<MaintenanceRegulation> typeRegulations = repository.searchPaginated(
                 equipmentTypeId,
                 active,
                 blankToNull(category),
                 search,
-                pageable
-        ).map(this::toDto);
+                Pageable.unpaged()
+        );
+        List<MaintenanceRegulationDto> items = new java.util.ArrayList<>(
+                toDtoList(typeRegulations.getContent())
+        );
+        items.addAll(equipmentScopedRegulationDtos(search, equipmentTypeId, active, blankToNull(category)));
+        return PaginationUtils.page(items, page, pageSize);
     }
 
     @Transactional(readOnly = true)
@@ -384,6 +389,87 @@ public class MaintenanceRegulationService {
                 })
                 .filter(item -> item.regulations() != null && !item.regulations().isEmpty())
                 .toList();
+    }
+
+    private List<MaintenanceRegulationDto> equipmentScopedRegulationDtos(String search,
+                                                                         UUID equipmentTypeId,
+                                                                         Boolean active,
+                                                                         String category) {
+        List<Equipment> equipment = safeList(equipmentRepository.findAllForMaintenanceRegulations(equipmentTypeId));
+        if (equipment.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, Equipment> equipmentById = equipment.stream()
+                .filter(item -> item != null && item.getId() != null)
+                .collect(Collectors.toMap(Equipment::getId, item -> item, (left, right) -> left, LinkedHashMap::new));
+        List<EquipmentMaintenanceRule> rules = equipmentById.isEmpty()
+                ? List.of()
+                : safeList(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(
+                        equipmentById.keySet(),
+                        active
+                ));
+        List<EquipmentMaintenanceRule> standaloneRules = rules.stream()
+                .filter(Objects::nonNull)
+                .filter(rule -> rule.getBaseRegulationId() == null)
+                .filter(rule -> category == null
+                        || (rule.getMaintenanceKind() != null && category.equals(rule.getMaintenanceKind().name())))
+                .filter(rule -> matchesSearch(rule, equipmentById.get(rule.getEquipmentId()), search))
+                .toList();
+        if (standaloneRules.isEmpty()) {
+            return List.of();
+        }
+
+        Set<UUID> equipmentTypeIds = equipmentById.values().stream()
+                .map(Equipment::getEquipmentTypeId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> equipmentTypeNames = equipmentTypeIds.isEmpty()
+                ? Map.of()
+                : safeList(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(equipmentTypeIds))
+                .stream()
+                .collect(Collectors.toMap(EquipmentType::getId, EquipmentType::getName, (left, right) -> left));
+        Set<UUID> templateIds = standaloneRules.stream()
+                .map(EquipmentMaintenanceRule::getTemplateId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, MaintenanceTemplate> templates = templateIds.isEmpty()
+                ? Map.of()
+                : safeList(templateRepository.findAllByIdInAndIsDeletedFalse(templateIds))
+                .stream()
+                .collect(Collectors.toMap(MaintenanceTemplate::getId, template -> template, (left, right) -> left));
+
+        return standaloneRules.stream()
+                .map(rule -> {
+                    Equipment item = equipmentById.get(rule.getEquipmentId());
+                    UUID typeId = item == null ? null : item.getEquipmentTypeId();
+                    MaintenanceTemplate template = rule.getTemplateId() == null ? null : templates.get(rule.getTemplateId());
+                    return MaintenanceRegulationDto.from(
+                            rule,
+                            typeId,
+                            typeId == null ? null : equipmentTypeNames.get(typeId),
+                            item == null ? null : item.getName(),
+                            template == null ? null : template.getCode(),
+                            template == null ? null : template.getName()
+                    );
+                })
+                .toList();
+    }
+
+    private boolean matchesSearch(EquipmentMaintenanceRule rule, Equipment equipment, String search) {
+        String normalized = blankToNull(search);
+        if (normalized == null) {
+            return true;
+        }
+        String lower = normalized.toLowerCase(Locale.ROOT);
+        return containsIgnoreCase(rule.getCode(), lower)
+                || containsIgnoreCase(rule.getName(), lower)
+                || containsIgnoreCase(rule.getDescription(), lower)
+                || (equipment != null && (containsIgnoreCase(equipment.getCode(), lower)
+                || containsIgnoreCase(equipment.getName(), lower)));
+    }
+
+    private boolean containsIgnoreCase(String value, String lowerNeedle) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(lowerNeedle);
     }
 
     private Map<UUID, Integer> equipmentCountByTypeId(Set<UUID> equipmentTypeIds) {
@@ -905,10 +991,10 @@ public class MaintenanceRegulationService {
                 sparePartDtosByRegulationId(regulationIds);
         return regulations.stream()
                 .map(r -> {
-                    MaintenanceTemplate template = templates.get(r.getTemplateId());
+                    MaintenanceTemplate template = r.getTemplateId() == null ? null : templates.get(r.getTemplateId());
                     return MaintenanceRegulationDto.from(
                             r,
-                            eqTypeNames.getOrDefault(r.getEquipmentTypeId(), null),
+                            r.getEquipmentTypeId() == null ? null : eqTypeNames.get(r.getEquipmentTypeId()),
                             template == null ? null : template.getCode(),
                             template == null ? null : template.getName(),
                             conditionsByRegulationId.getOrDefault(r.getId(), List.of()),

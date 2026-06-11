@@ -137,21 +137,20 @@ public record EquipmentMaintenanceEffectiveRule(
                 override.getRecalculationPolicy() == null
                         ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
                         : override.getRecalculationPolicy(),
-                base.getInitialSchedulePolicy() == null
-                        ? MaintenanceInitialSchedulePolicy.FROM_OPERATION_START
-                        : base.getInitialSchedulePolicy(),
+                firstNonNull(override.getInitialSchedulePolicy(), base.getInitialSchedulePolicy(),
+                        MaintenanceInitialSchedulePolicy.FROM_OPERATION_START),
                 base.getCreatedAt(),
-                base.getAutomationAction() == null ? AutomationAction.REQUIRE_APPROVAL : base.getAutomationAction(),
-                base.getApprovalResultAction() == null ? ApprovalResultAction.CREATE_TASK : base.getApprovalResultAction(),
-                base.getDuplicatePolicy() == null ? DuplicatePolicy.ONE_ITEM_PER_CYCLE : base.getDuplicatePolicy(),
-                base.getLeadTimeDays(),
-                base.getLeadMeterPercent(),
-                base.getDefaultDepartmentId(),
-                base.getDefaultResponsibleId(),
-                base.getDefaultPriority(),
-                base.isRequiresApproval(),
-                base.getApprovalRole(),
-                base.getApprovalPermission(),
+                firstNonNull(override.getAutomationAction(), base.getAutomationAction(), AutomationAction.REQUIRE_APPROVAL),
+                firstNonNull(override.getApprovalResultAction(), base.getApprovalResultAction(), ApprovalResultAction.CREATE_TASK),
+                firstNonNull(override.getDuplicatePolicy(), base.getDuplicatePolicy(), DuplicatePolicy.ONE_ITEM_PER_CYCLE),
+                firstNonNull(override.getLeadTimeDays(), base.getLeadTimeDays()),
+                firstNonNull(override.getLeadMeterPercent(), base.getLeadMeterPercent()),
+                firstNonNull(override.getDefaultDepartmentId(), base.getDefaultDepartmentId()),
+                firstNonNull(override.getDefaultResponsibleId(), base.getDefaultResponsibleId()),
+                firstNonNull(override.getDefaultPriority(), base.getDefaultPriority()),
+                firstNonNull(override.getRequiresApproval(), base.isRequiresApproval()),
+                firstNonNull(override.getApprovalRole(), base.getApprovalRole()),
+                firstNonNull(override.getApprovalPermission(), base.getApprovalPermission()),
                 MaintenanceRuleOrigin.TYPE_REGULATION_WITH_OVERRIDE,
                 true,
                 null,
@@ -224,19 +223,21 @@ public record EquipmentMaintenanceEffectiveRule(
                 rule.getRecalculationPolicy() == null
                         ? MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION
                         : rule.getRecalculationPolicy(),
-                MaintenanceInitialSchedulePolicy.FROM_OPERATION_START,
+                rule.getInitialSchedulePolicy() == null
+                        ? MaintenanceInitialSchedulePolicy.FROM_OPERATION_START
+                        : rule.getInitialSchedulePolicy(),
                 rule.getCreatedAt(),
-                AutomationAction.REQUIRE_APPROVAL,
-                ApprovalResultAction.CREATE_TASK,
-                DuplicatePolicy.ONE_ITEM_PER_CYCLE,
-                null,
-                null,
-                null,
-                null,
-                PriorityLevel.MEDIUM,
-                true,
-                null,
-                null,
+                rule.getAutomationAction() == null ? AutomationAction.REQUIRE_APPROVAL : rule.getAutomationAction(),
+                rule.getApprovalResultAction() == null ? ApprovalResultAction.CREATE_TASK : rule.getApprovalResultAction(),
+                rule.getDuplicatePolicy() == null ? DuplicatePolicy.ONE_ITEM_PER_CYCLE : rule.getDuplicatePolicy(),
+                rule.getLeadTimeDays(),
+                rule.getLeadMeterPercent(),
+                rule.getDefaultDepartmentId(),
+                rule.getDefaultResponsibleId(),
+                rule.getDefaultPriority() == null ? PriorityLevel.MEDIUM : rule.getDefaultPriority(),
+                rule.getRequiresApproval() == null || rule.getRequiresApproval(),
+                rule.getApprovalRole(),
+                rule.getApprovalPermission(),
                 MaintenanceRuleOrigin.INDIVIDUAL_RULE,
                 true,
                 null,
@@ -246,5 +247,14 @@ public record EquipmentMaintenanceEffectiveRule(
 
     public boolean hasMeterTrigger() {
         return triggerMeterType != null && triggerMeterInterval != null && triggerMeterInterval > 0;
+    }
+
+    private static <T> T firstNonNull(T first, T second) {
+        return first != null ? first : second;
+    }
+
+    private static <T> T firstNonNull(T first, T second, T fallback) {
+        T value = firstNonNull(first, second);
+        return value != null ? value : fallback;
     }
 }
