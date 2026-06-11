@@ -53,6 +53,7 @@ import com.toir.enums.DefectListStatus;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
 import com.toir.enums.MaintenanceTriggerSource;
+import com.toir.enums.NotificationSeverity;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.ReservationStatus;
@@ -168,6 +169,7 @@ public class WorkOrderService {
     private final SafetyChecklistService safetyChecklistService;
     private final ScopeAccessService scopeAccessService;
     private final WorkOrderNumberService workOrderNumberService;
+    private final NotificationService notificationService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     private final ObjectMapper objectMapper;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
@@ -538,8 +540,52 @@ public class WorkOrderService {
                 saved);
 
         workOrderSparePartRequirementService.syncFromWorkOrderContext(saved);
+        notifyAssignedPerformer(saved, equipment);
 
         return toDetailDto(saved);
+    }
+
+    private void notifyAssignedPerformer(WorkOrder workOrder, Equipment equipment) {
+        if (workOrder == null || workOrder.getId() == null || workOrder.getPerformer() == null) {
+            return;
+        }
+        UUID performerUserId = workOrder.getPerformer().getUserId();
+        if (performerUserId == null) {
+            return;
+        }
+        notificationService.notifyUser(
+                performerUserId,
+                "Work order assigned: " + workOrder.getNumber(),
+                assignedPerformerMessage(workOrder, equipment),
+                NotificationSeverity.INFO,
+                ENTITY,
+                workOrder.getId().toString()
+        );
+    }
+
+    private String assignedPerformerMessage(WorkOrder workOrder, Equipment equipment) {
+        String equipmentName = equipment == null || equipment.getName() == null || equipment.getName().isBlank()
+                ? "selected equipment"
+                : equipment.getName();
+        String workLabel = switch (workOrder.getWorkType()) {
+            case DIAGNOSTICS -> "texnik ko'rik";
+            case REPLACEMENT -> "almashtirish";
+            case REPAIR -> "ta'mirlash";
+        };
+        String number = workOrder.getNumber() == null ? "work order" : workOrder.getNumber();
+        if (isPlannedForToday(workOrder.getStartPlannedAt())) {
+            return "Bugun " + equipmentName + " qurilmasi bo'yicha " + workLabel
+                    + " ishini bajarishingiz kerak. Narad: " + number + ".";
+        }
+        return equipmentName + " qurilmasi bo'yicha " + workLabel
+                + " ishi sizga biriktirildi. Narad: " + number + ".";
+    }
+
+    private boolean isPlannedForToday(Instant plannedAt) {
+        if (plannedAt == null) {
+            return false;
+        }
+        return LocalDate.now(CALENDAR_ZONE).equals(plannedAt.atZone(CALENDAR_ZONE).toLocalDate());
     }
 
     @Transactional

@@ -213,6 +213,23 @@ class RepairRequestControllerContractTest {
     }
 
     @Test
+    void assignedUserCanReadRequestOutsideDepartmentScope() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        UUID assigneeId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithAssignee(requestId, assigneeId);
+        RepairRequest entity = entityFromDto(response);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessDepartment(response.departmentId())).thenReturn(false);
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(assigneeId);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entity));
+        when(service.findById(requestId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/repair-requests/{id}", requestId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assignedToId").value(assigneeId.toString()));
+    }
+
+    @Test
     void listIncludesEquipmentDepartmentReporterIds() throws Exception {
         RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
@@ -575,6 +592,36 @@ class RepairRequestControllerContractTest {
                         "HIGH",
                         Instant.now()
                 )),
+                List.of()
+        );
+    }
+
+    private RepairRequestDto dtoWithAssignee(UUID requestId, UUID assigneeId) {
+        return new RepairRequestDto(
+                requestId,
+                "RR-2026-1001",
+                "Repair request",
+                "Description",
+                UUID.randomUUID(),
+                "Pump #1",
+                UUID.randomUUID(),
+                "Maintenance",
+                null,
+                UUID.randomUUID(),
+                "Reporter",
+                assigneeId,
+                PriorityLevel.MEDIUM,
+                CriticalityLevel.MEDIUM,
+                RequestStatus.ASSIGNED,
+                RequestSource.MANUAL,
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
                 List.of()
         );
     }

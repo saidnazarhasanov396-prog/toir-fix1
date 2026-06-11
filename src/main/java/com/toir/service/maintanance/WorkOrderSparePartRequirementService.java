@@ -1,6 +1,7 @@
 package com.toir.service.maintanance;
 
 import com.toir.dto.workorder.WorkOrderSparePartRequirementDto;
+import com.toir.entity.SparePart;
 import com.toir.entity.PprTask;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
@@ -9,10 +10,12 @@ import com.toir.entity.maintenance.MaintenanceRegulationSparePartRequirement;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderSparePartRequirement;
+import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.enums.WorkOrderSparePartRequirementSourceType;
 import com.toir.enums.WorkOrderSparePartRequirementStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.SparePartRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
@@ -20,10 +23,14 @@ import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirementRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
 import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
+import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.security.ScopeAccessService;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -41,14 +48,62 @@ public class WorkOrderSparePartRequirementService {
     private final MaintenanceRegulationRepository maintenanceRegulationRepository;
     private final EquipmentMaintenanceRuleRepository equipmentMaintenanceRuleRepository;
     private final PprTaskRepository pprTaskRepository;
+    private final RepairMaterialUsageRepository repairMaterialUsageRepository;
+    private final SparePartRepository sparePartRepository;
     private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public List<WorkOrderSparePartRequirementDto> findByWorkOrder(UUID workOrderId) {
         WorkOrder workOrder = workOrderOrThrow(workOrderId);
         assertCanAccessWorkOrder(workOrder);
-        return repository.findActiveByWorkOrderId(workOrderId).stream()
-                .map(WorkOrderSparePartRequirementDto::from)
+        List<WorkOrderSparePartRequirement> requirements = repository.findActiveByWorkOrderId(workOrderId);
+        if (requirements.isEmpty()) {
+            return List.of();
+        }
+
+        // Requirement larga bog'liq faktik materiallarni olamiz
+        List<UUID> requirementIds = requirements.stream()
+                .map(WorkOrderSparePartRequirement::getId)
+                .toList();
+        Map<UUID, RepairMaterialUsage> usageByRequirementId = repairMaterialUsageRepository
+                .findAllByRequirementIdInAndIsDeletedFalse(requirementIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        RepairMaterialUsage::getRequirementId,
+                        Function.identity(),
+                        (a, b) -> a // bitta requirement uchun eng birinchisini olamiz
+                ));
+
+        // Almashtirish bo'lgan spare part lar uchun nom va kodni yuklaymiz
+        List<UUID> replacedSparePartIds = usageByRequirementId.values().stream()
+                .map(RepairMaterialUsage::getReplacedSparePartId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        Map<UUID, SparePart> replacedSparePartById = replacedSparePartIds.isEmpty()
+                ? Map.of()
+                : sparePartRepository.findAllByIdInAndIsDeletedFalse(replacedSparePartIds)
+                .stream()
+                .collect(Collectors.toMap(SparePart::getId, Function.identity()));
+
+        return requirements.stream()
+                .map(req -> {
+                    RepairMaterialUsage usage = usageByRequirementId.get(req.getId());
+                    if (usage == null) {
+                        return WorkOrderSparePartRequirementDto.from(req);
+                    }
+                    UUID issuedSparePartId = usage.getSparePartId();
+                    SparePart replacedSparePart = usage.getReplacedSparePartId() != null
+                            ? replacedSparePartById.get(usage.getReplacedSparePartId())
+                            : null;
+                    return WorkOrderSparePartRequirementDto.withUsage(
+                            req,
+                            usage.getQuantity(),
+                            issuedSparePartId,
+                            req.getSparePart() != null ? req.getSparePart().getCode() : null,
+                            req.getSparePart() != null ? req.getSparePart().getName() : null
+                    );
+                })
                 .toList();
     }
 

@@ -78,6 +78,7 @@ public final class RolePermissionDefaults {
                 PermissionConstants.REPAIR_REQUEST_CLOSE,
                 PermissionConstants.WORK_ORDER_READ,
                 PermissionConstants.WORK_ORDER_CREATE,
+                PermissionConstants.WORK_ORDER_UPDATE,
                 PermissionConstants.WORK_ORDER_APPROVE,
                 PermissionConstants.WORK_ORDER_START,
                 PermissionConstants.WORK_ORDER_COMPLETE,
@@ -104,7 +105,27 @@ public final class RolePermissionDefaults {
                 PermissionConstants.TIMESHEET_DELETE,
                 PermissionConstants.TIMESHEET_APPROVE,
                 PermissionConstants.KNOWLEDGE_READ,
-                PermissionConstants.ANALYTICS_READ
+                PermissionConstants.ANALYTICS_READ,
+                PermissionConstants.NOTIFICATION_READ,
+                PermissionConstants.NOTIFICATION_MARK_READ
+        ));
+        defaults.put("TECHNICIAN", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.REPAIR_REQUEST_READ,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.WORK_ORDER_UPDATE,
+                PermissionConstants.WORK_ORDER_START,
+                PermissionConstants.WORK_ORDER_COMPLETE,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.DEFECT_READ,
+                PermissionConstants.PPR_TASK_READ,
+                PermissionConstants.INSPECTION_READ,
+                PermissionConstants.INSPECTION_START,
+                PermissionConstants.INSPECTION_COMPLETE,
+                PermissionConstants.TIMESHEET_CREATE,
+                PermissionConstants.KNOWLEDGE_READ,
+                PermissionConstants.NOTIFICATION_READ,
+                PermissionConstants.NOTIFICATION_MARK_READ
         ));
         defaults.put("TECHNICAL_DIRECTOR", List.of(
                 PermissionConstants.READ_LEGACY,
@@ -130,6 +151,7 @@ public final class RolePermissionDefaults {
                 PermissionConstants.REPAIR_REQUEST_CLOSE,
                 PermissionConstants.WORK_ORDER_READ,
                 PermissionConstants.WORK_ORDER_CREATE,
+                PermissionConstants.WORK_ORDER_UPDATE,
                 PermissionConstants.WORK_ORDER_APPROVE,
                 PermissionConstants.WORK_ORDER_START,
                 PermissionConstants.WORK_ORDER_COMPLETE,
@@ -163,7 +185,10 @@ public final class RolePermissionDefaults {
                 PermissionConstants.KNOWLEDGE_CREATE,
                 PermissionConstants.KNOWLEDGE_UPDATE,
                 PermissionConstants.ANALYTICS_READ,
-                PermissionConstants.ANALYTICS_EXPORT
+                PermissionConstants.ANALYTICS_EXPORT,
+                PermissionConstants.NOTIFICATION_READ,
+                PermissionConstants.NOTIFICATION_MARK_READ,
+                PermissionConstants.NOTIFICATION_ADMIN
         ));
         List<String> chiefMaintenancePermissions = List.of(
                 PermissionConstants.READ_LEGACY,
@@ -175,6 +200,7 @@ public final class RolePermissionDefaults {
                 PermissionConstants.REPAIR_REQUEST_CLOSE,
                 PermissionConstants.WORK_ORDER_READ,
                 PermissionConstants.WORK_ORDER_CREATE,
+                PermissionConstants.WORK_ORDER_UPDATE,
                 PermissionConstants.WORK_ORDER_APPROVE,
                 PermissionConstants.WORK_ORDER_START,
                 PermissionConstants.WORK_ORDER_COMPLETE,
@@ -201,7 +227,9 @@ public final class RolePermissionDefaults {
                 PermissionConstants.PPR_TASK_READ,
                 PermissionConstants.INSPECTION_READ,
                 PermissionConstants.INSPECTION_START,
-                PermissionConstants.INSPECTION_COMPLETE
+                PermissionConstants.INSPECTION_COMPLETE,
+                PermissionConstants.NOTIFICATION_READ,
+                PermissionConstants.NOTIFICATION_MARK_READ
         );
         defaults.put("CHIEF_MECHANIC", chiefMaintenancePermissions);
         defaults.put("CHIEF_POWER_ENGINEER", chiefMaintenancePermissions);
@@ -219,6 +247,7 @@ public final class RolePermissionDefaults {
                 PermissionConstants.REPAIR_REQUEST_APPROVE,
                 PermissionConstants.REPAIR_REQUEST_ASSIGN,
                 PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.WORK_ORDER_UPDATE,
                 PermissionConstants.WORK_ORDER_APPROVE,
                 PermissionConstants.WORK_ORDER_START,
                 PermissionConstants.WORK_ORDER_COMPLETE,
@@ -233,7 +262,9 @@ public final class RolePermissionDefaults {
                 PermissionConstants.TIMESHEET_READ,
                 PermissionConstants.TIMESHEET_APPROVE,
                 PermissionConstants.ANALYTICS_READ,
-                PermissionConstants.KNOWLEDGE_READ
+                PermissionConstants.KNOWLEDGE_READ,
+                PermissionConstants.NOTIFICATION_READ,
+                PermissionConstants.NOTIFICATION_MARK_READ
         );
         defaults.put("WORKSHOP_HEAD", shopLeadPermissions);
         defaults.put("SECTION_HEAD", shopLeadPermissions);
@@ -252,6 +283,7 @@ public final class RolePermissionDefaults {
                 PermissionConstants.PPR_TASK_APPROVE,
                 PermissionConstants.WORK_ORDER_READ,
                 PermissionConstants.WORK_ORDER_CREATE,
+                PermissionConstants.WORK_ORDER_UPDATE,
                 PermissionConstants.WORK_ORDER_APPROVE,
                 PermissionConstants.WORK_ORDER_START,
                 PermissionConstants.WORK_ORDER_COMPLETE,

@@ -28,6 +28,22 @@ public class RepairMaterialUsage extends BaseEntity {
     @Column(name = "stock_movement_id")
     private UUID stockMovementId;
 
+    /**
+     * Rejalashtirilgan ehtiyot qism (WorkOrderSparePartRequirement) ga havola.
+     * Agar null bo'lsa — requirement ga bog'liq bo'lmagan qo'shimcha material.
+     */
+    @Column(name = "requirement_id")
+    private UUID requirementId;
+
+    /**
+     * Agar rejalashtirilgan ehtiyot qism o'rniga boshqasi ishlatilgan bo'lsa —
+     * asl rejalashtirilgan spare part id shu yerda saqlanadi.
+     * Masalan: 5x30-111 rejalashtirilgan edi, 5x30-222 ishlatildi →
+     *   sparePartId = 5x30-222, replacedSparePartId = 5x30-111
+     */
+    @Column(name = "replaced_spare_part_id")
+    private UUID replacedSparePartId;
+
     @Column(name = "issued_by_id")
     private UUID issuedById;
 
