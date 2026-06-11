@@ -14,6 +14,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -63,6 +64,7 @@ public class WarehouseService {
 
     @Transactional
     public WarehouseDto create(WarehouseRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         assertCanCreateOrTargetWarehouse(request);
         Warehouse entity = new Warehouse();
         entity.setCode(nextCode());
@@ -84,6 +86,7 @@ public class WarehouseService {
 
     @Transactional
     public WarehouseDto update(UUID id, WarehouseRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         Warehouse entity = getOrThrow(id);
         assertCanAccessWarehouse(entity);
         assertCanCreateOrTargetWarehouse(request);

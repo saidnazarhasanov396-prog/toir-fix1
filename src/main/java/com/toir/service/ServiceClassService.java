@@ -7,6 +7,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.ServiceClassRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +36,7 @@ public class ServiceClassService {
 
     @Transactional
     public ServiceClassDto create(ServiceClassDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         ServiceClass e = new ServiceClass();
         e.setCode(nextCode());
         e.setName(r.name()); e.setDescription(r.description());
@@ -54,6 +56,7 @@ public class ServiceClassService {
 
     @Transactional
     public ServiceClassDto update(UUID id, ServiceClassDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         ServiceClass e = getOrThrow(id);
         e.setName(r.name()); e.setDescription(r.description());
 

@@ -11,6 +11,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -60,6 +61,7 @@ public class LocationService {
 
     @Transactional
     public LocationDto create(LocationRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         Location saved = saveWithGeneratedCode(request);
 
         auditBuilderService.log(
@@ -78,6 +80,7 @@ public class LocationService {
 
     @Transactional
     public LocationDto update(UUID id, LocationRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         Location entity = getOrThrow(id);
         apply(entity, request);
 

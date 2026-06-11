@@ -8,6 +8,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.users.RoleRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,11 +36,9 @@ public class RoleService {
 
     @Transactional
     public RoleDto create(RoleRequest request) {
-        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Role with code " + request.code() + " already exists");
-        }
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         Role role = new Role();
-        role.setCode(request.code());
+        role.setCode(nextCode());
         role.setName(request.name());
         role.setDescription(request.description());
         role.setPermissions(request.permissions());
@@ -56,6 +55,15 @@ public class RoleService {
                 saved
         );
         return RoleDto.from(saved);
+    }
+
+    private String nextCode() {
+        String prefix = "ROLE-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "ROLE",
+                () -> repository.maxSequenceByCodePrefix(prefix),
+                repository::existsByCodeAndIsDeletedFalse
+        );
     }
 
     @Transactional

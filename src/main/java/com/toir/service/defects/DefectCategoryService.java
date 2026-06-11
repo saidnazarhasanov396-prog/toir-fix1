@@ -7,6 +7,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.defects.DefectCategoryRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ public class DefectCategoryService {
 
     @Transactional
     public DefectCategoryDto create(DefectCategoryDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         DefectCategory e = new DefectCategory();
         e.setCode(nextCode());
         e.setName(r.name());
@@ -52,6 +54,7 @@ public class DefectCategoryService {
 
     @Transactional
     public DefectCategoryDto update(UUID id, DefectCategoryDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         DefectCategory e = getOrThrow(id);
         e.setName(r.name());
         e.setDescription(r.description());

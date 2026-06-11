@@ -11,6 +11,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.CertificationTypeRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,10 +36,9 @@ public class CertificationService {
 
     @Transactional
     public CertificationTypeDto createType(CertificationTypeDto r) {
-        if (typeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Certification type code already exists: " + r.code());
-        }
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         CertificationType t = new CertificationType();
+        t.setCode(nextTypeCode());
         applyType(t, r);
         CertificationType saved = typeRepo.save(t);
 
@@ -56,6 +56,7 @@ public class CertificationService {
 
     @Transactional
     public CertificationTypeDto updateType(UUID id, CertificationTypeDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         CertificationType t = typeRepo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Certification type not found: " + id));
 
@@ -217,13 +218,21 @@ public class CertificationService {
     }
 
     private void applyType(CertificationType t, CertificationTypeDto r) {
-        t.setCode(r.code());
         t.setName(r.name());
         t.setNameEn(r.nameEn());
         t.setNameUz(r.nameUz());
         t.setValidityMonths(r.validityMonths());
         if (r.category() != null) t.setCategory(r.category());
         t.setDescription(r.description());
+    }
+
+    private String nextTypeCode() {
+        String prefix = "CERT-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "CERT",
+                () -> typeRepo.maxSequenceByCodePrefix(prefix),
+                typeRepo::existsByCodeAndIsDeletedFalse
+        );
     }
 
     public UserCertificationDto findOne(UUID id) {

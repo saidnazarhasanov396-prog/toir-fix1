@@ -31,6 +31,14 @@ public interface FinancialApprovalRuleRepository extends JpaRepository<Financial
     @Query(value = "SELECT EXISTS(SELECT 1 FROM financial_approval_rules WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM financial_approval_rules
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
+
     @Query(value = "SELECT * FROM financial_approval_rules WHERE is_active = true AND is_deleted = false ORDER BY priority ASC", nativeQuery = true)
     List<FinancialApprovalRule> findAllByActiveTrueAndIsDeletedFalseOrderByPriorityAsc();
 

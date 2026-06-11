@@ -34,6 +34,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -76,6 +77,8 @@ class InspectionPbacScopeTest {
     @BeforeEach
     void setUp() {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        lenient().when(routeRepo.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        lenient().when(routeRepo.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(false);
         lenient().when(checkpointRepo.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> {
             UUID checkpointId = invocation.getArgument(0);
             InspectionCheckpoint checkpoint = new InspectionCheckpoint();
@@ -193,7 +196,7 @@ class InspectionPbacScopeTest {
         UUID otherDepartmentId = UUID.randomUUID();
         when(scopeAccessService.canAccessDepartment(ownDepartmentId)).thenReturn(true);
         denyDepartment(otherDepartmentId);
-        when(routeRepo.existsByCodeAndIsDeletedFalse("IR-OWN")).thenReturn(false);
+        lenient().when(routeRepo.existsByCodeAndIsDeletedFalse("IR-OWN")).thenReturn(false);
         when(routeRepo.save(any(InspectionRoute.class))).thenAnswer(invocation -> {
             InspectionRoute saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
@@ -452,7 +455,7 @@ class InspectionPbacScopeTest {
 
     private InspectionRouteRequest routeRequest(String code, UUID departmentId) {
         return new InspectionRouteRequest(
-                code,
+                null,
                 "Route",
                 departmentId,
                 "DAILY",

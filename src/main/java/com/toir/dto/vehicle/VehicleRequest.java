@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 public record VehicleRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         @NotBlank String inventoryNumber,
         String technicalNumber,

@@ -22,6 +22,7 @@ import com.toir.repository.projection.DefectListStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -119,6 +120,7 @@ public class DefectListService {
 
     @Transactional
     public DefectListDto create(DefectListRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         assertCanAccessDefectListRequest(request);
         DefectList d = new DefectList();
         d.setCode(nextCode());
@@ -145,6 +147,7 @@ public class DefectListService {
 
     @Transactional
     public DefectListDto update(UUID id, DefectListRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         DefectList d = getOrThrow(id);
         assertCanAccessDefectList(d);
         assertCanAccessDefectListRequest(request);

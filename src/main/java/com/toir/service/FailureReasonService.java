@@ -7,6 +7,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.FailureReasonRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,7 @@ public class FailureReasonService {
 
     @Transactional
     public FailureReasonDto create(FailureReasonDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         FailureReason e = new FailureReason();
         e.setCode(nextCode());
         e.setName(r.name()); e.setDescription(r.description());
@@ -49,6 +51,7 @@ public class FailureReasonService {
 
     @Transactional
     public FailureReasonDto update(UUID id, FailureReasonDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         FailureReason e = getOrThrow(id);
         e.setName(r.name()); e.setDescription(r.description());
 

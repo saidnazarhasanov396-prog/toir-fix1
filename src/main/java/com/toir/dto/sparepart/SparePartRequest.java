@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 
 public record SparePartRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         String sku,
         InventoryItemKind kind,

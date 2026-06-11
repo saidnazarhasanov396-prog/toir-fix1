@@ -10,6 +10,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,11 +38,9 @@ public class EquipmentNodeService {
 
     @Transactional
     public EquipmentNodeDto create(UUID equipmentId, EquipmentNodeDto r) {
-        String code = requireText(r.code(), "Node code");
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
+        String code = nextCode(equipmentId);
         String serialNumber = normalizeOptional(r.serialNumber());
-        if (repository.existsByEquipmentIdAndCodeAndIsDeletedFalse(equipmentId, code)) {
-            throw RestException.conflict("Node code already exists in this equipment: " + code);
-        }
         validateParent(equipmentId, null, r.parentId());
         validateSerialNumberUnique(equipmentId, serialNumber, null);
 
@@ -70,6 +69,7 @@ public class EquipmentNodeService {
 
     @Transactional
     public EquipmentNodeDto update(UUID id, EquipmentNodeDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         EquipmentNode e = getOrThrow(id);
         String serialNumber = normalizeOptional(r.serialNumber());
         validateParent(e.getEquipmentId(), id, r.parentId());
@@ -94,6 +94,15 @@ public class EquipmentNodeService {
         );
 
         return EquipmentNodeDto.from(updated);
+    }
+
+    private String nextCode(UUID equipmentId) {
+        String prefix = "NODE-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "NODE",
+                () -> repository.maxSequenceByEquipmentIdAndCodePrefix(equipmentId, prefix),
+                code -> repository.existsByEquipmentIdAndCodeAndIsDeletedFalse(equipmentId, code)
+        );
     }
 
     @Transactional

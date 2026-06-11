@@ -32,6 +32,7 @@ import com.toir.service.equipment.EquipmentManualAttributeService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.file_management.FileService;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
@@ -131,8 +132,10 @@ public class VehicleService {
 
     @Transactional
     public VehicleDetailDto create(VehicleRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         validateUniqueCreate(request);
         Equipment equipment = new Equipment();
+        equipment.setCode(nextEquipmentCode());
         applyEquipment(equipment, request);
         Equipment savedEquipment = equipmentRepository.save(equipment);
 
@@ -174,6 +177,7 @@ public class VehicleService {
 
     @Transactional
     public VehicleDetailDto update(UUID equipmentId, VehicleRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
         if (equipment.getCategory() != EquipmentCategory.VEHICLE) {
@@ -564,9 +568,6 @@ public class VehicleService {
     }
 
     private void validateUniqueCreate(VehicleRequest request) {
-        if (equipmentRepository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Equipment code already exists: " + request.code());
-        }
         if (equipmentRepository.existsByInventoryNumberAndIsDeletedFalse(request.inventoryNumber())) {
             throw RestException.conflict("Inventory number already exists: " + request.inventoryNumber());
         }
@@ -579,13 +580,6 @@ public class VehicleService {
     }
 
     private void validateUniqueUpdate(UUID equipmentId, Equipment equipment, VehicleDetails details, VehicleRequest request) {
-        if (!Objects.equals(equipment.getCode(), request.code())) {
-            equipmentRepository.findByCodeAndIsDeletedFalse(request.code())
-                    .filter(existing -> !Objects.equals(existing.getId(), equipmentId))
-                    .ifPresent(existing -> {
-                        throw RestException.conflict("Equipment code already exists: " + request.code());
-                    });
-        }
         if (!Objects.equals(equipment.getInventoryNumber(), request.inventoryNumber())) {
             equipmentRepository.findByInventoryNumberAndIsDeletedFalse(request.inventoryNumber())
                     .filter(existing -> !Objects.equals(existing.getId(), equipmentId))
@@ -613,7 +607,6 @@ public class VehicleService {
     }
 
     private void applyEquipment(Equipment equipment, VehicleRequest request) {
-        equipment.setCode(request.code());
         equipment.setName(request.name());
         equipment.setInventoryNumber(request.inventoryNumber());
         equipment.setTechnicalNumber(request.technicalNumber());
@@ -625,6 +618,15 @@ public class VehicleService {
         equipment.setStatus(request.status() != null ? request.status() : EquipmentStatus.ACTIVE);
         equipment.setCategory(EquipmentCategory.VEHICLE);
         equipment.setManufacturer(request.brand());
+    }
+
+    private String nextEquipmentCode() {
+        String prefix = "EQ-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "EQ",
+                () -> equipmentRepository.maxSequenceByCodePrefix(prefix),
+                equipmentRepository::existsByCodeAndIsDeletedFalse
+        );
     }
 
     private void applyDetails(VehicleDetails details, VehicleRequest request) {
