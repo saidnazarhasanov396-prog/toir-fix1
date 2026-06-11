@@ -16,6 +16,7 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -149,10 +150,9 @@ public class SparePartService {
 
     @Transactional
     public SparePartDto create(SparePartRequest request) {
-        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Spare part code already exists: " + request.code());
-        }
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         SparePart entity = new SparePart();
+        entity.setCode(nextCode());
         apply(entity, request);
         SparePart saved = repository.save(entity);
 
@@ -171,6 +171,7 @@ public class SparePartService {
 
     @Transactional
     public SparePartDto update(UUID id, SparePartRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         SparePart entity = getOrThrow(id);
         apply(entity, request);
 
@@ -211,7 +212,6 @@ public class SparePartService {
     }
 
     private void apply(SparePart entity, SparePartRequest request) {
-        entity.setCode(request.code());
         entity.setName(request.name());
         entity.setSku(request.sku());
         if (request.kind() != null) entity.setKind(request.kind());
@@ -219,6 +219,15 @@ public class SparePartService {
         entity.setSpecification(request.specification());
         entity.setManufacturer(request.manufacturer());
         entity.setMinStock(request.minStock());
+    }
+
+    private String nextCode() {
+        String prefix = "SP-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "SP",
+                () -> repository.maxSequenceByCodePrefix(prefix),
+                repository::existsByCodeAndIsDeletedFalse
+        );
     }
 
     public String toSearchPattern(String search) {

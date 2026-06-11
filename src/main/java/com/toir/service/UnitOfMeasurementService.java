@@ -7,6 +7,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +49,7 @@ public class UnitOfMeasurementService {
 
     @Transactional
     public UnitOfMeasurementDto create(UnitOfMeasurementDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         UnitOfMeasurement e = new UnitOfMeasurement();
         e.setCode(nextCode());
         e.setName(r.name());
@@ -68,6 +70,7 @@ public class UnitOfMeasurementService {
 
     @Transactional
     public UnitOfMeasurementDto update(UUID id, UnitOfMeasurementDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         UnitOfMeasurement e = getOrThrow(id);
         e.setName(r.name());
 

@@ -7,6 +7,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.ManufacturerRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,7 @@ public class ManufacturerService {
 
     @Transactional
     public ManufacturerDto create(ManufacturerDto request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         Manufacturer entity = new Manufacturer();
         entity.setCode(nextCode());
         apply(entity, request);
@@ -54,6 +56,7 @@ public class ManufacturerService {
 
     @Transactional
     public ManufacturerDto update(UUID id, ManufacturerDto request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         Manufacturer entity = getOrThrow(id);
         apply(entity, request);
 

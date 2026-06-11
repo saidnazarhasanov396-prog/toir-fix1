@@ -26,6 +26,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -83,11 +84,10 @@ public class InspectionService {
 
     @Transactional
     public InspectionRouteDto createRoute(InspectionRouteRequest r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         assertCanAccessRouteDepartment(r.departmentId());
-        if (routeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Route code already exists: " + r.code());
-        }
         InspectionRoute route = new InspectionRoute();
+        route.setCode(nextRouteCode());
         applyRoute(route, r);
         if (r.checkpoints() != null) {
             for (InspectionRouteRequest.CheckpointRequest cp : r.checkpoints()) {
@@ -110,12 +110,10 @@ public class InspectionService {
 
     @Transactional
     public InspectionRouteDto updateRoute(UUID id, InspectionRouteRequest r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         InspectionRoute route = loadRoute(id);
         assertCanAccessRoute(route);
         assertCanAccessRouteDepartment(r.departmentId());
-        if (!route.getCode().equals(r.code()) && routeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Route code already exists: " + r.code());
-        }
         applyRoute(route, r);
         InspectionRoute saved = routeRepo.save(route);
 
@@ -571,13 +569,21 @@ public class InspectionService {
     }
 
     private void applyRoute(InspectionRoute route, InspectionRouteRequest r) {
-        route.setCode(r.code());
         route.setName(r.name());
         route.setDepartmentId(r.departmentId());
         if (r.frequency() != null) route.setFrequency(r.frequency());
         route.setTargetDurationMin(r.targetDurationMin());
         route.setDescription(r.description());
         if (r.active() != null) route.setActive(r.active());
+    }
+
+    private String nextRouteCode() {
+        String prefix = "IR-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "IR",
+                () -> routeRepo.maxSequenceByCodePrefix(prefix),
+                routeRepo::existsByCodeAndIsDeletedFalse
+        );
     }
 
     private InspectionCheckpoint buildCheckpoint(InspectionRoute route, InspectionRouteRequest.CheckpointRequest cp) {

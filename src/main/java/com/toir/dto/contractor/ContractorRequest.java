@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 public record ContractorRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         String taxNumber,
         String contactPerson,

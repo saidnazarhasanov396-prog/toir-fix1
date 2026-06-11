@@ -8,6 +8,7 @@ import com.toir.enums.IntegrationSyncStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.IntegrationEndpointRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,10 +32,9 @@ public class IntegrationEndpointService {
 
     @Transactional
     public IntegrationEndpointDto create(IntegrationEndpointDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Endpoint code already exists: " + r.code());
-        }
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         IntegrationEndpoint e = new IntegrationEndpoint();
+        e.setCode(nextCode());
         apply(e, r);
         IntegrationEndpoint saved = repository.save(e);
 
@@ -52,6 +52,7 @@ public class IntegrationEndpointService {
 
     @Transactional
     public IntegrationEndpointDto update(UUID id, IntegrationEndpointDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         IntegrationEndpoint e = getOrThrow(id);
         apply(e, r);
 
@@ -103,7 +104,6 @@ public class IntegrationEndpointService {
     }
 
     private void apply(IntegrationEndpoint e, IntegrationEndpointDto r) {
-        e.setCode(r.code());
         e.setName(r.name());
         e.setSystem(r.system());
         e.setUrl(r.url());
@@ -121,6 +121,15 @@ public class IntegrationEndpointService {
         e.setSyncScada(r.syncScada());
         e.setSyncProduction(r.syncProduction());
         if (r.active() != null) e.setActive(r.active());
+    }
+
+    private String nextCode() {
+        String prefix = "INT-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "INT",
+                () -> repository.maxSequenceByCodePrefix(prefix),
+                repository::existsByCodeAndIsDeletedFalse
+        );
     }
 
 

@@ -13,7 +13,7 @@ public record EquipmentNodeDto(
         UUID equipmentId,
         @JsonAlias("parentNodeId")
         UUID parentId,
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         @NotNull EquipmentNodeType nodeType,
         String serialNumber,

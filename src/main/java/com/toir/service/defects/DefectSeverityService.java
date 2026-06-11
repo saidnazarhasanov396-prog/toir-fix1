@@ -8,6 +8,7 @@ import com.toir.exception.RestException;
 import com.toir.dto.defectseverity.DefectSeverityDto;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,7 @@ public class DefectSeverityService {
 
     @Transactional
     public DefectSeverityDto create(DefectSeverityDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         DefectSeverity e = new DefectSeverity();
         e.setCode(nextCode());
         e.setName(r.name()); e.setWeight(r.weight());
@@ -51,6 +53,7 @@ public class DefectSeverityService {
 
     @Transactional
     public DefectSeverityDto update(UUID id, DefectSeverityDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         DefectSeverity e = getOrThrow(id);
         e.setName(r.name()); e.setWeight(r.weight());
         DefectSeverity updated = repository.save(e);

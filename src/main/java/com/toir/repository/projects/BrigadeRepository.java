@@ -31,6 +31,14 @@ public interface BrigadeRepository extends JpaRepository<Brigade, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM brigades WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM brigades
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
+
     @Query(value = "SELECT * FROM brigades WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Brigade> findAllByDepartmentIdAndIsDeletedFalse(@Param("departmentId") UUID departmentId);
 

@@ -7,6 +7,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.SlaRuleRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,10 +29,9 @@ public class SlaRuleService {
 
     @Transactional
     public SlaRuleDto create(SlaRuleDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("SLA rule code already exists: " + r.code());
-        }
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         SlaRule rule = new SlaRule();
+        rule.setCode(nextCode());
         apply(rule, r);
         SlaRule saved = repository.save(rule);
 
@@ -49,6 +49,7 @@ public class SlaRuleService {
 
     @Transactional
     public SlaRuleDto update(UUID id, SlaRuleDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         SlaRule rule = getOrThrow(id);
         apply(rule, r);
         SlaRule saved = repository.save(rule);
@@ -85,12 +86,20 @@ public class SlaRuleService {
     }
 
     private void apply(SlaRule rule, SlaRuleDto r) {
-        rule.setCode(r.code());
         rule.setName(r.name());
         rule.setEntityType(r.entityType());
         rule.setTriggerType(r.triggerType());
         rule.setThresholdHours(r.thresholdHours());
         rule.setDepartmentId(r.departmentId());
         if (r.active() != null) rule.setActive(r.active());
+    }
+
+    private String nextCode() {
+        String prefix = "SLA-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "SLA",
+                () -> repository.maxSequenceByCodePrefix(prefix),
+                repository::existsByCodeAndIsDeletedFalse
+        );
     }
 }

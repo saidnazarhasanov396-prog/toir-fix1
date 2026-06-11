@@ -7,6 +7,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.RootCauseRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ public class RootCauseService {
 
     @Transactional
     public RootCauseDto create(RootCauseDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         RootCause e = new RootCause();
         e.setCode(nextCode());
         e.setName(r.name());
@@ -51,6 +53,7 @@ public class RootCauseService {
 
     @Transactional
     public RootCauseDto update(UUID id, RootCauseDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         RootCause e = getOrThrow(id);
         e.setName(r.name());
         e.setDescription(r.description());
