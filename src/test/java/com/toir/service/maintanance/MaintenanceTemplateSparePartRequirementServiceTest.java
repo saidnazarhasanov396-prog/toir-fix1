@@ -12,6 +12,7 @@ import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
+import com.toir.service.UnitOfMeasurementService;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,6 +42,8 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
     private MaintenanceActionRepository actionRepository;
     @Mock
     private SparePartRepository sparePartRepository;
+    @Mock
+    private UnitOfMeasurementService unitOfMeasurementService;
 
     @InjectMocks
     private MaintenanceTemplateSparePartRequirementService service;
@@ -206,6 +209,35 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
     }
 
     @Test
+    void createAcceptsRequestedUnitCodeWhenItNormalizesToSparePartUnit() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId);
+        SparePart sparePart = sparePart(sparePartId);
+        sparePart.setUnit("piece");
+
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(repository.existsActiveByTemplateOperationAndSparePart(templateId, null, sparePartId, null))
+                .thenReturn(false);
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull("NAV-PC")).thenReturn("piece");
+        when(repository.save(any(MaintenanceTemplateSparePartRequirement.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var dto = service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
+                null,
+                sparePartId,
+                1,
+                "NAV-PC",
+                null,
+                null,
+                true
+        ));
+
+        assertThat(dto.unit()).isEqualTo("piece");
+    }
+
+    @Test
     void createRejectsUnitDifferentFromSparePartUnit() {
         UUID templateId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
@@ -214,6 +246,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
 
         when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull("kg")).thenReturn("kg");
 
         assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 null,
@@ -230,7 +263,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
     }
 
     @Test
-    void createRejectsUnitWithDifferentCodeCaseFromSparePartUnit() {
+    void createAcceptsRequestedUnitWithDifferentCaseWhenItNormalizesToSparePartUnit() {
         UUID templateId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
         MaintenanceTemplate template = template(templateId);
@@ -238,8 +271,13 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
 
         when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(repository.existsActiveByTemplateOperationAndSparePart(templateId, null, sparePartId, null))
+                .thenReturn(false);
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull("PCS")).thenReturn("pcs");
+        when(repository.save(any(MaintenanceTemplateSparePartRequirement.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
+        var dto = service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 null,
                 sparePartId,
                 1,
@@ -247,10 +285,9 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
                 null,
                 null,
                 true
-        ))).isInstanceOf(RestException.class)
-                .hasMessageContaining("unit must match spare part unit");
+        ));
 
-        verify(repository, never()).save(any());
+        assertThat(dto.unit()).isEqualTo("pcs");
     }
 
     @Test

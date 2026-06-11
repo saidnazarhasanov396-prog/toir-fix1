@@ -12,6 +12,7 @@ import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
+import com.toir.service.UnitOfMeasurementService;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class MaintenanceTemplateSparePartRequirementService {
     private final MaintenanceOperationRepository operationRepository;
     private final MaintenanceActionRepository actionRepository;
     private final SparePartRepository sparePartRepository;
+    private final UnitOfMeasurementService unitOfMeasurementService;
 
     @Transactional(readOnly = true)
     public List<MaintenanceTemplateSparePartRequirementDto> findByTemplate(UUID templateId) {
@@ -129,7 +131,9 @@ public class MaintenanceTemplateSparePartRequirementService {
                        SparePart sparePart) {
         entity.setQuantity(request.quantity());
         String sparePartUnit = StringUtils.hasText(sparePart.getUnit()) ? sparePart.getUnit().trim() : null;
-        String requestedUnit = StringUtils.hasText(request.unit()) ? request.unit().trim() : null;
+        String requestedUnit = StringUtils.hasText(request.unit())
+                ? unitOfMeasurementService.normalizeOptionalUnitOrNull(request.unit())
+                : null;
         if (requestedUnit != null && !requestedUnit.equals(sparePartUnit)) {
             throw RestException.badRequest("unit must match spare part unit");
         }
