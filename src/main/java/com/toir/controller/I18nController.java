@@ -94,6 +94,13 @@ public class I18nController {
                 Map.entry("CANCELLED", "Отменена"),
                 Map.entry("REJECTED", "Отклонена")
         ));
+        ru.put("equipmentLifecycleStage", Map.of(
+                "LOW_RISK",       "Низкий риск",
+                "MEDIUM_RISK",    "Средний риск",
+                "HIGH_RISK",      "Высокий риск",
+                "IN_REPAIR",      "На ремонте",
+                "DECOMMISSIONED", "Списано"
+        ));
         m.put("ru", ru);
 
         // ---- English ----
@@ -161,6 +168,13 @@ public class I18nController {
                 Map.entry("CANCELLED", "Cancelled"),
                 Map.entry("REJECTED", "Rejected")
         ));
+        en.put("equipmentLifecycleStage", Map.of(
+                "LOW_RISK",       "Low risk",
+                "MEDIUM_RISK",    "Medium risk",
+                "HIGH_RISK",      "High risk",
+                "IN_REPAIR",      "Under repair",
+                "DECOMMISSIONED", "Decommissioned"
+        ));
         m.put("en", en);
 
         // ---- Uzbek ----
@@ -227,6 +241,13 @@ public class I18nController {
                 Map.entry("RECEIVED", "Qabul qilingan"),
                 Map.entry("CANCELLED", "Bekor qilingan"),
                 Map.entry("REJECTED", "Rad etilgan")
+        ));
+        uz.put("equipmentLifecycleStage", Map.of(
+                "LOW_RISK",       "Past xavf",
+                "MEDIUM_RISK",    "O'rta xavf",
+                "HIGH_RISK",      "Yuqori xavf",
+                "IN_REPAIR",      "Ta'mirda",
+                "DECOMMISSIONED", "Eskirgan"
         ));
         m.put("uz", uz);
 
