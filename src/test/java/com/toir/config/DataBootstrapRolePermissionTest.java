@@ -40,6 +40,22 @@ class DataBootstrapRolePermissionTest {
                 .contains(PermissionConstants.ANALYTICS_READ);
         assertThat(roles.get("RELIABILITY_ENGINEER").getPermissions())
                 .contains(PermissionConstants.ANALYTICS_READ, PermissionConstants.ANALYTICS_EXPORT);
+        assertThat(roles.get("TECHNICIAN").getPermissions())
+                .contains(
+                        PermissionConstants.NOTIFICATION_READ,
+                        PermissionConstants.NOTIFICATION_MARK_READ,
+                        PermissionConstants.WORK_ORDER_READ,
+                        PermissionConstants.WORK_ORDER_START,
+                        PermissionConstants.WORK_ORDER_COMPLETE
+                );
+        assertThat(roles.get("MECHANIC").getPermissions())
+                .contains(
+                        PermissionConstants.NOTIFICATION_READ,
+                        PermissionConstants.NOTIFICATION_MARK_READ,
+                        PermissionConstants.WORK_ORDER_READ,
+                        PermissionConstants.WORK_ORDER_START,
+                        PermissionConstants.WORK_ORDER_COMPLETE
+                );
         assertThat(roles.get("SYSTEM_ADMIN").getPermissions())
                 .containsExactly(PermissionConstants.WILDCARD);
     }

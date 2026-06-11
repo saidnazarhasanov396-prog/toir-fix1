@@ -53,6 +53,7 @@ import com.toir.enums.DefectListStatus;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
 import com.toir.enums.MaintenanceTriggerSource;
+import com.toir.enums.NotificationSeverity;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.ReservationStatus;
@@ -164,6 +165,7 @@ public class WorkOrderService {
     private final SafetyChecklistService safetyChecklistService;
     private final ScopeAccessService scopeAccessService;
     private final WorkOrderNumberService workOrderNumberService;
+    private final NotificationService notificationService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     private final ObjectMapper objectMapper;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
@@ -535,6 +537,7 @@ public class WorkOrderService {
                 saved);
 
         workOrderSparePartRequirementService.syncFromWorkOrderContext(saved);
+        notifyAssignedPerformer(saved);
 
         return toDetailDto(saved);
     }
@@ -562,6 +565,7 @@ public class WorkOrderService {
                 "Утверждён наряд " + entity.getNumber(),
                 entity,
                 saved);
+        notifyAssignedPerformer(saved);
 
         return toDto(saved);
     }
@@ -2130,6 +2134,45 @@ public class WorkOrderService {
         }
         User user = usersById.get(member.getUserId());
         return user == null ? member.getUserId().toString() : user.getFullName();
+    }
+
+    private void notifyAssignedPerformer(WorkOrder workOrder) {
+        BrigadeMember performer = workOrder.getPerformer();
+        if (performer == null || performer.getUserId() == null || workOrder.getId() == null) {
+            return;
+        }
+        notificationService.notifyUser(
+                performer.getUserId(),
+                "WorkOrder biriktirildi: " + workOrder.getNumber(),
+                performerNotificationMessage(workOrder),
+                NotificationSeverity.INFO,
+                ENTITY,
+                workOrder.getId().toString()
+        );
+    }
+
+    private String performerNotificationMessage(WorkOrder workOrder) {
+        String equipmentName = equipmentRepository.findByIdAndIsDeletedFalse(workOrder.getEquipmentId())
+                .map(equipment -> "%s - %s".formatted(equipment.getCode(), equipment.getName()))
+                .orElse("ushbu qurilma");
+        String timing = plannedTimingText(workOrder.getStartPlannedAt());
+        return "%s bo'yicha texnik ko'rikdan o'tkazish yoki ta'mirlashni %s."
+                .formatted(equipmentName, timing);
+    }
+
+    private String plannedTimingText(Instant startPlannedAt) {
+        if (startPlannedAt == null) {
+            return "rejalashtirilgan vaqtda bajarishingiz kerak";
+        }
+        LocalDate plannedDate = startPlannedAt.atZone(CALENDAR_ZONE).toLocalDate();
+        LocalDate today = LocalDate.now(CALENDAR_ZONE);
+        if (plannedDate.isEqual(today)) {
+            return "bugun bajarishingiz kerak";
+        }
+        if (plannedDate.isEqual(today.plusDays(1))) {
+            return "ertaga bajarishingiz kerak";
+        }
+        return plannedDate + " sanasida bajarishingiz kerak";
     }
 
     private EquipmentNode resolveEquipmentNode(UUID equipmentNodeId, Map<UUID, EquipmentNode> equipmentNodeById) {
