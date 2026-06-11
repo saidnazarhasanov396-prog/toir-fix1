@@ -20,7 +20,13 @@ public record WorkOrderSparePartRequirementDto(
         String unit,
         String criticality,
         String notes,
-        WorkOrderSparePartRequirementStatus status
+        WorkOrderSparePartRequirementStatus status,
+        // Faktik bajarilish ma'lumotlari
+        Double issuedQty,
+        UUID issuedSparePartId,
+        String issuedSparePartCode,
+        String issuedSparePartName,
+        boolean isReplacement
 ) {
     public static WorkOrderSparePartRequirementDto from(WorkOrderSparePartRequirement requirement) {
         var workOrder = requirement.getWorkOrder();
@@ -52,7 +58,27 @@ public record WorkOrderSparePartRequirementDto(
                 requirement.getUnit(),
                 requirement.getCriticality(),
                 requirement.getNotes(),
-                requirement.getStatus()
+                requirement.getStatus(),
+                null, null, null, null, false
+        );
+    }
+
+    public static WorkOrderSparePartRequirementDto withUsage(
+            WorkOrderSparePartRequirement requirement,
+            Double issuedQty,
+            UUID issuedSparePartId,
+            String issuedSparePartCode,
+            String issuedSparePartName
+    ) {
+        WorkOrderSparePartRequirementDto base = from(requirement);
+        boolean isReplacement = issuedSparePartId != null
+                && !issuedSparePartId.equals(requirement.getSparePartId());
+        return new WorkOrderSparePartRequirementDto(
+                base.id(), base.workOrderId(), base.sourceType(), base.sourceRequirementId(),
+                base.templateId(), base.operationId(), base.operationName(),
+                base.sparePartId(), base.sparePartCode(), base.sparePartName(),
+                base.requiredQty(), base.unit(), base.criticality(), base.notes(), base.status(),
+                issuedQty, issuedSparePartId, issuedSparePartCode, issuedSparePartName, isReplacement
         );
     }
 

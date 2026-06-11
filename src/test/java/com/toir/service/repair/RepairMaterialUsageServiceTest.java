@@ -5,6 +5,7 @@ import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.StockMovement;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.maintenance.WorkOrderSparePartRequirement;
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
@@ -12,6 +13,7 @@ import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WorkOrderSparePartRequirementStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
@@ -21,6 +23,7 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
@@ -89,6 +92,9 @@ class RepairMaterialUsageServiceTest {
 
     @Mock
     CostCategoryRepository costCategoryRepository;
+
+    @Mock
+    WorkOrderSparePartRequirementRepository requirementRepository;
 
     @InjectMocks
     RepairMaterialUsageService service;
@@ -194,7 +200,6 @@ class RepairMaterialUsageServiceTest {
         assertThat(result.sparePartId()).isEqualTo(sparePartId);
         assertThat(result.quantity()).isEqualTo(7);
         assertThat(result.unitCost()).isEqualTo(12.5);
-
         assertThat(stock.getQuantity()).isEqualTo(3);
         assertThat(stock.getReservedQty()).isEqualTo(3);
 
@@ -456,6 +461,139 @@ class RepairMaterialUsageServiceTest {
         assertRegisterBlockedForStatus(WorkOrderStatus.CANCELLED);
     }
 
+    // ═══════════════════════════════════════════════════════
+    // Task 5 — Requirement bog'lash testlari
+    // ═══════════════════════════════════════════════════════
+
+    @Test
+    void registerWithRequirementId_linksRequirementToUsage() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+
+        mockSuccessfulRegister(workOrderId, warehouseId, sparePartId);
+        when(requirementRepository.findById(requirementId))
+                .thenReturn(Optional.of(requirement(requirementId, workOrderId, sparePartId)));
+
+        service.register(workOrderId, usageDtoWithRequirement(warehouseId, sparePartId, 2, requirementId));
+
+        ArgumentCaptor<RepairMaterialUsage> captor = ArgumentCaptor.forClass(RepairMaterialUsage.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getRequirementId()).isEqualTo(requirementId);
+    }
+
+    @Test
+    void registerWithRequirementId_setsRequirementStatusToIssued() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+
+        mockSuccessfulRegister(workOrderId, warehouseId, sparePartId);
+        when(requirementRepository.findById(requirementId))
+                .thenReturn(Optional.of(requirement(requirementId, workOrderId, sparePartId)));
+
+        service.register(workOrderId, usageDtoWithRequirement(warehouseId, sparePartId, 2, requirementId));
+
+        ArgumentCaptor<WorkOrderSparePartRequirement> captor =
+                ArgumentCaptor.forClass(WorkOrderSparePartRequirement.class);
+        verify(requirementRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(WorkOrderSparePartRequirementStatus.ISSUED);
+    }
+
+    @Test
+    void registerWithDifferentSparePart_setsReplacedSparePartId() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID plannedSparePartId = UUID.randomUUID();
+        UUID actualSparePartId = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+
+        mockSuccessfulRegister(workOrderId, warehouseId, actualSparePartId);
+        when(requirementRepository.findById(requirementId))
+                .thenReturn(Optional.of(requirement(requirementId, workOrderId, plannedSparePartId)));
+
+        service.register(workOrderId, usageDtoWithRequirement(warehouseId, actualSparePartId, 2, requirementId));
+
+        ArgumentCaptor<RepairMaterialUsage> captor = ArgumentCaptor.forClass(RepairMaterialUsage.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getReplacedSparePartId()).isEqualTo(plannedSparePartId);
+    }
+
+    @Test
+    void registerWithSameSparePart_doesNotSetReplacedSparePartId() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+
+        mockSuccessfulRegister(workOrderId, warehouseId, sparePartId);
+        when(requirementRepository.findById(requirementId))
+                .thenReturn(Optional.of(requirement(requirementId, workOrderId, sparePartId)));
+
+        service.register(workOrderId, usageDtoWithRequirement(warehouseId, sparePartId, 2, requirementId));
+
+        ArgumentCaptor<RepairMaterialUsage> captor = ArgumentCaptor.forClass(RepairMaterialUsage.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getReplacedSparePartId()).isNull();
+    }
+
+    @Test
+    void registerWithRequirementId_requirementNotFound_throws404() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+
+        mockSuccessfulRegister(workOrderId, warehouseId, sparePartId);
+        when(requirementRepository.findById(requirementId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.register(
+                workOrderId, usageDtoWithRequirement(warehouseId, sparePartId, 2, requirementId)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Requirement not found");
+
+        verify(repository, never()).save(any(RepairMaterialUsage.class));
+    }
+
+    @Test
+    void registerWithRequirementId_requirementBelongsToDifferentWorkOrder_throws404() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID otherWorkOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+
+        mockSuccessfulRegister(workOrderId, warehouseId, sparePartId);
+        when(requirementRepository.findById(requirementId))
+                .thenReturn(Optional.of(requirement(requirementId, otherWorkOrderId, sparePartId)));
+
+        assertThatThrownBy(() -> service.register(
+                workOrderId, usageDtoWithRequirement(warehouseId, sparePartId, 2, requirementId)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Requirement not found");
+
+        verify(repository, never()).save(any(RepairMaterialUsage.class));
+    }
+
+    @Test
+    void registerWithoutRequirementId_doesNotTouchRequirementRepository() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+
+        mockSuccessfulRegister(workOrderId, warehouseId, sparePartId);
+
+        service.register(workOrderId, new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 2, 10.0));
+
+        verifyNoInteractions(requirementRepository);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Helpers
+    // ═══════════════════════════════════════════════════════
+
     private void assertRegisterBlockedForStatus(WorkOrderStatus status) {
         UUID workOrderId = UUID.randomUUID();
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
@@ -468,14 +606,39 @@ class RepairMaterialUsageServiceTest {
         verifyNoInteractions(stockRepository, repository, stockMovementRepository);
     }
 
+    private void mockSuccessfulRegister(UUID workOrderId, UUID warehouseId, UUID sparePartId) {
+        WarehouseStock stock = stock(warehouseId, sparePartId, 10, 0);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+        lenient().when(stockRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        lenient().when(stockMovementRepository.save(any())).thenAnswer(i -> {
+            StockMovement m = i.getArgument(0);
+            m.setId(UUID.randomUUID());
+            return m;
+        });
+        lenient().when(repository.save(any())).thenAnswer(i -> {
+            RepairMaterialUsage u = i.getArgument(0);
+            u.setId(UUID.randomUUID());
+            return u;
+        });
+    }
+
     private RepairMaterialUsageDto usageDto(double quantity) {
         return new RepairMaterialUsageDto(
-                null,
-                null,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                quantity,
-                10.0
+                null, null, UUID.randomUUID(), UUID.randomUUID(), quantity, 10.0
+        );
+    }
+
+    private RepairMaterialUsageDto usageDtoWithRequirement(
+            UUID warehouseId, UUID sparePartId, double quantity, UUID requirementId) {
+        return new RepairMaterialUsageDto(
+                null, null, null, null,
+                warehouseId, null,
+                sparePartId, null, null, null,
+                quantity, 10.0, null, null, null, null, null, null, null,
+                requirementId, null, null, null
         );
     }
 
@@ -512,5 +675,14 @@ class RepairMaterialUsageServiceTest {
         warehouse.setId(warehouseId);
         warehouse.setActive(true);
         return warehouse;
+    }
+
+    private WorkOrderSparePartRequirement requirement(UUID id, UUID workOrderId, UUID sparePartId) {
+        WorkOrderSparePartRequirement req = new WorkOrderSparePartRequirement();
+        req.setId(id);
+        req.setWorkOrderId(workOrderId);
+        req.setSparePartId(sparePartId);
+        req.setStatus(WorkOrderSparePartRequirementStatus.PLANNED);
+        return req;
     }
 }

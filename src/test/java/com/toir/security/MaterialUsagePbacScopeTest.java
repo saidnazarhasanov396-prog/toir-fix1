@@ -8,6 +8,7 @@ import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
@@ -53,6 +54,7 @@ class MaterialUsagePbacScopeTest {
     LowStockRecommendationService lowStockRecommendationService;
     ActualCostRepository actualCostRepository;
     CostCategoryRepository costCategoryRepository;
+    WorkOrderSparePartRequirementRepository requirementRepository;
     RepairMaterialUsageService service;
 
     @BeforeEach
@@ -71,6 +73,7 @@ class MaterialUsagePbacScopeTest {
         lowStockRecommendationService = mock(LowStockRecommendationService.class);
         actualCostRepository = mock(ActualCostRepository.class);
         costCategoryRepository = mock(CostCategoryRepository.class);
+        requirementRepository = mock(WorkOrderSparePartRequirementRepository.class);
         service = new RepairMaterialUsageService(
                 repository,
                 stockRepository,
@@ -85,7 +88,8 @@ class MaterialUsagePbacScopeTest {
                 equipmentStatusLifecycleService,
                 lowStockRecommendationService,
                 actualCostRepository,
-                costCategoryRepository
+                costCategoryRepository,
+                requirementRepository
         );
     }
 
