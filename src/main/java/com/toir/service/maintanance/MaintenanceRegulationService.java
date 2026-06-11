@@ -283,12 +283,10 @@ public class MaintenanceRegulationService {
                 .collect(Collectors.toMap(MaintenanceRegulation::getId, regulation -> regulation, (left, right) -> left));
         Map<UUID, List<MaintenanceRegulation>> regulationsByEquipmentId =
                 regulationsByEquipmentId(rules, regulationById, equipmentById.keySet());
+        Map<UUID, List<EquipmentMaintenanceRule>> standaloneRulesByEquipmentId =
+                standaloneRulesByEquipmentId(rules, equipmentById.keySet());
         Map<UUID, MaintenanceRegulationSummaryDto.OperationSummary> operationSummaryByTemplateId =
-                operationSummaryByTemplateId(regulationsByEquipmentId.values().stream()
-                        .flatMap(Collection::stream)
-                        .map(MaintenanceRegulation::getTemplateId)
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toSet()));
+                operationSummaryByTemplateId(templateIds(regulationsByEquipmentId, standaloneRulesByEquipmentId));
         log.info("Mapping {} equipment rows with related maintenance regulations: ", equipment.size());
 
         return equipment.stream()
@@ -299,16 +297,28 @@ public class MaintenanceRegulationService {
                     List<MaintenanceRegulation> matchedRegulations = item.getId() == null
                             ? Collections.emptyList()
                             : regulationsByEquipmentId.getOrDefault(item.getId(), Collections.emptyList());
+                    List<EquipmentMaintenanceRule> matchedStandaloneRules = item.getId() == null
+                            ? Collections.emptyList()
+                            : standaloneRulesByEquipmentId.getOrDefault(item.getId(), Collections.emptyList());
                     log.debug("Matched maintenance regulations for equipmentId={}, equipmentTypeId={}, regulationCount={}",
-                            item.getId(), itemEquipmentTypeId, matchedRegulations.size());
-                    List<MaintenanceRegulationSummaryDto> regulations = matchedRegulations
+                            item.getId(), itemEquipmentTypeId, matchedRegulations.size() + matchedStandaloneRules.size());
+                    List<MaintenanceRegulationSummaryDto> regulations = new java.util.ArrayList<>();
+                    matchedRegulations
                             .stream()
                             .map(regulation -> MaintenanceRegulationSummaryDto.from(
                                     regulation,
                                     operationSummary(regulation, operationSummaryByTemplateId)
                             ))
                             .filter(Objects::nonNull)
-                            .toList();
+                            .forEach(regulations::add);
+                    matchedStandaloneRules
+                            .stream()
+                            .map(rule -> MaintenanceRegulationSummaryDto.from(
+                                    rule,
+                                    operationSummary(rule, operationSummaryByTemplateId)
+                            ))
+                            .filter(Objects::nonNull)
+                            .forEach(regulations::add);
                     return new EquipmentWithRegulationsDto(
                             item.getId(),
                             item.getName(),
@@ -410,6 +420,54 @@ public class MaintenanceRegulationService {
             return null;
         }
         return operationSummaryByTemplateId.get(regulation.getTemplateId());
+    }
+
+    private MaintenanceRegulationSummaryDto.OperationSummary operationSummary(
+            EquipmentMaintenanceRule rule,
+            Map<UUID, MaintenanceRegulationSummaryDto.OperationSummary> operationSummaryByTemplateId) {
+        if (rule == null || rule.getTemplateId() == null) {
+            return null;
+        }
+        return operationSummaryByTemplateId.get(rule.getTemplateId());
+    }
+
+    private Set<UUID> templateIds(
+            Map<UUID, List<MaintenanceRegulation>> regulationsByEquipmentId,
+            Map<UUID, List<EquipmentMaintenanceRule>> standaloneRulesByEquipmentId) {
+        Set<UUID> ids = regulationsByEquipmentId.values().stream()
+                .flatMap(Collection::stream)
+                .map(MaintenanceRegulation::getTemplateId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        standaloneRulesByEquipmentId.values().stream()
+                .flatMap(Collection::stream)
+                .map(EquipmentMaintenanceRule::getTemplateId)
+                .filter(Objects::nonNull)
+                .forEach(ids::add);
+        return ids;
+    }
+
+    private Map<UUID, List<EquipmentMaintenanceRule>> standaloneRulesByEquipmentId(
+            List<EquipmentMaintenanceRule> rules,
+            Set<UUID> equipmentIds) {
+        Map<UUID, LinkedHashMap<UUID, EquipmentMaintenanceRule>> grouped = new LinkedHashMap<>();
+        for (EquipmentMaintenanceRule rule : rules) {
+            if (rule == null || rule.getId() == null || rule.getEquipmentId() == null || rule.getBaseRegulationId() != null) {
+                continue;
+            }
+            if (!equipmentIds.contains(rule.getEquipmentId())) {
+                continue;
+            }
+            grouped.computeIfAbsent(rule.getEquipmentId(), ignored -> new LinkedHashMap<>())
+                    .putIfAbsent(rule.getId(), rule);
+        }
+        return grouped.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> List.copyOf(entry.getValue().values()),
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
     }
 
     private Map<UUID, List<MaintenanceRegulation>> regulationsByEquipmentId(
