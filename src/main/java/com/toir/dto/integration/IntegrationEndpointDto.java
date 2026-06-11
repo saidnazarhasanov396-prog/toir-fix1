@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public record IntegrationEndpointDto(
         UUID id,
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         @NotBlank String system,
         @NotBlank String url,

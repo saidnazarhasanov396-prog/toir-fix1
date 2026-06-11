@@ -14,6 +14,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,14 +59,12 @@ public class RepairCampaignService {
 
     @Transactional
     public RepairCampaignDto create(RepairCampaignRequest r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Campaign code already exists: " + r.code());
-        }
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         if (!r.endDate().isAfter(r.startDate())) {
             throw RestException.badRequest("End date must be after start date");
         }
         RepairCampaign c = new RepairCampaign();
-        c.setCode(r.code());
+        c.setCode(nextCode());
         c.setName(r.name());
         c.setYear(r.year());
         c.setQuarter(r.quarter());
@@ -88,6 +87,15 @@ public class RepairCampaignService {
         );
 
         return toDto(saved);
+    }
+
+    private String nextCode() {
+        String prefix = "RCMP-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "RCMP",
+                () -> repository.maxSequenceByCodePrefix(prefix),
+                repository::existsByCodeAndIsDeletedFalse
+        );
     }
 
     @Transactional

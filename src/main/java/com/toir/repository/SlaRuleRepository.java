@@ -32,6 +32,14 @@ public interface SlaRuleRepository extends JpaRepository<SlaRule, UUID> {
     @Query(value = "SELECT EXISTS(SELECT 1 FROM sla_rules WHERE code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM sla_rules
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
+
     @Query(value = "SELECT * FROM sla_rules WHERE is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<SlaRule> findAllByActiveTrueAndIsDeletedFalse();
 

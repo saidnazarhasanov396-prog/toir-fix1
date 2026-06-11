@@ -7,6 +7,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.CriticalityClassRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +37,7 @@ public class CriticalityClassService {
 
     @Transactional()
     public CriticalityClassDto create(CriticalityClassDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         CriticalityClass e = new CriticalityClass();
         e.setCode(nextCode());
         apply(e, r);
@@ -57,6 +59,7 @@ public class CriticalityClassService {
 
     @Transactional
     public CriticalityClassDto update(UUID id, CriticalityClassDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         CriticalityClass e = getOrThrow(id);
         apply(e, r);
 

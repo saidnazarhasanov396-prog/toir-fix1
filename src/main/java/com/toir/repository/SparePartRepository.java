@@ -34,6 +34,14 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM spare_parts
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
+
+    @Query(value = """
         select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern

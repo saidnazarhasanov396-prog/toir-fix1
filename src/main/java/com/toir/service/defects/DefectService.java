@@ -33,6 +33,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -141,6 +142,7 @@ public class DefectService {
 
     @Transactional
     public DefectResponse create(DefectRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         DefectList defectList = validateDefectListForCreate(request);
         assertCanAccessDefectRequest(request);
         equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create defect");
@@ -162,6 +164,7 @@ public class DefectService {
 
     @Transactional
     public DefectResponse update(UUID id, DefectRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         Defect entity = getOrThrow(id);
         assertCanAccessDefect(entity);
         assertCanAccessDefectRequest(request);

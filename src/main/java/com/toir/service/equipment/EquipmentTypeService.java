@@ -10,6 +10,7 @@ import com.toir.dto.equipmenttype.EquipmentTypeRequest;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,6 +57,7 @@ public class EquipmentTypeService {
 
     @Transactional
     public EquipmentTypeDto create(EquipmentTypeRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         EquipmentType entity = new EquipmentType();
         entity.setCode(nextCode());
         apply(entity, request);
@@ -75,6 +77,7 @@ public class EquipmentTypeService {
 
     @Transactional
     public EquipmentTypeDto update(UUID id, EquipmentTypeRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         EquipmentType entity = getOrThrow(id);
         apply(entity, request);
 

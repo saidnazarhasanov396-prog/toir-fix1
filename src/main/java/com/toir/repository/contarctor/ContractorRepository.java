@@ -39,4 +39,12 @@ public interface ContractorRepository extends JpaRepository<Contractor, UUID> {
 
     @Query(value = "SELECT COUNT(*) > 0 FROM contractors WHERE code = :code AND is_deleted = false", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
+
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM contractors
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
 }

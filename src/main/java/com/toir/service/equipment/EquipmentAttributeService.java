@@ -30,6 +30,7 @@ import com.toir.repository.equipment.EquipmentAttributeValueHistoryRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -132,17 +133,23 @@ public class EquipmentAttributeService {
 
     @Transactional
     public EquipmentAttributeOptionSourceDto createOptionSource(EquipmentAttributeOptionSourceRequest request) {
-        String code = normalizeKey(request.code());
-        if (optionSourceRepository.existsByCodeAndIsDeletedFalse(code)) {
-            throw RestException.conflict("Equipment attribute option source already exists: " + code);
-        }
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         EquipmentAttributeOptionSource source = new EquipmentAttributeOptionSource();
-        source.setCode(code);
+        source.setCode(nextOptionSourceCode());
         source.setName(request.name());
         source.setNameRu(request.nameRu());
         source.setNameUz(request.nameUz());
         source.setDescription(request.description());
         return EquipmentAttributeOptionSourceDto.from(optionSourceRepository.save(source));
+    }
+
+    private String nextOptionSourceCode() {
+        String prefix = "EAOS-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "EAOS",
+                () -> optionSourceRepository.maxSequenceByCodePrefix(prefix),
+                optionSourceRepository::existsByCodeAndIsDeletedFalse
+        );
     }
 
     private Map<UUID, Long> optionCountsBySourceId(List<EquipmentAttributeOptionSource> sources) {
