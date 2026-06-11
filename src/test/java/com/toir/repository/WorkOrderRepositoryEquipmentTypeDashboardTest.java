@@ -8,6 +8,8 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
+import com.toir.entity.Department;
+import com.toir.enums.DepartmentType;
 import com.toir.enums.WorkType;
 import java.util.List;
 import java.util.UUID;
@@ -42,7 +44,7 @@ class WorkOrderRepositoryEquipmentTypeDashboardTest {
 
     @Test
     void countsActiveWorkOrdersGroupedByEquipmentType() {
-        UUID departmentId = UUID.randomUUID();
+        UUID departmentId = saveDepartment("DEPT-P-001").getId();
         EquipmentType pump = saveEquipmentType("PUMP", "Pump");
         Equipment pumpA = saveEquipment("EQ-P-001", "Pump A", pump.getId(), departmentId);
         Equipment pumpB = saveEquipment("EQ-P-002", "Pump B", pump.getId(), departmentId);
@@ -64,7 +66,7 @@ class WorkOrderRepositoryEquipmentTypeDashboardTest {
 
     @Test
     void excludesSoftDeletedWorkOrders() {
-        UUID departmentId = UUID.randomUUID();
+        UUID departmentId = saveDepartment("DEPT-P-DEL").getId();
         EquipmentType pump = saveEquipmentType("PUMP-DEL", "Pump");
         Equipment equipment = saveEquipment("EQ-P-DEL", "Pump", pump.getId(), departmentId);
 
@@ -80,8 +82,8 @@ class WorkOrderRepositoryEquipmentTypeDashboardTest {
 
     @Test
     void departmentFilterChangesCounts() {
-        UUID targetDepartmentId = UUID.randomUUID();
-        UUID otherDepartmentId = UUID.randomUUID();
+        UUID targetDepartmentId = saveDepartment("DEPT-TARGET").getId();
+        UUID otherDepartmentId = saveDepartment("DEPT-OTHER").getId();
         EquipmentType pump = saveEquipmentType("PUMP-DEPT", "Pump");
         Equipment targetPump = saveEquipment("EQ-P-DEPT-1", "Pump target", pump.getId(), targetDepartmentId);
         Equipment otherPump = saveEquipment("EQ-P-DEPT-2", "Pump other", pump.getId(), otherDepartmentId);
@@ -98,7 +100,7 @@ class WorkOrderRepositoryEquipmentTypeDashboardTest {
 
     @Test
     void groupsEquipmentWithoutTypeUnderUnspecified() {
-        UUID departmentId = UUID.randomUUID();
+        UUID departmentId = saveDepartment("DEPT-NO-TYPE").getId();
         EquipmentType temporaryType = saveEquipmentType("TEMP-TYPE", "Temporary");
         Equipment equipment = saveEquipment("EQ-NO-TYPE", "No type", temporaryType.getId(), departmentId);
         entityManager.flush();
@@ -123,6 +125,14 @@ class WorkOrderRepositoryEquipmentTypeDashboardTest {
         type.setName(name);
         type.setCategory("PRODUCTION_EQUIPMENT");
         return entityManager.persistAndFlush(type);
+    }
+
+    private Department saveDepartment(String code) {
+        Department dept = new Department();
+        dept.setCode(code);
+        dept.setName("Department " + code);
+        dept.setType(DepartmentType.WORKSHOP);
+        return entityManager.persistAndFlush(dept);
     }
 
     private Equipment saveEquipment(String code, String name, UUID equipmentTypeId, UUID departmentId) {
