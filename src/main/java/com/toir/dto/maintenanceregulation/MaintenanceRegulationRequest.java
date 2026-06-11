@@ -179,4 +179,10 @@ public record MaintenanceRegulationRequest(
                 return (triggerMeterType == null && triggerMeterInterval == null)
                         || (triggerMeterType != null && triggerMeterInterval != null);
         }
+
+        @AssertTrue(message = "triggerMeterType and triggerMeterInterval must be provided together")
+        public boolean isMeterTriggerPairValid() {
+                return (triggerMeterType == null && triggerMeterInterval == null)
+                        || (triggerMeterType != null && triggerMeterInterval != null);
+        }
 }

@@ -50,6 +50,7 @@ import com.toir.enums.RequestStatus;
 import com.toir.enums.ReservationStatus;
 import com.toir.enums.SafetyPermitStatus;
 import com.toir.enums.TaskExecutionStatus;
+import com.toir.enums.NotificationSeverity;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -260,6 +261,9 @@ class WorkOrderServiceTest {
 
     @Mock
     ObjectMapper objectMapper;
+
+    @Mock
+    NotificationService notificationService;
 
     @InjectMocks
     WorkOrderService service;
@@ -979,6 +983,46 @@ class WorkOrderServiceTest {
         assertThat(captor.getValue().getPerformer()).isSameAs(performer);
         assertThat(result.performerId()).isEqualTo(performerId);
         assertThat(result.performerName()).isEqualTo("Ivan Petrov");
+        verify(notificationService).notifyUser(
+                eq(userId),
+                org.mockito.ArgumentMatchers.contains("Work order assigned"),
+                org.mockito.ArgumentMatchers.contains(request.number()),
+                eq(NotificationSeverity.INFO),
+                eq("WorkOrder"),
+                eq(result.id().toString())
+        );
+    }
+
+    @Test
+    void createWorkOrderWithTodayPerformerPlanSendsTodayTaskMessage() {
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Instant todayInTashkent = LocalDate.now(java.time.ZoneId.of("Asia/Tashkent"))
+                .atTime(9, 0)
+                .atZone(java.time.ZoneId.of("Asia/Tashkent"))
+                .toInstant();
+        WorkOrderRequest request = requestWithPerformerAndStart(performerId, todayInTashkent);
+        BrigadeMember performer = brigadeMember(performerId, userId, request.departmentId(), true, true);
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+        when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
+        when(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(Optional.of(user(userId, "Ivan Petrov")));
+
+        WorkOrderDto result = service.create(request);
+
+        verify(notificationService).notifyUser(
+                eq(userId),
+                org.mockito.ArgumentMatchers.contains("Work order assigned"),
+                org.mockito.ArgumentMatchers.contains("Bugun"),
+                eq(NotificationSeverity.INFO),
+                eq("WorkOrder"),
+                eq(result.id().toString())
+        );
     }
 
     @Test
@@ -3483,6 +3527,31 @@ class WorkOrderServiceTest {
                 base.replacementEquipmentId(),
                 base.priority(),
                 base.startPlannedAt(),
+                base.endPlannedAt(),
+                base.createdById(),
+                base.summary()
+        );
+    }
+
+    private WorkOrderRequest requestWithPerformerAndStart(UUID performerId, Instant startPlannedAt) {
+        WorkOrderRequest base = requestWithPerformer(performerId);
+        return new WorkOrderRequest(
+                base.number(),
+                base.title(),
+                base.equipmentId(),
+                base.equipmentNodeId(),
+                base.departmentId(),
+                base.repairRequestId(),
+                base.defectId(),
+                base.pprTaskId(),
+                base.contractorId(),
+                base.performerId(),
+                base.type(),
+                base.workType(),
+                base.warehouseId(),
+                base.replacementEquipmentId(),
+                base.priority(),
+                startPlannedAt,
                 base.endPlannedAt(),
                 base.createdById(),
                 base.summary()

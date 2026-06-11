@@ -3363,6 +3363,13 @@ CREATE INDEX idx_oee_equipment_shift ON public.oee_records USING btree (equipmen
 
 
 --
+-- Name: idx_ppr_plans_date_range; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_ppr_plans_date_range ON public.ppr_plans USING btree (start_date, end_date) WHERE (is_deleted = false);
+
+
+--
 -- Name: idx_sync_log_endpoint; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3578,5 +3585,4 @@ ALTER TABLE ONLY public.procurement_request_lines
 --
 -- PostgreSQL database dump complete
 --
-
 

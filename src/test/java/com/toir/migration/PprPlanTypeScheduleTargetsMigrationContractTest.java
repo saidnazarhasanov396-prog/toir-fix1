@@ -10,6 +10,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PprPlanTypeScheduleTargetsMigrationContractTest {
 
     @Test
+    void baselineIncludesSameVersionPprPlanDateRangeIndex() throws Exception {
+        Path baseline = Path.of(
+                "src/main/resources/db/migration/B20260523_7__schema_baseline.sql"
+        );
+
+        assertThat(Files.exists(baseline)).isTrue();
+        String sql = Files.readString(baseline).toLowerCase();
+
+        assertThat(sql).contains("create index idx_ppr_plans_date_range");
+        assertThat(sql).contains("on public.ppr_plans using btree (start_date, end_date)");
+    }
+
+    @Test
     void migrationAddsPprPlanContractColumnsAndTargetsTable() throws Exception {
         Path migration = Path.of(
                 "src/main/resources/db/migration/V20260526_2__ppr_plan_type_schedule_targets.sql"

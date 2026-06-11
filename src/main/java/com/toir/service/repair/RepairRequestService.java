@@ -13,6 +13,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.NotificationSeverity;
+import com.toir.enums.UserStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
@@ -33,6 +34,7 @@ import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import com.toir.exception.RestException;
 import com.toir.dto.repairrequest.CloseRequestRequest;
+import com.toir.dto.repairrequest.RepairRequestClarificationRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import lombok.RequiredArgsConstructor;
@@ -325,6 +327,7 @@ public class RepairRequestService {
                 Set.of(RequestStatus.APPROVED),
                 "Cannot assign repair request from status "
         );
+        validateAssignee(assigneeId);
 
         captureReaction(entity, RequestStatus.ASSIGNED);
         entity.setAssignedToId(assigneeId);
@@ -343,12 +346,31 @@ public class RepairRequestService {
         notificationService.notifyUser(
                 assigneeId,
                 "Repair request assigned: " + entity.getNumber(),
-                "Repair request " + entity.getNumber() + " was assigned to you.",
+                assignedRepairRequestMessage(entity),
                 NotificationSeverity.INFO,
                 "RepairRequest",
                 entity.getId().toString()
         );
         return toDtoWithLinks(entity);
+    }
+
+    private String assignedRepairRequestMessage(RepairRequest entity) {
+        String equipmentName = entity.getEquipmentId() == null
+                ? "ushbu uskuna"
+                : equipmentRepository.findByIdAndIsDeletedFalse(entity.getEquipmentId())
+                .map(Equipment::getName)
+                .filter(name -> name != null && !name.isBlank())
+                .orElse("ushbu uskuna");
+        return "Sizga " + entity.getNumber() + " bo'yicha " + equipmentName
+                + " uchun texnik ko'rik yoki ta'mirlash vazifasi biriktirildi.";
+    }
+
+    private void validateAssignee(UUID assigneeId) {
+        User assignee = userRepository.findByIdAndIsDeletedFalse(assigneeId)
+                .orElseThrow(() -> RestException.notFound("Assignee not found: " + assigneeId));
+        if (assignee.getStatus() != null && assignee.getStatus() != UserStatus.ACTIVE) {
+            throw RestException.badRequest("Assignee is inactive: " + assigneeId);
+        }
     }
 
     @Transactional
@@ -379,10 +401,23 @@ public class RepairRequestService {
 
     @Transactional
     public RepairRequestDto requestClarification(UUID id, String comment) {
+        return requestClarification(id, new RepairRequestClarificationRequest(null, comment, null));
+    }
+
+    @Transactional
+    public RepairRequestDto requestClarification(UUID id, RepairRequestClarificationRequest request) {
+        String comment = request == null ? null : request.message();
         if (comment == null || comment.isBlank()) {
             throw RestException.badRequest("Clarification comment is required");
         }
         RepairRequest entity = getOrThrow(id);
+        UUID recipientId = request.recipientUserId() != null
+                ? request.recipientUserId()
+                : entity.getReporterId();
+        if (request.recipientUserId() != null
+                && userRepository.findByIdAndIsDeletedFalse(request.recipientUserId()).isEmpty()) {
+            throw RestException.badRequest("Clarification recipient not found: " + request.recipientUserId());
+        }
         assertCanTransition(
                 entity,
                 RequestStatus.NEEDS_CLARIFICATION,
@@ -405,8 +440,23 @@ public class RepairRequestService {
                 entity,
                 save
         );
+        notifyClarificationRequested(entity, recipientId, comment);
 
         return toDtoWithLinks(entity);
+    }
+
+    private void notifyClarificationRequested(RepairRequest entity, UUID recipientId, String comment) {
+        if (recipientId == null) {
+            throw RestException.badRequest("Clarification recipient is required");
+        }
+        notificationService.notifyUser(
+                recipientId,
+                "Clarification requested: " + entity.getNumber(),
+                comment,
+                NotificationSeverity.INFO,
+                "RepairRequest",
+                entity.getId().toString()
+        );
     }
 
     @Transactional(readOnly = true)
