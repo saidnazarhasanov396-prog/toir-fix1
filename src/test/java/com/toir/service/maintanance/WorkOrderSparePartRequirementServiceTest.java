@@ -33,10 +33,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+
+import com.toir.dto.workorder.WorkOrderSparePartRequirementDto;
+import com.toir.entity.repair.RepairMaterialUsage;
+import com.toir.enums.WorkOrderSparePartRequirementStatus;
+import com.toir.repository.SparePartRepository;
+import com.toir.repository.repair.RepairMaterialUsageRepository;
 
 @ExtendWith(MockitoExtension.class)
 class WorkOrderSparePartRequirementServiceTest {
+
+
+
+    @Mock
+    private RepairMaterialUsageRepository repairMaterialUsageRepository;
+    @Mock
+    private SparePartRepository sparePartRepository;
 
     @Mock
     private WorkOrderSparePartRequirementRepository repository;
@@ -201,18 +215,10 @@ class WorkOrderSparePartRequirementServiceTest {
     }
 
     @Test
-    void templateRequirementsDoNotCreateRepairMaterialUsageOrStockMovementDependencies() {
+    void templateRequirementsDoNotCreateStockMovementOrWarehouseStockDependencies() {
         assertThat(WorkOrderSparePartRequirementService.class.getDeclaredFields())
-                .noneMatch(field -> field.getType().getName().contains("RepairMaterialUsage"))
                 .noneMatch(field -> field.getType().getName().contains("StockMovement"))
                 .noneMatch(field -> field.getType().getName().contains("WarehouseStock"));
-    }
-
-    private WorkOrder workOrder(UUID id) {
-        WorkOrder workOrder = new WorkOrder();
-        workOrder.setId(id);
-        workOrder.setDepartmentId(UUID.randomUUID());
-        return workOrder;
     }
 
     private MaintenanceTemplateSparePartRequirement templateRequirement(UUID templateId) {
@@ -244,5 +250,176 @@ class WorkOrderSparePartRequirementServiceTest {
         requirement.setNotes("keep ready");
         requirement.setActive(true);
         return requirement;
+    }
+
+    @Test
+    void findByWorkOrder_withLinkedUsage_populatesIssuedQty() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+
+        WorkOrder workOrder = workOrder(workOrderId);
+        WorkOrderSparePartRequirement req = requirement(requirementId, workOrderId, sparePartId);
+
+        RepairMaterialUsage usage = new RepairMaterialUsage();
+        usage.setId(UUID.randomUUID());
+        usage.setRequirementId(requirementId);
+        usage.setSparePartId(sparePartId);      // bir xil — almashtirish yo'q
+        usage.setQuantity(3.0);
+
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findActiveByWorkOrderId(workOrderId))
+                .thenReturn(List.of(req));
+        when(repairMaterialUsageRepository.findAllByRequirementIdInAndIsDeletedFalse(List.of(requirementId)))
+                .thenReturn(List.of(usage));
+
+        List<WorkOrderSparePartRequirementDto> result = service.findByWorkOrder(workOrderId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).issuedQty()).isEqualTo(3.0);
+        assertThat(result.get(0).issuedSparePartId()).isEqualTo(sparePartId);
+        assertThat(result.get(0).isReplacement()).isFalse();
+    }
+
+    @Test
+    void findByWorkOrder_withReplacement_marksIsReplacementTrue() {
+        UUID workOrderId  = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+        UUID plannedSparePartId = UUID.randomUUID();
+        UUID actualSparePartId  = UUID.randomUUID(); // boshqa spare part
+
+        WorkOrder workOrder = workOrder(workOrderId);
+        WorkOrderSparePartRequirement req = requirement(requirementId, workOrderId, plannedSparePartId);
+
+        RepairMaterialUsage usage = new RepairMaterialUsage();
+        usage.setId(UUID.randomUUID());
+        usage.setRequirementId(requirementId);
+        usage.setSparePartId(actualSparePartId);           // faktda ishlatilgan
+        usage.setReplacedSparePartId(plannedSparePartId);  // almashtirish
+        usage.setQuantity(2.0);
+
+        SparePart replacedSparePart = new SparePart();
+        replacedSparePart.setId(plannedSparePartId);
+        replacedSparePart.setName("Original Part");
+        replacedSparePart.setCode("OP-001");
+
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findActiveByWorkOrderId(workOrderId))
+                .thenReturn(List.of(req));
+        when(repairMaterialUsageRepository.findAllByRequirementIdInAndIsDeletedFalse(List.of(requirementId)))
+                .thenReturn(List.of(usage));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(List.of(plannedSparePartId)))
+                .thenReturn(List.of(replacedSparePart));
+
+        List<WorkOrderSparePartRequirementDto> result = service.findByWorkOrder(workOrderId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).issuedQty()).isEqualTo(2.0);
+        assertThat(result.get(0).issuedSparePartId()).isEqualTo(actualSparePartId);
+        assertThat(result.get(0).isReplacement()).isTrue();
+    }
+
+    @Test
+    void findByWorkOrder_noLinkedUsage_returnsRequirementWithNullUsageFields() {
+        UUID workOrderId  = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+        UUID sparePartId  = UUID.randomUUID();
+
+        WorkOrder workOrder = workOrder(workOrderId);
+        WorkOrderSparePartRequirement req = requirement(requirementId, workOrderId, sparePartId);
+
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findActiveByWorkOrderId(workOrderId))
+                .thenReturn(List.of(req));
+        when(repairMaterialUsageRepository.findAllByRequirementIdInAndIsDeletedFalse(List.of(requirementId)))
+                .thenReturn(List.of()); // usage yo'q
+
+        List<WorkOrderSparePartRequirementDto> result = service.findByWorkOrder(workOrderId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).issuedQty()).isNull();
+        assertThat(result.get(0).issuedSparePartId()).isNull();
+        assertThat(result.get(0).isReplacement()).isFalse();
+    }
+
+    @Test
+    void findByWorkOrder_multipleRequirements_eachLinkedToOwnUsage() {
+        UUID workOrderId   = UUID.randomUUID();
+        UUID requirementId1 = UUID.randomUUID();
+        UUID requirementId2 = UUID.randomUUID();
+        UUID sparePartId1  = UUID.randomUUID();
+        UUID sparePartId2  = UUID.randomUUID();
+
+        WorkOrder workOrder = workOrder(workOrderId);
+        WorkOrderSparePartRequirement req1 = requirement(requirementId1, workOrderId, sparePartId1);
+        WorkOrderSparePartRequirement req2 = requirement(requirementId2, workOrderId, sparePartId2);
+
+        RepairMaterialUsage usage1 = new RepairMaterialUsage();
+        usage1.setRequirementId(requirementId1);
+        usage1.setSparePartId(sparePartId1);
+        usage1.setQuantity(1.0);
+
+        // req2 uchun usage yo'q
+
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findActiveByWorkOrderId(workOrderId))
+                .thenReturn(List.of(req1, req2));
+        when(repairMaterialUsageRepository.findAllByRequirementIdInAndIsDeletedFalse(
+                List.of(requirementId1, requirementId2)))
+                .thenReturn(List.of(usage1));
+
+        List<WorkOrderSparePartRequirementDto> result = service.findByWorkOrder(workOrderId);
+
+        assertThat(result).hasSize(2);
+        WorkOrderSparePartRequirementDto dto1 = result.stream()
+                .filter(d -> d.id().equals(requirementId1)).findFirst().orElseThrow();
+        WorkOrderSparePartRequirementDto dto2 = result.stream()
+                .filter(d -> d.id().equals(requirementId2)).findFirst().orElseThrow();
+
+        assertThat(dto1.issuedQty()).isEqualTo(1.0);
+        assertThat(dto2.issuedQty()).isNull();
+    }
+
+    @Test
+    void findByWorkOrder_noRequirements_returnsEmptyList() {
+        UUID workOrderId = UUID.randomUUID();
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId)));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findActiveByWorkOrderId(workOrderId))
+                .thenReturn(List.of());
+
+        List<WorkOrderSparePartRequirementDto> result = service.findByWorkOrder(workOrderId);
+
+        assertThat(result).isEmpty();
+        verifyNoInteractions(repairMaterialUsageRepository);
+    }
+
+    // ─── Helpers ───────────────────────────────────────────
+
+    private WorkOrder workOrder(UUID id) {
+        WorkOrder wo = new WorkOrder();
+        wo.setId(id);
+        wo.setDepartmentId(UUID.randomUUID());
+        return wo;
+    }
+
+    private WorkOrderSparePartRequirement requirement(UUID id, UUID workOrderId, UUID sparePartId) {
+        WorkOrderSparePartRequirement req = new WorkOrderSparePartRequirement();
+        req.setId(id);
+        req.setWorkOrderId(workOrderId);
+        req.setSparePartId(sparePartId);
+        req.setRequiredQty(2.0);
+        req.setStatus(WorkOrderSparePartRequirementStatus.PLANNED);
+        req.setSourceType(WorkOrderSparePartRequirementSourceType.MANUAL);
+        return req;
     }
 }

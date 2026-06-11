@@ -4,6 +4,7 @@ import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.maintenance.WorkOrderSparePartRequirement;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.repair.RepairMaterialUsage;
@@ -15,6 +16,7 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WorkOrderSparePartRequirementStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
@@ -24,6 +26,7 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
@@ -68,6 +71,7 @@ public class RepairMaterialUsageService {
     private final LowStockRecommendationService lowStockRecommendationService;
     private final ActualCostRepository actualCostRepository;
     private final CostCategoryRepository costCategoryRepository;
+    private final WorkOrderSparePartRequirementRepository requirementRepository;
 
 
     @Transactional(readOnly = true)
@@ -151,6 +155,24 @@ public class RepairMaterialUsageService {
         usage.setQuantity(r.quantity());
         usage.setUnitCost(r.unitCost());
         usage.setNotes(r.notes());
+
+
+        if (r.requirementId() != null) {
+            WorkOrderSparePartRequirement requirement = requirementRepository
+                    .findById(r.requirementId())
+                    .filter(req -> !req.isDeleted() && req.getWorkOrderId().equals(workOrderId))
+                    .orElseThrow(() -> RestException.notFound("Requirement not found: " + r.requirementId()));
+            usage.setRequirementId(requirement.getId());
+
+
+            if (!r.sparePartId().equals(requirement.getSparePartId())) {
+                usage.setReplacedSparePartId(requirement.getSparePartId());
+            }
+
+            // Requirement statusini ISSUED ga o'tkazamiz
+            requirement.setStatus(WorkOrderSparePartRequirementStatus.ISSUED);
+            requirementRepository.save(requirement);
+        }
         RepairMaterialUsage saved = repository.save(usage);
         syncMaterialActualCost(saved);
 
@@ -202,15 +224,21 @@ public class RepairMaterialUsageService {
         Map<UUID, WorkOrder> workOrderById = workOrders.stream()
                 .collect(Collectors.toMap(WorkOrder::getId, Function.identity(), (left, right) -> left));
         Map<UUID, Warehouse> warehouseById = safeList(warehouseRepository.findAllByIdInAndIsDeletedFalse(
-                        usages.stream().map(RepairMaterialUsage::getWarehouseId).filter(Objects::nonNull).distinct().toList())
-                )
+                usages.stream().map(RepairMaterialUsage::getWarehouseId).filter(Objects::nonNull).distinct().toList())
+        )
                 .stream()
                 .collect(Collectors.toMap(Warehouse::getId, Function.identity(), (left, right) -> left));
-        Map<UUID, SparePart> sparePartById = safeList(sparePartRepository.findAllByIdInAndIsDeletedFalse(
-                        usages.stream().map(RepairMaterialUsage::getSparePartId).filter(Objects::nonNull).distinct().toList())
-                )
+
+
+        List<UUID> allSparePartIds = usages.stream()
+                .flatMap(u -> java.util.stream.Stream.of(u.getSparePartId(), u.getReplacedSparePartId()))
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<UUID, SparePart> sparePartById = safeList(sparePartRepository.findAllByIdInAndIsDeletedFalse(allSparePartIds))
                 .stream()
                 .collect(Collectors.toMap(SparePart::getId, Function.identity(), (left, right) -> left));
+
         List<UUID> issuedByIds = usages.stream()
                 .map(RepairMaterialUsage::getIssuedById)
                 .filter(Objects::nonNull)
@@ -225,6 +253,9 @@ public class RepairMaterialUsageService {
                     WorkOrder workOrder = workOrderById.get(usage.getWorkOrderId());
                     Warehouse warehouse = warehouseById.get(usage.getWarehouseId());
                     SparePart sparePart = sparePartById.get(usage.getSparePartId());
+                    SparePart replacedSparePart = usage.getReplacedSparePartId() != null
+                            ? sparePartById.get(usage.getReplacedSparePartId())
+                            : null;
                     User issuedBy = usage.getIssuedById() == null ? null : userById.get(usage.getIssuedById());
                     return RepairMaterialUsageDto.detailed(
                             usage,
@@ -234,7 +265,9 @@ public class RepairMaterialUsageService {
                             sparePart == null ? null : sparePart.getName(),
                             sparePart == null ? null : sparePart.getCode(),
                             sparePart == null ? null : sparePart.getKind(),
-                            issuedBy == null ? null : issuedBy.getFullName()
+                            issuedBy == null ? null : issuedBy.getFullName(),
+                            replacedSparePart == null ? null : replacedSparePart.getName(),
+                            replacedSparePart == null ? null : replacedSparePart.getCode()
                     );
                 })
                 .toList();

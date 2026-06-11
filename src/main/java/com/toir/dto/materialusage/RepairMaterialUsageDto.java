@@ -27,7 +27,11 @@ public record RepairMaterialUsageDto(
         String issuedByName,
         UUID stockMovementId,
         String notes,
-        String costWarning
+        String costWarning,
+        UUID requirementId,
+        UUID replacedSparePartId,
+        String replacedSparePartName,
+        String replacedSparePartCode
 ) {
     public RepairMaterialUsageDto(UUID id,
                                   UUID workOrderId,
@@ -36,7 +40,8 @@ public record RepairMaterialUsageDto(
                                   double quantity,
                                   Double unitCost) {
         this(id, workOrderId, null, null, warehouseId, null, sparePartId, null, null, null,
-                quantity, unitCost, totalCost(quantity, unitCost), null, null, null, null, null, null);
+                quantity, unitCost, totalCost(quantity, unitCost), null, null, null, null, null, null,
+                null, null, null, null);
     }
 
     public RepairMaterialUsageDto(
@@ -61,30 +66,27 @@ public record RepairMaterialUsageDto(
     ) {
         this(id, workOrderId, workOrderNumber, workOrderTitle, warehouseId, warehouseName, sparePartId,
                 sparePartName, sparePartCode, kind, quantity, unitCost, totalCost, issuedAt, issuedById,
-                issuedByName, stockMovementId, notes, null);
+                issuedByName, stockMovementId, notes, null, null, null, null, null);
     }
 
     public static RepairMaterialUsageDto from(RepairMaterialUsage u) {
         return new RepairMaterialUsageDto(
                 u.getId(),
                 u.getWorkOrderId(),
-                null,
-                null,
-                u.getWarehouseId(),
-                null,
-                u.getSparePartId(),
-                null,
-                null,
-                null,
+                null, null,
+                u.getWarehouseId(), null,
+                u.getSparePartId(), null, null, null,
                 u.getQuantity(),
                 u.getUnitCost(),
                 totalCost(u.getQuantity(), u.getUnitCost()),
                 u.getIssuedAt() == null ? u.getCreatedAt() : u.getIssuedAt(),
-                u.getIssuedById(),
-                null,
+                u.getIssuedById(), null,
                 u.getStockMovementId(),
                 u.getNotes(),
-                costWarning(u.getUnitCost())
+                costWarning(u.getUnitCost()),
+                u.getRequirementId(),
+                u.getReplacedSparePartId(),
+                null, null
         );
     }
 
@@ -95,27 +97,27 @@ public record RepairMaterialUsageDto(
                                                   String sparePartName,
                                                   String sparePartCode,
                                                   InventoryItemKind kind,
-                                                  String issuedByName) {
+                                                  String issuedByName,
+                                                  String replacedSparePartName,
+                                                  String replacedSparePartCode) {
         return new RepairMaterialUsageDto(
                 u.getId(),
                 u.getWorkOrderId(),
-                workOrderNumber,
-                workOrderTitle,
-                u.getWarehouseId(),
-                warehouseName,
-                u.getSparePartId(),
-                sparePartName,
-                sparePartCode,
-                kind,
+                workOrderNumber, workOrderTitle,
+                u.getWarehouseId(), warehouseName,
+                u.getSparePartId(), sparePartName, sparePartCode, kind,
                 u.getQuantity(),
                 u.getUnitCost(),
                 totalCost(u.getQuantity(), u.getUnitCost()),
                 u.getIssuedAt() == null ? u.getCreatedAt() : u.getIssuedAt(),
-                u.getIssuedById(),
-                issuedByName,
+                u.getIssuedById(), issuedByName,
                 u.getStockMovementId(),
                 u.getNotes(),
-                costWarning(u.getUnitCost())
+                costWarning(u.getUnitCost()),
+                u.getRequirementId(),
+                u.getReplacedSparePartId(),
+                replacedSparePartName,
+                replacedSparePartCode
         );
     }
 
