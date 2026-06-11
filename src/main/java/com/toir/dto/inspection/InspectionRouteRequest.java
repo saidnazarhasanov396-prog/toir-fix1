@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 public record InspectionRouteRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         UUID departmentId,
         String frequency,

@@ -98,6 +98,8 @@ class VehicleServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(service, "auditBuilderService", auditBuilderService);
+        lenient().when(equipmentRepository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(false);
     }
 
     @Test
@@ -105,7 +107,7 @@ class VehicleServiceTest {
         UUID equipmentTypeId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         VehicleRequest request = new VehicleRequest(
-                "VH-001",
+                null,
                 "Truck 001",
                 "INV-VH-001",
                 "TN-VH-001",
@@ -137,7 +139,7 @@ class VehicleServiceTest {
                 "GPS-001"
         );
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-001")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-001")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-001")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A123AA")).thenReturn(false);
         when(vehicleDetailsRepository.existsByVinAndIsDeletedFalse("VIN123456789")).thenReturn(false);
@@ -169,7 +171,7 @@ class VehicleServiceTest {
                 VehicleRegistrationPlateType.LEGAL_ENTITY
         );
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-PLATE-TYPE-001")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-PLATE-TYPE-001")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-PLATE-TYPE-001")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("95 123 ABC")).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
@@ -198,7 +200,7 @@ class VehicleServiceTest {
     void createVehicleDefaultsMissingPlateTypeToUnknown() {
         VehicleRequest request = fullRequest("VH-PLATE-TYPE-002", "Truck Default Plate Type", "INV-VH-PLATE-TYPE-002", "LEGACY-123", null);
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-PLATE-TYPE-002")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-PLATE-TYPE-002")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-PLATE-TYPE-002")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("LEGACY-123")).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
@@ -227,7 +229,7 @@ class VehicleServiceTest {
         VehicleRequest request = fullRequest("VH-ATTR-001", "Truck Attr", "INV-VH-ATTR-001", "01A101AA", null)
                 .withAttributes(List.of(new EquipmentAttributeValueRequest(null, "payload_capacity", null, 12000.0, null, null, null, null)));
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-ATTR-001")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-ATTR-001")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-ATTR-001")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A101AA")).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
@@ -317,7 +319,7 @@ class VehicleServiceTest {
     void vehicleCreateWithoutManualAttributesDoesNotWriteManualAttributes() {
         VehicleRequest request = fullRequest("VH-NO-MANUAL-001", "Truck No Manual", "INV-VH-NO-MANUAL-001", "01A308AA", null);
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-NO-MANUAL-001")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-NO-MANUAL-001")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-NO-MANUAL-001")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A308AA")).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
@@ -340,7 +342,7 @@ class VehicleServiceTest {
         VehicleRequest request = fullRequest("VH-OFFICIAL-001", "Truck Official", "INV-VH-OFFICIAL-001", "01A201AA", null)
                 .withAttributes(List.of(new EquipmentAttributeValueRequest(null, "payload_capacity", null, 12000.0, null, null, null, null)));
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-OFFICIAL-001")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-OFFICIAL-001")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-OFFICIAL-001")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A201AA")).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
@@ -369,7 +371,7 @@ class VehicleServiceTest {
         VehicleRequest request = fullRequest("VH-FULL-ATTR-001", "Truck Full Attr", "INV-VH-FULL-ATTR-001", "01A207AA", null)
                 .withAttributes(attributes);
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-FULL-ATTR-001")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-FULL-ATTR-001")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-FULL-ATTR-001")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A207AA")).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
@@ -397,7 +399,7 @@ class VehicleServiceTest {
         VehicleRequest request = fullRequest("VH-DETAIL-CREATE", "Truck Detail Create", "INV-VH-DETAIL-CREATE", "01A304AA", null)
                 .withAttributes(List.of(new EquipmentAttributeValueRequest(null, "payload_capacity", null, 13000.0, null, null, null, null)));
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-DETAIL-CREATE")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-DETAIL-CREATE")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-DETAIL-CREATE")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A304AA")).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
@@ -424,7 +426,7 @@ class VehicleServiceTest {
         );
         EquipmentManualAttributeDto manualAttribute = manualAttribute("legacy_key", "legacy value");
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-MANUAL-001")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-MANUAL-001")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-MANUAL-001")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A202AA")).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
@@ -450,7 +452,7 @@ class VehicleServiceTest {
     void createVehicleWithMissingRequiredDynamicMetricFails() {
         VehicleRequest request = fullRequest("VH-ATTR-002", "Truck Attr Missing", "INV-VH-ATTR-002", "01A102AA", null);
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-ATTR-002")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-ATTR-002")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-ATTR-002")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A102AA")).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
@@ -470,7 +472,7 @@ class VehicleServiceTest {
     @Test
     void createVehicleRejectsDuplicatePlateNumber() {
         VehicleRequest request = VehicleRequest.minimal(
-                "VH-002",
+                null,
                 "Truck 002",
                 "INV-VH-002",
                 UUID.randomUUID(),
@@ -479,7 +481,7 @@ class VehicleServiceTest {
                 VehicleType.TRUCK
         );
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-002")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-002")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-002")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A999AA")).thenReturn(true);
 
@@ -492,7 +494,7 @@ class VehicleServiceTest {
     void createVehicleAllowsSoftDeletedPlateAndVinReuseWhenActiveLookupsDoNotFindThem() {
         VehicleRequest request = fullRequest("VH-003", "Truck 003", "INV-VH-003", "01A777AA", "VIN-REUSED");
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-003")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-003")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-003")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A777AA")).thenReturn(false);
         when(vehicleDetailsRepository.existsByVinAndIsDeletedFalse("VIN-REUSED")).thenReturn(false);
@@ -521,7 +523,7 @@ class VehicleServiceTest {
     void createVehicleNormalizesBlankVinToNull() {
         VehicleRequest request = fullRequest("VH-004", "Truck 004", "INV-VH-004", "01A444AA", "   ");
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-004")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-004")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-004")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A444AA")).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
@@ -549,21 +551,18 @@ class VehicleServiceTest {
     }
 
     @Test
-    void updateVehicleRejectsDuplicateEquipmentCodeFromAnotherActiveRow() {
+    void updateVehicleRejectsClientProvidedCode() {
         UUID equipmentId = UUID.randomUUID();
-        UUID otherEquipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-010", "Truck 010", "INV-VH-010");
-        Equipment duplicateEquipment = equipment(otherEquipmentId, "VH-011", "Truck 011", "INV-VH-011");
-        VehicleDetails details = details(equipmentId, "01A010AA", "VIN-010");
-        VehicleRequest request = fullRequest("VH-011", "Truck 010", "INV-VH-010", "01A010AA", "VIN-010");
-
-        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
-        when(equipmentRepository.findByCodeAndIsDeletedFalse("VH-011")).thenReturn(Optional.of(duplicateEquipment));
+        VehicleRequest request = withClientCode(
+                fullRequest("VH-010", "Truck 010", "INV-VH-010", "01A010AA", "VIN-010"),
+                "VH-011"
+        );
 
         assertThatThrownBy(() -> service.update(equipmentId, request))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Equipment code already exists");
+                .hasMessageContaining("code is generated by backend and must not be provided");
+        verify(equipmentRepository, never()).findByIdAndIsDeletedFalse(equipment.getId());
     }
 
     @Test
@@ -631,10 +630,10 @@ class VehicleServiceTest {
                 null
         );
         Equipment updated = updatedEquipment(equipmentId, request);
+        updated.setCode(equipment.getCode());
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
-        when(equipmentRepository.findByCodeAndIsDeletedFalse("VH-041")).thenReturn(Optional.empty());
         when(equipmentRepository.findByInventoryNumberAndIsDeletedFalse("INV-VH-041")).thenReturn(Optional.empty());
         when(vehicleDetailsRepository.findByPlateNumberAndIsDeletedFalse("01A041AA")).thenReturn(Optional.empty());
         when(vehicleDetailsRepository.findByVinAndIsDeletedFalse("VIN-041")).thenReturn(Optional.empty());
@@ -644,7 +643,7 @@ class VehicleServiceTest {
 
         VehicleDetailDto result = service.update(equipmentId, request);
 
-        assertThat(result.equipment().code()).isEqualTo("VH-041");
+        assertThat(result.equipment().code()).isEqualTo("VH-040");
         assertThat(result.equipment().inventoryNumber()).isEqualTo("INV-VH-041");
         assertThat(result.vehicleDetails().plateNumber()).isEqualTo("01A041AA");
         assertThat(result.vehicleDetails().vin()).isEqualTo("VIN-041");
@@ -661,6 +660,7 @@ class VehicleServiceTest {
                 null
         );
         Equipment updated = updatedEquipment(equipmentId, request);
+        updated.setCode(equipment.getCode());
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
@@ -686,6 +686,7 @@ class VehicleServiceTest {
                 null
         );
         Equipment updated = updatedEquipment(equipmentId, request);
+        updated.setCode(equipment.getCode());
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
@@ -1026,7 +1027,7 @@ class VehicleServiceTest {
         EquipmentManualAttributeDto manualAttribute = manualAttribute("legacy_key", "legacy value");
         EquipmentAttributeValueDto officialAttribute = attributeValue(UUID.randomUUID(), "payload_capacity", 12000.0);
 
-        when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-MANUAL-PHASE1A")).thenReturn(false);
+        lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-MANUAL-PHASE1A")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-MANUAL-PHASE1A")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A306AA")).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
@@ -1640,7 +1641,7 @@ class VehicleServiceTest {
 
     private static VehicleRequest fullRequest(String code, String name, String inventoryNumber, String plateNumber, String vin) {
         return new VehicleRequest(
-                code,
+                null,
                 name,
                 inventoryNumber,
                 null,
@@ -1670,6 +1671,43 @@ class VehicleServiceTest {
                 null,
                 null,
                 null
+        );
+    }
+
+    private static VehicleRequest withClientCode(VehicleRequest request, String code) {
+        return new VehicleRequest(
+                code,
+                request.name(),
+                request.inventoryNumber(),
+                request.technicalNumber(),
+                request.serialNumber(),
+                request.equipmentTypeId(),
+                request.departmentId(),
+                request.locationId(),
+                request.status(),
+                request.plateNumber(),
+                request.vin(),
+                request.brand(),
+                request.model(),
+                request.manufactureYear(),
+                request.vehicleType(),
+                request.bodyNumber(),
+                request.chassisNumber(),
+                request.engineNumber(),
+                request.fuelType(),
+                request.fuelTankCapacity(),
+                request.carryingCapacity(),
+                request.seatCount(),
+                request.assignedDriverId(),
+                request.currentOdometerKm(),
+                request.currentEngineHours(),
+                request.registrationCertificateNumber(),
+                request.insurancePolicyNumber(),
+                request.insuranceExpiryDate(),
+                request.technicalInspectionExpiryDate(),
+                request.gpsDeviceId(),
+                request.attributes(),
+                request.manualAttributes()
         );
     }
 

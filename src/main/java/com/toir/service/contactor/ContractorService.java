@@ -8,6 +8,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,10 +35,9 @@ public class ContractorService {
 
     @Transactional
     public ContractorDto create(ContractorRequest request) {
-        if (repository.existsByCodeAndIsDeletedFalse(request.code())) {
-            throw RestException.conflict("Contractor code already exists: " + request.code());
-        }
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         Contractor entity = new Contractor();
+        entity.setCode(nextCode());
         apply(entity, request);
         Contractor saved = repository.save(entity);
 
@@ -56,6 +56,7 @@ public class ContractorService {
 
     @Transactional
     public ContractorDto update(UUID id, ContractorRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         Contractor entity = getOrThrow(id);
 
         apply(entity, request);
@@ -97,7 +98,6 @@ public class ContractorService {
     }
 
     private void apply(Contractor entity, ContractorRequest request) {
-        entity.setCode(request.code());
         entity.setName(request.name());
         entity.setTaxNumber(request.taxNumber());
         entity.setContactPerson(request.contactPerson());
@@ -105,6 +105,15 @@ public class ContractorService {
         entity.setEmail(request.email());
         entity.setSpecialization(request.specialization());
         if (request.status() != null) entity.setStatus(request.status());
+    }
+
+    private String nextCode() {
+        String prefix = "CTR-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "CTR",
+                () -> repository.maxSequenceByCodePrefix(prefix),
+                repository::existsByCodeAndIsDeletedFalse
+        );
     }
 
 }

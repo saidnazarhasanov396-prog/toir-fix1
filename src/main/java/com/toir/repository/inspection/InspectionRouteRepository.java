@@ -32,6 +32,14 @@ public interface InspectionRouteRepository extends JpaRepository<InspectionRoute
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
     @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM inspection_routes
+            WHERE code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+            """, nativeQuery = true)
+    long maxSequenceByCodePrefix(@Param("prefix") String prefix);
+
+    @Query(value = """
             SELECT ir.* FROM inspection_routes ir 
             WHERE  is_deleted = false 
             AND (CAST(:departmentId as uuid) IS NULL OR ir.department_id = cast(:departmentId as uuid))

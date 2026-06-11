@@ -37,6 +37,16 @@ public interface EquipmentNodeRepository extends JpaRepository<EquipmentNode, UU
     @Query(value = "SELECT EXISTS(SELECT 1 FROM equipment_nodes WHERE equipment_id = :equipmentId AND code = :code AND is_deleted = false)", nativeQuery = true)
     boolean existsByEquipmentIdAndCodeAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId, @Param("code") String code);
 
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
+            FROM equipment_nodes
+            WHERE equipment_id = :equipmentId
+              AND code LIKE CONCAT(:prefix, '%')
+              AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
+              AND is_deleted = false
+            """, nativeQuery = true)
+    long maxSequenceByEquipmentIdAndCodePrefix(@Param("equipmentId") UUID equipmentId, @Param("prefix") String prefix);
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM equipment_nodes WHERE equipment_id = :equipmentId AND serial_number = :serialNumber AND is_deleted = false)", nativeQuery = true)
     boolean existsByEquipmentIdAndSerialNumberAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId, @Param("serialNumber") String serialNumber);
 

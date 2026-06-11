@@ -7,6 +7,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.projects.FinancialApprovalRuleRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,10 +30,9 @@ public class FinancialApprovalRuleService {
 
     @Transactional
     public FinancialApprovalRuleDto create(FinancialApprovalRuleDto r) {
-        if (repository.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Approval rule code already exists: " + r.code());
-        }
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         FinancialApprovalRule rule = new FinancialApprovalRule();
+        rule.setCode(nextCode());
         apply(rule, r);
         FinancialApprovalRule saved = repository.save(rule);
 
@@ -51,6 +51,7 @@ public class FinancialApprovalRuleService {
 
     @Transactional
     public FinancialApprovalRuleDto update(UUID id, FinancialApprovalRuleDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         FinancialApprovalRule rule = getOrThrow(id);
         apply(rule, r);
 
@@ -90,7 +91,6 @@ public class FinancialApprovalRuleService {
     }
 
     private void apply(FinancialApprovalRule rule, FinancialApprovalRuleDto r) {
-        rule.setCode(r.code());
         rule.setName(r.name());
         rule.setDepartmentId(r.departmentId());
         rule.setMinAmount(r.minAmount());
@@ -101,5 +101,14 @@ public class FinancialApprovalRuleService {
         if (r.priority() != null) rule.setPriority(r.priority());
         rule.setNotes(r.notes());
         if (r.isActive() != null) rule.setActive(r.isActive());
+    }
+
+    private String nextCode() {
+        String prefix = "FAR-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "FAR",
+                () -> repository.maxSequenceByCodePrefix(prefix),
+                repository::existsByCodeAndIsDeletedFalse
+        );
     }
 }

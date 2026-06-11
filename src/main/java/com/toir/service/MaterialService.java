@@ -7,6 +7,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.MaterialRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,7 @@ public class MaterialService {
 
     @Transactional
     public MaterialDto create(MaterialDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         Material m = new Material();
         m.setCode(nextCode());
         apply(m, r);
@@ -49,6 +51,7 @@ public class MaterialService {
 
     @Transactional
     public MaterialDto update(UUID id, MaterialDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         Material m = getOrThrow(id);
         apply(m, r);
 

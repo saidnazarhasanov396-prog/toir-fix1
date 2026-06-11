@@ -7,6 +7,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ public class CostCategoryService {
 
     @Transactional
     public CostCategoryDto create(CostCategoryDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         CostCategory e = new CostCategory();
         e.setCode(nextCode());
         e.setName(r.name()); e.setDescription(r.description());
@@ -50,6 +52,7 @@ public class CostCategoryService {
 
     @Transactional
     public CostCategoryDto update(UUID id, CostCategoryDto r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         CostCategory e = getOrThrow(id);
         e.setName(r.name()); e.setDescription(r.description());
 

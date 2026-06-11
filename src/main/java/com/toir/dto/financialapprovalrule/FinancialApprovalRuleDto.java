@@ -7,7 +7,7 @@ import java.util.UUID;
 
 public record FinancialApprovalRuleDto(
         UUID id,
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         UUID departmentId,
         Double minAmount,

@@ -9,7 +9,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 public record RepairCampaignRequest(
-        @NotBlank String code,
+        String code,
         @NotBlank String name,
         @NotNull @Min(2000) Integer year,
         Integer quarter,

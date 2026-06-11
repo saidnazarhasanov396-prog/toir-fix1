@@ -12,6 +12,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,11 +45,9 @@ public class BrigadeService {
 
     @Transactional
     public BrigadeDto create(BrigadeRequest r) {
-        if (brigadeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Brigade code already exists: " + r.code());
-        }
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         Brigade b = new Brigade();
-        b.setCode(r.code());
+        b.setCode(nextCode());
         b.setName(r.name());
         b.setDepartmentId(r.departmentId());
         b.setForemanId(r.foremanId());
@@ -70,11 +69,8 @@ public class BrigadeService {
 
     @Transactional
     public BrigadeDto update(UUID id, BrigadeRequest r) {
+        CodeGenerationUtils.rejectClientProvidedCode(r.code());
         Brigade b = load(id);
-        if (!b.getCode().equals(r.code()) && brigadeRepo.existsByCodeAndIsDeletedFalse(r.code())) {
-            throw RestException.conflict("Brigade code already exists: " + r.code());
-        }
-        b.setCode(r.code());
         b.setName(r.name());
         b.setDepartmentId(r.departmentId());
         b.setForemanId(r.foremanId());
@@ -93,6 +89,15 @@ public class BrigadeService {
                 saved
         );
         return BrigadeDto.from(b);
+    }
+
+    private String nextCode() {
+        String prefix = "BR-" + java.time.Year.now().getValue() + "-";
+        return CodeGenerationUtils.nextYearSequenceCode(
+                "BR",
+                () -> brigadeRepo.maxSequenceByCodePrefix(prefix),
+                brigadeRepo::existsByCodeAndIsDeletedFalse
+        );
     }
 
     @Transactional
