@@ -298,7 +298,7 @@ public class OperationalIssueScannerService {
             return NotificationSeverity.CRITICAL;
         }
         if (risk >= LIFECYCLE_RISK_WARNING_THRESHOLD) {
-            return NotificationSeverity.WARNING;
+            return NotificationSeverity.CRITICAL;
         }
         return NotificationSeverity.INFO;
     }
