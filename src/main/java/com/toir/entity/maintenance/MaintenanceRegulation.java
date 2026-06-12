@@ -112,6 +112,7 @@ public class MaintenanceRegulation extends BaseEntity {
     private PriorityLevel defaultPriority;
 
     @Column(name = "requires_approval", nullable = false)
+    @Deprecated
     private boolean requiresApproval = true;
 
     @Column(name = "approval_role")

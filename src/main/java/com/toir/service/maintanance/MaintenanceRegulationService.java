@@ -666,9 +666,9 @@ public class MaintenanceRegulationService {
         entity.setDefaultDepartmentId(request.defaultDepartmentId());
         entity.setDefaultResponsibleId(request.defaultResponsibleId());
         entity.setDefaultPriority(request.defaultPriority());
-        entity.setRequiresApproval(request.requiresApproval() != null
-                ? request.requiresApproval()
-                : entity.getAutomationAction() == AutomationAction.REQUIRE_APPROVAL);
+        if (request.requiresApproval() != null) {
+            entity.setRequiresApproval(request.requiresApproval());
+        }
         entity.setApprovalRole(blankToNull(request.approvalRole()));
         entity.setApprovalPermission(blankToNull(request.approvalPermission()));
         validateAutomationTemplate(entity);
@@ -872,7 +872,6 @@ public class MaintenanceRegulationService {
                 || request.defaultDepartmentId() != null
                 || request.defaultResponsibleId() != null
                 || effectiveDefaultPriority(request) != PriorityLevel.MEDIUM
-                || (request.requiresApproval() != null && !request.requiresApproval())
                 || blankToNull(request.approvalRole()) != null
                 || blankToNull(request.approvalPermission()) != null;
     }
@@ -887,7 +886,6 @@ public class MaintenanceRegulationService {
                 || !Objects.equals(request.defaultDepartmentId(), existing.getDefaultDepartmentId())
                 || !Objects.equals(request.defaultResponsibleId(), existing.getDefaultResponsibleId())
                 || effectiveDefaultPriority(request) != effectiveDefaultPriority(existing)
-                || !Objects.equals(effectiveRequiresApproval(request), existing.isRequiresApproval())
                 || !Objects.equals(blankToNull(request.approvalRole()), blankToNull(existing.getApprovalRole()))
                 || !Objects.equals(blankToNull(request.approvalPermission()), blankToNull(existing.getApprovalPermission()));
     }
@@ -926,12 +924,6 @@ public class MaintenanceRegulationService {
 
     private PriorityLevel effectiveDefaultPriority(MaintenanceRegulation regulation) {
         return regulation.getDefaultPriority() == null ? PriorityLevel.MEDIUM : regulation.getDefaultPriority();
-    }
-
-    private boolean effectiveRequiresApproval(MaintenanceRegulationRequest request) {
-        return request.requiresApproval() != null
-                ? request.requiresApproval()
-                : effectiveAutomationAction(request) == AutomationAction.REQUIRE_APPROVAL;
     }
 
     private String blankToNull(String value) {

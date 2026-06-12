@@ -362,7 +362,7 @@ public class MaintenanceAutomationService {
         if (dueStatus == MaintenanceDueStatus.UPCOMING) {
             return MaintenanceDueEventStatus.DETECTED;
         }
-        return rule.automationAction() == AutomationAction.REQUIRE_APPROVAL || rule.requiresApproval()
+        return rule.automationAction() == AutomationAction.REQUIRE_APPROVAL
                 ? MaintenanceDueEventStatus.AWAITING_APPROVAL
                 : MaintenanceDueEventStatus.DETECTED;
     }
