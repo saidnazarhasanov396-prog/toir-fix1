@@ -37,6 +37,13 @@ public class ReliabilityPassportController {
             Instant generatedAt
     ) {}
 
+    public record ReliabilityPassportStats(
+            int total,
+            int highAvailability,
+            int mediumAvailability,
+            int lowAvailability
+    ) {}
+
     @GetMapping("/reliability-passport")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<Page<ReliabilityPassport>> list(
@@ -46,5 +53,15 @@ public class ReliabilityPassportController {
             @RequestParam(defaultValue = "20") int size
     ) {
         return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, page, size));
+    }
+
+    @GetMapping("/reliability-passports/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<ReliabilityPassportStats> stats(
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String availability
+    ) {
+        return ResponseEntity.ok(reliabilityPassportService.stats(equipmentId, search, availability));
     }
 }

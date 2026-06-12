@@ -11,6 +11,7 @@ import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.dto.warehouse.LowStockEvaluationResultDto;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceDueEventStatus;
@@ -94,6 +95,9 @@ class OperationalIssueScannerServiceTest {
     @Mock
     LowStockRecommendationService lowStockRecommendationService;
 
+    @Mock
+    RcmService rcmService;
+
     @InjectMocks
     OperationalIssueScannerService service;
 
@@ -111,6 +115,7 @@ class OperationalIssueScannerServiceTest {
         when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         lenient().when(lowStockRecommendationService.evaluateAll()).thenReturn(new LowStockEvaluationResultDto(0, 0, 0, 0, 0));
         lenient().when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(any())).thenReturn(List.of());
+        lenient().when(rcmService.computeAll()).thenReturn(List.of());
     }
 
     @Test
@@ -221,6 +226,107 @@ class OperationalIssueScannerServiceTest {
                 eq(eventId),
                 eq("Maintenance due: cycle-1"),
                 eq("meter missing")
+        );
+    }
+
+    @Test
+    void scanCreatesCriticalLifecycleIssueForEquipmentInRepair() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentId);
+        equipment.setStatus(EquipmentStatus.IN_REPAIR);
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(rcmService.computeAll()).thenReturn(List.of(riskScore(equipmentId, 10)));
+
+        service.scanAll();
+
+        verify(issueService).openOrUpdate(
+                eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
+                eq(NotificationSeverity.CRITICAL),
+                eq(equipmentId),
+                eq(departmentId),
+                eq("EquipmentLifecycle"),
+                eq(equipmentId),
+                eq("Equipment lifecycle risk: EQ-1"),
+                any(),
+                org.mockito.ArgumentMatchers.<java.util.Map<String, Object>>any()
+        );
+    }
+
+    @Test
+    void scanCreatesCriticalLifecycleIssueForHighRiskScore() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentId);
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(rcmService.computeAll()).thenReturn(List.of(riskScore(equipmentId, 75)));
+
+        service.scanAll();
+
+        verify(issueService).openOrUpdate(
+                eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
+                eq(NotificationSeverity.CRITICAL),
+                eq(equipmentId),
+                eq(departmentId),
+                eq("EquipmentLifecycle"),
+                eq(equipmentId),
+                eq("Equipment lifecycle risk: EQ-1"),
+                any(),
+                org.mockito.ArgumentMatchers.<java.util.Map<String, Object>>any()
+        );
+    }
+
+    @Test
+    void scanCreatesWarningLifecycleIssueForMediumRiskScore() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentId);
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(rcmService.computeAll()).thenReturn(List.of(riskScore(equipmentId, 45)));
+
+        service.scanAll();
+
+        verify(issueService).openOrUpdate(
+                eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
+                eq(NotificationSeverity.WARNING),
+                eq(equipmentId),
+                eq(departmentId),
+                eq("EquipmentLifecycle"),
+                eq(equipmentId),
+                eq("Equipment lifecycle risk: EQ-1"),
+                any(),
+                org.mockito.ArgumentMatchers.<java.util.Map<String, Object>>any()
+        );
+    }
+
+    @Test
+    void scanCreatesInfoLifecycleIssueForLowRiskScore() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentId);
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(rcmService.computeAll()).thenReturn(List.of(riskScore(equipmentId, 10)));
+
+        service.scanAll();
+
+        verify(issueService).openOrUpdate(
+                eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
+                eq(NotificationSeverity.INFO),
+                eq(equipmentId),
+                eq(departmentId),
+                eq("EquipmentLifecycle"),
+                eq(equipmentId),
+                eq("Equipment lifecycle risk: EQ-1"),
+                any(),
+                org.mockito.ArgumentMatchers.<java.util.Map<String, Object>>any()
+        );
+    }
+
+    private EquipmentRiskScore riskScore(UUID equipmentId, int risk) {
+        return new EquipmentRiskScore(
+                equipmentId, "EQ-1", "Pump", "A",
+                15, risk / 15, risk, 1,
+                2L, 3000.0, 12.0
         );
     }
 

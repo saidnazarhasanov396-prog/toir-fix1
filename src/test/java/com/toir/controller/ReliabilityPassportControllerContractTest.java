@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.controller.ReliabilityPassportController.ReliabilityPassport;
+import com.toir.controller.ReliabilityPassportController.ReliabilityPassportStats;
 import com.toir.controller.ReliabilityPassportController.TopCause;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.ReliabilityPassportService;
@@ -154,6 +155,41 @@ class ReliabilityPassportControllerContractTest {
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content").isEmpty())
                 .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void statsWithoutFiltersReturnsCounters() throws Exception {
+        when(reliabilityPassportService.stats(isNull(), isNull(), isNull()))
+                .thenReturn(new ReliabilityPassportStats(10, 6, 3, 1));
+
+        mockMvc.perform(get("/api/v1/equipment/reliability-passports/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(10))
+                .andExpect(jsonPath("$.highAvailability").value(6))
+                .andExpect(jsonPath("$.mediumAvailability").value(3))
+                .andExpect(jsonPath("$.lowAvailability").value(1));
+
+        verify(reliabilityPassportService).stats(isNull(), isNull(), isNull());
+    }
+
+    @Test
+    void statsWithAllFiltersPassesParamsToService() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+
+        when(reliabilityPassportService.stats(eq(equipmentId), eq("pump"), eq("high")))
+                .thenReturn(new ReliabilityPassportStats(2, 2, 0, 0));
+
+        mockMvc.perform(get("/api/v1/equipment/reliability-passports/stats")
+                        .param("equipmentId", equipmentId.toString())
+                        .param("search", "pump")
+                        .param("availability", "high"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2))
+                .andExpect(jsonPath("$.highAvailability").value(2))
+                .andExpect(jsonPath("$.mediumAvailability").value(0))
+                .andExpect(jsonPath("$.lowAvailability").value(0));
+
+        verify(reliabilityPassportService).stats(eq(equipmentId), eq("pump"), eq("high"));
     }
 
     @Test

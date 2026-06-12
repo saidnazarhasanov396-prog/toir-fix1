@@ -34,11 +34,16 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.dto.rcm.EquipmentRiskScore;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +55,8 @@ public class OperationalIssueScannerService {
     private static final int LIFETIME_WARNING_MONTHS = 3;
     private static final double LIFETIME_WARNING_HOURS_RATIO = 0.1;
     private static final int APPROVAL_ESCALATION_DAYS = 3;
+    private static final int LIFECYCLE_RISK_CRITICAL_THRESHOLD = 60;
+    private static final int LIFECYCLE_RISK_WARNING_THRESHOLD = 30;
 
     private final OperationalIssueService issueService;
     private final WorkOrderRepository workOrderRepository;
@@ -64,6 +71,7 @@ public class OperationalIssueScannerService {
     private final ApprovalRequestRepository approvalRequestRepository;
     private final DefectRepository defectRepository;
     private final LowStockRecommendationService lowStockRecommendationService;
+    private final RcmService rcmService;
 
     @Transactional
     public ScanResult scanAll() {
@@ -74,6 +82,7 @@ public class OperationalIssueScannerService {
         openedOrUpdated += scanRepairRequests();
         openedOrUpdated += scanCalibrations();
         openedOrUpdated += scanEquipmentLifetime();
+        openedOrUpdated += scanEquipmentLifecycle();
         openedOrUpdated += scanMaintenanceDueEvents();
         openedOrUpdated += scanContractorWorkDelays();
         openedOrUpdated += scanBudgetIssues();
@@ -252,6 +261,84 @@ public class OperationalIssueScannerService {
             }
         }
         return count;
+    }
+
+    private int scanEquipmentLifecycle() {
+        int count = 0;
+        Map<UUID, EquipmentRiskScore> riskScoreByEquipment = rcmService.computeAll().stream()
+                .collect(Collectors.toMap(EquipmentRiskScore::equipmentId, Function.identity(), (left, right) -> left));
+        for (Equipment item : equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
+            EquipmentRiskScore riskScore = riskScoreByEquipment.get(item.getId());
+            int risk = riskScore == null ? 0 : riskScore.riskScore();
+            NotificationSeverity severity = lifecycleSeverity(item.getStatus(), risk);
+            issueService.openOrUpdate(
+                    OperationalIssueType.EQUIPMENT_LIFECYCLE,
+                    severity,
+                    item.getId(),
+                    effectiveDepartment(item),
+                    "EquipmentLifecycle",
+                    item.getId(),
+                    "Equipment lifecycle risk: " + item.getCode(),
+                    lifecycleMessage(item, risk, riskScore),
+                    lifecycleMetadata(item, risk, riskScore)
+            );
+            count++;
+        }
+        return count;
+    }
+
+    private NotificationSeverity lifecycleSeverity(EquipmentStatus status, int risk) {
+        if (status == EquipmentStatus.IN_REPAIR || status == EquipmentStatus.DECOMMISSIONED) {
+            return NotificationSeverity.CRITICAL;
+        }
+        if (risk >= LIFECYCLE_RISK_CRITICAL_THRESHOLD) {
+            return NotificationSeverity.CRITICAL;
+        }
+        if (risk >= LIFECYCLE_RISK_WARNING_THRESHOLD) {
+            return NotificationSeverity.WARNING;
+        }
+        return NotificationSeverity.INFO;
+    }
+
+    private String lifecycleMessage(Equipment equipment, int risk, EquipmentRiskScore riskScore) {
+        StringBuilder message = new StringBuilder();
+        message.append("Equipment ").append(equipment.getCode());
+        if (equipment.getName() != null && !equipment.getName().isBlank()) {
+            message.append(" (").append(equipment.getName()).append(")");
+        }
+        message.append(" has status ").append(equipment.getStatus())
+                .append(" and RCM risk score ").append(risk).append("/100");
+        if (riskScore != null) {
+            message.append(" (consequence ").append(riskScore.consequence())
+                    .append(" x probability ").append(riskScore.probability())
+                    .append(", open defects: ").append(riskScore.openDefects())
+                    .append(")");
+        }
+        message.append(".");
+        if (equipment.getStatus() == EquipmentStatus.IN_REPAIR
+                || equipment.getStatus() == EquipmentStatus.DECOMMISSIONED) {
+            message.append(" Equipment status ").append(equipment.getStatus())
+                    .append(" requires critical lifecycle attention.");
+        }
+        return message.toString();
+    }
+
+    private Map<String, Object> lifecycleMetadata(Equipment equipment, int risk, EquipmentRiskScore riskScore) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("equipmentCode", equipment.getCode());
+        metadata.put("equipmentName", equipment.getName());
+        metadata.put("status", equipment.getStatus() == null ? null : equipment.getStatus().name());
+        metadata.put("riskScore", risk);
+        if (riskScore != null) {
+            metadata.put("criticalityClass", riskScore.criticalityClass());
+            metadata.put("consequence", riskScore.consequence());
+            metadata.put("probability", riskScore.probability());
+            metadata.put("repairPriority", riskScore.repairPriority());
+            metadata.put("openDefects", riskScore.openDefects());
+            metadata.put("mtbfHours", riskScore.mtbfHours());
+            metadata.put("mttrHours", riskScore.mttrHours());
+        }
+        return metadata;
     }
 
     private int scanMaintenanceDueEvents() {
