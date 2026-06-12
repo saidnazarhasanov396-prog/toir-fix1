@@ -82,6 +82,7 @@ public record MaintenanceRegulationDto(
             Double triggerMeterInterval,
             MaintenanceTriggerPolicy triggerPolicy,
             MaintenanceRecalculationPolicy recalculationPolicy,
+            MaintenanceInitialSchedulePolicy initialSchedulePolicy,
             AutomationAction automationAction,
             ApprovalResultAction approvalResultAction,
             DuplicatePolicy duplicatePolicy,
@@ -98,10 +99,9 @@ public record MaintenanceRegulationDto(
         this(id, code, name, description, equipmentTypeId, equipmentTypeName, templateId, templateCode, templateName,
                 maintenanceKind, normativeLaborHours, active, periodicityUnit, periodicityValue, toleranceDays,
                 requiresShutdown, triggerMeterType, triggerMeterInterval, triggerPolicy, recalculationPolicy,
-                MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, automationAction, approvalResultAction,
-                duplicatePolicy, leadTimeDays, leadMeterPercent, defaultDepartmentId, defaultResponsibleId,
-                defaultPriority, requiresApproval, approvalRole, approvalPermission, attributeConditions, List.of(),
-                "TYPE", null, null, null);
+                initialSchedulePolicy, automationAction, approvalResultAction, duplicatePolicy, leadTimeDays,
+                leadMeterPercent, defaultDepartmentId, defaultResponsibleId, defaultPriority, requiresApproval,
+                approvalRole, approvalPermission, attributeConditions, List.of(), "TYPE", null, null, null);
     }
 
     public MaintenanceRegulationDto(
@@ -125,7 +125,6 @@ public record MaintenanceRegulationDto(
             Double triggerMeterInterval,
             MaintenanceTriggerPolicy triggerPolicy,
             MaintenanceRecalculationPolicy recalculationPolicy,
-            MaintenanceInitialSchedulePolicy initialSchedulePolicy,
             AutomationAction automationAction,
             ApprovalResultAction approvalResultAction,
             DuplicatePolicy duplicatePolicy,
@@ -142,9 +141,10 @@ public record MaintenanceRegulationDto(
         this(id, code, name, description, equipmentTypeId, equipmentTypeName, templateId, templateCode, templateName,
                 maintenanceKind, normativeLaborHours, active, periodicityUnit, periodicityValue, toleranceDays,
                 requiresShutdown, triggerMeterType, triggerMeterInterval, triggerPolicy, recalculationPolicy,
-                initialSchedulePolicy, automationAction, approvalResultAction, duplicatePolicy, leadTimeDays,
-                leadMeterPercent, defaultDepartmentId, defaultResponsibleId, defaultPriority, requiresApproval,
-                approvalRole, approvalPermission, attributeConditions, List.of(), "TYPE", null, null, null);
+                MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, automationAction, approvalResultAction,
+                duplicatePolicy, leadTimeDays, leadMeterPercent, defaultDepartmentId, defaultResponsibleId,
+                defaultPriority, requiresApproval, approvalRole, approvalPermission, attributeConditions, List.of(),
+                "TYPE", null, null, null);
     }
 
     public MaintenanceRegulationDto(

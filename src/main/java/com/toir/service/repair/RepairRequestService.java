@@ -161,7 +161,7 @@ public class RepairRequestService {
                 saved.getDepartmentId(),
                 PermissionConstants.REPAIR_REQUEST_ASSIGN,
                 "Repair request created: " + saved.getNumber(),
-                "Repair request " + saved.getNumber() + " needs assignment.",
+                "Yangi ta'mirlash arizasi bor, ijrochi biriktirish kerak.",
                 NotificationSeverity.INFO,
                 "RepairRequest",
                 saved.getId().toString()
@@ -346,7 +346,7 @@ public class RepairRequestService {
         notificationService.notifyUser(
                 assigneeId,
                 "Repair request assigned: " + entity.getNumber(),
-                assignedRepairRequestMessage(entity),
+                "Sizga ushbu qurilma bo'yicha ta'mirlash vazifasi biriktirildi.",
                 NotificationSeverity.INFO,
                 "RepairRequest",
                 entity.getId().toString()

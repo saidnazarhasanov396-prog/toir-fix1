@@ -1,5 +1,6 @@
 package com.toir.entity;
 
+import com.toir.enums.EquipmentRiskLevel;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.OperationalIssueStatus;
 import com.toir.enums.OperationalIssueType;
@@ -33,6 +34,10 @@ public class OperationalIssue extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private NotificationSeverity severity = NotificationSeverity.INFO;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "equipment_risk_level")
+    private EquipmentRiskLevel equipmentRiskLevel;
 
     @Column(name = "equipment_id")
     private UUID equipmentId;

@@ -10,6 +10,7 @@ import com.toir.enums.NotificationSeverity;
 import com.toir.enums.NotificationStatus;
 import com.toir.service.NotificationFacadeService;
 import com.toir.service.NotificationService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -17,8 +18,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -56,6 +56,16 @@ class RbacNotificationSecurityTest {
     @MockBean
     NotificationFacadeService notificationFacadeService;
 
+    @BeforeEach
+    void setUp() {
+        when(notificationFacadeService.list(any(), eq(0), eq(20), any(), any(), any(), any(), eq(false))).thenReturn(Page.empty());
+        when(notificationFacadeService.summary(any())).thenReturn(new NotificationSummaryDto(0, 0, 0, 0, 0, 0));
+        when(notificationFacadeService.unreadCount(any())).thenReturn(0L);
+        when(notificationFacadeService.slaRules(0, 20)).thenReturn(Page.empty());
+        when(notificationFacadeService.evaluate()).thenReturn(new NotificationEvaluationResponse(0, 0, 0));
+        when(notificationFacadeService.dispatch()).thenReturn(new NotificationDispatchResponse(0));
+    }
+
     @TestConfiguration
     static class SecurityBeans {
         @Bean
@@ -73,13 +83,15 @@ class RbacNotificationSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = PermissionConstants.USER_READ)
+    void unrelatedPermissionCannotReadNotifications() throws Exception {
+        mockMvc.perform(get("/api/v1/notifications"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @WithMockUser(authorities = PermissionConstants.NOTIFICATION_READ)
     void notificationReadCanReadListSummaryAndUnreadCount() throws Exception {
-        when(notificationFacadeService.list(null, 0, 20))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        when(notificationFacadeService.summary(null)).thenReturn(new NotificationSummaryDto(0, 0, 0, 0, 0, 0));
-        when(notificationFacadeService.unreadCount(null)).thenReturn(0L);
-
         mockMvc.perform(get("/api/v1/notifications"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/notifications/summary"))
@@ -89,58 +101,48 @@ class RbacNotificationSecurityTest {
     }
 
     @Test
-    @WithMockUser(authorities = PermissionConstants.USER_READ)
-    void unrelatedPermissionCannotReadNotifications() throws Exception {
-        mockMvc.perform(get("/api/v1/notifications"))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
     @WithMockUser(authorities = PermissionConstants.NOTIFICATION_READ)
-    void notificationReadCannotCreateEvaluateOrDispatchNotifications() throws Exception {
+    void notificationReadCannotCreateMarkReadOrRunAdminEndpoints() throws Exception {
         mockMvc.perform(post("/api/v1/notifications")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(notificationPayload()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/notifications/{id}/read", UUID.randomUUID()))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/notifications/evaluate"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/notifications/dispatch-pending"))
                 .andExpect(status().isForbidden());
-    }
-
-    @Test
-    @WithMockUser(authorities = PermissionConstants.NOTIFICATION_ADMIN)
-    void notificationAdminCanCreateEvaluateAndDispatchNotifications() throws Exception {
-        UUID notificationId = UUID.randomUUID();
-        when(notificationService.send(any())).thenReturn(notificationDto(notificationId));
-        when(notificationFacadeService.evaluate()).thenReturn(new NotificationEvaluationResponse(0, 0, 0));
-        when(notificationFacadeService.dispatch()).thenReturn(new NotificationDispatchResponse(0));
-
-        mockMvc.perform(post("/api/v1/notifications")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(notificationPayload()))
-                .andExpect(status().isCreated());
-        mockMvc.perform(post("/api/v1/notifications/evaluate"))
-                .andExpect(status().isOk());
-        mockMvc.perform(post("/api/v1/notifications/dispatch-pending"))
-                .andExpect(status().isOk());
     }
 
     @Test
     @WithMockUser(authorities = PermissionConstants.NOTIFICATION_MARK_READ)
-    void notificationMarkReadCanMarkRead() throws Exception {
+    void notificationMarkReadCanMarkReadOnly() throws Exception {
         UUID notificationId = UUID.randomUUID();
         when(notificationService.markRead(eq(notificationId), any(), eq(false))).thenReturn(notificationDto(notificationId));
 
         mockMvc.perform(post("/api/v1/notifications/{id}/read", notificationId))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/notifications"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
-    @WithMockUser(authorities = PermissionConstants.NOTIFICATION_READ)
-    void notificationReadCannotMarkRead() throws Exception {
-        mockMvc.perform(post("/api/v1/notifications/{id}/read", UUID.randomUUID()))
-                .andExpect(status().isForbidden());
+    @WithMockUser(authorities = PermissionConstants.NOTIFICATION_ADMIN)
+    void notificationAdminCanCreateAndRunAdminEndpoints() throws Exception {
+        UUID notificationId = UUID.randomUUID();
+        when(notificationService.send(any())).thenReturn(notificationDto(notificationId));
+
+        mockMvc.perform(post("/api/v1/notifications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(notificationPayload()))
+                .andExpect(status().isCreated());
+        mockMvc.perform(get("/api/v1/notifications/sla-rules"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/notifications/evaluate"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/notifications/dispatch-pending"))
+                .andExpect(status().isOk());
     }
 
     private String notificationPayload() {

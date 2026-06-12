@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.controller.ReliabilityPassportController.ReliabilityPassport;
+import com.toir.controller.ReliabilityPassportController.ReliabilityPassportStats;
 import com.toir.controller.ReliabilityPassportController.TopCause;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.defects.Defect;
@@ -77,6 +78,51 @@ public class ReliabilityPassportService {
     }
 
     @Transactional(readOnly = true)
+    public ReliabilityPassportStats stats(UUID equipmentId, String search, String availability) {
+        AvailabilityBand availabilityFilter = parseAvailabilityFilter(availability);
+        String searchPattern = search == null || search.isBlank()
+                ? null
+                : "%" + search.toLowerCase() + "%";
+
+        List<Equipment> equipmentList = equipmentRepository.searchAllForPassport(equipmentId, searchPattern);
+        if (equipmentList.isEmpty()) {
+            return new ReliabilityPassportStats(0, 0, 0, 0);
+        }
+
+        List<UUID> ids = equipmentList.stream()
+                .map(Equipment::getId)
+                .toList();
+
+        Map<UUID, List<DowntimeEvent>> downtimesByEquipment = downtimeRepository
+                .findAllByEquipmentIdInAndIsDeletedFalse(ids)
+                .stream()
+                .collect(Collectors.groupingBy(DowntimeEvent::getEquipmentId));
+
+        Instant now = Instant.now();
+        int total = 0;
+        int high = 0;
+        int medium = 0;
+        int low = 0;
+        for (Equipment equipment : equipmentList) {
+            double availabilityPct = availabilityPct(
+                    downtimesByEquipment.getOrDefault(equipment.getId(), List.of()),
+                    now
+            );
+            AvailabilityBand band = bandOf(availabilityPct);
+            if (availabilityFilter != null && availabilityFilter != band) {
+                continue;
+            }
+            total++;
+            switch (band) {
+                case HIGH -> high++;
+                case MEDIUM -> medium++;
+                case LOW -> low++;
+            }
+        }
+        return new ReliabilityPassportStats(total, high, medium, low);
+    }
+
+    @Transactional(readOnly = true)
     public ReliabilityPassport passport(UUID equipmentId) {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
@@ -117,15 +163,7 @@ public class ReliabilityPassportService {
             mtbfHours = uptimeHours / (double) downtimes.size();
         }
 
-        Instant horizon = now.minusSeconds(60L * 60 * 24 * 365);
-        long periodHours = Duration.between(horizon, now).toHours();
-        long downtimeLastYearMinutes = downtimes.stream()
-                .filter(ev -> ev.getStartAt().isAfter(horizon))
-                .mapToLong(this::eventDurationMinutes)
-                .sum();
-        double availabilityPct = periodHours > 0
-                ? Math.max(0, 100.0 - (downtimeLastYearMinutes / 60.0) / periodHours * 100.0)
-                : 100.0;
+        double availabilityPct = availabilityPct(downtimes, now);
 
         Map<String, Integer> causes = new HashMap<>();
         for (Defect d : defects) {
@@ -154,6 +192,41 @@ public class ReliabilityPassportService {
                 topCauses,
                 now
         );
+    }
+
+    private double availabilityPct(List<DowntimeEvent> downtimes, Instant now) {
+        Instant horizon = now.minusSeconds(60L * 60 * 24 * 365);
+        long periodHours = Duration.between(horizon, now).toHours();
+        long downtimeLastYearMinutes = downtimes.stream()
+                .filter(ev -> ev.getStartAt().isAfter(horizon))
+                .mapToLong(this::eventDurationMinutes)
+                .sum();
+        return periodHours > 0
+                ? Math.max(0, 100.0 - (downtimeLastYearMinutes / 60.0) / periodHours * 100.0)
+                : 100.0;
+    }
+
+    private AvailabilityBand bandOf(double availabilityPct) {
+        if (availabilityPct >= 95.0) return AvailabilityBand.HIGH;
+        if (availabilityPct >= 80.0) return AvailabilityBand.MEDIUM;
+        return AvailabilityBand.LOW;
+    }
+
+    private AvailabilityBand parseAvailabilityFilter(String availability) {
+        if (availability == null || availability.isBlank()) {
+            return null;
+        }
+        return switch (availability.toLowerCase()) {
+            case "high" -> AvailabilityBand.HIGH;
+            case "medium" -> AvailabilityBand.MEDIUM;
+            case "low" -> AvailabilityBand.LOW;
+            default -> throw RestException.badRequest(
+                    "Unknown availability filter: " + availability + ". Allowed values: high, medium, low");
+        };
+    }
+
+    private enum AvailabilityBand {
+        HIGH, MEDIUM, LOW
     }
 
     private long eventDurationMinutes(DowntimeEvent event) {

@@ -555,37 +555,42 @@ public class WorkOrderService {
         }
         notificationService.notifyUser(
                 performerUserId,
-                "Work order assigned: " + workOrder.getNumber(),
-                assignedPerformerMessage(workOrder, equipment),
+                "WorkOrder biriktirildi: " + workOrder.getNumber(),
+                performerNotificationMessage(workOrder, equipment),
                 NotificationSeverity.INFO,
                 ENTITY,
                 workOrder.getId().toString()
         );
     }
 
-    private String assignedPerformerMessage(WorkOrder workOrder, Equipment equipment) {
-        String equipmentName = equipment == null || equipment.getName() == null || equipment.getName().isBlank()
-                ? "selected equipment"
-                : equipment.getName();
-        String workLabel = switch (workOrder.getWorkType()) {
-            case DIAGNOSTICS -> "texnik ko'rik";
-            case REPLACEMENT -> "almashtirish";
-            case REPAIR -> "ta'mirlash";
-        };
-        String number = workOrder.getNumber() == null ? "work order" : workOrder.getNumber();
-        if (isPlannedForToday(workOrder.getStartPlannedAt())) {
-            return "Bugun " + equipmentName + " qurilmasi bo'yicha " + workLabel
-                    + " ishini bajarishingiz kerak. Narad: " + number + ".";
-        }
-        return equipmentName + " qurilmasi bo'yicha " + workLabel
-                + " ishi sizga biriktirildi. Narad: " + number + ".";
+    private void notifyAssignedPerformer(WorkOrder workOrder) {
+        notifyAssignedPerformer(workOrder, null);
     }
 
-    private boolean isPlannedForToday(Instant plannedAt) {
-        if (plannedAt == null) {
-            return false;
+    private String performerNotificationMessage(WorkOrder workOrder, Equipment equipment) {
+        String equipmentName = equipment != null
+                ? formatEquipmentName(equipment)
+                : equipmentRepository.findByIdAndIsDeletedFalse(workOrder.getEquipmentId())
+                .map(this::formatEquipmentName)
+                .orElse("ushbu qurilma");
+        String timing = plannedTimingText(workOrder.getStartPlannedAt());
+        return "%s bo'yicha texnik ko'rikdan o'tkazish yoki ta'mirlashni %s."
+                .formatted(equipmentName, timing);
+    }
+
+    private String formatEquipmentName(Equipment equipment) {
+        if (equipment == null) {
+            return "ushbu qurilma";
         }
-        return LocalDate.now(CALENDAR_ZONE).equals(plannedAt.atZone(CALENDAR_ZONE).toLocalDate());
+        String code = equipment.getCode();
+        String name = equipment.getName();
+        if (code != null && !code.isBlank() && name != null && !name.isBlank()) {
+            return "%s - %s".formatted(code, name);
+        }
+        if (name != null && !name.isBlank()) {
+            return name;
+        }
+        return "ushbu qurilma";
     }
 
     @Transactional
@@ -620,6 +625,7 @@ public class WorkOrderService {
                 "Утверждён наряд " + entity.getNumber(),
                 entity,
                 saved);
+        notifyAssignedPerformer(saved);
 
         return toDto(saved);
     }
@@ -2230,6 +2236,21 @@ public class WorkOrderService {
         }
         User user = usersById.get(member.getUserId());
         return user == null ? member.getUserId().toString() : user.getFullName();
+    }
+
+    private String plannedTimingText(Instant startPlannedAt) {
+        if (startPlannedAt == null) {
+            return "rejalashtirilgan vaqtda bajarishingiz kerak";
+        }
+        LocalDate plannedDate = startPlannedAt.atZone(CALENDAR_ZONE).toLocalDate();
+        LocalDate today = LocalDate.now(CALENDAR_ZONE);
+        if (plannedDate.isEqual(today)) {
+            return "bugun bajarishingiz kerak";
+        }
+        if (plannedDate.isEqual(today.plusDays(1))) {
+            return "ertaga bajarishingiz kerak";
+        }
+        return plannedDate + " sanasida bajarishingiz kerak";
     }
 
     private EquipmentNode resolveEquipmentNode(UUID equipmentNodeId, Map<UUID, EquipmentNode> equipmentNodeById) {

@@ -3,6 +3,7 @@ package com.toir.dto.operationalissue;
 import com.toir.entity.Department;
 import com.toir.entity.OperationalIssue;
 import com.toir.entity.equipment.Equipment;
+import com.toir.enums.EquipmentRiskLevel;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.OperationalIssueStatus;
 import com.toir.enums.OperationalIssueType;
@@ -25,7 +26,8 @@ public record OperationalIssueDto(
         Instant resolvedAt,
         String sourceType,
         UUID sourceId,
-        Map<String, Object> metadata
+        Map<String, Object> metadata,
+        EquipmentRiskLevel equipmentRiskLevel
 ) {
     public static OperationalIssueDto from(OperationalIssue issue, Equipment equipment, Department department) {
         return new OperationalIssueDto(
@@ -43,7 +45,8 @@ public record OperationalIssueDto(
                 issue.getResolvedAt(),
                 issue.getSourceType(),
                 issue.getSourceId(),
-                issue.getMetadata()
+                issue.getMetadata(),
+                issue.getEquipmentRiskLevel()
         );
     }
 }

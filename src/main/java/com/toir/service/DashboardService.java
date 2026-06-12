@@ -93,9 +93,10 @@ public class DashboardService {
 
     public DashboardOverview overview(UUID requestedDepartmentId) {
         UUID departmentId = scopedDepartment(requestedDepartmentId);
-        Instant currentMonthStart = LocalDate.now()
+        ZoneId tz = ZoneId.of("Asia/Tashkent");
+        Instant currentMonthStart = LocalDate.now(tz)
                 .withDayOfMonth(1)
-                .atStartOfDay(ZoneId.systemDefault())
+                .atStartOfDay(tz)
                 .toInstant();
         LocalDateTime now = LocalDateTime.now();
 
@@ -128,7 +129,7 @@ public class DashboardService {
 
         List<WorkOrder> allWorkOrders = workOrderRepository.search(null, departmentId, null);
         long repairsThisMonth = allWorkOrders.stream()
-                .filter(w -> w.getStatus() == WorkOrderStatus.CLOSED)
+                .filter(w -> w.getStatus() == WorkOrderStatus.CLOSED || w.getStatus() == WorkOrderStatus.COMPLETED)
                 .filter(w -> w.getCompletedAt() != null && !w.getCompletedAt().isBefore(currentMonthStart))
                 .count();
 
