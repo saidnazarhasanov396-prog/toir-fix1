@@ -10,6 +10,7 @@ import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -39,7 +40,9 @@ public record MaintenanceRegulationRequest(
         MaintenanceTriggerPolicy triggerPolicy,
         MaintenanceRecalculationPolicy recalculationPolicy,
         MaintenanceInitialSchedulePolicy initialSchedulePolicy,
+        @Schema(description = "Automation mode. Use REQUIRE_APPROVAL for approval-gated automation.")
         AutomationAction automationAction,
+        @Schema(description = "Action created after approving a REQUIRE_APPROVAL maintenance due event.")
         ApprovalResultAction approvalResultAction,
         DuplicatePolicy duplicatePolicy,
         @PositiveOrZero Integer leadTimeDays,
@@ -47,6 +50,7 @@ public record MaintenanceRegulationRequest(
         UUID defaultDepartmentId,
         UUID defaultResponsibleId,
         PriorityLevel defaultPriority,
+        @Schema(description = "Deprecated legacy flag. Ignored by automation decisions; use automationAction=REQUIRE_APPROVAL.", deprecated = true)
         Boolean requiresApproval,
         String approvalRole,
         String approvalPermission,
