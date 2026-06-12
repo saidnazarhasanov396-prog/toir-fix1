@@ -369,9 +369,11 @@ public final class RolePermissionDefaults {
         defaults.put("CONTRACTOR", List.of(PermissionConstants.READ_LEGACY));
         List<String> performerPermissions = List.of(
                 PermissionConstants.READ_LEGACY,
+                PermissionConstants.REPAIR_REQUEST_READ,
                 PermissionConstants.NOTIFICATION_READ,
                 PermissionConstants.NOTIFICATION_MARK_READ,
                 PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.WORK_ORDER_UPDATE,
                 PermissionConstants.WORK_ORDER_START,
                 PermissionConstants.WORK_ORDER_COMPLETE,
                 PermissionConstants.EQUIPMENT_READ,

@@ -37,9 +37,11 @@ $$;
 
 SELECT merge_role_permissions('TECHNICIAN', 'Техник', 'Technician', 'Texnik', ARRAY[
     'read',
+    'REPAIR_REQUEST_READ',
     'NOTIFICATION_READ',
     'NOTIFICATION_MARK_READ',
     'WORK_ORDER_READ',
+    'WORK_ORDER_UPDATE',
     'WORK_ORDER_START',
     'WORK_ORDER_COMPLETE',
     'EQUIPMENT_READ',
@@ -48,9 +50,11 @@ SELECT merge_role_permissions('TECHNICIAN', 'Техник', 'Technician', 'Texni
 
 SELECT merge_role_permissions('MECHANIC', 'Механик', 'Mechanic', 'Mexanik', ARRAY[
     'read',
+    'REPAIR_REQUEST_READ',
     'NOTIFICATION_READ',
     'NOTIFICATION_MARK_READ',
     'WORK_ORDER_READ',
+    'WORK_ORDER_UPDATE',
     'WORK_ORDER_START',
     'WORK_ORDER_COMPLETE',
     'EQUIPMENT_READ',

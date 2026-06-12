@@ -988,8 +988,8 @@ class WorkOrderServiceTest {
         assertThat(result.performerName()).isEqualTo("Ivan Petrov");
         verify(notificationService).notifyUser(
                 eq(userId),
-                org.mockito.ArgumentMatchers.contains("Work order assigned"),
-                org.mockito.ArgumentMatchers.contains(request.number()),
+                contains(request.number()),
+                contains("rejalashtirilgan vaqtda bajarishingiz kerak"),
                 eq(NotificationSeverity.INFO),
                 eq("WorkOrder"),
                 eq(result.id().toString())
