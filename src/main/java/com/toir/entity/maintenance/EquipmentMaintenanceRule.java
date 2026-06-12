@@ -128,10 +128,7 @@ public class EquipmentMaintenanceRule extends BaseEntity {
     private PriorityLevel defaultPriority;
 
     @Column(name = "requires_approval")
-<<<<<<< HEAD
     @Deprecated
-=======
->>>>>>> b7dcbd47 (fix equipment-scoped maintenance regulations)
     private Boolean requiresApproval;
 
     @Column(name = "approval_role")

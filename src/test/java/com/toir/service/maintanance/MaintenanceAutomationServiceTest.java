@@ -1548,13 +1548,6 @@ class MaintenanceAutomationServiceTest {
         return due(equipmentId, regulationId, null);
     }
 
-<<<<<<< HEAD
-=======
-    private MaintenanceDueCalculationDto due(UUID equipmentId, UUID regulationId) {
-        return due(equipmentId, regulationId, null);
-    }
-
->>>>>>> b7dcbd47 (fix equipment-scoped maintenance regulations)
     private MaintenanceDueCalculationDto due(UUID equipmentId, UUID regulationId, UUID equipmentMaintenanceRuleId) {
         return new MaintenanceDueCalculationDto(
                 equipmentId,
@@ -1821,7 +1814,3 @@ class MaintenanceAutomationServiceTest {
         );
     }
 }
-<<<<<<< HEAD
-=======
-
->>>>>>> b7dcbd47 (fix equipment-scoped maintenance regulations)

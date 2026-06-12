@@ -11,10 +11,7 @@ import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
-<<<<<<< HEAD
 import io.swagger.v3.oas.annotations.media.Schema;
-=======
->>>>>>> b7dcbd47 (fix equipment-scoped maintenance regulations)
 import java.util.UUID;
 
 public record EquipmentMaintenanceRuleDto(
@@ -47,10 +44,7 @@ public record EquipmentMaintenanceRuleDto(
         UUID defaultDepartmentId,
         UUID defaultResponsibleId,
         PriorityLevel defaultPriority,
-<<<<<<< HEAD
         @Schema(description = "Deprecated legacy flag. Ignored by automation decisions; use automationAction=REQUIRE_APPROVAL.", deprecated = true)
-=======
->>>>>>> b7dcbd47 (fix equipment-scoped maintenance regulations)
         Boolean requiresApproval,
         String approvalRole,
         String approvalPermission

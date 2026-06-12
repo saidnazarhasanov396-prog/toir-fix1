@@ -10,11 +10,8 @@ import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
-<<<<<<< HEAD
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
-=======
->>>>>>> b7dcbd47 (fix equipment-scoped maintenance regulations)
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -40,13 +37,9 @@ public record EquipmentMaintenanceRuleRequest(
         Boolean disablesBaseRegulation,
         String overrideReason,
         MaintenanceInitialSchedulePolicy initialSchedulePolicy,
-<<<<<<< HEAD
         @Schema(description = "Automation mode. Use REQUIRE_APPROVAL for approval-gated automation.")
         AutomationAction automationAction,
         @Schema(description = "Action created after approving a REQUIRE_APPROVAL maintenance due event.")
-=======
-        AutomationAction automationAction,
->>>>>>> b7dcbd47 (fix equipment-scoped maintenance regulations)
         ApprovalResultAction approvalResultAction,
         DuplicatePolicy duplicatePolicy,
         Integer leadTimeDays,
@@ -54,7 +47,6 @@ public record EquipmentMaintenanceRuleRequest(
         UUID defaultDepartmentId,
         UUID defaultResponsibleId,
         PriorityLevel defaultPriority,
-<<<<<<< HEAD
         @Schema(description = "Deprecated legacy flag. Ignored by automation decisions; use automationAction=REQUIRE_APPROVAL.", deprecated = true)
         Boolean requiresApproval,
         String approvalRole,
@@ -91,9 +83,3 @@ public record EquipmentMaintenanceRuleRequest(
                 || (triggerMeterType != null && triggerMeterInterval != null);
     }
 }
-=======
-        Boolean requiresApproval,
-        String approvalRole,
-        String approvalPermission
-) {}
->>>>>>> b7dcbd47 (fix equipment-scoped maintenance regulations)
