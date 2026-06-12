@@ -15,6 +15,7 @@ import com.toir.enums.ApprovalStatus;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.ContractorWorkStatus;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.EquipmentRiskLevel;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.MeterType;
@@ -271,9 +272,11 @@ public class OperationalIssueScannerService {
             EquipmentRiskScore riskScore = riskScoreByEquipment.get(item.getId());
             int risk = riskScore == null ? 0 : riskScore.riskScore();
             NotificationSeverity severity = lifecycleSeverity(item.getStatus(), risk);
+            EquipmentRiskLevel riskLevel = toEquipmentRiskLevel(item.getStatus(), risk);
             issueService.openOrUpdate(
                     OperationalIssueType.EQUIPMENT_LIFECYCLE,
                     severity,
+                    riskLevel,
                     item.getId(),
                     effectiveDepartment(item),
                     "EquipmentLifecycle",
@@ -298,6 +301,16 @@ public class OperationalIssueScannerService {
             return NotificationSeverity.WARNING;
         }
         return NotificationSeverity.INFO;
+    }
+
+    private EquipmentRiskLevel toEquipmentRiskLevel(EquipmentStatus status, int risk) {
+        if (status == EquipmentStatus.IN_REPAIR || status == EquipmentStatus.DECOMMISSIONED) {
+            return EquipmentRiskLevel.CRITICAL;
+        }
+        if (risk >= LIFECYCLE_RISK_CRITICAL_THRESHOLD) return EquipmentRiskLevel.CRITICAL;
+        if (risk >= LIFECYCLE_RISK_WARNING_THRESHOLD) return EquipmentRiskLevel.HIGH;
+        if (risk >= 15) return EquipmentRiskLevel.MEDIUM;
+        return EquipmentRiskLevel.LOW;
     }
 
     private String lifecycleMessage(Equipment equipment, int risk, EquipmentRiskScore riskScore) {

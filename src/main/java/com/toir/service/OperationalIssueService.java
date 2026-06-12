@@ -4,6 +4,7 @@ import com.toir.entity.OperationalIssue;
 import com.toir.dto.operationalissue.OperationalIssueDto;
 import com.toir.entity.Department;
 import com.toir.entity.equipment.Equipment;
+import com.toir.enums.EquipmentRiskLevel;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.OperationalIssueStatus;
 import com.toir.enums.OperationalIssueType;
@@ -108,8 +109,26 @@ public class OperationalIssueService {
         issue.setTitle(title);
         issue.setMessage(message);
         issue.setMetadata(metadata);
+        // equipmentRiskLevel is set separately via setEquipmentRiskLevel() if needed
         issue.setStatus(OperationalIssueStatus.OPEN);
         issue.setResolvedAt(null);
+        return repository.save(issue);
+    }
+
+    @Transactional
+    public OperationalIssue openOrUpdate(OperationalIssueType type,
+                                         NotificationSeverity severity,
+                                         EquipmentRiskLevel equipmentRiskLevel,
+                                         UUID equipmentId,
+                                         UUID departmentId,
+                                         String sourceType,
+                                         UUID sourceId,
+                                         String title,
+                                         String message,
+                                         Map<String, Object> metadata) {
+        OperationalIssue issue = openOrUpdate(type, severity, equipmentId, departmentId,
+                sourceType, sourceId, title, message, metadata);
+        issue.setEquipmentRiskLevel(equipmentRiskLevel);
         return repository.save(issue);
     }
 
