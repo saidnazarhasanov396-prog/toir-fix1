@@ -41,6 +41,7 @@ import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.MeterType;
+import com.toir.enums.NotificationSeverity;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.DefectListStatus;
 import com.toir.enums.DefectStatus;
@@ -115,6 +116,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.List;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -122,6 +124,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -254,6 +257,9 @@ class WorkOrderServiceTest {
     WorkOrderNumberService workOrderNumberService;
 
     @Mock
+    NotificationService notificationService;
+
+    @Mock
     ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
 
     @Mock
@@ -261,9 +267,6 @@ class WorkOrderServiceTest {
 
     @Mock
     ObjectMapper objectMapper;
-
-    @Mock
-    NotificationService notificationService;
 
     @InjectMocks
     WorkOrderService service;
@@ -1017,8 +1020,40 @@ class WorkOrderServiceTest {
 
         verify(notificationService).notifyUser(
                 eq(userId),
-                org.mockito.ArgumentMatchers.contains("Work order assigned"),
-                org.mockito.ArgumentMatchers.contains("Bugun"),
+                contains(result.number()),
+                contains("bugun bajarishingiz kerak"),
+                eq(NotificationSeverity.INFO),
+                eq("WorkOrder"),
+                eq(result.id().toString())
+        );
+    }
+
+    @Test
+    void createWorkOrderWithTodayStartNotifiesAssignedPerformerUser() {
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Instant todayInTashkent = LocalDate.now(ZoneId.of("Asia/Tashkent"))
+                .atStartOfDay(ZoneId.of("Asia/Tashkent"))
+                .plusHours(9)
+                .toInstant();
+        WorkOrderRequest request = requestWithPerformerAndStart(performerId, todayInTashkent);
+        BrigadeMember performer = brigadeMember(performerId, userId, request.departmentId(), true, true);
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        mockSuccessfulCreateDependencies(request);
+        when(brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)).thenReturn(Optional.of(performer));
+        when(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(Optional.of(user(userId, "Ivan Petrov")));
+
+        WorkOrderDto result = service.create(request);
+
+        verify(notificationService).notifyUser(
+                eq(userId),
+                contains(result.number()),
+                contains("bugun bajarishingiz kerak"),
                 eq(NotificationSeverity.INFO),
                 eq("WorkOrder"),
                 eq(result.id().toString())
@@ -2000,6 +2035,36 @@ class WorkOrderServiceTest {
         service.approve(workOrderId, UUID.randomUUID());
 
         assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.RESERVED);
+    }
+
+    @Test
+    void approveWorkOrderWithTomorrowStartNotifiesAssignedPerformerUser() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID performerId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.PLANNED, null, null);
+        workOrder.setPerformer(brigadeMember(performerId, userId, workOrder.getDepartmentId(), true, true));
+        workOrder.setStartPlannedAt(LocalDate.now(ZoneId.of("Asia/Tashkent"))
+                .plusDays(1)
+                .atStartOfDay(ZoneId.of("Asia/Tashkent"))
+                .plusHours(10)
+                .toInstant());
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+        when(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(Optional.of(user(userId, "Ivan Petrov")));
+
+        service.approve(workOrderId, UUID.randomUUID());
+
+        verify(notificationService).notifyUser(
+                eq(userId),
+                contains(workOrder.getNumber()),
+                contains("ertaga bajarishingiz kerak"),
+                eq(NotificationSeverity.INFO),
+                eq("WorkOrder"),
+                eq(workOrderId.toString())
+        );
     }
 
     @Test
@@ -3510,6 +3575,15 @@ class WorkOrderServiceTest {
 
     private WorkOrderRequest requestWithPerformer(UUID performerId) {
         WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        return requestWithPerformerAndStart(base, performerId, base.startPlannedAt());
+    }
+
+    private WorkOrderRequest requestWithPerformerAndStart(UUID performerId, Instant startPlannedAt) {
+        WorkOrderRequest base = request(WorkOrderType.PLANNED, WorkType.REPAIR, null, null);
+        return requestWithPerformerAndStart(base, performerId, startPlannedAt);
+    }
+
+    private WorkOrderRequest requestWithPerformerAndStart(WorkOrderRequest base, UUID performerId, Instant startPlannedAt) {
         return new WorkOrderRequest(
                 base.number(),
                 base.title(),
@@ -3521,31 +3595,6 @@ class WorkOrderServiceTest {
                 base.pprTaskId(),
                 base.contractorId(),
                 performerId,
-                base.type(),
-                base.workType(),
-                base.warehouseId(),
-                base.replacementEquipmentId(),
-                base.priority(),
-                base.startPlannedAt(),
-                base.endPlannedAt(),
-                base.createdById(),
-                base.summary()
-        );
-    }
-
-    private WorkOrderRequest requestWithPerformerAndStart(UUID performerId, Instant startPlannedAt) {
-        WorkOrderRequest base = requestWithPerformer(performerId);
-        return new WorkOrderRequest(
-                base.number(),
-                base.title(),
-                base.equipmentId(),
-                base.equipmentNodeId(),
-                base.departmentId(),
-                base.repairRequestId(),
-                base.defectId(),
-                base.pprTaskId(),
-                base.contractorId(),
-                base.performerId(),
                 base.type(),
                 base.workType(),
                 base.warehouseId(),

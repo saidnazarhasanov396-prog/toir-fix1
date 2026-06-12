@@ -275,7 +275,17 @@ public class WorkOrderController {
     }
 
     private void assertCanAccessWorkOrder(WorkOrder workOrder) {
-        assertCanAccessDepartmentForMutation(workOrder.getDepartmentId());
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        if (scopeAccessService.canAccessDepartment(workOrder.getDepartmentId())) {
+            return;
+        }
+        if (workOrder.getPerformer() != null
+                && scopeAccessService.canAccessAssignedUser(workOrder.getPerformer().getUserId())) {
+            return;
+        }
+        throw new AccessDeniedException("Access denied by work order department or performer scope");
     }
 
     private void assertCanAccessDepartmentForMutation(UUID departmentId) {

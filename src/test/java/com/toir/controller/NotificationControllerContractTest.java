@@ -29,7 +29,9 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -64,7 +66,7 @@ class NotificationControllerContractTest {
     @Test
     void listWithEmptyDatasetReturns200StablePage() throws Exception {
         UUID recipientId = UUID.randomUUID();
-        when(notificationFacadeService.list(recipientId, 0, 10))
+        when(notificationFacadeService.list(recipientId, 0, 10, null, null, null, null, false))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
 
         mockMvc.perform(get("/api/v1/notifications")
@@ -92,7 +94,7 @@ class NotificationControllerContractTest {
                 "id-1",
                 null
         );
-        when(notificationFacadeService.list(eq(recipientId), eq(0), eq(10)))
+        when(notificationFacadeService.list(eq(recipientId), eq(0), eq(10), isNull(), isNull(), isNull(), isNull(), eq(false)))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1));
 
         mockMvc.perform(get("/api/v1/notifications")
@@ -101,6 +103,43 @@ class NotificationControllerContractTest {
                         .param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].severity").value(NotificationSeverity.INFO.name()));
+    }
+
+    @Test
+    void listForwardsSupportedFilters() throws Exception {
+        UUID recipientId = UUID.randomUUID();
+        when(notificationFacadeService.list(
+                eq(recipientId),
+                eq(1),
+                eq(25),
+                eq("pump"),
+                eq(NotificationStatus.SENT),
+                eq(NotificationSeverity.WARNING),
+                eq("WorkOrder"),
+                eq(true)
+        )).thenReturn(new PageImpl<>(List.of(), PageRequest.of(1, 25), 0));
+
+        mockMvc.perform(get("/api/v1/notifications")
+                        .param("recipientId", recipientId.toString())
+                        .param("page", "1")
+                        .param("size", "25")
+                        .param("search", "pump")
+                        .param("status", "SENT")
+                        .param("severity", "WARNING")
+                        .param("entityType", "WorkOrder")
+                        .param("unreadOnly", "true"))
+                .andExpect(status().isOk());
+
+        verify(notificationFacadeService).list(
+                recipientId,
+                1,
+                25,
+                "pump",
+                NotificationStatus.SENT,
+                NotificationSeverity.WARNING,
+                "WorkOrder",
+                true
+        );
     }
 
     @Test

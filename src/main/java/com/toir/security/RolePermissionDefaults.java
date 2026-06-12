@@ -367,6 +367,18 @@ public final class RolePermissionDefaults {
                 PermissionConstants.CATEGORY_READ
         ));
         defaults.put("CONTRACTOR", List.of(PermissionConstants.READ_LEGACY));
+        List<String> performerPermissions = List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.NOTIFICATION_READ,
+                PermissionConstants.NOTIFICATION_MARK_READ,
+                PermissionConstants.WORK_ORDER_READ,
+                PermissionConstants.WORK_ORDER_START,
+                PermissionConstants.WORK_ORDER_COMPLETE,
+                PermissionConstants.EQUIPMENT_READ,
+                PermissionConstants.KNOWLEDGE_READ
+        );
+        defaults.put("TECHNICIAN", performerPermissions);
+        defaults.put("MECHANIC", performerPermissions);
         return Map.copyOf(defaults);
     }
 }
