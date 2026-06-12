@@ -8,7 +8,9 @@ import com.toir.entity.ApprovalStep;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.enums.ApprovalDecision;
+import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalStatus;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalRequestRepository;
@@ -197,6 +199,51 @@ class ApprovalPbacScopeTest {
         service.create(request);
 
         verify(approvalScopeService).assertCanCreateApproval(request);
+    }
+
+    @Test
+    void existingApprovalCreationAliasesDocumentFieldsToTargetFields() {
+        UUID documentId = UUID.randomUUID();
+        CreateApprovalRequest request = createRequest(UUID.randomUUID(), UUID.randomUUID(), documentId);
+        when(requestRepository.save(any())).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        service.create(request);
+
+        org.mockito.ArgumentCaptor<ApprovalRequest> captor = org.mockito.ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository).save(captor.capture());
+        ApprovalRequest saved = captor.getValue();
+        assertThat(saved.getDocumentType()).isEqualTo("WORK_ORDER");
+        assertThat(saved.getDocumentId()).isEqualTo(documentId);
+        assertThat(saved.getTargetType()).isEqualTo(ApprovalTargetType.WORK_ORDER);
+        assertThat(saved.getTargetId()).isEqualTo(documentId);
+    }
+
+    @Test
+    void newFrameworkFieldsCanBeSavedWithoutChangingLegacyDocumentFields() {
+        UUID documentId = UUID.randomUUID();
+        ApprovalRequest approval = approval(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), documentId);
+        approval.setTargetType(ApprovalTargetType.MAINTENANCE_BUDGET);
+        approval.setTargetId(documentId);
+        approval.setActionType(ApprovalActionType.APPROVE);
+        approval.setPayloadJson("{\"source\":\"test\"}");
+        approval.setResultJson("{\"status\":\"queued\"}");
+        approval.setFailureReason("not executed");
+        when(requestRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ApprovalRequest saved = requestRepository.save(approval);
+
+        assertThat(saved.getDocumentType()).isEqualTo("WORK_ORDER");
+        assertThat(saved.getDocumentId()).isEqualTo(documentId);
+        assertThat(saved.getTargetType()).isEqualTo(ApprovalTargetType.MAINTENANCE_BUDGET);
+        assertThat(saved.getTargetId()).isEqualTo(documentId);
+        assertThat(saved.getActionType()).isEqualTo(ApprovalActionType.APPROVE);
+        assertThat(saved.getPayloadJson()).contains("source");
+        assertThat(saved.getResultJson()).contains("queued");
+        assertThat(saved.getFailureReason()).isEqualTo("not executed");
     }
 
     @Test

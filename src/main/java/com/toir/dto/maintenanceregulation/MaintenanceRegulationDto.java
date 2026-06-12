@@ -12,6 +12,7 @@ import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -47,7 +48,9 @@ public record MaintenanceRegulationDto(
         UUID defaultDepartmentId,
         UUID defaultResponsibleId,
         PriorityLevel defaultPriority,
-        @Schema(description = "Deprecated legacy flag. Ignored by automation decisions; use automationAction=REQUIRE_APPROVAL.", deprecated = true)
+        @Deprecated
+        @JsonIgnore
+        @Schema(hidden = true, deprecated = true)
         Boolean requiresApproval,
         String approvalRole,
         String approvalPermission,
