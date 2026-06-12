@@ -13,6 +13,7 @@ import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.dto.warehouse.LowStockEvaluationResultDto;
+import com.toir.enums.EquipmentRiskLevel;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
@@ -243,6 +244,7 @@ class OperationalIssueScannerServiceTest {
         verify(issueService).openOrUpdate(
                 eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
                 eq(NotificationSeverity.CRITICAL),
+                eq(EquipmentRiskLevel.CRITICAL),
                 eq(equipmentId),
                 eq(departmentId),
                 eq("EquipmentLifecycle"),
@@ -266,6 +268,7 @@ class OperationalIssueScannerServiceTest {
         verify(issueService).openOrUpdate(
                 eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
                 eq(NotificationSeverity.CRITICAL),
+                eq(EquipmentRiskLevel.CRITICAL),
                 eq(equipmentId),
                 eq(departmentId),
                 eq("EquipmentLifecycle"),
@@ -289,6 +292,7 @@ class OperationalIssueScannerServiceTest {
         verify(issueService).openOrUpdate(
                 eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
                 eq(NotificationSeverity.WARNING),
+                eq(EquipmentRiskLevel.HIGH),
                 eq(equipmentId),
                 eq(departmentId),
                 eq("EquipmentLifecycle"),
@@ -312,6 +316,7 @@ class OperationalIssueScannerServiceTest {
         verify(issueService).openOrUpdate(
                 eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
                 eq(NotificationSeverity.INFO),
+                eq(EquipmentRiskLevel.LOW),
                 eq(equipmentId),
                 eq(departmentId),
                 eq("EquipmentLifecycle"),
