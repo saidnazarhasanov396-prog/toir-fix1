@@ -27,7 +27,25 @@ public class NotificationFacadeService {
 
     @Transactional(readOnly = true)
     public Page<NotificationDto> list(UUID recipientId, int page, int size) {
+        return list(recipientId, page, size, null, null, null, null, false);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<NotificationDto> list(UUID recipientId, int page, int size, String search,
+                                      NotificationStatus status, NotificationSeverity severity, String entityType,
+                                      boolean unreadOnly) {
         List<NotificationDto> items = recipientId != null ? notificationService.findForUser(recipientId) : List.of();
+        items = items.stream()
+                .filter(n -> !unreadOnly || n.status() != NotificationStatus.READ)
+                .filter(n -> status == null || n.status() == status)
+                .filter(n -> severity == null || n.severity() == severity)
+                .filter(n -> entityType == null || entityType.isBlank() || entityType.equalsIgnoreCase(n.entityType()))
+                .filter(n -> search == null || search.isBlank()
+                        || containsIgnoreCase(n.title(), search)
+                        || containsIgnoreCase(n.message(), search)
+                        || containsIgnoreCase(n.entityType(), search)
+                        || containsIgnoreCase(n.entityId(), search))
+                .toList();
         return PaginationUtils.page(items, page, size);
     }
 

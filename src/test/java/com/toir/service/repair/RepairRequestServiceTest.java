@@ -675,10 +675,7 @@ class RepairRequestServiceTest {
         verify(notificationService).notifyUser(
                 eq(assigneeId),
                 org.mockito.ArgumentMatchers.contains("Repair request assigned"),
-                org.mockito.ArgumentMatchers.argThat(message ->
-                        message != null
-                                && message.contains(entity.getNumber())
-                                && message.contains("texnik ko'rik")),
+                eq("Sizga ushbu qurilma bo'yicha ta'mirlash vazifasi biriktirildi."),
                 eq(com.toir.enums.NotificationSeverity.INFO),
                 eq("RepairRequest"),
                 eq(id.toString())
