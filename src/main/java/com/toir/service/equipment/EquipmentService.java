@@ -296,12 +296,25 @@ public class EquipmentService {
         );
     }
 
+    private static final Set<String> ALLOWED_EQUIPMENT_DOCUMENT_CONTENT_TYPES = Set.of(
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp"
+    );
+
     @Transactional
     public List<EquipmentDocumentDto> attachDocuments(
             UUID equipmentId,
             List<MultipartFile> files,
             List<String> documentNames,
-            String documentType,
+            List<String> documentTypes,
+            List<String> documentNumbers,
             AuthenticatedUser user
     ) {
         UUID currentUserId = currentUserId(user);
@@ -310,13 +323,18 @@ public class EquipmentService {
             throw RestException.badRequest("At least one equipment document file is required");
         }
         List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
-        String normalizedDocumentType = normalizeDocumentType(documentType);
 
         List<UUID> uploadedFileIds = new ArrayList<>();
         try {
             List<com.toir.entity.equipment.EquipmentDocument> documents = new ArrayList<>(files.size());
             for (int i = 0; i < files.size(); i++) {
                 MultipartFile file = files.get(i);
+                String contentType = file.getContentType();
+                if (contentType == null || !ALLOWED_EQUIPMENT_DOCUMENT_CONTENT_TYPES.contains(contentType)) {
+                    throw RestException.badRequest("Unsupported file type: " + contentType);
+                }
+                String type = (documentTypes != null && i < documentTypes.size()) ? normalizeDocumentType(documentTypes.get(i)) : null;
+                String number = (documentNumbers != null && i < documentNumbers.size()) ? documentNumbers.get(i) : null;
                 UploadFileResponse uploaded = fileService.upload(file, FileCategory.EQUIPMENT_DOCUMENT, currentUserId);
                 uploadedFileIds.add(uploaded.id());
                 UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
@@ -324,7 +342,8 @@ public class EquipmentService {
                 documents.add(com.toir.entity.equipment.EquipmentDocument.builder()
                         .equipment(equipment)
                         .file(uploadedFile)
-                        .documentType(normalizedDocumentType)
+                        .documentType(type)
+                        .documentNumber(number)
                         .documentName(normalizedDocumentNames.get(i))
                         .build());
             }

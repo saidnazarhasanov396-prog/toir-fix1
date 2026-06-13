@@ -1,0 +1,2 @@
+ALTER TABLE equipment_documents
+    ADD COLUMN IF NOT EXISTS document_number varchar(128);

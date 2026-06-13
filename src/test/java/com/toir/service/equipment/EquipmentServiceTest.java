@@ -42,6 +42,9 @@ import com.toir.exception.RestException;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.FileAssetRepository;
+import com.toir.repository.UploadedFileRepository;
+import com.toir.repository.equipment.EquipmentDocumentRepository;
+import com.toir.service.file_management.FileService;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -164,6 +167,15 @@ class EquipmentServiceTest {
 
     @Mock
     ScopeAccessService scopeAccessService;
+
+    @Mock
+    FileService fileService;
+
+    @Mock
+    UploadedFileRepository uploadedFileRepository;
+
+    @Mock
+    EquipmentDocumentRepository equipmentDocumentRepository;
 
     @BeforeEach
     void setUp() {
@@ -3030,5 +3042,76 @@ class EquipmentServiceTest {
 
     private void stubWarehouseLocationFallback(List<Warehouse> warehouses) {
         when(warehouseRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(warehouses);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void attachDocuments_eachFileGetsItsOwnTypeAndNumber() {
+        UUID userId = UUID.randomUUID();
+        UUID fileId1 = UUID.randomUUID();
+        UUID fileId2 = UUID.randomUUID();
+
+        Equipment equipment = equipment("EQ-DOC");
+        UUID equipmentId = equipment.getId();
+
+        org.springframework.mock.web.MockMultipartFile file1 =
+                new org.springframework.mock.web.MockMultipartFile("files", "passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes());
+        org.springframework.mock.web.MockMultipartFile file2 =
+                new org.springframework.mock.web.MockMultipartFile("files", "drawing.png", "image/png", new byte[]{1, 2, 3});
+
+        com.toir.entity.UploadedFile uploadedFile1 = com.toir.entity.UploadedFile.builder()
+                .id(fileId1).originalName("passport.pdf").storedName(fileId1 + ".pdf")
+                .contentType("application/pdf").extension("pdf").size(10L)
+                .uploadedBy(userId).category(com.toir.enums.FileCategory.EQUIPMENT_DOCUMENT)
+                .deleted(false).build();
+        com.toir.entity.UploadedFile uploadedFile2 = com.toir.entity.UploadedFile.builder()
+                .id(fileId2).originalName("drawing.png").storedName(fileId2 + ".png")
+                .contentType("image/png").extension("png").size(3L)
+                .uploadedBy(userId).category(com.toir.enums.FileCategory.EQUIPMENT_DOCUMENT)
+                .deleted(false).build();
+
+        com.toir.dto.file.UploadFileResponse response1 = com.toir.dto.file.UploadFileResponse.builder()
+                .id(fileId1).originalName("passport.pdf").contentType("application/pdf")
+                .size(10L).category(com.toir.enums.FileCategory.EQUIPMENT_DOCUMENT).build();
+        com.toir.dto.file.UploadFileResponse response2 = com.toir.dto.file.UploadFileResponse.builder()
+                .id(fileId2).originalName("drawing.png").contentType("image/png")
+                .size(3L).category(com.toir.enums.FileCategory.EQUIPMENT_DOCUMENT).build();
+
+        com.toir.security.AuthenticatedUser user = new com.toir.security.AuthenticatedUser(
+                userId.toString(), "testuser", "test@test.com", "Test User",
+                equipment.getDepartmentId().toString(), "USER", List.of()
+        );
+
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(fileService.upload(eq(file1), eq(com.toir.enums.FileCategory.EQUIPMENT_DOCUMENT), eq(userId)))
+                .thenReturn(response1);
+        when(fileService.upload(eq(file2), eq(com.toir.enums.FileCategory.EQUIPMENT_DOCUMENT), eq(userId)))
+                .thenReturn(response2);
+        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId1)).thenReturn(Optional.of(uploadedFile1));
+        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId2)).thenReturn(Optional.of(uploadedFile2));
+        when(equipmentDocumentRepository.saveAllAndFlush(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.attachDocuments(
+                equipmentId,
+                List.of(file1, file2),
+                List.of("Technical Passport", "Drawing"),
+                List.of("PASSPORT", "DRAWING"),
+                List.of("АКТ-2024-001", "DRW-2024-001"),
+                user
+        );
+
+        org.mockito.ArgumentCaptor<List<com.toir.entity.equipment.EquipmentDocument>> captor =
+                org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(equipmentDocumentRepository).saveAllAndFlush(captor.capture());
+
+        List<com.toir.entity.equipment.EquipmentDocument> saved = captor.getValue();
+        assertThat(saved).hasSize(2);
+        assertThat(saved.get(0).getDocumentType()).isEqualTo("PASSPORT");
+        assertThat(saved.get(0).getDocumentNumber()).isEqualTo("АКТ-2024-001");
+        assertThat(saved.get(0).getDocumentName()).isEqualTo("Technical Passport");
+        assertThat(saved.get(1).getDocumentType()).isEqualTo("DRAWING");
+        assertThat(saved.get(1).getDocumentNumber()).isEqualTo("DRW-2024-001");
+        assertThat(saved.get(1).getDocumentName()).isEqualTo("Drawing");
     }
 }

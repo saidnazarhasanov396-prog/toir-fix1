@@ -154,12 +154,15 @@ public class EquipmentController {
             @RequestParam("files") List<MultipartFile> files,
             @Parameter(description = "Document names/titles in the same order as files.")
             @RequestParam(value = "documentNames", required = false) List<String> documentNames,
-            @RequestParam(required = false) String documentType,
+            @Parameter(description = "Document type per file, in the same order as files.")
+            @RequestParam(value = "documentTypes", required = false) List<String> documentTypes,
+            @Parameter(description = "Document number per file, in the same order as files.")
+            @RequestParam(value = "documentNumbers", required = false) List<String> documentNumbers,
             @CurrentUser AuthenticatedUser user
     ) {
         assertCanAccessEquipment(equipmentOrThrow(id));
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(service.attachDocuments(id, files, documentNames, documentType, user));
+                .body(service.attachDocuments(id, files, documentNames, documentTypes, documentNumbers, user));
     }
 
     @GetMapping("/{id}/documents")
