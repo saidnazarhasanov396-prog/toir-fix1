@@ -78,6 +78,11 @@ public final class PermissionConstants {
     public static final String INVENTORY_READ = "INVENTORY_READ";
     public static final String INVENTORY_RECEIPT = "INVENTORY_RECEIPT";
     public static final String INVENTORY_ISSUE = "INVENTORY_ISSUE";
+    public static final String INVENTORY_TRANSFER = "INVENTORY_TRANSFER";
+    public static final String INVENTORY_RETURN = "INVENTORY_RETURN";
+    public static final String INVENTORY_ADJUSTMENT = "INVENTORY_ADJUSTMENT";
+    public static final String INVENTORY_ANALYTICS_READ = "INVENTORY_ANALYTICS_READ";
+    public static final String INVENTORY_VALUATION_READ = "INVENTORY_VALUATION_READ";
     public static final String MATERIAL_USAGE_READ = "MATERIAL_USAGE_READ";
     public static final String MATERIAL_USAGE_ISSUE = "MATERIAL_USAGE_ISSUE";
     public static final String PROCUREMENT_READ = "PROCUREMENT_READ";
@@ -88,6 +93,15 @@ public final class PermissionConstants {
     public static final String PROCUREMENT_ORDER = "PROCUREMENT_ORDER";
     public static final String PROCUREMENT_RECEIVE = "PROCUREMENT_RECEIVE";
     public static final String PROCUREMENT_CANCEL = "PROCUREMENT_CANCEL";
+    public static final String SUPPLIER_READ = "SUPPLIER_READ";
+    public static final String SUPPLIER_CREATE = "SUPPLIER_CREATE";
+    public static final String SUPPLIER_UPDATE = "SUPPLIER_UPDATE";
+    public static final String PURCHASE_ORDER_READ = "PURCHASE_ORDER_READ";
+    public static final String PURCHASE_ORDER_CREATE = "PURCHASE_ORDER_CREATE";
+    public static final String PURCHASE_ORDER_APPROVE = "PURCHASE_ORDER_APPROVE";
+    public static final String PURCHASE_ORDER_SEND = "PURCHASE_ORDER_SEND";
+    public static final String PURCHASE_ORDER_RECEIVE = "PURCHASE_ORDER_RECEIVE";
+    public static final String PURCHASE_ORDER_CANCEL = "PURCHASE_ORDER_CANCEL";
 
     public static final String APPROVAL_READ = "APPROVAL_READ";
     public static final String APPROVAL_CREATE = "APPROVAL_CREATE";

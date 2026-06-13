@@ -1,8 +1,10 @@
 package com.toir.dto.warehouse;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.toir.dto.sparepartforecast.SparePartForecastSourceDto;
 import com.toir.enums.NotificationSeverity;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,10 +25,17 @@ public record InventoryReplenishmentRecommendationDto(
         double projectedBalance,
         double totalShortageQty,
         double suggestedOrderQty,
+        UUID preferredSupplierId,
+        String preferredSupplierName,
+        LocalDate expectedDeliveryDate,
         NotificationSeverity severity,
         InventoryReplenishmentReason reason,
         int sourceCount,
         Instant firstDueAt,
         List<SparePartForecastSourceDto> forecastSources
 ) {
+    @JsonProperty("recommendedQuantity")
+    public double recommendedQuantity() {
+        return suggestedOrderQty;
+    }
 }

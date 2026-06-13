@@ -86,6 +86,15 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
         long totalIssues = transactions.stream()
                 .filter(tx -> tx.getType() == InventoryTransactionType.ISSUE)
                 .count();
+        long transfers = transactions.stream()
+                .filter(tx -> tx.getType() == InventoryTransactionType.TRANSFER)
+                .count();
+        long returns = transactions.stream()
+                .filter(tx -> tx.getType() == InventoryTransactionType.RETURN)
+                .count();
+        long adjustments = transactions.stream()
+                .filter(tx -> tx.getType() == InventoryTransactionType.ADJUSTMENT)
+                .count();
         BigDecimal receiptAmount = sum(transactions, InventoryTransactionType.RECEIPT, true);
         BigDecimal issueAmount = sum(transactions, InventoryTransactionType.ISSUE, true);
         BigDecimal receivedQuantity = sum(transactions, InventoryTransactionType.RECEIPT, false);
@@ -94,6 +103,10 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
         return new InventoryStatisticsDto(
                 totalReceipts,
                 totalIssues,
+                transfers,
+                returns,
+                adjustments,
+                transactions.size(),
                 receiptAmount,
                 issueAmount,
                 receivedQuantity,
@@ -194,5 +207,37 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
     List<InventoryTransaction> findAllBySparePartIdAndTypeInOrderByTransactionDateDescCreatedAtDesc(
             UUID sparePartId,
             Collection<InventoryTransactionType> types
+    );
+
+    default List<InventoryTransaction> findAdjustmentsForReconciliation(
+            boolean scopeAdmin,
+            Collection<UUID> warehouseIds
+    ) {
+        if (scopeAdmin) {
+            return findAllAdjustmentsForReconciliationAdmin();
+        }
+        if (warehouseIds == null || warehouseIds.isEmpty()) {
+            return List.of();
+        }
+        return findAllAdjustmentsForReconciliationScoped(warehouseIds);
+    }
+
+    @Query("""
+            select tx
+            from InventoryTransaction tx
+            where tx.type = com.toir.enums.InventoryTransactionType.ADJUSTMENT
+            order by tx.transactionDate desc, tx.createdAt desc
+            """)
+    List<InventoryTransaction> findAllAdjustmentsForReconciliationAdmin();
+
+    @Query("""
+            select tx
+            from InventoryTransaction tx
+            where tx.type = com.toir.enums.InventoryTransactionType.ADJUSTMENT
+              and tx.warehouseId in :warehouseIds
+            order by tx.transactionDate desc, tx.createdAt desc
+            """)
+    List<InventoryTransaction> findAllAdjustmentsForReconciliationScoped(
+            @Param("warehouseIds") Collection<UUID> warehouseIds
     );
 }

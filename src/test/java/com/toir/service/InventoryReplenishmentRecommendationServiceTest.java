@@ -7,6 +7,8 @@ import com.toir.dto.warehouse.InventoryReplenishmentReason;
 import com.toir.dto.warehouse.InventoryReplenishmentRecommendationDto;
 import com.toir.dto.warehouse.ReorderSuggestionDto;
 import com.toir.enums.NotificationSeverity;
+import com.toir.repository.SparePartRepository;
+import com.toir.repository.SupplierRepository;
 import com.toir.service.maintanance.SparePartForecastService;
 import java.time.Instant;
 import java.util.List;
@@ -34,6 +36,12 @@ class InventoryReplenishmentRecommendationServiceTest {
 
     @Mock
     SparePartForecastService forecastService;
+
+    @Mock
+    SparePartRepository sparePartRepository;
+
+    @Mock
+    SupplierRepository supplierRepository;
 
     @InjectMocks
     InventoryReplenishmentRecommendationService service;

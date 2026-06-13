@@ -96,18 +96,25 @@ public class ApprovalController {
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_APPROVE')")
     public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id, @Valid @RequestBody DecisionRequest decision) {
-        return ResponseEntity.ok(service.approve(id, decision));
+        return decisionResponse(service.approve(id, decision));
     }
 
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_REJECT')")
     public ResponseEntity<ApprovalRequestDto> reject(@PathVariable UUID id, @Valid @RequestBody DecisionRequest decision) {
-        return ResponseEntity.ok(service.reject(id, decision));
+        return decisionResponse(service.reject(id, decision));
     }
 
     @PostMapping("/{id}/cancel")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_CANCEL')")
     public ResponseEntity<ApprovalRequestDto> cancel(@PathVariable UUID id) {
         return ResponseEntity.ok(service.cancel(id));
+    }
+
+    private ResponseEntity<ApprovalRequestDto> decisionResponse(ApprovalRequestDto approval) {
+        if (approval.status() == ApprovalStatus.FAILED) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(approval);
+        }
+        return ResponseEntity.ok(approval);
     }
 }

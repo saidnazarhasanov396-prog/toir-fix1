@@ -3,6 +3,7 @@ package com.toir.security;
 import com.toir.controller.SparePartController;
 import com.toir.dto.sparepart.SparePartDto;
 import com.toir.dto.sparepart.SparePartRequest;
+import com.toir.service.InventoryAnalyticsService;
 import com.toir.service.SparePartService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +49,9 @@ class RbacSparePartSecurityTest {
 
     @MockBean
     SparePartService sparePartService;
+
+    @MockBean
+    InventoryAnalyticsService analyticsService;
 
     @TestConfiguration
     static class SecurityBeans {

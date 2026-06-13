@@ -17,6 +17,7 @@ import com.toir.repository.LocationRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.SparePartTypeRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.SupplierRepository;
 import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -61,6 +62,9 @@ class SparePartServiceTest {
     SparePartTypeRepository typeRepository;
 
     @Mock
+    SupplierRepository supplierRepository;
+
+    @Mock
     InventoryTransactionRepository inventoryTransactionRepository;
 
     @Mock
@@ -97,6 +101,7 @@ class SparePartServiceTest {
         service = new SparePartService(
                 repository,
                 typeRepository,
+                supplierRepository,
                 inventoryTransactionRepository,
                 stockRepository,
                 stockMovementRepository,

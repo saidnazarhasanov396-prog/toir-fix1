@@ -4,11 +4,15 @@ import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.procurement.ProcurementLineRequest;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
+import com.toir.dto.purchaseorder.ProcurementRequestPurchaseOrderRequest;
+import com.toir.dto.purchaseorder.PurchaseOrderDto;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
+import com.toir.security.PermissionConstants;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.ApprovalService;
 import com.toir.service.ProcurementRequestService;
+import com.toir.service.PurchaseOrderService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -31,6 +35,7 @@ public class ProcurementRequestController {
 
     private final ProcurementRequestService service;
     private final ApprovalService approvalService;
+    private final PurchaseOrderService purchaseOrderService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_READ')")
@@ -114,5 +119,17 @@ public class ProcurementRequestController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(service.generateFromLowStock(warehouseId), page, size));
+    }
+
+    @PostMapping("/{id}/purchase-order")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.PURCHASE_ORDER_CREATE + "')")
+    public ResponseEntity<PurchaseOrderDto> createPurchaseOrder(
+            @PathVariable UUID id,
+            @RequestBody(required = false) ProcurementRequestPurchaseOrderRequest request
+    ) {
+        ProcurementRequestPurchaseOrderRequest effectiveRequest = request == null
+                ? new ProcurementRequestPurchaseOrderRequest(null, null, null)
+                : request;
+        return ResponseEntity.status(HttpStatus.CREATED).body(purchaseOrderService.createFromProcurementRequest(id, effectiveRequest));
     }
 }

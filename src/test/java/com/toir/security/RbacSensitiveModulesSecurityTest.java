@@ -27,7 +27,9 @@ import com.toir.service.ActualCostService;
 import com.toir.service.ApprovalService;
 import com.toir.service.AuditLogService;
 import com.toir.service.FinanceScopeService;
+import com.toir.service.InventoryAnalyticsService;
 import com.toir.service.ProcurementRequestService;
+import com.toir.service.PurchaseOrderService;
 import com.toir.service.SparePartService;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.service.WarehouseService;
@@ -111,7 +113,11 @@ class RbacSensitiveModulesSecurityTest {
     @MockBean
     SparePartService sparePartService;
     @MockBean
+    InventoryAnalyticsService inventoryAnalyticsService;
+    @MockBean
     ProcurementRequestService procurementRequestService;
+    @MockBean
+    PurchaseOrderService purchaseOrderService;
     @MockBean
     ApprovalService approvalService;
     @MockBean

@@ -6,6 +6,7 @@ import com.toir.enums.NotificationSeverity;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.InventoryReplenishmentRecommendationService;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,6 +65,9 @@ class InventoryReplenishmentRecommendationControllerContractTest {
                 -1.0,
                 9.0,
                 20.0,
+                UUID.randomUUID(),
+                "Best Supplier",
+                LocalDate.of(2026, 6, 20),
                 NotificationSeverity.WARNING,
                 InventoryReplenishmentReason.LOW_STOCK_AND_MAINTENANCE_FORECAST,
                 1,

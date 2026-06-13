@@ -5,6 +5,7 @@ import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.service.ApprovalService;
 import com.toir.service.ProcurementRequestService;
+import com.toir.service.PurchaseOrderService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -50,6 +51,9 @@ class RbacProcurementSecurityTest {
 
     @MockBean
     ApprovalService approvalService;
+
+    @MockBean
+    PurchaseOrderService purchaseOrderService;
 
     @TestConfiguration
     static class SecurityBeans {

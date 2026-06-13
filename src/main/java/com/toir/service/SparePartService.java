@@ -25,6 +25,7 @@ import com.toir.repository.LocationRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.SparePartTypeRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.SupplierRepository;
 import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -58,6 +59,7 @@ public class SparePartService {
 
     private final SparePartRepository repository;
     private final SparePartTypeRepository typeRepository;
+    private final SupplierRepository supplierRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final WarehouseStockRepository stockRepository;
     private final StockMovementRepository stockMovementRepository;
@@ -178,13 +180,13 @@ public class SparePartService {
                     List<WarehouseStock> stocks = stocksByPart.getOrDefault(part.getId(), List.of());
                     double currentStock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
                     double reservedStock = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
-                    return SparePartDto.from(
+                    return enrichSupplier(SparePartDto.from(
                             part,
                             currentStock,
                             reservedStock,
                             stocks.size(),
                             unitRefFor(part.getUnit(), unitRefsByToken)
-                    );
+                    ));
                 });
     }
 
@@ -229,7 +231,7 @@ public class SparePartService {
         List<WarehouseStock> stocks = stockRepository.findAllBySparePartIdAndIsDeletedFalse(id);
         double currentStock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
         double reservedStock = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
-        return SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit()));
+        return enrichSupplier(SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit())));
     }
 
     @Transactional(readOnly = true)
@@ -296,7 +298,7 @@ public class SparePartService {
                 saved
         );
 
-        return SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()));
+        return enrichSupplier(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit())));
     }
 
     @Transactional
@@ -316,7 +318,7 @@ public class SparePartService {
                 entity,
                 saved
         );
-        return SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()));
+        return enrichSupplier(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit())));
     }
 
     @Transactional
@@ -352,6 +354,23 @@ public class SparePartService {
         entity.setSpecification(request.specification());
         entity.setManufacturer(request.manufacturer());
         entity.setMinStock(request.minStock());
+        entity.setPreferredSupplierId(request.preferredSupplierId());
+        entity.setLeadTimeDays(request.leadTimeDays());
+        entity.setLastPurchasePrice(request.lastPurchasePrice());
+        entity.setAverageCost(request.averageCost());
+        entity.setLastPurchaseCost(request.lastPurchaseCost());
+        if (request.criticality() != null) {
+            entity.setCriticality(request.criticality());
+        }
+    }
+
+    private SparePartDto enrichSupplier(SparePartDto dto) {
+        if (dto == null || dto.preferredSupplierId() == null) {
+            return dto;
+        }
+        return supplierRepository.findByIdAndIsDeletedFalse(dto.preferredSupplierId())
+                .map(supplier -> dto.withPreferredSupplierName(supplier.getName()))
+                .orElse(dto);
     }
 
     private String resolveUnit(String rawUnit, SparePartType type) {

@@ -2,9 +2,11 @@ package com.toir.dto.sparepart;
 
 import com.toir.entity.SparePart;
 import com.toir.entity.SparePartType;
+import com.toir.enums.CriticalityLevel;
 import com.toir.enums.InventoryItemKind;
 
 import java.util.UUID;
+import java.math.BigDecimal;
 
 /**
  * Shape matches the React frontend's inventory catalog while exposing the new type dictionary fields.
@@ -29,7 +31,15 @@ public record SparePartDto(
         UUID typeId,
         String typeCode,
         String typeName,
-        com.toir.enums.SparePartType type
+        com.toir.enums.SparePartType type,
+        UUID preferredSupplierId,
+        String preferredSupplierName,
+        Integer leadTimeDays,
+        BigDecimal lastPurchasePrice,
+        BigDecimal averageCost,
+        BigDecimal lastPurchaseCost,
+        BigDecimal inventoryValue,
+        CriticalityLevel criticality
 ) {
     public record UnitRef(String code, String name) {}
 
@@ -51,7 +61,8 @@ public record SparePartDto(
     ) {
         this(id, entityType, code, name, kind, unit == null ? null : unit.code(), unit == null ? null : unit.code(),
                 unit == null ? null : unit.name(), manufacturer, sku, specification, minStock, currentStock,
-                reservedStock, availableStock, warehouseCount, null, null, null, com.toir.enums.SparePartType.OTHER);
+                reservedStock, availableStock, warehouseCount, null, null, null, com.toir.enums.SparePartType.OTHER,
+                null, null, null, null, null, null, null, null);
     }
 
     public static SparePartDto from(SparePart s) {
@@ -94,8 +105,23 @@ public record SparePartDto(
                 type == null ? null : type.getId(),
                 typeCode,
                 type == null ? null : type.getName(),
-                legacyType(typeCode)
+                legacyType(typeCode),
+                s.getPreferredSupplierId(),
+                null,
+                s.getLeadTimeDays(),
+                s.getLastPurchasePrice(),
+                s.getAverageCost(),
+                s.getLastPurchaseCost(),
+                s.getInventoryValue(),
+                s.getCriticality()
         );
+    }
+
+    public SparePartDto withPreferredSupplierName(String preferredSupplierName) {
+        return new SparePartDto(id, entityType, code, name, kind, unit, unitCode, unitName, manufacturer, sku,
+                specification, minStock, currentStock, reservedStock, availableStock, warehouseCount,
+                typeId, typeCode, typeName, type, preferredSupplierId, preferredSupplierName,
+                leadTimeDays, lastPurchasePrice, averageCost, lastPurchaseCost, inventoryValue, criticality);
     }
 
     public static UnitRef unitRef(String unit) {

@@ -1,6 +1,7 @@
 package com.toir.dto.inventory;
 
 import com.toir.enums.InventoryTransactionType;
+import com.toir.enums.InventoryAdjustmentReason;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,9 +13,14 @@ public record InventoryTransactionDto(
         InventoryTransactionType type,
         UUID warehouseId,
         String warehouseName,
+        UUID destinationWarehouseId,
+        String destinationWarehouseName,
         UUID sparePartId,
         String sparePartName,
         BigDecimal quantity,
+        BigDecimal actualQuantity,
+        BigDecimal variance,
+        InventoryAdjustmentReason adjustmentReason,
         String unit,
         BigDecimal unitPrice,
         BigDecimal totalAmount,
