@@ -1,10 +1,13 @@
 package com.toir.controller;
 import com.toir.dto.sparepart.SparePartDto;
+import com.toir.dto.sparepart.SparePartDetailDto;
+import com.toir.dto.sparepart.SparePartLocationDto;
 import com.toir.dto.sparepart.SparePartRequest;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.SparePartService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -29,14 +32,27 @@ public class SparePartController {
             @RequestParam(defaultValue = "0", required = false) Integer page,
             @RequestParam(name = "size", defaultValue = "20", required = false) Integer size,
             @RequestParam(required = false)String itemType,
+            @RequestParam(required = false) UUID typeId,
             @RequestParam(required = false) String type,
             @RequestParam(required = false, defaultValue = "") String search,
             @RequestParam(required = false) UUID warehouseId
-            ) { return ResponseEntity.ok(service.findAll(size, page, itemType, type, search, warehouseId)); }
+            ) { return ResponseEntity.ok(service.findAll(size, page, itemType, typeId, type, search, warehouseId)); }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")
     public ResponseEntity<SparePartDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
+
+    @GetMapping("/{id}/locations")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")
+    public ResponseEntity<List<SparePartLocationDto>> locations(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.findLocations(id));
+    }
+
+    @GetMapping("/{id}/detail")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")
+    public ResponseEntity<SparePartDetailDto> detail(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.findDetail(id));
+    }
 
     @PostMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_CREATE')")

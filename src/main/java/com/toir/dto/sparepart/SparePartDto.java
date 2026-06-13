@@ -1,14 +1,13 @@
 package com.toir.dto.sparepart;
 
-import com.toir.enums.InventoryItemKind;
 import com.toir.entity.SparePart;
-import com.toir.enums.SparePartType;
+import com.toir.entity.SparePartType;
+import com.toir.enums.InventoryItemKind;
 
 import java.util.UUID;
 
 /**
- * Shape matches the React frontend's {@code InventoryCatalogItem} so the spare-parts page
- * can render directly from {@code GET /spare-parts}.
+ * Shape matches the React frontend's inventory catalog while exposing the new type dictionary fields.
  */
 public record SparePartDto(
         UUID id,
@@ -16,7 +15,9 @@ public record SparePartDto(
         String code,
         String name,
         String kind,
-        UnitRef unit,
+        String unit,
+        String unitCode,
+        String unitName,
         String manufacturer,
         String sku,
         String specification,
@@ -25,7 +26,10 @@ public record SparePartDto(
         double reservedStock,
         double availableStock,
         int warehouseCount,
-        SparePartType type
+        UUID typeId,
+        String typeCode,
+        String typeName,
+        com.toir.enums.SparePartType type
 ) {
     public record UnitRef(String code, String name) {}
 
@@ -45,8 +49,9 @@ public record SparePartDto(
             double availableStock,
             int warehouseCount
     ) {
-        this(id, entityType, code, name, kind, unit, manufacturer, sku, specification, minStock,
-                currentStock, reservedStock, availableStock, warehouseCount, SparePartType.OTHER);
+        this(id, entityType, code, name, kind, unit == null ? null : unit.code(), unit == null ? null : unit.code(),
+                unit == null ? null : unit.name(), manufacturer, sku, specification, minStock, currentStock,
+                reservedStock, availableStock, warehouseCount, null, null, null, com.toir.enums.SparePartType.OTHER);
     }
 
     public static SparePartDto from(SparePart s) {
@@ -62,8 +67,13 @@ public record SparePartDto(
             double currentStock,
             double reservedStock,
             int warehouseCount,
-            UnitRef unit
+            UnitRef unitRef
     ) {
+        SparePartType type = s.getType();
+        String unit = s.getUnit();
+        String unitCode = unitRef != null ? unitRef.code() : unit;
+        String unitName = unitRef != null ? unitRef.name() : unit;
+        String typeCode = type == null ? s.getLegacyType() : type.getCode();
         return new SparePartDto(
                 s.getId(),
                 "SPARE_PART",
@@ -71,6 +81,8 @@ public record SparePartDto(
                 s.getName(),
                 s.getKind() != null ? s.getKind().name() : InventoryItemKind.SPARE_PART.name(),
                 unit,
+                unitCode,
+                unitName,
                 s.getManufacturer(),
                 s.getSku(),
                 s.getSpecification(),
@@ -79,11 +91,31 @@ public record SparePartDto(
                 reservedStock,
                 Math.max(0, currentStock - reservedStock),
                 warehouseCount,
-                s.getType() != null ? s.getType() : SparePartType.OTHER
+                type == null ? null : type.getId(),
+                typeCode,
+                type == null ? null : type.getName(),
+                legacyType(typeCode)
         );
     }
 
     public static UnitRef unitRef(String unit) {
         return new UnitRef(unit, unit);
+    }
+
+    private static com.toir.enums.SparePartType legacyType(String code) {
+        if (code == null || code.isBlank()) {
+            return null;
+        }
+        String legacyCode = switch (code) {
+            case "ELECTRICAL_PART" -> "ELECTRICAL";
+            case "MECHANICAL_PART" -> "MECHANICAL";
+            case "METAL" -> "RAW_MATERIAL";
+            default -> code;
+        };
+        try {
+            return com.toir.enums.SparePartType.valueOf(legacyCode);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 }

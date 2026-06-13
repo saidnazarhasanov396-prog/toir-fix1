@@ -154,12 +154,35 @@ public class EquipmentController {
             @RequestParam("files") List<MultipartFile> files,
             @Parameter(description = "Document names/titles in the same order as files.")
             @RequestParam(value = "documentNames", required = false) List<String> documentNames,
+            @Parameter(description = "Single document title. When present, all files are attached to one document.")
+            @RequestParam(value = "documentName", required = false) String documentName,
             @RequestParam(required = false) String documentType,
             @CurrentUser AuthenticatedUser user
     ) {
         assertCanAccessEquipment(equipmentOrThrow(id));
+        if (documentName != null && !documentName.isBlank()) {
+            if (documentNames != null && !documentNames.isEmpty()) {
+                throw RestException.badRequest("Use either documentName or documentNames, not both");
+            }
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(List.of(service.attachDocumentFiles(id, files, documentName, documentType, user)));
+        }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(service.attachDocuments(id, files, documentNames, documentType, user));
+    }
+
+    @PostMapping(value = "/{id}/documents/{documentId}/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    @Operation(summary = "Attach additional files to an existing equipment document")
+    public ResponseEntity<EquipmentDocumentDto> attachDocumentFiles(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @RequestParam("files") List<MultipartFile> files,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.attachDocumentFiles(id, documentId, files, user));
     }
 
     @GetMapping("/{id}/documents")
@@ -213,6 +236,55 @@ public class EquipmentController {
                         .build()
                         .toString())
                 .body(resource);
+    }
+
+    @GetMapping("/{id}/documents/{documentId}/files/{fileId}/presigned-url")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<PresignedUrlResponse> getDocumentFilePresignedUrl(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @PathVariable UUID fileId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.ok(service.getDocumentFilePresignedUrl(id, documentId, fileId, user));
+    }
+
+    @GetMapping("/{id}/documents/{documentId}/files/{fileId}/download")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Resource> downloadDocumentFile(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @PathVariable UUID fileId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        EquipmentDocumentDto document = service.getDocument(id, documentId, user);
+        EquipmentDocumentDto.FileRef file = document.files().stream()
+                .filter(item -> fileId.equals(item.id()))
+                .findFirst()
+                .orElseThrow(() -> RestException.notFound("Equipment document file not found: " + fileId));
+        Resource resource = service.downloadDocumentFile(id, documentId, fileId, user);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(file.mimeType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(file.originalName(), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .body(resource);
+    }
+
+    @DeleteMapping("/{id}/documents/{documentId}/files/{fileId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    public ResponseEntity<Void> deleteDocumentFile(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @PathVariable UUID fileId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        service.deleteDocumentFile(id, documentId, fileId, user);
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{id}/documents/{documentId}")

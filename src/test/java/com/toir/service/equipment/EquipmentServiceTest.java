@@ -3,9 +3,11 @@ package com.toir.service.equipment;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentCreateRequest;
 import com.toir.dto.equipment.EquipmentDetailDto;
+import com.toir.dto.equipment.EquipmentDocumentDto;
 import com.toir.dto.equipment.EquipmentLocationRequest;
 import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.equipment.EquipmentUpdateRequest;
+import com.toir.dto.file.UploadFileResponse;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeRequest;
@@ -15,10 +17,12 @@ import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.FileAsset;
 import com.toir.entity.Location;
+import com.toir.entity.UploadedFile;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
 import com.toir.entity.equipment.EquipmentAttributeValue;
+import com.toir.entity.equipment.EquipmentDocument;
 import com.toir.entity.equipment.EquipmentLocationHistory;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
@@ -31,6 +35,7 @@ import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.FileCategory;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
 import com.toir.enums.RequestStatus;
@@ -50,13 +55,18 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
+import com.toir.repository.equipment.EquipmentDocumentFileRepository;
+import com.toir.repository.equipment.EquipmentDocumentRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
+import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.WarehouseEquipmentItemService;
+import com.toir.service.file_management.FileService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,12 +79,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 import com.toir.dto.equipment.EquipmentStatsResponse;
 import com.toir.repository.equipment.EquipmentStatsProjection;
 
 import java.time.Year;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -160,6 +174,18 @@ class EquipmentServiceTest {
     AuditBuilderService auditBuilderService;
 
     @Mock
+    FileService fileService;
+
+    @Mock
+    UploadedFileRepository uploadedFileRepository;
+
+    @Mock
+    EquipmentDocumentRepository equipmentDocumentRepository;
+
+    @Mock
+    EquipmentDocumentFileRepository equipmentDocumentFileRepository;
+
+    @Mock
     UserRepository userRepository;
 
     @Mock
@@ -173,6 +199,84 @@ class EquipmentServiceTest {
 
     @InjectMocks
     EquipmentService service;
+
+    @Test
+    void attachDocumentFilesCreatesSingleDocumentWithMultipleFiles() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID frontFileId = UUID.randomUUID();
+        UUID backFileId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-DOC-MULTI");
+        equipment.setId(equipmentId);
+        MockMultipartFile front = documentFile("front.pdf");
+        MockMultipartFile back = documentFile("back.pdf");
+        UploadedFile frontUploadedFile = uploadedFile(frontFileId, currentUserId, "front.pdf");
+        UploadedFile backUploadedFile = uploadedFile(backFileId, currentUserId, "back.pdf");
+
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(fileService.upload(front, FileCategory.EQUIPMENT_DOCUMENT, currentUserId))
+                .thenReturn(uploadResponse(frontFileId, "front.pdf"));
+        when(fileService.upload(back, FileCategory.EQUIPMENT_DOCUMENT, currentUserId))
+                .thenReturn(uploadResponse(backFileId, "back.pdf"));
+        when(uploadedFileRepository.findByIdAndDeletedFalse(frontFileId)).thenReturn(Optional.of(frontUploadedFile));
+        when(uploadedFileRepository.findByIdAndDeletedFalse(backFileId)).thenReturn(Optional.of(backUploadedFile));
+        when(equipmentDocumentRepository.saveAndFlush(any(EquipmentDocument.class))).thenAnswer(invocation -> {
+            EquipmentDocument saved = invocation.getArgument(0);
+            saved.setId(documentId);
+            return saved;
+        });
+
+        EquipmentDocumentDto result = service.attachDocumentFiles(
+                equipmentId,
+                List.of(front, back),
+                " Technical Passport ",
+                " PASSPORT ",
+                authenticatedUser(currentUserId)
+        );
+
+        assertThat(result.id()).isEqualTo(documentId);
+        assertThat(result.documentName()).isEqualTo("Technical Passport");
+        assertThat(result.documentType()).isEqualTo("PASSPORT");
+        assertThat(result.fileId()).isEqualTo(frontFileId);
+        assertThat(result.files()).extracting(EquipmentDocumentDto.FileRef::id)
+                .containsExactly(frontFileId, backFileId);
+        ArgumentCaptor<EquipmentDocument> documentCaptor = ArgumentCaptor.forClass(EquipmentDocument.class);
+        verify(equipmentDocumentRepository).saveAndFlush(documentCaptor.capture());
+        EquipmentDocument savedDocument = documentCaptor.getValue();
+        assertThat(savedDocument.getFile().getId()).isEqualTo(frontFileId);
+        assertThat(savedDocument.getFiles()).hasSize(2);
+        assertThat(savedDocument.getFiles()).extracting(link -> link.getFile().getId())
+                .containsExactly(frontFileId, backFileId);
+        assertThat(savedDocument.getFiles()).extracting(link -> link.getSortOrder())
+                .containsExactly(0, 1);
+    }
+
+    @Test
+    void attachDocumentFilesRejectsMoreThanTwentyFiveFilesBeforeUpload() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-DOC-LIMIT");
+        equipment.setId(equipmentId);
+        List<MultipartFile> files = new ArrayList<>();
+        for (int i = 0; i < 26; i++) {
+            files.add(documentFile("page-" + i + ".pdf"));
+        }
+
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.attachDocumentFiles(
+                equipmentId,
+                files,
+                "Oversized document",
+                null,
+                authenticatedUser(currentUserId)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessage("An equipment document cannot contain more than 25 files");
+
+        verifyNoInteractions(fileService);
+    }
 
     @Test
     void searchWithoutAvailableForReplacementKeepsExistingBehavior() {
@@ -2826,6 +2930,43 @@ class EquipmentServiceTest {
         fileAsset.setStoragePath("/tmp/" + fileName);
         fileAsset.setDeleted(false);
         return fileAsset;
+    }
+
+    private MockMultipartFile documentFile(String originalName) {
+        return new MockMultipartFile("files", originalName, "application/pdf", "%PDF-1.4\n".getBytes());
+    }
+
+    private UploadedFile uploadedFile(UUID id, UUID uploadedBy, String originalName) {
+        return UploadedFile.builder()
+                .id(id)
+                .originalName(originalName)
+                .storedName(id + ".pdf")
+                .objectName("equipment-documents/2026/06/" + id + ".pdf")
+                .contentType("application/pdf")
+                .extension("pdf")
+                .size(1024L)
+                .uploadedBy(uploadedBy)
+                .category(FileCategory.EQUIPMENT_DOCUMENT)
+                .deleted(false)
+                .createdAt(LocalDateTime.now())
+                .build();
+    }
+
+    private UploadFileResponse uploadResponse(UUID fileId, String originalName) {
+        return UploadFileResponse.builder()
+                .id(fileId)
+                .originalName(originalName)
+                .storedName(fileId + ".pdf")
+                .contentType("application/pdf")
+                .extension("pdf")
+                .size(1024L)
+                .category(FileCategory.EQUIPMENT_DOCUMENT)
+                .createdAt(LocalDateTime.now())
+                .build();
+    }
+
+    private AuthenticatedUser authenticatedUser(UUID userId) {
+        return new AuthenticatedUser(userId.toString(), "user", "user@example.com", "User", null, "USER", List.of());
     }
 
     private WarehouseEquipmentItem activeWarehouseItem(UUID equipmentId, UUID warehouseId, WarehouseEquipmentStatus status) {

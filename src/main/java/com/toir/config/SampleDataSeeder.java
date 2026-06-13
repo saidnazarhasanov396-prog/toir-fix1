@@ -57,6 +57,7 @@ import com.toir.repository.RootCauseRepository;
 import com.toir.enums.InventoryItemKind;
 import com.toir.entity.SparePart;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.SparePartTypeRepository;
 import com.toir.entity.StockMovement;
 import com.toir.repository.StockMovementRepository;
 import com.toir.enums.StockMovementType;
@@ -96,6 +97,7 @@ public class SampleDataSeeder implements CommandLineRunner {
     private final EquipmentRepository equipmentRepository;
     private final MaintenanceRegulationRepository regulationRepository;
     private final SparePartRepository sparePartRepository;
+    private final SparePartTypeRepository sparePartTypeRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseStockRepository stockRepository;
     private final RepairRequestRepository repairRequestRepository;
@@ -665,6 +667,8 @@ public class SampleDataSeeder implements CommandLineRunner {
         SparePart p = new SparePart();
         p.setCode(code); p.setName(name); p.setUnit(unit);
         p.setMinStock(minStock); p.setKind(InventoryItemKind.SPARE_PART);
+        p.setType(sparePartTypeRepository.findByCodeIgnoreCaseAndActiveTrue("OTHER").orElseThrow());
+        p.setLegacyType("OTHER");
         return sparePartRepository.save(p);
     }
 

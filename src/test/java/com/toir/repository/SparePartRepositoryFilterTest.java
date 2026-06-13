@@ -1,6 +1,7 @@
 package com.toir.repository;
 
 import com.toir.entity.SparePart;
+import com.toir.entity.SparePartType;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.InventoryItemKind;
@@ -136,9 +137,20 @@ class SparePartRepositoryFilterTest {
         sparePart.setName(name);
         sparePart.setKind(kind);
         sparePart.setUnit("PCS");
+        sparePart.setType(saveSparePartType("TYPE-" + code));
+        sparePart.setLegacyType("OTHER");
         sparePart.setMinStock(0);
         sparePart.setDeleted(deleted);
         return entityManager.persistAndFlush(sparePart);
+    }
+
+    private SparePartType saveSparePartType(String code) {
+        SparePartType type = new SparePartType();
+        type.setCode(code);
+        type.setName(code);
+        type.setDefaultUnit("PCS");
+        type.setActive(true);
+        return entityManager.persistAndFlush(type);
     }
 
     private WarehouseStock saveStock(Warehouse warehouse, SparePart sparePart, double quantity, boolean deleted) {
