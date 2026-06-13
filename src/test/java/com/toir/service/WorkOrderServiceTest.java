@@ -291,7 +291,7 @@ class WorkOrderServiceTest {
                 List.of(file),
                 List.of(" Completion act "),
                 List.of(" ACT "),
-                null,
+                List.of(" ACT-2024-015 "),
                 authenticatedUser(currentUserId));
 
         assertThat(result).hasSize(1);
@@ -299,6 +299,7 @@ class WorkOrderServiceTest {
         assertThat(result.getFirst().uploadedById()).isEqualTo(currentUserId);
         assertThat(result.getFirst().documentName()).isEqualTo("Completion act");
         assertThat(result.getFirst().documentType()).isEqualTo("ACT");
+        assertThat(result.getFirst().documentNumber()).isEqualTo("ACT-2024-015");
         verify(fileService).upload(file, FileCategory.WORK_ORDER_DOCUMENT, currentUserId);
     }
 

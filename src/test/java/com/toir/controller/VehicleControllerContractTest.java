@@ -255,27 +255,43 @@ class VehicleControllerContractTest {
         UUID firstFileId = UUID.randomUUID();
         UUID secondDocumentId = UUID.randomUUID();
         UUID secondFileId = UUID.randomUUID();
-        when(service.attachDocuments(eq(equipmentId), any(), eq(List.of("Technical Passport", "Insurance Document")), eq(List.of("TECHNICAL")), any(), any()))
+        when(service.attachDocuments(
+                eq(equipmentId),
+                any(),
+                eq(List.of("Technical Passport", "Insurance Document")),
+                eq(List.of("PASSPORT", "CERTIFICATE")),
+                eq(List.of("PAS-2024-001", "CERT-2024-015")),
+                any()))
                 .thenReturn(List.of(
-                        vehicleDocument(firstDocumentId, firstFileId, "passport.pdf", "TECHNICAL", "Technical Passport"),
-                        vehicleDocument(secondDocumentId, secondFileId, "insurance.pdf", "TECHNICAL", "Insurance Document")
+                        vehicleDocument(firstDocumentId, firstFileId, "passport.pdf", "PASSPORT", "Technical Passport", "PAS-2024-001"),
+                        vehicleDocument(secondDocumentId, secondFileId, "insurance.pdf", "CERTIFICATE", "Insurance Document", "CERT-2024-015")
                 ));
 
         mockMvc.perform(multipart("/api/v1/vehicles/{equipmentId}/documents", equipmentId)
                         .file(new MockMultipartFile("files", "passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
                         .file(new MockMultipartFile("files", "insurance.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
                         .param("documentNames", "Technical Passport", "Insurance Document")
-                        .param("documentTypes", "TECHNICAL"))
+                        .param("documentTypes", "PASSPORT", "CERTIFICATE")
+                        .param("documentNumbers", "PAS-2024-001", "CERT-2024-015"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$[0].id").value(firstDocumentId.toString()))
                 .andExpect(jsonPath("$[0].fileId").value(firstFileId.toString()))
-                .andExpect(jsonPath("$[0].documentType").value("TECHNICAL"))
+                .andExpect(jsonPath("$[0].documentType").value("PASSPORT"))
+                .andExpect(jsonPath("$[0].documentNumber").value("PAS-2024-001"))
                 .andExpect(jsonPath("$[0].documentName").value("Technical Passport"))
                 .andExpect(jsonPath("$[1].id").value(secondDocumentId.toString()))
                 .andExpect(jsonPath("$[1].fileId").value(secondFileId.toString()))
+                .andExpect(jsonPath("$[1].documentType").value("CERTIFICATE"))
+                .andExpect(jsonPath("$[1].documentNumber").value("CERT-2024-015"))
                 .andExpect(jsonPath("$[1].documentName").value("Insurance Document"));
 
-        verify(service).attachDocuments(eq(equipmentId), any(), eq(List.of("Technical Passport", "Insurance Document")), eq(List.of("TECHNICAL")), any(), any());
+        verify(service).attachDocuments(
+                eq(equipmentId),
+                any(),
+                eq(List.of("Technical Passport", "Insurance Document")),
+                eq(List.of("PASSPORT", "CERTIFICATE")),
+                eq(List.of("PAS-2024-001", "CERT-2024-015")),
+                any());
     }
 
     @Test
@@ -546,7 +562,18 @@ class VehicleControllerContractTest {
             String documentType,
             String documentName
     ) {
-        return vehicleDocument(UUID.randomUUID(), documentId, fileId, originalName, documentType, documentName);
+        return vehicleDocument(UUID.randomUUID(), documentId, fileId, originalName, documentType, documentName, null);
+    }
+
+    private VehicleDocumentDto vehicleDocument(
+            UUID documentId,
+            UUID fileId,
+            String originalName,
+            String documentType,
+            String documentName,
+            String documentNumber
+    ) {
+        return vehicleDocument(UUID.randomUUID(), documentId, fileId, originalName, documentType, documentName, documentNumber);
     }
 
     private VehicleDocumentDto vehicleDocument(UUID equipmentId, UUID documentId, UUID fileId, String originalName, String documentType) {
@@ -561,11 +588,23 @@ class VehicleControllerContractTest {
             String documentType,
             String documentName
     ) {
+        return vehicleDocument(equipmentId, documentId, fileId, originalName, documentType, documentName, null);
+    }
+
+    private VehicleDocumentDto vehicleDocument(
+            UUID equipmentId,
+            UUID documentId,
+            UUID fileId,
+            String originalName,
+            String documentType,
+            String documentName,
+            String documentNumber
+    ) {
         return new VehicleDocumentDto(
                 documentId,
                 fileId,
                 documentType,
-                null,
+                documentNumber,
                 documentName,
                 originalName,
                 "application/pdf",

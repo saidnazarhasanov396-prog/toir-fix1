@@ -29,6 +29,9 @@ public class RepairRequest extends BaseEntity {
     @Column(nullable = false, columnDefinition = "text")
     private String description;
 
+    @Column(name = "template_id")
+    private UUID templateId;
+
     @Column(name = "equipment_id", nullable = false)
     private UUID equipmentId;
 
@@ -81,4 +84,3 @@ public class RepairRequest extends BaseEntity {
     @Column(name = "close_result", columnDefinition = "text")
     private String closeResult;
 }
-

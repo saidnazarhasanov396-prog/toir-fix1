@@ -4,10 +4,13 @@ import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementIssueRequest;
 import com.toir.dto.stockmovement.StockMovementReceiptRequest;
 import com.toir.dto.stockmovement.StockMovementRequest;
+import com.toir.dto.warehouse.StockIssueCommand;
+import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.StockMovement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.SparePartType;
+import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
@@ -16,6 +19,7 @@ import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,6 +73,9 @@ class StockMovementServiceTest {
 
     @Mock
     LowStockRecommendationService lowStockRecommendationService;
+
+    @Mock
+    ToirStockService toirStockService;
 
     @InjectMocks
     StockMovementService service;
@@ -164,6 +171,11 @@ class StockMovementServiceTest {
         verify(repository).save(movementCaptor.capture());
         assertThat(movementCaptor.getValue().getType()).isEqualTo(StockMovementType.ADJUSTMENT);
         assertThat(movementCaptor.getValue().getQuantity()).isEqualTo(6);
+
+        ArgumentCaptor<StockIssueCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
+        verify(toirStockService).postDecrease(stockCommandCaptor.capture(), eq(StockLedgerMovementType.ADJUSTMENT_DEC));
+        assertThat(stockCommandCaptor.getValue().quantity()).isEqualByComparingTo("4");
+        assertThat(stockCommandCaptor.getValue().idempotencyKey()).startsWith("stock-movement-adjustment_dec:");
     }
 
     @Test
@@ -187,6 +199,11 @@ class StockMovementServiceTest {
         verify(repository).save(movementCaptor.capture());
         assertThat(movementCaptor.getValue().getType()).isEqualTo(StockMovementType.ISSUE);
         verify(lowStockRecommendationService).evaluateStockSafely(stock);
+
+        ArgumentCaptor<StockIssueCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
+        verify(toirStockService).postDecrease(stockCommandCaptor.capture(), eq(StockLedgerMovementType.ISSUE));
+        assertThat(stockCommandCaptor.getValue().quantity()).isEqualByComparingTo("5");
+        assertThat(stockCommandCaptor.getValue().idempotencyKey()).startsWith("stock-movement-issue:");
     }
 
     @Test
@@ -204,6 +221,11 @@ class StockMovementServiceTest {
 
         assertThat(stock.getQuantity()).isEqualTo(13);
         verify(lowStockRecommendationService, never()).evaluateStockSafely(any(WarehouseStock.class));
+
+        ArgumentCaptor<StockReceiptCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
+        verify(toirStockService).postIncrease(stockCommandCaptor.capture(), eq(StockLedgerMovementType.RECEIPT));
+        assertThat(stockCommandCaptor.getValue().quantity()).isEqualByComparingTo("5");
+        assertThat(stockCommandCaptor.getValue().idempotencyKey()).startsWith("stock-movement-receipt:");
     }
 
     @Test
@@ -241,6 +263,18 @@ class StockMovementServiceTest {
         assertThat(result.supplierName()).isEqualTo("Local supplier");
         assertThat(result.movementDate()).isEqualTo(receivedAt);
         assertThat(result.comment()).isEqualTo("Motor moyi keldi");
+
+        ArgumentCaptor<StockReceiptCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
+        verify(toirStockService).postReceipt(stockCommandCaptor.capture());
+        StockReceiptCommand stockCommand = stockCommandCaptor.getValue();
+        assertThat(stockCommand.warehouseId()).isEqualTo(warehouseId);
+        assertThat(stockCommand.sparePartId()).isEqualTo(sparePartId);
+        assertThat(stockCommand.quantity()).isEqualByComparingTo("20");
+        assertThat(stockCommand.unitCost()).isEqualByComparingTo("45000");
+        assertThat(stockCommand.referenceType()).isEqualTo("STOCK_MOVEMENT");
+        assertThat(stockCommand.referenceId()).isEqualTo(result.id());
+        assertThat(stockCommand.referenceDocNo()).isEqualTo("PRX-2026-0001");
+        assertThat(stockCommand.idempotencyKey()).isEqualTo("stock-movement-receipt:" + result.id());
     }
 
     @Test
@@ -284,6 +318,17 @@ class StockMovementServiceTest {
         assertThat(result.movementDate()).isEqualTo(issuedAt);
         assertThat(result.comment()).isEqualTo("Work order uchun moy berildi");
         verify(lowStockRecommendationService).evaluateStockSafely(stock);
+
+        ArgumentCaptor<StockIssueCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
+        verify(toirStockService).postIssue(stockCommandCaptor.capture());
+        StockIssueCommand stockCommand = stockCommandCaptor.getValue();
+        assertThat(stockCommand.warehouseId()).isEqualTo(warehouseId);
+        assertThat(stockCommand.sparePartId()).isEqualTo(sparePartId);
+        assertThat(stockCommand.quantity()).isEqualByComparingTo("5");
+        assertThat(stockCommand.referenceType()).isEqualTo("STOCK_MOVEMENT");
+        assertThat(stockCommand.referenceId()).isEqualTo(result.id());
+        assertThat(stockCommand.referenceDocNo()).isEqualTo("RSX-2026-0001");
+        assertThat(stockCommand.idempotencyKey()).isEqualTo("stock-movement-issue:" + result.id());
     }
 
     @Test

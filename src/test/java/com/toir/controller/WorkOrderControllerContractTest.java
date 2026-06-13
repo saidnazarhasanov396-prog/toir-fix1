@@ -234,24 +234,39 @@ class WorkOrderControllerContractTest {
     @Test
     void attachDocumentsUploadsMultipleMultipartFilesWithDocumentNames() throws Exception {
         UUID workOrderId = UUID.randomUUID();
-        WorkOrderDocumentDto first = workOrderDocumentDto(workOrderId, "Defect photo");
-        WorkOrderDocumentDto second = workOrderDocumentDto(workOrderId, "Completion act");
-        when(service.attachDocuments(eq(workOrderId), any(), any(), eq(List.of("ACT")), any(), any()))
+        WorkOrderDocumentDto first = workOrderDocumentDto(workOrderId, "Defect photo", "PHOTO", null);
+        WorkOrderDocumentDto second = workOrderDocumentDto(workOrderId, "Completion act", "ACT", "ACT-2024-015");
+        when(service.attachDocuments(
+                eq(workOrderId),
+                any(),
+                eq(List.of("Defect photo", "Completion act")),
+                eq(List.of("PHOTO", "ACT")),
+                eq(List.of("", "ACT-2024-015")),
+                any()))
                 .thenReturn(List.of(first, second));
 
         mockMvc.perform(multipart("/api/v1/work-orders/{id}/documents", workOrderId)
                         .file(new MockMultipartFile("files", "photo.png", "image/png", "png".getBytes()))
                         .file(new MockMultipartFile("files", "act.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
                         .param("documentNames", "Defect photo", "Completion act")
-                        .param("documentTypes", "ACT"))
+                        .param("documentTypes", "PHOTO", "ACT")
+                        .param("documentNumbers", "", "ACT-2024-015"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$[0].workOrderId").value(workOrderId.toString()))
                 .andExpect(jsonPath("$[0].documentName").value("Defect photo"))
                 .andExpect(jsonPath("$[0].uploadedById").value(currentUserId.toString()))
-                .andExpect(jsonPath("$[1].documentName").value("Completion act"));
+                .andExpect(jsonPath("$[1].documentName").value("Completion act"))
+                .andExpect(jsonPath("$[1].documentType").value("ACT"))
+                .andExpect(jsonPath("$[1].documentNumber").value("ACT-2024-015"));
 
         var userCaptor = forClass(AuthenticatedUser.class);
-        verify(service).attachDocuments(eq(workOrderId), any(), any(), eq(List.of("ACT")), any(), userCaptor.capture());
+        verify(service).attachDocuments(
+                eq(workOrderId),
+                any(),
+                eq(List.of("Defect photo", "Completion act")),
+                eq(List.of("PHOTO", "ACT")),
+                eq(List.of("", "ACT-2024-015")),
+                userCaptor.capture());
         org.assertj.core.api.Assertions.assertThat(userCaptor.getValue().id()).isEqualTo(currentUserId.toString());
     }
 
@@ -1012,7 +1027,16 @@ class WorkOrderControllerContractTest {
     }
 
     private WorkOrderDocumentDto workOrderDocumentDto(UUID workOrderId, String documentName) {
-        return workOrderDocumentDto(workOrderId, UUID.randomUUID(), documentName, documentName + ".pdf", "application/pdf");
+        return workOrderDocumentDto(workOrderId, documentName, "ACT", "ACT-2026-001");
+    }
+
+    private WorkOrderDocumentDto workOrderDocumentDto(
+            UUID workOrderId,
+            String documentName,
+            String documentType,
+            String documentNumber
+    ) {
+        return workOrderDocumentDto(workOrderId, UUID.randomUUID(), documentName, documentName + ".pdf", "application/pdf", documentType, documentNumber);
     }
 
     private WorkOrderDocumentDto workOrderDocumentDto(
@@ -1022,13 +1046,25 @@ class WorkOrderControllerContractTest {
             String originalName,
             String contentType
     ) {
+        return workOrderDocumentDto(workOrderId, documentId, documentName, originalName, contentType, "ACT", "ACT-2026-001");
+    }
+
+    private WorkOrderDocumentDto workOrderDocumentDto(
+            UUID workOrderId,
+            UUID documentId,
+            String documentName,
+            String originalName,
+            String contentType,
+            String documentType,
+            String documentNumber
+    ) {
         UUID fileId = UUID.randomUUID();
         String downloadUrl = "/api/v1/work-orders/" + workOrderId + "/documents/" + documentId + "/download";
         return new WorkOrderDocumentDto(
                 documentId,
                 fileId,
-                "ACT",
-                null,
+                documentType,
+                documentNumber,
                 documentName,
                 originalName,
                 contentType,
@@ -1040,7 +1076,7 @@ class WorkOrderControllerContractTest {
                 workOrderId,
                 currentUserId,
                 documentName,
-                "ACT",
+                documentType,
                 java.time.LocalDateTime.parse("2026-06-09T10:00:00"),
                 new WorkOrderDocumentDto.FileRef(
                         fileId,

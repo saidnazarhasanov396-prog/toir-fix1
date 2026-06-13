@@ -16,6 +16,7 @@ public record RepairRequestDto(
         String number,
         String title,
         String description,
+        UUID templateId,
         UUID equipmentId,
         String equipmentName,
         UUID departmentId,
@@ -38,9 +39,41 @@ public record RepairRequestDto(
         List<DefectBriefDto> linkedDefects,
         List<WorkOrderBriefDto> linkedWorkOrders
 ) {
+    public RepairRequestDto(
+            UUID id,
+            String number,
+            String title,
+            String description,
+            UUID equipmentId,
+            String equipmentName,
+            UUID departmentId,
+            String departmentName,
+            String locationName,
+            UUID reporterId,
+            String reporterName,
+            UUID assignedToId,
+            PriorityLevel priority,
+            CriticalityLevel criticality,
+            RequestStatus status,
+            RequestSource source,
+            Instant detectedAt,
+            Instant targetCompletionAt,
+            Instant actualCompletionAt,
+            Instant reactedAt,
+            String rejectionReason,
+            String clarificationReason,
+            String closeResult,
+            List<DefectBriefDto> linkedDefects,
+            List<WorkOrderBriefDto> linkedWorkOrders
+    ) {
+        this(id, number, title, description, null, equipmentId, equipmentName, departmentId, departmentName,
+                locationName, reporterId, reporterName, assignedToId, priority, criticality, status, source,
+                detectedAt, targetCompletionAt, actualCompletionAt, reactedAt, rejectionReason,
+                clarificationReason, closeResult, linkedDefects, linkedWorkOrders);
+    }
+
     public RepairRequestDto {
         linkedDefects = linkedDefects == null ? List.of() : List.copyOf(linkedDefects);
         linkedWorkOrders = linkedWorkOrders == null ? List.of() : List.copyOf(linkedWorkOrders);
     }
 }
-

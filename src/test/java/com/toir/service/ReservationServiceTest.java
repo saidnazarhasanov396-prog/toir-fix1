@@ -11,6 +11,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.ReservationRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,6 +49,9 @@ class ReservationServiceTest {
 
     @Mock
     LowStockRecommendationService lowStockRecommendationService;
+
+    @Mock
+    ToirStockService toirStockService;
 
     @InjectMocks
     ReservationService service;
@@ -94,6 +98,16 @@ class ReservationServiceTest {
         assertThat(movement.getSparePartId()).isEqualTo(sparePartId);
         assertThat(movement.getCreatedById()).isEqualTo(reservedById);
         assertThat(movement.getQuantity()).isEqualTo(4);
+        verify(toirStockService).reserve(
+                warehouseId,
+                sparePartId,
+                null,
+                java.math.BigDecimal.valueOf(4),
+                "RESERVATION",
+                result.id(),
+                null,
+                "reservation-reserve:" + result.id()
+        );
     }
 
     @Test
@@ -173,6 +187,16 @@ class ReservationServiceTest {
         assertThat(movement.getWarehouseId()).isEqualTo(warehouseId);
         assertThat(movement.getSparePartId()).isEqualTo(sparePartId);
         assertThat(movement.getQuantity()).isEqualTo(4);
+        verify(toirStockService).releaseReservation(
+                warehouseId,
+                sparePartId,
+                null,
+                java.math.BigDecimal.valueOf(4),
+                "RESERVATION",
+                reservationId,
+                null,
+                "reservation-cancel:" + reservationId
+        );
     }
 
     @Test
@@ -206,6 +230,16 @@ class ReservationServiceTest {
         assertThat(movement.getWarehouseId()).isEqualTo(warehouseId);
         assertThat(movement.getSparePartId()).isEqualTo(sparePartId);
         assertThat(movement.getQuantity()).isEqualTo(5);
+        verify(toirStockService).fulfillReservation(
+                warehouseId,
+                sparePartId,
+                null,
+                java.math.BigDecimal.valueOf(5),
+                "RESERVATION",
+                reservationId,
+                null,
+                "reservation-fulfill:" + reservationId
+        );
         verify(lowStockRecommendationService).evaluateStockSafely(stock);
     }
 

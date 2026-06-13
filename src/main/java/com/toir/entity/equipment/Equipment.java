@@ -37,6 +37,9 @@ public class Equipment extends BaseEntity {
 
     private String model;
 
+    @Column(name = "produced_year")
+    private Integer producedYear;
+
     @Column(name = "equipment_type_id", nullable = false)
     private UUID equipmentTypeId;
 

@@ -508,6 +508,7 @@ class EquipmentServiceTest {
         Equipment equipment = equipment("EQ-LOC-4");
         equipment.setId(equipmentId);
         equipment.setLocationId(locationId);
+        equipment.setProducedYear(2021);
 
         Location location = new Location();
         location.setId(locationId);
@@ -526,6 +527,7 @@ class EquipmentServiceTest {
         assertThat(dto.location().id()).isEqualTo(locationId);
         assertThat(dto.location().code()).isEqualTo("LOC-010");
         assertThat(dto.location().name()).isEqualTo("Compressor Zone");
+        assertThat(dto.producedYear()).isEqualTo(2021);
     }
 
     @Test
@@ -558,6 +560,29 @@ class EquipmentServiceTest {
         assertThat(detail.repairRequests()).hasSize(1);
         assertThat(detail.repairRequests().getFirst().number()).isEqualTo("RR-001");
         assertThat(detail.repairRequests().getFirst().title()).isEqualTo("Seal leak");
+    }
+
+    @Test
+    void findByIdDetailCountsCompletedAndClosedRepairRequests() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-DETAIL-REPAIR-COUNT");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        stubEnrichment();
+
+        RepairRequest open = repairRequest(equipmentId, RequestStatus.OPEN);
+        RepairRequest completed = repairRequest(equipmentId, RequestStatus.COMPLETED);
+        RepairRequest closed = repairRequest(equipmentId, RequestStatus.CLOSED);
+
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of(open, completed, closed));
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId)).thenReturn(List.of());
+
+        EquipmentDetailDto detail = service.findDetailById(equipmentId);
+
+        assertThat(detail.repairCount()).isEqualTo(2);
+        assertThat(detail.repairRequests()).hasSize(3);
     }
 
     @Test
@@ -2733,6 +2758,21 @@ class EquipmentServiceTest {
         equipment.setStatus(EquipmentStatus.ACTIVE);
         equipment.setCategory(EquipmentCategory.PRODUCTION_EQUIPMENT);
         return equipment;
+    }
+
+    private RepairRequest repairRequest(UUID equipmentId, RequestStatus status) {
+        RepairRequest request = RepairRequest.builder()
+                .number("RR-" + status.name())
+                .title(status.name() + " repair")
+                .description("Repair request")
+                .equipmentId(equipmentId)
+                .departmentId(UUID.randomUUID())
+                .reporterId(UUID.randomUUID())
+                .status(status)
+                .build();
+        request.setId(UUID.randomUUID());
+        request.setDetectedAt(Instant.parse("2026-05-01T10:00:00Z"));
+        return request;
     }
 
     private EquipmentCreateRequest createRequest(String code, String inventoryNumber, UUID departmentId, UUID warehouseId) {

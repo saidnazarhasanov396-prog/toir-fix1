@@ -31,6 +31,7 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
+import com.toir.enums.RequestStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
@@ -241,6 +242,9 @@ public class EquipmentService {
                         r.getDescription()
                 ))
                 .toList();
+        int repairCount = (int) repairRequestEntities.stream()
+                .filter(r -> r.getStatus() == RequestStatus.COMPLETED || r.getStatus() == RequestStatus.CLOSED)
+                .count();
 
         List<Defect> defectEntities = defectRepository.findAllByEquipmentIdAndIsDeletedFalse(id);
         if (defectEntities == null) {
@@ -291,6 +295,7 @@ public class EquipmentService {
 
         return new EquipmentDetailDto(
                 equipment,
+                repairCount,
                 repairRequests,
                 defects,
                 workOrders,
@@ -328,6 +333,8 @@ public class EquipmentService {
             throw RestException.badRequest("At least one equipment document file is required");
         }
         List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
+        List<String> normalizedDocumentTypes = normalizeDocumentTypes(files, documentTypes);
+        List<String> normalizedDocumentNumbers = normalizeDocumentNumbers(files, documentNumbers);
 
         List<UUID> uploadedFileIds = new ArrayList<>();
         try {
@@ -338,8 +345,6 @@ public class EquipmentService {
                 if (contentType == null || !ALLOWED_EQUIPMENT_DOCUMENT_CONTENT_TYPES.contains(contentType)) {
                     throw RestException.badRequest("Unsupported file type: " + contentType);
                 }
-                String type = (documentTypes != null && i < documentTypes.size()) ? normalizeDocumentType(documentTypes.get(i)) : null;
-                String number = (documentNumbers != null && i < documentNumbers.size()) ? documentNumbers.get(i) : null;
                 UploadFileResponse uploaded = fileService.upload(file, FileCategory.EQUIPMENT_DOCUMENT, currentUserId);
                 uploadedFileIds.add(uploaded.id());
                 UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
@@ -347,8 +352,8 @@ public class EquipmentService {
                 EquipmentDocument document = EquipmentDocument.builder()
                         .equipment(equipment)
                         .file(uploadedFile)
-                        .documentType(type)
-                        .documentNumber(number)
+                        .documentType(normalizedDocumentTypes.get(i))
+                        .documentNumber(normalizedDocumentNumbers.get(i))
                         .documentName(normalizedDocumentNames.get(i))
                         .build();
                 document.addFile(uploadedFile, 0);
@@ -1050,6 +1055,7 @@ public class EquipmentService {
         entity.setTechnicalNumber(request.technicalNumber());
         entity.setSerialNumber(request.serialNumber());
         entity.setModel(request.model());
+        entity.setProducedYear(request.producedYear());
         entity.setEquipmentTypeId(request.equipmentTypeId());
         entity.setDepartmentId(request.departmentId());
         entity.setLocationId(request.locationId());
@@ -1514,6 +1520,49 @@ public class EquipmentService {
         return trimmed;
     }
 
+    private String normalizeDocumentNumber(String documentNumber, int index) {
+        if (documentNumber == null || documentNumber.isBlank()) {
+            return null;
+        }
+        String trimmed = documentNumber.trim();
+        if (trimmed.length() > 128) {
+            throw RestException.badRequest("documentNumbers[" + index + "] must be 128 characters or fewer");
+        }
+        return trimmed;
+    }
+
+    private List<String> normalizeDocumentTypes(List<MultipartFile> files, List<String> documentTypes) {
+        if (documentTypes == null || documentTypes.isEmpty()) {
+            return Collections.nCopies(files.size(), null);
+        }
+        if (documentTypes.size() != files.size()) {
+            throw RestException.badRequest("files and documentTypes must have the same length");
+        }
+        List<String> normalized = new ArrayList<>(documentTypes.size());
+        for (int i = 0; i < documentTypes.size(); i++) {
+            String normalizedType = normalizeDocumentType(documentTypes.get(i));
+            if (normalizedType == null) {
+                throw RestException.badRequest("documentTypes[" + i + "] must not be blank");
+            }
+            normalized.add(normalizedType);
+        }
+        return normalized;
+    }
+
+    private List<String> normalizeDocumentNumbers(List<MultipartFile> files, List<String> documentNumbers) {
+        if (documentNumbers == null || documentNumbers.isEmpty()) {
+            return Collections.nCopies(files.size(), null);
+        }
+        if (documentNumbers.size() != files.size()) {
+            throw RestException.badRequest("files and documentNumbers must have the same length");
+        }
+        List<String> normalized = new ArrayList<>(documentNumbers.size());
+        for (int i = 0; i < documentNumbers.size(); i++) {
+            normalized.add(normalizeDocumentNumber(documentNumbers.get(i), i));
+        }
+        return normalized;
+    }
+
     private String normalizeDocumentName(String documentName) {
         if (documentName == null || documentName.isBlank()) {
             throw RestException.badRequest("documentName is required for equipment document uploads");
@@ -1618,6 +1667,7 @@ public class EquipmentService {
         entity.setTechnicalNumber(request.technicalNumber() != null ? request.technicalNumber() : entity.getTechnicalNumber());
         entity.setSerialNumber(request.serialNumber()  != null ? request.serialNumber() : entity.getSerialNumber());
         entity.setModel(request.model() != null ? request.model() : entity.getModel());
+        entity.setProducedYear(request.producedYear() != null ? request.producedYear() : entity.getProducedYear());
         entity.setEquipmentTypeId(request.equipmentTypeId() != null ? request.equipmentTypeId() : entity.getEquipmentTypeId());
         entity.setDepartmentId(request.departmentId() != null ? request.departmentId() : entity.getDepartmentId());
         entity.setLocationId(request.locationId() != null ? request.locationId() : entity.getLocationId());

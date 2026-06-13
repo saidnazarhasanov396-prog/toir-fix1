@@ -257,6 +257,8 @@ public class VehicleService {
             throw RestException.badRequest("At least one vehicle document file is required");
         }
         List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
+        List<String> normalizedDocumentTypes = normalizeDocumentTypes(files, documentTypes);
+        List<String> normalizedDocumentNumbers = normalizeDocumentNumbers(files, documentNumbers);
         VehicleDetails details = findVehicleDetails(equipmentId);
 
         List<UUID> uploadedFileIds = new ArrayList<>();
@@ -268,8 +270,6 @@ public class VehicleService {
                 if (contentType == null || !ALLOWED_VEHICLE_DOCUMENT_CONTENT_TYPES.contains(contentType)) {
                     throw RestException.badRequest("Unsupported file type: " + contentType);
                 }
-                String type = (documentTypes != null && i < documentTypes.size()) ? normalizeDocumentType(documentTypes.get(i)) : null;
-                String number = (documentNumbers != null && i < documentNumbers.size()) ? documentNumbers.get(i) : null;
                 UploadFileResponse uploaded = fileService.upload(file, FileCategory.VEHICLE_DOCUMENT, currentUserId);
                 uploadedFileIds.add(uploaded.id());
                 UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
@@ -277,8 +277,8 @@ public class VehicleService {
                 documents.add(VehicleDocument.builder()
                         .vehicleDetails(details)
                         .file(uploadedFile)
-                        .documentType(type)
-                        .documentNumber(number)
+                        .documentType(normalizedDocumentTypes.get(i))
+                        .documentNumber(normalizedDocumentNumbers.get(i))
                         .documentName(normalizedDocumentNames.get(i))
                         .build());
             }
@@ -556,6 +556,49 @@ public class VehicleService {
             throw RestException.badRequest("documentType must be 64 characters or fewer");
         }
         return trimmed;
+    }
+
+    private String normalizeDocumentNumber(String documentNumber, int index) {
+        if (documentNumber == null || documentNumber.isBlank()) {
+            return null;
+        }
+        String trimmed = documentNumber.trim();
+        if (trimmed.length() > 128) {
+            throw RestException.badRequest("documentNumbers[" + index + "] must be 128 characters or fewer");
+        }
+        return trimmed;
+    }
+
+    private List<String> normalizeDocumentTypes(List<MultipartFile> files, List<String> documentTypes) {
+        if (documentTypes == null || documentTypes.isEmpty()) {
+            return Collections.nCopies(files.size(), null);
+        }
+        if (documentTypes.size() != files.size()) {
+            throw RestException.badRequest("files and documentTypes must have the same length");
+        }
+        List<String> normalized = new ArrayList<>(documentTypes.size());
+        for (int i = 0; i < documentTypes.size(); i++) {
+            String normalizedType = normalizeDocumentType(documentTypes.get(i));
+            if (normalizedType == null) {
+                throw RestException.badRequest("documentTypes[" + i + "] must not be blank");
+            }
+            normalized.add(normalizedType);
+        }
+        return normalized;
+    }
+
+    private List<String> normalizeDocumentNumbers(List<MultipartFile> files, List<String> documentNumbers) {
+        if (documentNumbers == null || documentNumbers.isEmpty()) {
+            return Collections.nCopies(files.size(), null);
+        }
+        if (documentNumbers.size() != files.size()) {
+            throw RestException.badRequest("files and documentNumbers must have the same length");
+        }
+        List<String> normalized = new ArrayList<>(documentNumbers.size());
+        for (int i = 0; i < documentNumbers.size(); i++) {
+            normalized.add(normalizeDocumentNumber(documentNumbers.get(i), i));
+        }
+        return normalized;
     }
 
     private String legacyDocumentName(MultipartFile document) {

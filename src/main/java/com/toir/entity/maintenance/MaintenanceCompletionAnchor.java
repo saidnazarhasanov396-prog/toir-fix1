@@ -39,6 +39,9 @@ public class MaintenanceCompletionAnchor extends BaseEntity {
     @Column(name = "work_order_id")
     private UUID workOrderId;
 
+    @Column(name = "repair_request_id")
+    private UUID repairRequestId;
+
     @Column(name = "ppr_task_id")
     private UUID pprTaskId;
 

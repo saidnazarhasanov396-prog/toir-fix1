@@ -1208,8 +1208,10 @@ class VehicleServiceTest {
         VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
         MockMultipartFile firstDocument = document("files", "passport.pdf");
         MockMultipartFile secondDocument = document("files", "insurance.pdf");
-        VehicleDocument firstVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(firstFileId, currentUserId), "TECHNICAL", "Technical Passport");
-        VehicleDocument secondVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(secondFileId, currentUserId), "TECHNICAL", "Insurance Document");
+        VehicleDocument firstVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(firstFileId, currentUserId), "PASSPORT", "Technical Passport");
+        firstVehicleDocument.setDocumentNumber("PAS-2024-001");
+        VehicleDocument secondVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(secondFileId, currentUserId), "CERTIFICATE", "Insurance Document");
+        secondVehicleDocument.setDocumentNumber("CERT-2024-015");
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
@@ -1223,20 +1225,25 @@ class VehicleServiceTest {
                 equipmentId,
                 List.of(firstDocument, secondDocument),
                 List.of(" Technical Passport ", "Insurance Document"),
-                List.of("TECHNICAL"),
-                null,
+                List.of("PASSPORT", "CERTIFICATE"),
+                List.of("PAS-2024-001", "CERT-2024-015"),
                 authenticatedUser(currentUserId, equipment.getDepartmentId())
         );
 
         assertThat(result).hasSize(2);
         assertThat(result).extracting(VehicleDocumentDto::fileId).containsExactly(firstFileId, secondFileId);
-        assertThat(result).extracting(VehicleDocumentDto::documentType).containsExactly("TECHNICAL", "TECHNICAL");
+        assertThat(result).extracting(VehicleDocumentDto::documentType).containsExactly("PASSPORT", "CERTIFICATE");
+        assertThat(result).extracting(VehicleDocumentDto::documentNumber).containsExactly("PAS-2024-001", "CERT-2024-015");
         assertThat(result).extracting(VehicleDocumentDto::documentName).containsExactly("Technical Passport", "Insurance Document");
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<VehicleDocument>> documentsCaptor = ArgumentCaptor.forClass(List.class);
         verify(vehicleDocumentRepository).saveAllAndFlush(documentsCaptor.capture());
         assertThat(documentsCaptor.getValue()).extracting(VehicleDocument::getDocumentName)
                 .containsExactly("Technical Passport", "Insurance Document");
+        assertThat(documentsCaptor.getValue()).extracting(VehicleDocument::getDocumentType)
+                .containsExactly("PASSPORT", "CERTIFICATE");
+        assertThat(documentsCaptor.getValue()).extracting(VehicleDocument::getDocumentNumber)
+                .containsExactly("PAS-2024-001", "CERT-2024-015");
     }
 
     @Test

@@ -3,6 +3,7 @@ import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.entity.*;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.User;
@@ -20,6 +21,8 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.LocationRepository;
+import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
+import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.users.UserRepository;
@@ -68,6 +71,8 @@ public class RepairRequestService {
     private final ScopeAccessService scopeAccessService;
     private final NotificationService notificationService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+    private final MaintenanceTemplateRepository maintenanceTemplateRepository;
+    private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
 
     private static final Set<RequestStatus> REVIEWABLE_STATUSES = EnumSet.of(
             RequestStatus.OPEN,
@@ -126,12 +131,14 @@ public class RepairRequestService {
         if (request.defectId() != null && !inlineDefects.isEmpty()) {
             throw RestException.badRequest("Use either defectId or inline defects, not both");
         }
+        validateMaintenanceTemplate(request.templateId());
         Defect defect = getDefectForCreate(request);
 
         RepairRequest entity = new RepairRequest();
         entity.setNumber(request.number());
         entity.setTitle(request.title());
         entity.setDescription(request.description());
+        entity.setTemplateId(request.templateId());
         entity.setEquipmentId(request.equipmentId());
         entity.setDepartmentId(request.departmentId());
         entity.setLocationId(request.locationId());
@@ -524,6 +531,7 @@ public class RepairRequestService {
         entity.setStatus(RequestStatus.CLOSED);
 
         RepairRequest save = repository.save(entity);
+        createCompletionAnchor(save);
 
         auditBuilderService.log(
                 "repair_request",
@@ -632,6 +640,7 @@ public class RepairRequestService {
                 r.getNumber(),
                 r.getTitle(),
                 r.getDescription(),
+                r.getTemplateId(),
                 r.getEquipmentId(),
                 equipmentName,
                 r.getDepartmentId(),
@@ -668,6 +677,32 @@ public class RepairRequestService {
                 .map(TriadLinkMapper::toWorkOrderBrief)
                 .toList();
         return toDto(repairRequest, linkedDefects, linkedWorkOrders);
+    }
+
+    private void validateMaintenanceTemplate(UUID templateId) {
+        if (templateId == null) {
+            return;
+        }
+        maintenanceTemplateRepository.findByIdAndIsDeletedFalse(templateId)
+                .orElseThrow(() -> RestException.notFound("Maintenance template not found: " + templateId));
+    }
+
+    private void createCompletionAnchor(RepairRequest request) {
+        if (request.getId() == null || request.getEquipmentId() == null) {
+            return;
+        }
+        if (maintenanceCompletionAnchorRepository.findByRepairRequestIdAndIsDeletedFalse(request.getId()).isPresent()) {
+            return;
+        }
+
+        MaintenanceCompletionAnchor anchor = new MaintenanceCompletionAnchor();
+        anchor.setEquipmentId(request.getEquipmentId());
+        anchor.setRepairRequestId(request.getId());
+        anchor.setPerformedAt(request.getActualCompletionAt() == null ? Instant.now() : request.getActualCompletionAt());
+        anchor.setSource("REPAIR_REQUEST");
+        anchor.setNote(request.getCloseResult());
+        anchor.setMeterSnapshots("[]");
+        maintenanceCompletionAnchorRepository.save(anchor);
     }
 
     private Page<RepairRequestDto> toDtoPage(Page<RepairRequest> page) {

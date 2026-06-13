@@ -107,6 +107,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -356,6 +357,8 @@ public class WorkOrderService {
             throw RestException.badRequest("At least one work order document file is required");
         }
         List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
+        List<String> normalizedDocumentTypes = normalizeDocumentTypes(files, documentTypes);
+        List<String> normalizedDocumentNumbers = normalizeDocumentNumbers(files, documentNumbers);
 
         List<UUID> uploadedFileIds = new ArrayList<>();
         try {
@@ -366,8 +369,6 @@ public class WorkOrderService {
                 if (contentType == null || !ALLOWED_WORK_ORDER_DOCUMENT_CONTENT_TYPES.contains(contentType)) {
                     throw RestException.badRequest("Unsupported file type: " + contentType);
                 }
-                String type = (documentTypes != null && i < documentTypes.size()) ? normalizeDocumentType(documentTypes.get(i)) : null;
-                String number = (documentNumbers != null && i < documentNumbers.size()) ? documentNumbers.get(i) : null;
                 var uploaded = fileService.upload(file, FileCategory.WORK_ORDER_DOCUMENT, currentUserId);
                 uploadedFileIds.add(uploaded.id());
                 UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
@@ -375,8 +376,8 @@ public class WorkOrderService {
                 documents.add(WorkOrderDocument.builder()
                         .workOrder(workOrder)
                         .file(uploadedFile)
-                        .documentType(type)
-                        .documentNumber(number)
+                        .documentType(normalizedDocumentTypes.get(i))
+                        .documentNumber(normalizedDocumentNumbers.get(i))
                         .documentName(normalizedDocumentNames.get(i))
                         .build());
             }
@@ -1372,6 +1373,49 @@ public class WorkOrderService {
             throw RestException.badRequest("documentType must be 64 characters or fewer");
         }
         return trimmed;
+    }
+
+    private String normalizeDocumentNumber(String documentNumber, int index) {
+        if (documentNumber == null || documentNumber.isBlank()) {
+            return null;
+        }
+        String trimmed = documentNumber.trim();
+        if (trimmed.length() > 128) {
+            throw RestException.badRequest("documentNumbers[" + index + "] must be 128 characters or fewer");
+        }
+        return trimmed;
+    }
+
+    private List<String> normalizeDocumentTypes(List<MultipartFile> files, List<String> documentTypes) {
+        if (documentTypes == null || documentTypes.isEmpty()) {
+            return Collections.nCopies(files.size(), null);
+        }
+        if (documentTypes.size() != files.size()) {
+            throw RestException.badRequest("files and documentTypes must have the same length");
+        }
+        List<String> normalized = new ArrayList<>(documentTypes.size());
+        for (int i = 0; i < documentTypes.size(); i++) {
+            String normalizedType = normalizeDocumentType(documentTypes.get(i));
+            if (normalizedType == null) {
+                throw RestException.badRequest("documentTypes[" + i + "] must not be blank");
+            }
+            normalized.add(normalizedType);
+        }
+        return normalized;
+    }
+
+    private List<String> normalizeDocumentNumbers(List<MultipartFile> files, List<String> documentNumbers) {
+        if (documentNumbers == null || documentNumbers.isEmpty()) {
+            return Collections.nCopies(files.size(), null);
+        }
+        if (documentNumbers.size() != files.size()) {
+            throw RestException.badRequest("files and documentNumbers must have the same length");
+        }
+        List<String> normalized = new ArrayList<>(documentNumbers.size());
+        for (int i = 0; i < documentNumbers.size(); i++) {
+            normalized.add(normalizeDocumentNumber(documentNumbers.get(i), i));
+        }
+        return normalized;
     }
 
     private List<String> normalizeDocumentNames(List<MultipartFile> files, List<String> documentNames) {

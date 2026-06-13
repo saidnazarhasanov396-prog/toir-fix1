@@ -28,8 +28,45 @@ public record RepairRequestRequest(
         PriorityLevel priority,
         CriticalityLevel criticality,
         RequestSource source,
-        Instant targetCompletionAt
+        Instant targetCompletionAt,
+        @Schema(description = "Optional maintenance template to use as repair context", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        UUID templateId
 ) {
+    public RepairRequestRequest(
+            String number,
+            String title,
+            String description,
+            UUID defectId,
+            InlineDefectRequest defect,
+            List<InlineDefectRequest> defects,
+            UUID equipmentId,
+            UUID departmentId,
+            UUID locationId,
+            UUID reporterId,
+            PriorityLevel priority,
+            CriticalityLevel criticality,
+            RequestSource source,
+            Instant targetCompletionAt
+    ) {
+        this(
+                number,
+                title,
+                description,
+                defectId,
+                defect,
+                defects,
+                equipmentId,
+                departmentId,
+                locationId,
+                reporterId,
+                priority,
+                criticality,
+                source,
+                targetCompletionAt,
+                null
+        );
+    }
+
     public RepairRequestRequest(
             String number,
             String title,
@@ -58,7 +95,8 @@ public record RepairRequestRequest(
                 priority,
                 criticality,
                 source,
-                targetCompletionAt
+                targetCompletionAt,
+                null
         );
     }
 
