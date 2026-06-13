@@ -280,7 +280,7 @@ class OperationalIssueScannerServiceTest {
     }
 
     @Test
-    void scanCreatesWarningLifecycleIssueForMediumRiskScore() {
+    void scanCreatesCriticalLifecycleIssueForMediumRiskScore() {
         UUID equipmentId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, departmentId);
@@ -291,7 +291,7 @@ class OperationalIssueScannerServiceTest {
 
         verify(issueService).openOrUpdate(
                 eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
-                eq(NotificationSeverity.WARNING),
+                eq(NotificationSeverity.CRITICAL),
                 eq(EquipmentRiskLevel.HIGH),
                 eq(equipmentId),
                 eq(departmentId),
