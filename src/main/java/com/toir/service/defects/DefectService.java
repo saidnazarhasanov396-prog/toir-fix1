@@ -76,11 +76,12 @@ public class DefectService {
     }
 
     @Transactional(readOnly = true)
-    public Page<DefectResponse> search(UUID equipmentId, UUID repairRequestId, int page, int size, String search) {
+    public Page<DefectResponse> search(UUID equipmentId, UUID repairRequestId, DefectStatus status, int page, int size, String search) {
         var pageable = PaginationUtils.pageRequest(page, size);
         Page<Defect> resultPage = repository.searchPaginated(
                 equipmentId,
                 repairRequestId,
+                status == null ? null : status.name(),
                 search,
                 pageable
         );
