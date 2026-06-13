@@ -290,7 +290,8 @@ class WorkOrderServiceTest {
                 workOrderId,
                 List.of(file),
                 List.of(" Completion act "),
-                " ACT ",
+                List.of(" ACT "),
+                null,
                 authenticatedUser(currentUserId));
 
         assertThat(result).hasSize(1);
@@ -315,11 +316,59 @@ class WorkOrderServiceTest {
                 List.of(file),
                 List.of("One", "Two"),
                 null,
+                null,
                 authenticatedUser(currentUserId)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("files and documentNames must have the same length");
 
         verifyNoInteractions(fileService);
+    }
+
+    @Test
+    void attachDocuments_eachFileGetsItsOwnTypeAndNumber() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        UUID fileId1 = UUID.randomUUID();
+        UUID fileId2 = UUID.randomUUID();
+        WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), UUID.randomUUID());
+        UploadedFile uploadedFile1 = uploadedFile(fileId1, currentUserId, "passport.pdf");
+        UploadedFile uploadedFile2 = uploadedFile(fileId2, currentUserId, "drawing.png");
+        uploadedFile2.setContentType("image/png");
+        uploadedFile2.setExtension("png");
+        MockMultipartFile file1 = new MockMultipartFile("files", "passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes());
+        MockMultipartFile file2 = new MockMultipartFile("files", "drawing.png", "image/png", new byte[]{1, 2, 3});
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(fileService.upload(eq(file1), eq(FileCategory.WORK_ORDER_DOCUMENT), eq(currentUserId)))
+                .thenReturn(UploadFileResponse.from(uploadedFile1));
+        when(fileService.upload(eq(file2), eq(FileCategory.WORK_ORDER_DOCUMENT), eq(currentUserId)))
+                .thenReturn(UploadFileResponse.from(uploadedFile2));
+        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId1)).thenReturn(Optional.of(uploadedFile1));
+        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId2)).thenReturn(Optional.of(uploadedFile2));
+        when(workOrderDocumentRepository.saveAllAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.attachDocuments(
+                workOrderId,
+                List.of(file1, file2),
+                List.of("Technical Passport", "Drawing"),
+                List.of("PASSPORT", "DRAWING"),
+                List.of("АКТ-2024-001", "DRW-2024-001"),
+                authenticatedUser(currentUserId)
+        );
+
+        org.mockito.ArgumentCaptor<List<WorkOrderDocument>> captor =
+                org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(workOrderDocumentRepository).saveAllAndFlush(captor.capture());
+
+        List<WorkOrderDocument> saved = captor.getValue();
+        assertThat(saved).hasSize(2);
+        assertThat(saved.get(0).getDocumentType()).isEqualTo("PASSPORT");
+        assertThat(saved.get(0).getDocumentNumber()).isEqualTo("АКТ-2024-001");
+        assertThat(saved.get(0).getDocumentName()).isEqualTo("Technical Passport");
+        assertThat(saved.get(1).getDocumentType()).isEqualTo("DRAWING");
+        assertThat(saved.get(1).getDocumentNumber()).isEqualTo("DRW-2024-001");
+        assertThat(saved.get(1).getDocumentName()).isEqualTo("Drawing");
     }
 
     @Test

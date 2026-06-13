@@ -225,16 +225,29 @@ public class VehicleService {
 
     @Transactional
     public VehicleDetailDto attachDocument(UUID equipmentId, MultipartFile document, UUID currentUserId) {
-        attachDocuments(equipmentId, List.of(document), List.of(legacyDocumentName(document)), null, authenticatedUser(currentUserId));
+        attachDocuments(equipmentId, List.of(document), List.of(legacyDocumentName(document)), null, null, authenticatedUser(currentUserId));
         return findByEquipmentId(equipmentId);
     }
+
+    private static final Set<String> ALLOWED_VEHICLE_DOCUMENT_CONTENT_TYPES = Set.of(
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp"
+    );
 
     @Transactional
     public List<VehicleDocumentDto> attachDocuments(
             UUID equipmentId,
             List<MultipartFile> files,
             List<String> documentNames,
-            String documentType,
+            List<String> documentTypes,
+            List<String> documentNumbers,
             AuthenticatedUser user
     ) {
         UUID currentUserId = currentUserId(user);
@@ -245,13 +258,18 @@ public class VehicleService {
         }
         List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
         VehicleDetails details = findVehicleDetails(equipmentId);
-        String normalizedDocumentType = normalizeDocumentType(documentType);
 
         List<UUID> uploadedFileIds = new ArrayList<>();
         try {
             List<VehicleDocument> documents = new ArrayList<>(files.size());
             for (int i = 0; i < files.size(); i++) {
                 MultipartFile file = files.get(i);
+                String contentType = file.getContentType();
+                if (contentType == null || !ALLOWED_VEHICLE_DOCUMENT_CONTENT_TYPES.contains(contentType)) {
+                    throw RestException.badRequest("Unsupported file type: " + contentType);
+                }
+                String type = (documentTypes != null && i < documentTypes.size()) ? normalizeDocumentType(documentTypes.get(i)) : null;
+                String number = (documentNumbers != null && i < documentNumbers.size()) ? documentNumbers.get(i) : null;
                 UploadFileResponse uploaded = fileService.upload(file, FileCategory.VEHICLE_DOCUMENT, currentUserId);
                 uploadedFileIds.add(uploaded.id());
                 UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
@@ -259,7 +277,8 @@ public class VehicleService {
                 documents.add(VehicleDocument.builder()
                         .vehicleDetails(details)
                         .file(uploadedFile)
-                        .documentType(normalizedDocumentType)
+                        .documentType(type)
+                        .documentNumber(number)
                         .documentName(normalizedDocumentNames.get(i))
                         .build());
             }
@@ -504,6 +523,7 @@ public class VehicleService {
         return new VehicleDocumentDto(
                 file.getId(),
                 file.getId(),
+                null,
                 null,
                 file.getOriginalName(),
                 file.getOriginalName(),

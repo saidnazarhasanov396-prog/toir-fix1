@@ -255,7 +255,7 @@ class VehicleControllerContractTest {
         UUID firstFileId = UUID.randomUUID();
         UUID secondDocumentId = UUID.randomUUID();
         UUID secondFileId = UUID.randomUUID();
-        when(service.attachDocuments(eq(equipmentId), any(), eq(List.of("Technical Passport", "Insurance Document")), eq("TECHNICAL"), any()))
+        when(service.attachDocuments(eq(equipmentId), any(), eq(List.of("Technical Passport", "Insurance Document")), eq(List.of("TECHNICAL")), any(), any()))
                 .thenReturn(List.of(
                         vehicleDocument(firstDocumentId, firstFileId, "passport.pdf", "TECHNICAL", "Technical Passport"),
                         vehicleDocument(secondDocumentId, secondFileId, "insurance.pdf", "TECHNICAL", "Insurance Document")
@@ -265,7 +265,7 @@ class VehicleControllerContractTest {
                         .file(new MockMultipartFile("files", "passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
                         .file(new MockMultipartFile("files", "insurance.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
                         .param("documentNames", "Technical Passport", "Insurance Document")
-                        .param("documentType", "TECHNICAL"))
+                        .param("documentTypes", "TECHNICAL"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$[0].id").value(firstDocumentId.toString()))
                 .andExpect(jsonPath("$[0].fileId").value(firstFileId.toString()))
@@ -275,13 +275,13 @@ class VehicleControllerContractTest {
                 .andExpect(jsonPath("$[1].fileId").value(secondFileId.toString()))
                 .andExpect(jsonPath("$[1].documentName").value("Insurance Document"));
 
-        verify(service).attachDocuments(eq(equipmentId), any(), eq(List.of("Technical Passport", "Insurance Document")), eq("TECHNICAL"), any());
+        verify(service).attachDocuments(eq(equipmentId), any(), eq(List.of("Technical Passport", "Insurance Document")), eq(List.of("TECHNICAL")), any(), any());
     }
 
     @Test
     void attachDocumentsUnauthorizedReturnsForbidden() throws Exception {
         UUID equipmentId = UUID.randomUUID();
-        when(service.attachDocuments(eq(equipmentId), any(), eq(List.of("Technical Passport")), isNull(), any()))
+        when(service.attachDocuments(eq(equipmentId), any(), eq(List.of("Technical Passport")), isNull(), isNull(), any()))
                 .thenThrow(RestException.forbidden("Vehicle access denied"));
 
         mockMvc.perform(multipart("/api/v1/vehicles/{equipmentId}/documents", equipmentId)
@@ -294,7 +294,7 @@ class VehicleControllerContractTest {
     @Test
     void attachDocumentsInvalidFilePropagatesValidationError() throws Exception {
         UUID equipmentId = UUID.randomUUID();
-        when(service.attachDocuments(eq(equipmentId), any(), eq(List.of("Suspicious File")), isNull(), any()))
+        when(service.attachDocuments(eq(equipmentId), any(), eq(List.of("Suspicious File")), isNull(), isNull(), any()))
                 .thenThrow(new RestException("File type is not allowed", HttpStatus.UNSUPPORTED_MEDIA_TYPE));
 
         mockMvc.perform(multipart("/api/v1/vehicles/{equipmentId}/documents", equipmentId)
@@ -565,6 +565,7 @@ class VehicleControllerContractTest {
                 documentId,
                 fileId,
                 documentType,
+                null,
                 documentName,
                 originalName,
                 "application/pdf",

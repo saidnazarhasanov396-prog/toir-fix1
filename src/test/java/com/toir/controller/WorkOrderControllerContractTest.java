@@ -236,14 +236,14 @@ class WorkOrderControllerContractTest {
         UUID workOrderId = UUID.randomUUID();
         WorkOrderDocumentDto first = workOrderDocumentDto(workOrderId, "Defect photo");
         WorkOrderDocumentDto second = workOrderDocumentDto(workOrderId, "Completion act");
-        when(service.attachDocuments(eq(workOrderId), any(), any(), eq("ACT"), any()))
+        when(service.attachDocuments(eq(workOrderId), any(), any(), eq(List.of("ACT")), any(), any()))
                 .thenReturn(List.of(first, second));
 
         mockMvc.perform(multipart("/api/v1/work-orders/{id}/documents", workOrderId)
                         .file(new MockMultipartFile("files", "photo.png", "image/png", "png".getBytes()))
                         .file(new MockMultipartFile("files", "act.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
                         .param("documentNames", "Defect photo", "Completion act")
-                        .param("documentType", "ACT"))
+                        .param("documentTypes", "ACT"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$[0].workOrderId").value(workOrderId.toString()))
                 .andExpect(jsonPath("$[0].documentName").value("Defect photo"))
@@ -251,14 +251,14 @@ class WorkOrderControllerContractTest {
                 .andExpect(jsonPath("$[1].documentName").value("Completion act"));
 
         var userCaptor = forClass(AuthenticatedUser.class);
-        verify(service).attachDocuments(eq(workOrderId), any(), any(), eq("ACT"), userCaptor.capture());
+        verify(service).attachDocuments(eq(workOrderId), any(), any(), eq(List.of("ACT")), any(), userCaptor.capture());
         org.assertj.core.api.Assertions.assertThat(userCaptor.getValue().id()).isEqualTo(currentUserId.toString());
     }
 
     @Test
     void attachDocumentsWithMismatchedDocumentNamesReturnsBadRequest() throws Exception {
         UUID workOrderId = UUID.randomUUID();
-        when(service.attachDocuments(eq(workOrderId), any(), any(), isNull(), any()))
+        when(service.attachDocuments(eq(workOrderId), any(), any(), isNull(), isNull(), any()))
                 .thenThrow(RestException.badRequest("files and documentNames must have the same length"));
 
         mockMvc.perform(multipart("/api/v1/work-orders/{id}/documents", workOrderId)
@@ -1028,6 +1028,7 @@ class WorkOrderControllerContractTest {
                 documentId,
                 fileId,
                 "ACT",
+                null,
                 documentName,
                 originalName,
                 contentType,
