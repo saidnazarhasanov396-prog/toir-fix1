@@ -2,6 +2,7 @@ package com.toir.repository;
 
 import com.toir.entity.Reservation;
 import com.toir.entity.SparePart;
+import com.toir.entity.SparePartType;
 import com.toir.entity.StockMovement;
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.warehouse.Warehouse;
@@ -29,6 +30,8 @@ class WarehouseStockRepositorySparePartsStatsTest {
 
     @Autowired
     TestEntityManager entityManager;
+
+    private SparePartType defaultSparePartType;
 
     @Test
     void returnsAllFourStatsWithNoFilter() {
@@ -164,9 +167,33 @@ class WarehouseStockRepositorySparePartsStatsTest {
         sparePart.setCode(code);
         sparePart.setName(name);
         sparePart.setKind(InventoryItemKind.SPARE_PART);
+        sparePart.setType(defaultSparePartType());
+        sparePart.setLegacyType("OTHER");
         sparePart.setUnit("PCS");
         sparePart.setMinStock(0);
         return entityManager.persistAndFlush(sparePart);
+    }
+
+    private SparePartType defaultSparePartType() {
+        if (defaultSparePartType != null) {
+            return defaultSparePartType;
+        }
+        List<SparePartType> existing = entityManager.getEntityManager()
+                .createQuery("select type from SparePartType type where type.code = :code", SparePartType.class)
+                .setParameter("code", "OTHER")
+                .getResultList();
+        if (!existing.isEmpty()) {
+            defaultSparePartType = existing.getFirst();
+            return defaultSparePartType;
+        }
+
+        SparePartType type = new SparePartType();
+        type.setCode("OTHER");
+        type.setName("Other");
+        type.setDefaultUnit("PCS");
+        type.setActive(true);
+        defaultSparePartType = entityManager.persistAndFlush(type);
+        return defaultSparePartType;
     }
 
     private WarehouseStock saveStock(Warehouse warehouse,
