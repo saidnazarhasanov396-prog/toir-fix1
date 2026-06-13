@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.plannedshutdown.PlannedShutdownDto;
 import com.toir.enums.PlanStatus;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.service.ApprovalService;
 import com.toir.service.PlannedShutdownService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,11 +29,14 @@ class PlannedShutdownControllerContractTest {
     @Mock
     private PlannedShutdownService service;
 
+    @Mock
+    private ApprovalService approvalService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new PlannedShutdownController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new PlannedShutdownController(service, approvalService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

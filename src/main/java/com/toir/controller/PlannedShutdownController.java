@@ -1,5 +1,8 @@
 package com.toir.controller;
+import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.plannedshutdown.PlannedShutdownDto;
+import com.toir.exception.RestException;
+import com.toir.service.ApprovalService;
 import com.toir.enums.PlanStatus;
 import com.toir.service.PlannedShutdownService;
 import com.toir.util.PaginationUtils;
@@ -21,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 public class PlannedShutdownController {
 
     private final PlannedShutdownService service;
+    private final ApprovalService approvalService;
 
     @GetMapping
     public ResponseEntity<Page<PlannedShutdownDto>> list(
@@ -37,5 +41,20 @@ public class PlannedShutdownController {
     }
 
     @PostMapping("/{id}/approve")
-    public ResponseEntity<PlannedShutdownDto> approve(@PathVariable UUID id) { return ResponseEntity.ok(service.approve(id)); }
+    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id,
+                                                      @RequestParam(required = false) UUID approverId) {
+        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
+                "PLANNED_SHUTDOWN",
+                id,
+                null,
+                approverId,
+                "PLANNED_SHUTDOWN_APPROVER",
+                "Planned shutdown approval: " + id,
+                "Approval workflow request for planned shutdown " + id));
+    }
+
+    @PostMapping("/{id}/reject")
+    public ResponseEntity<PlannedShutdownDto> reject(@PathVariable UUID id) {
+        throw RestException.conflict("Use /api/v1/approvals/{id}/reject to reject approval requests");
+    }
 }

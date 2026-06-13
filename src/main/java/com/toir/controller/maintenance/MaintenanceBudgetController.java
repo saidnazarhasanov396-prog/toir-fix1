@@ -1,5 +1,6 @@
 package com.toir.controller.maintenance;
 
+import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.security.RequiresSensitiveAccess;
@@ -49,18 +50,17 @@ public class MaintenanceBudgetController {
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_APPROVE')")
-    public ResponseEntity<MaintenanceBudgetDto> approve(@PathVariable UUID id,
+    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id,
             @RequestParam(required = false) UUID approverId) {
         MaintenanceBudgetDto current = service.validateCanApprove(id);
-        approvalService.createOrReuseApprovalForDocument(
+        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
                 "MAINTENANCE_BUDGET",
                 id,
                 null,
                 approverId,
                 "BUDGET_APPROVER",
                 "Maintenance budget approval: " + current.year() + "/" + current.month(),
-                "Approval workflow request for maintenance budget " + current.id());
-        return ResponseEntity.ok(service.findById(id));
+                "Approval workflow request for maintenance budget " + current.id()));
     }
 
     @PostMapping("/{id}/lines")

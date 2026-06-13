@@ -1,5 +1,6 @@
 package com.toir.service.maintanance;
 
+import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
@@ -18,6 +19,7 @@ import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.SecurityAccessService;
+import com.toir.service.ApprovalService;
 import com.toir.service.WorkOrderNumberService;
 import com.toir.service.WorkOrderService;
 import java.time.Instant;
@@ -25,6 +27,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.Test;
@@ -33,6 +36,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -45,6 +49,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -93,8 +98,29 @@ class MaintenanceAutomationServiceTest {
     @Mock
     MaintenanceAutomationNotificationService notificationService;
 
+    @Mock
+    ObjectProvider<ApprovalService> approvalServiceProvider;
+
+    @Mock
+    ApprovalService approvalService;
+
     @InjectMocks
     MaintenanceAutomationService service;
+
+    @BeforeEach
+    void setUpApprovalService() {
+        lenient().when(approvalServiceProvider.getObject()).thenReturn(approvalService);
+        lenient().when(approvalService.createOrReuseSystemApprovalForDocument(
+                eq("MAINTENANCE_DUE_EVENT"),
+                any(),
+                any(ApprovalActionType.class),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        )).thenAnswer(invocation -> approvalDto(UUID.randomUUID(), invocation.getArgument(1), invocation.getArgument(2)));
+    }
 
     @AfterEach
     void clearSecurityContext() {
@@ -289,9 +315,9 @@ class MaintenanceAutomationServiceTest {
         event.setStatus(MaintenanceDueEventStatus.AWAITING_APPROVAL);
         when(eventService.getOrThrow(eventId)).thenReturn(event);
         when(eventRepository.save(event)).thenReturn(event);
-        when(eventService.toDto(event)).thenReturn(null);
-
-        service.approveDueEvent(eventId, UUID.randomUUID());
+        assertThatThrownBy(() -> service.approveDueEvent(eventId, UUID.randomUUID()))
+                .isInstanceOfSatisfying(com.toir.exception.RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("Blocked"));
 
         assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.DETECTED);
         verify(eventRepository).save(event);
@@ -628,13 +654,14 @@ class MaintenanceAutomationServiceTest {
     }
 
     @Test
-    void approveRequireApprovalPolicyCreatesWorkOrderWhenConfigured() {
+    void approveRequireApprovalPolicyCreatesWorkOrderApprovalRequestWhenConfigured() {
         UUID eventId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
         UUID regulationId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
-        UUID workOrderId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID approvalId = UUID.randomUUID();
         MaintenanceDueEvent event = new MaintenanceDueEvent();
         ReflectionTestUtils.setField(event, "id", eventId);
         event.setEquipmentId(equipmentId);
@@ -645,6 +672,7 @@ class MaintenanceAutomationServiceTest {
         event.setDueAt(Instant.parse("2026-06-03T00:00:00Z"));
         Equipment equipment = equipment(equipmentId, typeId);
         equipment.setResponsibleDepartmentId(departmentId);
+        equipment.setResponsibleId(UUID.randomUUID());
         MaintenanceRegulation regulation = regulation(regulationId, typeId, AutomationAction.REQUIRE_APPROVAL);
         regulation.setApprovalResultAction(ApprovalResultAction.CREATE_WORK_ORDER);
 
@@ -653,28 +681,48 @@ class MaintenanceAutomationServiceTest {
                 EquipmentMaintenanceEffectiveRule.fromRegulation(equipmentId, regulation)
         ));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(workOrderRepository.existsOpenByCycleKey("cycle-work-order")).thenReturn(false);
-        when(workOrderNumberService.nextAutoNumber()).thenReturn("WO-AUTO-2026-0001");
-        when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
         when(eventRepository.save(event)).thenReturn(event);
-        when(eventService.toDto(event)).thenReturn(null);
+        when(approvalServiceProvider.getObject()).thenReturn(approvalService);
+        when(approvalService.createOrReuseSystemApprovalForDocument(
+                eq("MAINTENANCE_DUE_EVENT"),
+                eq(eventId),
+                eq(ApprovalActionType.CREATE_WORK_ORDER),
+                eq(requesterId),
+                eq(equipment.getResponsibleId()),
+                eq("MAINTENANCE_EVENT_APPROVER"),
+                any(),
+                any()
+        )).thenReturn(approvalDto(approvalId, eventId, ApprovalActionType.CREATE_WORK_ORDER));
 
-        service.approveDueEvent(eventId, UUID.randomUUID());
+        ApprovalRequestDto result = service.approveDueEvent(eventId, requesterId);
 
         verify(eventService).assertCanAccessEvent(event);
-        verify(workOrderService).create(any());
+        verify(approvalService).createOrReuseSystemApprovalForDocument(
+                eq("MAINTENANCE_DUE_EVENT"),
+                eq(eventId),
+                eq(ApprovalActionType.CREATE_WORK_ORDER),
+                eq(requesterId),
+                eq(equipment.getResponsibleId()),
+                eq("MAINTENANCE_EVENT_APPROVER"),
+                any(),
+                any()
+        );
+        verify(workOrderService, never()).create(any());
         verify(pprTaskRepository, never()).save(any());
-        assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.WORK_ORDER_CREATED);
-        assertThat(event.getCreatedWorkOrderId()).isEqualTo(workOrderId);
+        assertThat(result.id()).isEqualTo(approvalId);
+        assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.AWAITING_APPROVAL);
+        assertThat(event.getCreatedWorkOrderId()).isNull();
     }
 
     @Test
-    void approveRequireApprovalPolicyCreatesTaskWhenConfigured() {
+    void approveRequireApprovalPolicyCreatesTaskApprovalRequestWhenConfigured() {
         UUID eventId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
         UUID regulationId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID approvalId = UUID.randomUUID();
         MaintenanceDueEvent event = new MaintenanceDueEvent();
         ReflectionTestUtils.setField(event, "id", eventId);
         event.setEquipmentId(equipmentId);
@@ -685,6 +733,7 @@ class MaintenanceAutomationServiceTest {
         event.setDueAt(Instant.parse("2026-06-03T00:00:00Z"));
         Equipment equipment = equipment(equipmentId, typeId);
         equipment.setResponsibleDepartmentId(departmentId);
+        equipment.setResponsibleId(UUID.randomUUID());
         MaintenanceRegulation regulation = regulation(regulationId, typeId, AutomationAction.REQUIRE_APPROVAL);
         regulation.setTemplateId(UUID.randomUUID());
         regulation.setApprovalResultAction(ApprovalResultAction.CREATE_TASK);
@@ -694,27 +743,46 @@ class MaintenanceAutomationServiceTest {
                 EquipmentMaintenanceEffectiveRule.fromRegulation(equipmentId, regulation)
         ));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(pprTaskRepository.existsOpenByCycleKey("cycle-task-approved")).thenReturn(false);
-        when(pprTaskRepository.maxSequenceByCodePrefix(any())).thenReturn(0L);
-        when(pprPlanRepository.findByCodeAndIsDeletedFalse(any())).thenReturn(Optional.of(pprPlan(departmentId)));
-        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignPprTaskId(invocation.getArgument(0, PprTask.class)));
         when(eventRepository.save(event)).thenReturn(event);
-        when(eventService.toDto(event)).thenReturn(null);
+        when(approvalServiceProvider.getObject()).thenReturn(approvalService);
+        when(approvalService.createOrReuseSystemApprovalForDocument(
+                eq("MAINTENANCE_DUE_EVENT"),
+                eq(eventId),
+                eq(ApprovalActionType.CREATE_TASK),
+                eq(requesterId),
+                eq(equipment.getResponsibleId()),
+                eq("MAINTENANCE_EVENT_APPROVER"),
+                any(),
+                any()
+        )).thenReturn(approvalDto(approvalId, eventId, ApprovalActionType.CREATE_TASK));
 
-        service.approveDueEvent(eventId, UUID.randomUUID());
+        ApprovalRequestDto result = service.approveDueEvent(eventId, requesterId);
 
-        verify(pprTaskRepository).save(any());
+        verify(approvalService).createOrReuseSystemApprovalForDocument(
+                eq("MAINTENANCE_DUE_EVENT"),
+                eq(eventId),
+                eq(ApprovalActionType.CREATE_TASK),
+                eq(requesterId),
+                eq(equipment.getResponsibleId()),
+                eq("MAINTENANCE_EVENT_APPROVER"),
+                any(),
+                any()
+        );
+        verify(pprTaskRepository, never()).save(any());
         verify(workOrderService, never()).create(any());
-        assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.TASK_CREATED);
-        assertThat(event.getCreatedTaskId()).isNotNull();
+        assertThat(result.id()).isEqualTo(approvalId);
+        assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.AWAITING_APPROVAL);
+        assertThat(event.getCreatedTaskId()).isNull();
     }
 
     @Test
-    void approveRequireApprovalPolicyDefaultsNullApprovalResultActionToCreateTask() {
+    void approveRequireApprovalPolicyDefaultsNullApprovalResultActionToCreateTaskApprovalRequest() {
         UUID eventId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
         UUID regulationId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID approvalId = UUID.randomUUID();
         MaintenanceDueEvent event = new MaintenanceDueEvent();
         ReflectionTestUtils.setField(event, "id", eventId);
         event.setEquipmentId(equipmentId);
@@ -724,6 +792,7 @@ class MaintenanceAutomationServiceTest {
         event.setCycleKey("cycle-task-default");
         event.setDueAt(Instant.parse("2026-06-03T00:00:00Z"));
         Equipment equipment = equipment(equipmentId, typeId);
+        equipment.setResponsibleId(UUID.randomUUID());
         MaintenanceRegulation regulation = regulation(regulationId, typeId, AutomationAction.REQUIRE_APPROVAL);
         regulation.setTemplateId(UUID.randomUUID());
         regulation.setApprovalResultAction(null);
@@ -733,19 +802,36 @@ class MaintenanceAutomationServiceTest {
                 EquipmentMaintenanceEffectiveRule.fromRegulation(equipmentId, regulation)
         ));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(pprTaskRepository.existsOpenByCycleKey("cycle-task-default")).thenReturn(false);
-        when(pprTaskRepository.maxSequenceByCodePrefix(any())).thenReturn(0L);
-        when(pprPlanRepository.findByCodeAndIsDeletedFalse(any())).thenReturn(Optional.of(pprPlan(null)));
-        when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignPprTaskId(invocation.getArgument(0, PprTask.class)));
         when(eventRepository.save(event)).thenReturn(event);
-        when(eventService.toDto(event)).thenReturn(null);
+        when(approvalServiceProvider.getObject()).thenReturn(approvalService);
+        when(approvalService.createOrReuseSystemApprovalForDocument(
+                eq("MAINTENANCE_DUE_EVENT"),
+                eq(eventId),
+                eq(ApprovalActionType.CREATE_TASK),
+                eq(requesterId),
+                eq(equipment.getResponsibleId()),
+                eq("MAINTENANCE_EVENT_APPROVER"),
+                any(),
+                any()
+        )).thenReturn(approvalDto(approvalId, eventId, ApprovalActionType.CREATE_TASK));
 
-        service.approveDueEvent(eventId, UUID.randomUUID());
+        ApprovalRequestDto result = service.approveDueEvent(eventId, requesterId);
 
-        verify(pprTaskRepository).save(any());
+        verify(approvalService).createOrReuseSystemApprovalForDocument(
+                eq("MAINTENANCE_DUE_EVENT"),
+                eq(eventId),
+                eq(ApprovalActionType.CREATE_TASK),
+                eq(requesterId),
+                eq(equipment.getResponsibleId()),
+                eq("MAINTENANCE_EVENT_APPROVER"),
+                any(),
+                any()
+        );
+        verify(pprTaskRepository, never()).save(any());
         verify(workOrderService, never()).create(any());
-        assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.TASK_CREATED);
-        assertThat(event.getCreatedTaskId()).isNotNull();
+        assertThat(result.id()).isEqualTo(approvalId);
+        assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.AWAITING_APPROVAL);
+        assertThat(event.getCreatedTaskId()).isNull();
     }
 
     @Test
@@ -1154,9 +1240,8 @@ class MaintenanceAutomationServiceTest {
         when(workOrderNumberService.nextAutoNumber()).thenReturn("WO-AUTO-2026-0001");
         when(workOrderService.create(any())).thenReturn(workOrder(workOrderId));
         when(eventRepository.save(event)).thenReturn(event);
-        when(eventService.toDto(event)).thenReturn(null);
 
-        service.approveDueEvent(event.getId(), UUID.randomUUID());
+        service.finalizeDueEventApproval(event.getId(), ApprovalActionType.CREATE_WORK_ORDER, UUID.randomUUID());
 
         verify(workOrderService).create(any());
         assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.WORK_ORDER_CREATED);
@@ -1196,9 +1281,8 @@ class MaintenanceAutomationServiceTest {
         when(pprPlanRepository.findByCodeAndIsDeletedFalse(any())).thenReturn(Optional.of(pprPlan(departmentId)));
         when(pprTaskRepository.save(any())).thenAnswer(invocation -> assignPprTaskId(invocation.getArgument(0, PprTask.class)));
         when(eventRepository.save(event)).thenReturn(event);
-        when(eventService.toDto(event)).thenReturn(null);
 
-        service.approveDueEvent(event.getId(), UUID.randomUUID());
+        service.finalizeDueEventApproval(event.getId(), ApprovalActionType.CREATE_TASK, UUID.randomUUID());
 
         verify(pprTaskRepository).save(any());
         assertThat(event.getStatus()).isEqualTo(MaintenanceDueEventStatus.TASK_CREATED);
@@ -1811,6 +1895,22 @@ class MaintenanceAutomationServiceTest {
                 null,
                 0,
                 0
+        );
+    }
+
+    private ApprovalRequestDto approvalDto(UUID id, UUID eventId, ApprovalActionType actionType) {
+        return new ApprovalRequestDto(
+                id,
+                "MAINTENANCE_DUE_EVENT",
+                eventId,
+                "Maintenance due event approval",
+                UUID.randomUUID(),
+                ApprovalStatus.PENDING,
+                1,
+                null,
+                "Approval request",
+                Instant.parse("2026-06-03T00:00:00Z"),
+                List.of()
         );
     }
 }

@@ -1,24 +1,30 @@
 package com.toir.service;
 
 import com.toir.dto.approval.ApprovalRequestDto;
+import com.toir.dto.approval.ApprovalStepDto;
+import com.toir.dto.approval.ApprovalHistoryDto;
+import com.toir.dto.approval.ApprovalStatisticsDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
-import com.toir.entity.projects.MaintenanceBudget;
-import com.toir.entity.projects.ProcurementRequest;
+import com.toir.entity.users.User;
+import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalStatus;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
-import com.toir.enums.BudgetStatus;
 import com.toir.enums.NotificationSeverity;
-import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
-import com.toir.repository.ProcurementRequestRepository;
+import com.toir.repository.ApprovalDelegateRepository;
 import com.toir.repository.ApprovalRequestRepository;
-import com.toir.repository.maintenance.MaintenanceBudgetRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.approval.ApprovalActionExecutor;
+import com.toir.service.approval.ApprovalGovernanceService;
+import com.toir.service.approval.ApprovalRouteResolver;
+import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
@@ -40,32 +46,42 @@ public class ApprovalService {
             "WORK_ORDER",
             "PPR_PLAN",
             "PROCUREMENT_REQUEST",
-            "MAINTENANCE_BUDGET"
+            "MAINTENANCE_BUDGET",
+            "MAINTENANCE_DUE_EVENT",
+            "REPAIR_REQUEST",
+            "MAINTENANCE_REGULATION",
+            "REGULATION_CHANGE_PROPOSAL",
+            "ACTUAL_COST",
+            "DEFECT_LIST",
+            "PLANNED_SHUTDOWN",
+            "REPAIR_CAMPAIGN"
     );
 
     private final ApprovalRequestRepository requestRepository;
-    private final ProcurementRequestRepository procurementRequestRepository;
-    private final MaintenanceBudgetRepository maintenanceBudgetRepository;
-    private final WorkOrderService workOrderService;
-    private final PprPlanService pprPlanService;
+    private final ApprovalDelegateRepository delegateRepository;
+    private final ApprovalActionExecutor approvalActionExecutor;
+    private final ApprovalGovernanceService governanceService;
+    private final ApprovalSlaPolicyService slaPolicyService;
+    private final ApprovalRouteResolver routeResolver;
     private final AuditBuilderService auditBuilderService;
     private final ApprovalScopeService approvalScopeService;
     private final ScopeAccessService scopeAccessService;
     private final NotificationService notificationService;
+    private final UserRepository userRepository;
 
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> listByDocument(String documentType, UUID documentId) {
         return requestRepository.findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse(normalizeDocumentType(documentType), documentId).stream()
                 .filter(approvalScopeService::canReadApproval)
-                .map(ApprovalRequestDto::from).toList();
+                .map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> pending() {
         return requestRepository.findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalStatus.PENDING).stream()
                 .filter(approvalScopeService::canReadApproval)
-                .map(ApprovalRequestDto::from).toList();
+                .map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
@@ -87,7 +103,7 @@ public class ApprovalService {
                 .filter(request -> status == null || status == request.getStatus())
                 .filter(request -> normalizedSearch == null || matchesSearch(request, normalizedSearch))
                 .filter(approvalScopeService::canReadApproval)
-                .map(ApprovalRequestDto::from)
+                .map(this::toDto)
                 .toList();
     }
 
@@ -95,21 +111,50 @@ public class ApprovalService {
     public List<ApprovalRequestDto> listAll() {
         return requestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(approvalScopeService::canReadApproval)
-                .map(ApprovalRequestDto::from).toList();
+                .map(this::toDto).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ApprovalRequestDto> overdue() {
+        Instant now = Instant.now();
+        return requestRepository.findOverdue(now).stream()
+                .filter(approvalScopeService::canReadApproval)
+                .map(this::toDto)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ApprovalStatisticsDto statistics() {
+        return new ApprovalStatisticsDto(
+                requestRepository.countByStatus(ApprovalStatus.PENDING),
+                requestRepository.countByStatus(ApprovalStatus.APPROVED),
+                requestRepository.countByStatus(ApprovalStatus.REJECTED),
+                requestRepository.countByStatus(ApprovalStatus.EXPIRED),
+                requestRepository.countEscalated()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<ApprovalHistoryDto> history(UUID approvalId) {
+        ApprovalRequest request = getOrThrow(approvalId);
+        approvalScopeService.assertCanReadApproval(request);
+        return governanceService.history(approvalId).stream()
+                .map(ApprovalHistoryDto::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> byRequester(UUID requesterId) {
         return requestRepository.findAllByRequesterIdAndIsDeletedFalseOrderByCreatedAtDesc(requesterId).stream()
                 .filter(approvalScopeService::canReadApproval)
-                .map(ApprovalRequestDto::from).toList();
+                .map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
     public ApprovalRequestDto findById(UUID id) {
         ApprovalRequest request = getOrThrow(id);
         approvalScopeService.assertCanReadApproval(request);
-        return ApprovalRequestDto.from(request);
+        return toDto(request);
     }
 
     @Transactional
@@ -133,6 +178,71 @@ public class ApprovalService {
                                                                String approverRole,
                                                                String title,
                                                                String description) {
+        return createOrReuseApprovalForDocument(
+                documentType,
+                documentId,
+                ApprovalActionType.APPROVE,
+                requesterId,
+                approverId,
+                approverRole,
+                title,
+                description
+        );
+    }
+
+    @Transactional
+    public ApprovalRequestDto createOrReuseApprovalForDocument(String documentType,
+                                                               UUID documentId,
+                                                               ApprovalActionType actionType,
+                                                               UUID requesterId,
+                                                               UUID approverId,
+                                                               String approverRole,
+                                                               String title,
+                                                               String description) {
+        return createOrReuseApprovalForDocument(
+                documentType,
+                documentId,
+                actionType,
+                requesterId,
+                approverId,
+                approverRole,
+                title,
+                description,
+                true
+        );
+    }
+
+    @Transactional
+    public ApprovalRequestDto createOrReuseSystemApprovalForDocument(String documentType,
+                                                                     UUID documentId,
+                                                                     ApprovalActionType actionType,
+                                                                     UUID requesterId,
+                                                                     UUID approverId,
+                                                                     String approverRole,
+                                                                     String title,
+                                                                     String description) {
+        return createOrReuseApprovalForDocument(
+                documentType,
+                documentId,
+                actionType,
+                requesterId,
+                approverId,
+                approverRole,
+                title,
+                description,
+                false
+        );
+    }
+
+    private ApprovalRequestDto createOrReuseApprovalForDocument(String documentType,
+                                                                UUID documentId,
+                                                                ApprovalActionType actionType,
+                                                                UUID requesterId,
+                                                                UUID approverId,
+                                                                String approverRole,
+                                                                String title,
+                                                                String description,
+                                                                boolean validateScope) {
         String normalizedType = normalizeDocumentType(documentType);
         if (!INTEGRATED_DOCUMENT_TYPES.contains(normalizedType)) {
             throw RestException.badRequest("Unsupported approval-integrated document type: " + normalizedType);
@@ -142,28 +252,34 @@ public class ApprovalService {
         }
 
         UUID effectiveRequesterId = requesterId != null ? requesterId : scopeAccessService.currentUserIdOrNull();
-        UUID effectiveApproverId = approverId != null ? approverId : effectiveRequesterId;
-        if (effectiveRequesterId == null || effectiveApproverId == null) {
-            throw RestException.badRequest("requesterId/approverId is required to create approval request");
+        UUID effectiveApproverId = approverId;
+        if (effectiveRequesterId == null) {
+            throw RestException.badRequest("requesterId is required to create approval request");
         }
-        approvalScopeService.assertCanCreateApproval(new CreateApprovalRequest(
-                normalizedType,
-                documentId,
-                StringUtils.hasText(title) ? title : normalizedType + " approval",
-                effectiveRequesterId,
-                description,
-                List.of(new CreateApprovalRequest.StepInput(effectiveApproverId, approverRole))
-        ));
+        if (validateScope) {
+            approvalScopeService.assertCanCreateApproval(new CreateApprovalRequest(
+                    normalizedType,
+                    documentId,
+                    StringUtils.hasText(title) ? title : normalizedType + " approval",
+                    effectiveRequesterId,
+                    description,
+                    effectiveApproverId == null
+                            ? List.of()
+                            : List.of(new CreateApprovalRequest.StepInput(effectiveApproverId, approverRole))
+            ));
+        }
 
+        ApprovalActionType effectiveActionType = actionType == null ? ApprovalActionType.APPROVE : actionType;
         return requestRepository
-                .findFirstByDocumentTypeAndDocumentIdAndStatusAndIsDeletedFalseOrderByCreatedAtDesc(
+                .findFirstPendingByTargetAndAction(
                         normalizedType,
                         documentId,
+                        effectiveActionType.name(),
                         ApprovalStatus.PENDING
                 )
                 .map(existing -> {
                     notifyCurrentStep(existing);
-                    return ApprovalRequestDto.from(existing);
+                    return toDto(existing);
                 })
                 .orElseGet(() -> createNewApproval(
                         normalizedType,
@@ -171,7 +287,10 @@ public class ApprovalService {
                         StringUtils.hasText(title) ? title : normalizedType + " approval",
                         effectiveRequesterId,
                         description,
-                        List.of(new CreateApprovalRequest.StepInput(effectiveApproverId, approverRole))
+                        effectiveApproverId == null
+                                ? List.of()
+                                : List.of(new CreateApprovalRequest.StepInput(effectiveApproverId, approverRole)),
+                        effectiveActionType
                 ));
     }
 
@@ -194,8 +313,15 @@ public class ApprovalService {
         }
         request.setStatus(ApprovalStatus.CANCELLED);
         request.setCompletedAt(Instant.now());
+        if (request.getTargetType() == ApprovalTargetType.MAINTENANCE_DUE_EVENT
+                || "MAINTENANCE_DUE_EVENT".equals(normalizeDocumentType(request.getDocumentType()))) {
+            request.setResultJson(executeOnce(request));
+            request.setFailureReason(null);
+        }
 
         ApprovalRequest saved = requestRepository.save(request);
+        governanceService.record(saved, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
+                scopeAccessService.currentUserIdOrNull(), "Approval cancelled");
 
 
         auditBuilderService.log(
@@ -208,11 +334,12 @@ public class ApprovalService {
                 saved
         );
 
-        return ApprovalRequestDto.from(request);
+        return toDto(request);
     }
 
     private ApprovalRequestDto applyDecision(UUID requestId, DecisionRequest decision, ApprovalDecision outcome) {
         ApprovalRequest request = getOrThrow(requestId);
+        expireIfNeeded(request);
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
         }
@@ -220,11 +347,16 @@ public class ApprovalService {
                 .filter(s -> s.getStepNumber() == request.getCurrentStep())
                 .findFirst()
                 .orElseThrow(() -> RestException.conflict("No current step"));
-        approvalScopeService.assertCanDecideApproval(request, current);
-        if (!current.getApproverId().equals(decision.approverId())) {
+        boolean designatedApprover = current.getApproverId().equals(decision.approverId());
+        boolean delegateApprover = isActiveDelegate(current.getApproverId(), decision.approverId());
+        if (designatedApprover) {
+            approvalScopeService.assertCanDecideApproval(request, current);
+        } else if (!delegateApprover || !matchesCurrentPrincipal(decision.approverId())) {
             throw RestException.forbidden("Only designated approver can act on this step");
         }
         current.setDecision(outcome);
+        current.setDecidedById(decision.approverId());
+        current.setDelegatedForId(delegateApprover ? current.getApproverId() : null);
         current.setDecidedAt(Instant.now());
         current.setComment(decision.comment());
 
@@ -245,11 +377,15 @@ public class ApprovalService {
             }
         }
 
+        ApprovalStatus oldStatus = ApprovalStatus.PENDING;
         if (isTerminal) {
-            completeApprovalAndApplyBusinessDecision(request, decision, outcome);
+            executeTerminalAction(request, outcome);
         }
 
         ApprovalRequest saved = requestRepository.save(request);
+        if (isTerminal) {
+            governanceService.record(saved, oldStatus, saved.getStatus(), decision.approverId(), decision.comment());
+        }
         if (isTerminal) {
             notifyFinalDecision(saved, outcome);
         } else {
@@ -267,75 +403,74 @@ public class ApprovalService {
         );
 
 
-        return ApprovalRequestDto.from(request);
+        return toDto(request);
     }
 
-    private void completeApprovalAndApplyBusinessDecision(ApprovalRequest request,
-                                                          DecisionRequest decision,
-                                                          ApprovalDecision outcome) {
-        String type = normalizeDocumentType(request.getDocumentType());
-        UUID documentId = request.getDocumentId();
-        switch (type) {
-            case "WORK_ORDER" -> {
-                if (outcome == ApprovalDecision.APPROVED) {
-                    applyWorkOrderApproval(documentId, decision.approverId());
-                }
-            }
-            case "PPR_PLAN" -> {
-                if (outcome == ApprovalDecision.APPROVED) {
-                    applyPprPlanApproval(documentId, decision.approverId());
-                }
-            }
-            case "PROCUREMENT_REQUEST" -> applyProcurementDecision(documentId, outcome, decision.comment());
-            case "MAINTENANCE_BUDGET" -> {
-                if (outcome == ApprovalDecision.APPROVED) {
-                    applyMaintenanceBudgetApproval(documentId);
-                }
-            }
-            default -> {
-                // Not an integrated document type in this phase.
-            }
-        }
-    }
-
-    private void applyWorkOrderApproval(UUID workOrderId, UUID approverId) {
-        workOrderService.approve(workOrderId, approverId);
-    }
-
-    private void applyPprPlanApproval(UUID planId, UUID approverId) {
-        pprPlanService.approve(planId, approverId);
-    }
-
-    private void applyProcurementDecision(UUID requestId, ApprovalDecision outcome, String comment) {
-        ProcurementRequest request = procurementRequestRepository.findByIdAndIsDeletedFalse(requestId)
-                .orElseThrow(() -> RestException.notFound("Procurement request not found: " + requestId));
-        if (outcome == ApprovalDecision.APPROVED) {
-            if (request.getStatus() != ProcurementRequestStatus.SUBMITTED) {
-                throw RestException.badRequest("Procurement request approval can be finalized only from SUBMITTED status");
-            }
-            request.setStatus(ProcurementRequestStatus.APPROVED);
-            request.setApprovedAt(Instant.now());
-            request.setRejectionReason(null);
-            procurementRequestRepository.save(request);
+    private void executeTerminalAction(ApprovalRequest request, ApprovalDecision outcome) {
+        if (request.isExecuted()) {
             return;
         }
-        if (request.getStatus() == ProcurementRequestStatus.RECEIVED
-                || request.getStatus() == ProcurementRequestStatus.CANCELLED) {
-            throw RestException.badRequest("Cannot reject completed procurement request");
+        ApprovalActionType originalActionType = request.getActionType();
+        boolean isMaintenanceDueEvent = request.getTargetType() == ApprovalTargetType.MAINTENANCE_DUE_EVENT
+                || "MAINTENANCE_DUE_EVENT".equals(normalizeDocumentType(request.getDocumentType()));
+        boolean preserveActionType = isMaintenanceDueEvent
+                && (originalActionType == ApprovalActionType.CREATE_TASK
+                || originalActionType == ApprovalActionType.CREATE_WORK_ORDER);
+        if (!preserveActionType) {
+            request.setActionType(outcome == ApprovalDecision.APPROVED
+                    ? ApprovalActionType.APPROVE
+                    : ApprovalActionType.REJECT);
         }
-        request.setStatus(ProcurementRequestStatus.REJECTED);
-        request.setRejectionReason(StringUtils.hasText(comment) ? comment.trim() : "Rejected by approval workflow");
-        procurementRequestRepository.save(request);
+        try {
+            request.setResultJson(executeOnce(request));
+            request.setFailureReason(null);
+        } catch (RuntimeException ex) {
+            request.setStatus(ApprovalStatus.FAILED);
+            request.setCompletedAt(Instant.now());
+            request.setFailureReason(ex.getMessage());
+            request.setResultJson(null);
+        }
     }
 
-    private void applyMaintenanceBudgetApproval(UUID budgetId) {
-        MaintenanceBudget budget = maintenanceBudgetRepository.findByIdAndIsDeletedFalse(budgetId)
-                .orElseThrow(() -> RestException.notFound("Budget not found: " + budgetId));
-        if (budget.getStatus() != BudgetStatus.DRAFT) {
-            throw RestException.badRequest("Budget approval request can be finalized only from DRAFT status");
+    private String executeOnce(ApprovalRequest request) {
+        if (request.isExecuted()) {
+            return request.getResultJson();
         }
-        budget.setStatus(BudgetStatus.APPROVED);
-        maintenanceBudgetRepository.save(budget);
+        if (request.getExecutionId() == null) {
+            request.setExecutionId(UUID.randomUUID());
+        }
+        String result = approvalActionExecutor.execute(request);
+        request.setExecuted(true);
+        request.setExecutedAt(Instant.now());
+        return result;
+    }
+
+    private void expireIfNeeded(ApprovalRequest request) {
+        if (request.getStatus() == ApprovalStatus.PENDING
+                && request.getExpiresAt() != null
+                && request.getExpiresAt().isBefore(Instant.now())) {
+            governanceService.expire(request, null, "Approval expired before decision");
+        }
+    }
+
+    private boolean isActiveDelegate(UUID approverId, UUID delegateId) {
+        if (approverId == null || delegateId == null) {
+            return false;
+        }
+        return delegateRepository.findActiveDelegation(approverId, delegateId, Instant.now()).isPresent();
+    }
+
+    private boolean matchesCurrentPrincipal(UUID candidateId) {
+        if (candidateId == null) {
+            return false;
+        }
+        UUID currentUserId = scopeAccessService.currentUserIdOrNull();
+        if (candidateId.equals(currentUserId) || scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        return scopeAccessService.currentEmployeeId()
+                .map(candidateId::equals)
+                .orElse(false);
     }
 
     private ApprovalRequestDto createNewApproval(String normalizedDocumentType,
@@ -344,6 +479,16 @@ public class ApprovalService {
                                                  UUID requesterId,
                                                  String description,
                                                  List<CreateApprovalRequest.StepInput> steps) {
+        return createNewApproval(normalizedDocumentType, documentId, title, requesterId, description, steps, null);
+    }
+
+    private ApprovalRequestDto createNewApproval(String normalizedDocumentType,
+                                                 UUID documentId,
+                                                 String title,
+                                                 UUID requesterId,
+                                                 String description,
+                                                 List<CreateApprovalRequest.StepInput> steps,
+                                                 ApprovalActionType actionType) {
         if (!StringUtils.hasText(normalizedDocumentType)) {
             throw RestException.badRequest("documentType is required");
         }
@@ -356,10 +501,6 @@ public class ApprovalService {
         if (!StringUtils.hasText(title)) {
             throw RestException.badRequest("title is required");
         }
-        if (steps == null || steps.isEmpty()) {
-            throw RestException.badRequest("At least one approval step is required");
-        }
-
         ApprovalRequest request = new ApprovalRequest();
         request.setDocumentType(normalizedDocumentType);
         request.setDocumentId(documentId);
@@ -368,9 +509,21 @@ public class ApprovalService {
         request.setDescription(description);
         request.setStatus(ApprovalStatus.PENDING);
         request.setCurrentStep(1);
+        request.setActionType(actionType);
+        if (request.getExpiresAt() == null) {
+            request.setExpiresAt(Instant.now().plus(slaPolicyService.slaFor(request)));
+        }
+
+        List<CreateApprovalRequest.StepInput> effectiveSteps = steps;
+        if (effectiveSteps == null || effectiveSteps.isEmpty()) {
+            effectiveSteps = routeResolver.resolveRoute(request);
+        }
+        if (effectiveSteps == null || effectiveSteps.isEmpty()) {
+            throw RestException.badRequest("At least one approval step is required");
+        }
 
         int idx = 1;
-        for (CreateApprovalRequest.StepInput input : steps) {
+        for (CreateApprovalRequest.StepInput input : effectiveSteps) {
             if (input.approverId() == null) {
                 throw RestException.badRequest("approverId is required for each step");
             }
@@ -384,6 +537,7 @@ public class ApprovalService {
         }
 
         ApprovalRequest saved = requestRepository.save(request);
+        governanceService.record(saved, null, ApprovalStatus.PENDING, requesterId, "Approval created");
         notifyCurrentStep(saved);
 
         auditBuilderService.log(
@@ -396,7 +550,7 @@ public class ApprovalService {
                 saved
         );
 
-        return ApprovalRequestDto.from(saved);
+        return toDto(saved);
     }
 
     private void notifyCurrentStep(ApprovalRequest request) {
@@ -415,12 +569,17 @@ public class ApprovalService {
     }
 
     private void notifyFinalDecision(ApprovalRequest request, ApprovalDecision outcome) {
-        String decisionText = outcome == ApprovalDecision.APPROVED ? "approved" : "rejected";
+        String decisionText = switch (request.getStatus()) {
+            case FAILED -> "failed";
+            case EXPIRED -> "expired";
+            case CANCELLED -> "cancelled";
+            default -> outcome == ApprovalDecision.APPROVED ? "approved" : "rejected";
+        };
         notificationService.notifyUser(
                 request.getRequesterId(),
                 "Approval " + decisionText + ": " + request.getTitle(),
                 "Approval request " + request.getTitle() + " was " + decisionText + ".",
-                outcome == ApprovalDecision.APPROVED ? NotificationSeverity.INFO : NotificationSeverity.WARNING,
+                request.getStatus() == ApprovalStatus.APPROVED ? NotificationSeverity.INFO : NotificationSeverity.WARNING,
                 notificationEntityType(request.getDocumentType()),
                 request.getDocumentId() == null ? null : request.getDocumentId().toString()
         );
@@ -432,6 +591,14 @@ public class ApprovalService {
             case "PPR_PLAN" -> "PprPlan";
             case "PROCUREMENT_REQUEST" -> "ProcurementRequest";
             case "MAINTENANCE_BUDGET" -> "MaintenanceBudget";
+            case "MAINTENANCE_DUE_EVENT" -> "MaintenanceDueEvent";
+            case "REPAIR_REQUEST" -> "RepairRequest";
+            case "MAINTENANCE_REGULATION" -> "MaintenanceRegulation";
+            case "REGULATION_CHANGE_PROPOSAL" -> "RegulationChangeProposal";
+            case "ACTUAL_COST" -> "ActualCost";
+            case "DEFECT_LIST" -> "DefectList";
+            case "PLANNED_SHUTDOWN" -> "PlannedShutdown";
+            case "REPAIR_CAMPAIGN" -> "RepairCampaign";
             default -> "ApprovalRequest";
         };
     }
@@ -458,6 +625,108 @@ public class ApprovalService {
 
     private boolean containsIgnoreCase(String value, String search) {
         return value != null && value.toLowerCase(Locale.ROOT).contains(search);
+    }
+
+    private ApprovalRequestDto toDto(ApprovalRequest request) {
+        List<ApprovalStepDto> steps = request.getSteps().stream()
+                .map(step -> new ApprovalStepDto(
+                        step.getId(),
+                        step.getStepNumber(),
+                        step.getApproverId(),
+                        step.getApproverRole(),
+                        step.getDecision(),
+                        step.getDecidedAt(),
+                        step.getComment(),
+                        step.getDecidedById(),
+                        userName(step.getDecidedById()),
+                        step.getDelegatedForId(),
+                        userName(step.getDelegatedForId())))
+                .toList();
+        ApprovalStep currentStep = request.getSteps().stream()
+                .filter(step -> step.getStepNumber() == request.getCurrentStep())
+                .findFirst()
+                .orElse(null);
+        String targetTypeName = request.getTargetType() == null
+                ? request.getDocumentType()
+                : request.getTargetType().name();
+        UUID targetId = request.getTargetId() == null ? request.getDocumentId() : request.getTargetId();
+        String targetUrl = targetUrl(targetTypeName, targetId);
+        boolean canDecide = request.getStatus() == ApprovalStatus.PENDING
+                && currentStep != null
+                && currentStep.getDecision() == ApprovalDecision.PENDING
+                && (matchesCurrentPrincipal(currentStep.getApproverId())
+                || isActiveDelegate(currentStep.getApproverId(), scopeAccessService.currentUserIdOrNull()));
+        boolean canCancel = request.getStatus() == ApprovalStatus.PENDING
+                && (scopeAccessService.isScopeAdmin() || matchesCurrentPrincipal(request.getRequesterId()));
+
+        return new ApprovalRequestDto(
+                request.getId(),
+                request.getDocumentType(),
+                request.getDocumentId(),
+                request.getTitle(),
+                request.getRequesterId(),
+                request.getStatus(),
+                request.getCurrentStep(),
+                request.getCompletedAt(),
+                request.getDescription(),
+                request.getCreatedAt(),
+                steps,
+                request.getTargetType(),
+                request.getTargetId(),
+                request.getActionType(),
+                userName(request.getRequesterId()),
+                currentStep == null ? null : userName(currentStep.getApproverId()),
+                steps.size(),
+                request.getExpiresAt(),
+                request.getEscalatedAt() != null,
+                request.getStatus() == ApprovalStatus.PENDING
+                        && request.getExpiresAt() != null
+                        && request.getExpiresAt().isBefore(Instant.now()),
+                request.getTitle(),
+                targetUrl,
+                request.getResultJson(),
+                request.getFailureReason(),
+                canDecide,
+                canDecide,
+                canCancel,
+                new ApprovalRequestDto.TargetSummary(
+                        targetId,
+                        targetTypeName,
+                        request.getTitle(),
+                        null,
+                        request.getStatus() == null ? null : request.getStatus().name(),
+                        targetUrl));
+    }
+
+    private String userName(UUID userId) {
+        if (userId == null) {
+            return null;
+        }
+        return userRepository.findByIdAndIsDeletedFalse(userId)
+                .map(User::getFullName)
+                .filter(StringUtils::hasText)
+                .orElse(null);
+    }
+
+    private String targetUrl(String targetType, UUID targetId) {
+        if (targetType == null || targetId == null) {
+            return null;
+        }
+        return switch (targetType) {
+            case "WORK_ORDER" -> "/work-orders/" + targetId;
+            case "PPR_PLAN" -> "/ppr-plans/" + targetId;
+            case "PROCUREMENT_REQUEST" -> "/procurement-requests/" + targetId;
+            case "MAINTENANCE_BUDGET", "BUDGET" -> "/budgets/" + targetId;
+            case "MAINTENANCE_DUE_EVENT" -> "/maintenance-due-events/" + targetId;
+            case "REPAIR_REQUEST" -> "/repair-requests/" + targetId;
+            case "MAINTENANCE_REGULATION" -> "/maintenance-regulations/" + targetId;
+            case "REGULATION_CHANGE_PROPOSAL" -> "/regulation-change-proposals/" + targetId;
+            case "ACTUAL_COST" -> "/actual-costs/" + targetId;
+            case "DEFECT_LIST" -> "/defect-lists/" + targetId;
+            case "PLANNED_SHUTDOWN" -> "/planned-shutdowns/" + targetId;
+            case "REPAIR_CAMPAIGN" -> "/repair-campaigns/" + targetId;
+            default -> "/approvals/targets/" + targetType + "/" + targetId;
+        };
     }
 
     private ApprovalRequest getOrThrow(UUID id) {

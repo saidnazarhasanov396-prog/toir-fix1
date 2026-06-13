@@ -1,9 +1,11 @@
 package com.toir.controller.maintenance;
 
+import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.maintenancedue.CancelMaintenanceDueEventRequest;
 import com.toir.dto.maintenancedue.MaintenanceDueEventDto;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
+import com.toir.exception.RestException;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
@@ -61,7 +63,7 @@ public class MaintenanceDueEventController {
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_EVENT_APPROVE')")
-    public ResponseEntity<MaintenanceDueEventDto> approve(@PathVariable UUID id) {
+    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id) {
         return ResponseEntity.ok(automationService.approveDueEvent(id, currentUserId()));
     }
 
@@ -75,7 +77,7 @@ public class MaintenanceDueEventController {
     @PostMapping("/{id}/work-order")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_CREATE') or hasAuthority('MAINTENANCE_EVENT_APPROVE')")
     public ResponseEntity<MaintenanceDueEventDto> createWorkOrder(@PathVariable UUID id) {
-        return ResponseEntity.ok(automationService.createWorkOrderFromEvent(id, currentUserId()));
+        throw RestException.conflict("Use /api/v1/maintenance-due-events/{id}/approve to create an approval request");
     }
 
     private UUID currentUserId() {

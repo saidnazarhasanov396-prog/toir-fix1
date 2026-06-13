@@ -1,9 +1,11 @@
 package com.toir.controller;
 
+import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.procurement.ProcurementLineRequest;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.ApprovalService;
 import com.toir.service.ProcurementRequestService;
@@ -68,24 +70,23 @@ public class ProcurementRequestController {
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_APPROVE')")
-    public ResponseEntity<ProcurementRequestDto> approve(@PathVariable UUID id,
+    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id,
                                                          @RequestParam(required = false) UUID approverId) {
         ProcurementRequestDto current = service.validateCanApprove(id);
-        approvalService.createOrReuseApprovalForDocument(
+        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
                 "PROCUREMENT_REQUEST",
                 id,
                 null,
                 approverId,
                 "PROCUREMENT_APPROVER",
                 "Procurement request approval: " + current.number(),
-                "Approval workflow request for procurement request " + current.number());
-        return ResponseEntity.ok(service.findById(id));
+                "Approval workflow request for procurement request " + current.number()));
     }
 
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_REJECT')")
     public ResponseEntity<ProcurementRequestDto> reject(@PathVariable UUID id, @RequestParam String reason) {
-        return ResponseEntity.ok(service.reject(id, reason));
+        throw RestException.conflict("Use /api/v1/approvals/{id}/reject to reject approval requests");
     }
 
     @PostMapping("/{id}/ordered")

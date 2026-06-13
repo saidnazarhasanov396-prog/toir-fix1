@@ -1,6 +1,8 @@
 package com.toir.entity;
 
 import com.toir.enums.ApprovalStatus;
+import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalTargetType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -26,6 +28,30 @@ public class ApprovalRequest extends BaseEntity {
     @Column(name = "document_id", nullable = false)
     private UUID documentId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "target_type")
+    private ApprovalTargetType targetType;
+
+    @Column(name = "target_id")
+    private UUID targetId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "action_type")
+    private ApprovalActionType actionType;
+
+    @Column(name = "payload_json", columnDefinition = "text")
+    private String payloadJson;
+
+    @Column(name = "result_json", columnDefinition = "text")
+    private String resultJson;
+
+    @Column(name = "failure_reason", columnDefinition = "text")
+    private String failureReason;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     @Column(name = "title", nullable = false)
     private String title;
 
@@ -42,11 +68,71 @@ public class ApprovalRequest extends BaseEntity {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
+    @Column(name = "escalated_at")
+    private Instant escalatedAt;
+
+    @Column(name = "executed", nullable = false)
+    private boolean executed;
+
+    @Column(name = "executed_at")
+    private Instant executedAt;
+
+    @Column(name = "execution_id")
+    private UUID executionId;
+
     @Column(columnDefinition = "text")
     private String description;
 
     @OneToMany(mappedBy = "request", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("stepNumber ASC")
     private List<ApprovalStep> steps = new ArrayList<>();
+
+    public void setDocumentType(String documentType) {
+        this.documentType = documentType;
+        if (this.targetType == null) {
+            this.targetType = ApprovalTargetType.fromDocumentType(documentType);
+        }
+    }
+
+    public void setDocumentId(UUID documentId) {
+        this.documentId = documentId;
+        if (this.targetId == null) {
+            this.targetId = documentId;
+        }
+    }
+
+    public void setTargetType(ApprovalTargetType targetType) {
+        this.targetType = targetType;
+        if (this.documentType == null && targetType != null) {
+            this.documentType = targetType.name();
+        }
+    }
+
+    public void setTargetId(UUID targetId) {
+        this.targetId = targetId;
+        if (this.documentId == null) {
+            this.documentId = targetId;
+        }
+    }
+
+    @PrePersist
+    @PreUpdate
+    void syncTargetAliases() {
+        if (targetType == null) {
+            targetType = ApprovalTargetType.fromDocumentType(documentType);
+        }
+        if (targetId == null) {
+            targetId = documentId;
+        }
+        if (documentType == null && targetType != null) {
+            documentType = targetType.name();
+        }
+        if (documentId == null) {
+            documentId = targetId;
+        }
+    }
 
 }

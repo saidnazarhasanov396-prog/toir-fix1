@@ -191,7 +191,6 @@ public class EquipmentMaintenanceProfileService {
         rule.setDefaultDepartmentId(request.defaultDepartmentId());
         rule.setDefaultResponsibleId(request.defaultResponsibleId());
         rule.setDefaultPriority(request.defaultPriority());
-        rule.setRequiresApproval(request.requiresApproval());
         rule.setApprovalRole(blankToNull(request.approvalRole()));
         rule.setApprovalPermission(blankToNull(request.approvalPermission()));
     }

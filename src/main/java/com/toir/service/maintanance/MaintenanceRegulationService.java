@@ -666,9 +666,6 @@ public class MaintenanceRegulationService {
         entity.setDefaultDepartmentId(request.defaultDepartmentId());
         entity.setDefaultResponsibleId(request.defaultResponsibleId());
         entity.setDefaultPriority(request.defaultPriority());
-        if (request.requiresApproval() != null) {
-            entity.setRequiresApproval(request.requiresApproval());
-        }
         entity.setApprovalRole(blankToNull(request.approvalRole()));
         entity.setApprovalPermission(blankToNull(request.approvalPermission()));
         validateAutomationTemplate(entity);

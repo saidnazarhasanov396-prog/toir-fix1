@@ -274,13 +274,23 @@ public class PprPlanService {
 
     public PprPlanDto approve(UUID planId, UUID approverId) {
         PprPlan plan = getPlan(planId);
-        if (plan.getStatus() != PlanStatus.DRAFT && plan.getStatus() != PlanStatus.GENERATED) {
-            throw RestException.badRequest("Only DRAFT/GENERATED plans can be approved");
-        }
+        validateCanApprove(plan);
         plan.setStatus(PlanStatus.APPROVED);
         plan.setApprovedById(approverId);
         PprPlan saved = planRepository.saveAndFlush(plan);
         return toDto(reloadPlan(saved.getId()));
+    }
+
+    public PprPlanDto validateCanApprove(UUID planId) {
+        PprPlan plan = getPlan(planId);
+        validateCanApprove(plan);
+        return toDto(plan);
+    }
+
+    private void validateCanApprove(PprPlan plan) {
+        if (plan.getStatus() != PlanStatus.DRAFT && plan.getStatus() != PlanStatus.GENERATED) {
+            throw RestException.badRequest("Only DRAFT/GENERATED plans can be approved");
+        }
     }
 
     public PprTaskDto addTask(UUID planId, PprTaskRequest request) {
