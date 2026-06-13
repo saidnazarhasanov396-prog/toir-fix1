@@ -23,6 +23,8 @@ class SparePartTypeDictionaryMigrationContractTest {
         assertThat(sql).contains("active boolean NOT NULL DEFAULT true");
         assertThat(sql).contains("ALTER TABLE spare_parts");
         assertThat(sql).contains("ADD COLUMN IF NOT EXISTS type_id uuid");
+        assertThat(sql).contains("information_schema.columns");
+        assertThat(sql).contains("column_name = 'type'");
         assertThat(sql).contains("UPDATE spare_parts sp");
         assertThat(sql).contains("SET type_id = spt.id");
         assertThat(sql).contains("ALTER COLUMN type_id SET NOT NULL");

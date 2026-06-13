@@ -35,16 +35,29 @@ SET name = EXCLUDED.name,
 ALTER TABLE spare_parts
     ADD COLUMN IF NOT EXISTS type_id uuid;
 
-UPDATE spare_parts sp
-SET type_id = spt.id
-FROM spare_part_types spt
-WHERE sp.type_id IS NULL
-  AND spt.code = CASE
-      WHEN sp.type = 'ELECTRICAL' THEN 'ELECTRICAL_PART'
-      WHEN sp.type = 'MECHANICAL' THEN 'MECHANICAL_PART'
-      WHEN sp.type IS NULL OR trim(sp.type) = '' THEN 'OTHER'
-      ELSE sp.type
-  END;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'spare_parts'
+          AND column_name = 'type'
+    ) THEN
+        EXECUTE $sql$
+            UPDATE spare_parts sp
+            SET type_id = spt.id
+            FROM spare_part_types spt
+            WHERE sp.type_id IS NULL
+              AND spt.code = CASE
+                  WHEN sp.type = 'ELECTRICAL' THEN 'ELECTRICAL_PART'
+                  WHEN sp.type = 'MECHANICAL' THEN 'MECHANICAL_PART'
+                  WHEN sp.type IS NULL OR trim(sp.type) = '' THEN 'OTHER'
+                  ELSE sp.type
+              END
+        $sql$;
+    END IF;
+END $$;
 
 UPDATE spare_parts sp
 SET type_id = spt.id
