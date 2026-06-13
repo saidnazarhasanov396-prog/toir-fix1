@@ -178,7 +178,13 @@ public record EquipmentDto(
             String passportNumber,
             Double powerKw,
             Double voltageV,
-            Double pressureBar
+            Double pressureBar,
+            String factoryNumber,
+            String manufacturerSerial,
+            Double throughput,
+            LocalDate installDate,
+            LocalDate lastInspectionDate,
+            String notes
     ) {}
 
     public record MissingPassportFieldRef(
