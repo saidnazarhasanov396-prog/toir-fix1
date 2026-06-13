@@ -6,6 +6,7 @@ import com.toir.dto.inventory.InventoryReceiptDto;
 import com.toir.dto.inventory.InventoryStatisticsDto;
 import com.toir.dto.inventory.InventoryTransactionDto;
 import com.toir.enums.InventoryTransactionType;
+import com.toir.service.InventoryAnalyticsService;
 import com.toir.service.InventoryTransactionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +52,9 @@ class RbacInventoryTransactionSecurityTest {
     @MockBean
     InventoryTransactionService service;
 
+    @MockBean
+    InventoryAnalyticsService analyticsService;
+
     @TestConfiguration
     static class SecurityBeans {
         @Bean
@@ -75,6 +79,10 @@ class RbacInventoryTransactionSecurityTest {
         when(service.statistics(any(), any(), any())).thenReturn(new InventoryStatisticsDto(
                 1,
                 1,
+                0,
+                0,
+                0,
+                2,
                 BigDecimal.TEN,
                 BigDecimal.ZERO,
                 BigDecimal.ONE,
@@ -110,6 +118,39 @@ class RbacInventoryTransactionSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = PermissionConstants.INVENTORY_TRANSFER)
+    void inventoryTransferCanCreateTransfer() throws Exception {
+        when(service.createTransfer(any())).thenReturn(transactionDto());
+
+        mockMvc.perform(post("/api/v1/inventory/transfers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transferPayload()))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.INVENTORY_RETURN)
+    void inventoryReturnCanCreateReturn() throws Exception {
+        when(service.createReturn(any())).thenReturn(transactionDto());
+
+        mockMvc.perform(post("/api/v1/inventory/returns")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(returnPayload()))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.INVENTORY_ADJUSTMENT)
+    void inventoryAdjustmentCanCreateAdjustment() throws Exception {
+        when(service.createAdjustment(any())).thenReturn(transactionDto());
+
+        mockMvc.perform(post("/api/v1/inventory/adjustments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(adjustmentPayload()))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     @WithMockUser(authorities = PermissionConstants.INVENTORY_READ)
     void inventoryReadCannotCreateReceiptOrIssue() throws Exception {
         mockMvc.perform(post("/api/v1/inventory/receipts")
@@ -119,6 +160,18 @@ class RbacInventoryTransactionSecurityTest {
         mockMvc.perform(post("/api/v1/inventory/issues")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(issuePayload()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/inventory/transfers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transferPayload()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/inventory/returns")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(returnPayload()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/inventory/adjustments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(adjustmentPayload()))
                 .andExpect(status().isForbidden());
     }
 
@@ -135,9 +188,14 @@ class RbacInventoryTransactionSecurityTest {
                 InventoryTransactionType.RECEIPT,
                 UUID.randomUUID(),
                 "Main Warehouse",
+                null,
+                null,
                 UUID.randomUUID(),
                 "Engine Oil",
                 BigDecimal.ONE,
+                null,
+                null,
+                null,
                 "PCS",
                 BigDecimal.TEN,
                 BigDecimal.TEN,
@@ -227,5 +285,46 @@ class RbacInventoryTransactionSecurityTest {
                   "responsiblePersonId": "%s"
                 }
                 """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+    }
+
+    private String transferPayload() {
+        return """
+                {
+                  "sourceWarehouseId": "%s",
+                  "destinationWarehouseId": "%s",
+                  "sparePartId": "%s",
+                  "quantity": 1,
+                  "unit": "PCS",
+                  "transferDate": "2026-06-13",
+                  "responsiblePersonId": "%s"
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+    }
+
+    private String returnPayload() {
+        return """
+                {
+                  "warehouseId": "%s",
+                  "sparePartId": "%s",
+                  "quantity": 1,
+                  "workOrderId": "%s",
+                  "returnedById": "%s",
+                  "responsiblePersonId": "%s",
+                  "returnDate": "2026-06-13"
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+    }
+
+    private String adjustmentPayload() {
+        return """
+                {
+                  "warehouseId": "%s",
+                  "sparePartId": "%s",
+                  "actualQuantity": 1,
+                  "reason": "PHYSICAL_COUNT",
+                  "responsiblePersonId": "%s",
+                  "adjustmentDate": "2026-06-13"
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
     }
 }

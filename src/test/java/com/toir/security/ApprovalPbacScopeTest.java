@@ -845,6 +845,30 @@ class ApprovalPbacScopeTest {
     }
 
     @Test
+    void finalizerFailurePersistsFailedApprovalWithFailureReason() {
+        UUID approvalId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        ApprovalRequest approval = approval(approvalId, UUID.randomUUID(), approverId, documentId);
+        approval.setDocumentType("PROCUREMENT_REQUEST");
+        ProcurementRequest procurementRequest = procurementRequest(documentId, ProcurementRequestStatus.DRAFT);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(requestRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(procurementRequestRepository.findByIdAndIsDeletedFalse(documentId)).thenReturn(Optional.of(procurementRequest));
+
+        ApprovalRequestDto result = service.approve(approvalId, new DecisionRequest(approverId, "ok"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.FAILED);
+        assertThat(result.failureReason())
+                .isEqualTo("Procurement request approval can be finalized only from SUBMITTED status");
+        assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.FAILED);
+        assertThat(approval.getFailureReason())
+                .isEqualTo("Procurement request approval can be finalized only from SUBMITTED status");
+        assertThat(approval.getResultJson()).isNull();
+        verify(requestRepository).save(approval);
+    }
+
+    @Test
     void finalApprovalStepAppliesMaintenanceBudgetApprovalHandler() {
         UUID approvalId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();

@@ -3,7 +3,10 @@ import com.toir.dto.sparepart.SparePartDto;
 import com.toir.dto.sparepart.SparePartDetailDto;
 import com.toir.dto.sparepart.SparePartLocationDto;
 import com.toir.dto.sparepart.SparePartRequest;
+import com.toir.dto.sparepart.SparePartAnalyticsDto;
+import com.toir.security.PermissionConstants;
 import com.toir.security.RequiresSensitiveAccess;
+import com.toir.service.InventoryAnalyticsService;
 import com.toir.service.SparePartService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -25,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
 public class SparePartController {
 
     private final SparePartService service;
+    private final InventoryAnalyticsService analyticsService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")
@@ -52,6 +56,12 @@ public class SparePartController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")
     public ResponseEntity<SparePartDetailDto> detail(@PathVariable UUID id) {
         return ResponseEntity.ok(service.findDetail(id));
+    }
+
+    @GetMapping("/{id}/analytics")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.INVENTORY_ANALYTICS_READ + "')")
+    public ResponseEntity<SparePartAnalyticsDto> analytics(@PathVariable UUID id) {
+        return ResponseEntity.ok(analyticsService.sparePartAnalytics(id));
     }
 
     @PostMapping

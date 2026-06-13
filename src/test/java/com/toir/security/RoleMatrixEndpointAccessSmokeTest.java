@@ -28,9 +28,11 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.service.ActualCostService;
 import com.toir.service.ApprovalService;
+import com.toir.service.InventoryAnalyticsService;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
 import com.toir.service.ProcurementRequestService;
+import com.toir.service.PurchaseOrderService;
 import com.toir.service.SparePartService;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.service.WarehouseService;
@@ -111,6 +113,12 @@ class RoleMatrixEndpointAccessSmokeTest {
 
     @MockBean
     SparePartService sparePartService;
+
+    @MockBean
+    InventoryAnalyticsService inventoryAnalyticsService;
+
+    @MockBean
+    PurchaseOrderService purchaseOrderService;
 
     @MockBean
     ProcurementRequestService procurementRequestService;

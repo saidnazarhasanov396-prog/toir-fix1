@@ -7,10 +7,16 @@ import com.toir.dto.sparepartforecast.SparePartForecastSummaryDto;
 import com.toir.dto.warehouse.InventoryReplenishmentReason;
 import com.toir.dto.warehouse.InventoryReplenishmentRecommendationDto;
 import com.toir.dto.warehouse.ReorderSuggestionDto;
+import com.toir.entity.SparePart;
+import com.toir.entity.Supplier;
 import com.toir.enums.NotificationSeverity;
+import com.toir.repository.SparePartRepository;
+import com.toir.repository.SupplierRepository;
 import com.toir.service.maintanance.SparePartForecastService;
 import com.toir.util.PaginationUtils;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +35,8 @@ public class InventoryReplenishmentRecommendationService {
 
     private final WarehouseReorderService reorderService;
     private final SparePartForecastService forecastService;
+    private final SparePartRepository sparePartRepository;
+    private final SupplierRepository supplierRepository;
 
     @Transactional(readOnly = true)
     public Page<InventoryReplenishmentRecommendationDto> recommendations(Integer days,
@@ -176,6 +184,7 @@ public class InventoryReplenishmentRecommendationService {
         NotificationSeverity severity = severity(availableStock, minStock, maintenanceDemandQty,
                 maintenanceShortageQty, totalShortageQty, reorderUrgency);
         List<SparePartForecastSourceDto> sources = forecastSources == null ? List.of() : List.copyOf(forecastSources);
+        SupplierRecommendation supplier = supplierRecommendation(sparePartId);
 
         return new InventoryReplenishmentRecommendationDto(
                 sparePartId,
@@ -194,11 +203,35 @@ public class InventoryReplenishmentRecommendationService {
                 projectedBalance,
                 totalShortageQty,
                 suggestedOrderQty,
+                supplier.supplierId(),
+                supplier.supplierName(),
+                supplier.expectedDeliveryDate(),
                 severity,
                 reason,
                 sources.size(),
                 firstDueAt,
                 sources
+        );
+    }
+
+    private SupplierRecommendation supplierRecommendation(UUID sparePartId) {
+        if (sparePartId == null) {
+            return new SupplierRecommendation(null, null, null);
+        }
+        SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(sparePartId).orElse(null);
+        if (sparePart == null) {
+            return new SupplierRecommendation(null, null, null);
+        }
+        Supplier supplier = sparePart.getPreferredSupplierId() == null
+                ? null
+                : supplierRepository.findByIdAndIsDeletedFalse(sparePart.getPreferredSupplierId()).orElse(null);
+        LocalDate expectedDeliveryDate = sparePart.getLeadTimeDays() == null
+                ? null
+                : LocalDate.now(ZoneOffset.UTC).plusDays(sparePart.getLeadTimeDays());
+        return new SupplierRecommendation(
+                sparePart.getPreferredSupplierId(),
+                supplier == null ? null : supplier.getName(),
+                expectedDeliveryDate
         );
     }
 
@@ -275,5 +308,8 @@ public class InventoryReplenishmentRecommendationService {
     }
 
     private record RecommendationKey(UUID sparePartId, UUID warehouseId) {
+    }
+
+    private record SupplierRecommendation(UUID supplierId, String supplierName, LocalDate expectedDeliveryDate) {
     }
 }

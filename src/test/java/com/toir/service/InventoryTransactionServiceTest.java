@@ -1,8 +1,11 @@
 package com.toir.service;
 
+import com.toir.dto.inventory.InventoryAdjustmentRequest;
 import com.toir.dto.inventory.InventoryIssueRequest;
 import com.toir.dto.inventory.InventoryReceiptRequest;
+import com.toir.dto.inventory.InventoryReturnRequest;
 import com.toir.dto.inventory.InventoryStatisticsDto;
+import com.toir.dto.inventory.InventoryTransferRequest;
 import com.toir.dto.inventory.InventoryTransactionDto;
 import com.toir.entity.Department;
 import com.toir.entity.InventoryTransaction;
@@ -12,6 +15,7 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.users.Employee;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.InventoryAdjustmentReason;
 import com.toir.enums.InventoryTransactionType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
@@ -88,6 +92,9 @@ class InventoryTransactionServiceTest {
     @Mock
     LowStockRecommendationService lowStockRecommendationService;
 
+    @Mock
+    InventoryCostService inventoryCostService;
+
     InventoryTransactionService service;
 
     @BeforeEach
@@ -103,7 +110,8 @@ class InventoryTransactionServiceTest {
                 workOrderRepository,
                 scopeAccessService,
                 auditBuilderService,
-                lowStockRecommendationService
+                lowStockRecommendationService,
+                inventoryCostService
         );
     }
 
@@ -212,6 +220,158 @@ class InventoryTransactionServiceTest {
     }
 
     @Test
+    void transferMovesStockBetweenWarehousesAndCreatesTwoMovements() {
+        UUID sourceWarehouseId = UUID.randomUUID();
+        UUID destinationWarehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID responsibleId = UUID.randomUUID();
+        SparePart sparePart = sparePart(sparePartId, "Filter");
+        WarehouseStock sourceStock = stock(sourceWarehouseId, sparePart, 30, 5);
+        WarehouseStock destinationStock = stock(destinationWarehouseId, sparePart, 7, 0);
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(sourceWarehouseId))
+                .thenReturn(Optional.of(warehouse(sourceWarehouseId, UUID.randomUUID(), "Central")));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(destinationWarehouseId))
+                .thenReturn(Optional.of(warehouse(destinationWarehouseId, UUID.randomUUID(), "Workshop")));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(employee(responsibleId, "Jane", "Smith")));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(sourceWarehouseId, sparePartId))
+                .thenReturn(Optional.of(sourceStock));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(destinationWarehouseId, sparePartId))
+                .thenReturn(Optional.of(destinationStock));
+        when(repository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+
+        var result = service.createTransfer(new InventoryTransferRequest(
+                sourceWarehouseId,
+                destinationWarehouseId,
+                sparePartId,
+                BigDecimal.valueOf(20),
+                "PCS",
+                LocalDate.of(2026, 6, 13),
+                responsibleId,
+                "TRF-2026-0001",
+                "Transfer to workshop"
+        ));
+
+        assertThat(sourceStock.getQuantity()).isEqualTo(10);
+        assertThat(destinationStock.getQuantity()).isEqualTo(27);
+        assertThat(result.type()).isEqualTo(InventoryTransactionType.TRANSFER);
+        assertThat(result.destinationWarehouseId()).isEqualTo(destinationWarehouseId);
+
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(stockMovementRepository, org.mockito.Mockito.times(2)).save(movementCaptor.capture());
+        assertThat(movementCaptor.getAllValues())
+                .extracting(StockMovement::getWarehouseId, StockMovement::getQuantity)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple(sourceWarehouseId, -20.0),
+                        org.assertj.core.groups.Tuple.tuple(destinationWarehouseId, 20.0)
+                );
+    }
+
+    @Test
+    void returnCannotExceedPreviouslyIssuedQuantity() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID responsibleId = UUID.randomUUID();
+        UUID returnedById = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        SparePart sparePart = sparePart(sparePartId, "Filter");
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId))
+                .thenReturn(Optional.of(warehouse(warehouseId, departmentId, "Central")));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(employeeRepository.findByIdAndIsDeletedFalse(returnedById)).thenReturn(Optional.of(employee(returnedById, "Ali", "Valiyev")));
+        when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(employee(responsibleId, "Jane", "Smith")));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder(workOrderId, departmentId, "WO-1")));
+        StockMovement issueMovement = movement(warehouseId, sparePartId, workOrderId, StockMovementType.ISSUE, 10);
+        StockMovement returnMovement = movement(warehouseId, sparePartId, workOrderId, StockMovementType.RETURN, 8);
+        when(stockMovementRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByOccurredAtDesc(workOrderId))
+                .thenReturn(List.of(issueMovement, returnMovement));
+
+        assertThatThrownBy(() -> service.createReturn(new InventoryReturnRequest(
+                warehouseId,
+                sparePartId,
+                BigDecimal.valueOf(3),
+                workOrderId,
+                returnedById,
+                responsibleId,
+                LocalDate.of(2026, 6, 13),
+                "RTN-2026-0001",
+                "Too many"
+        ))).isInstanceOf(RestException.class)
+                .hasMessageContaining("Returned quantity cannot exceed previously issued quantity");
+
+        verify(stockMovementRepository, never()).save(any());
+    }
+
+    @Test
+    void adjustmentSetsActualQuantityAndStoresVarianceReason() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID responsibleId = UUID.randomUUID();
+        SparePart sparePart = sparePart(sparePartId, "Filter");
+        WarehouseStock stock = stock(warehouseId, sparePart, 100, 0);
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId))
+                .thenReturn(Optional.of(warehouse(warehouseId, UUID.randomUUID(), "Central")));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(employee(responsibleId, "Jane", "Smith")));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+        when(repository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+
+        var result = service.createAdjustment(new InventoryAdjustmentRequest(
+                warehouseId,
+                sparePartId,
+                BigDecimal.valueOf(97),
+                InventoryAdjustmentReason.PHYSICAL_COUNT,
+                responsibleId,
+                LocalDate.of(2026, 6, 13),
+                "ADJ-2026-0001",
+                "Physical count"
+        ));
+
+        assertThat(stock.getQuantity()).isEqualTo(97);
+        assertThat(result.actualQuantity()).isEqualByComparingTo("97");
+        assertThat(result.variance()).isEqualByComparingTo("-3");
+        assertThat(result.adjustmentReason()).isEqualTo(InventoryAdjustmentReason.PHYSICAL_COUNT);
+    }
+
+    @Test
+    void reconciliationReportsLatestAdjustmentForScopedStock() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        SparePart sparePart = sparePart(sparePartId, "Filter");
+        WarehouseStock stock = stock(warehouseId, sparePart, 97, 0);
+        InventoryTransaction adjustment = transaction(InventoryTransactionType.ADJUSTMENT, warehouseId, sparePartId, BigDecimal.valueOf(-3));
+        adjustment.setActualQuantity(BigDecimal.valueOf(97));
+        adjustment.setVariance(BigDecimal.valueOf(-3));
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(stock));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(anyCollection()))
+                .thenReturn(List.of(warehouse(warehouseId, UUID.randomUUID(), "Central")));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(anyCollection()))
+                .thenReturn(List.of(sparePart));
+        when(repository.findAdjustmentsForReconciliation(true, List.of()))
+                .thenReturn(List.of(adjustment));
+
+        var result = service.reconciliation(null, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().systemQuantity()).isEqualByComparingTo("97");
+        assertThat(result.getFirst().actualQuantity()).isEqualByComparingTo("97");
+        assertThat(result.getFirst().variance()).isEqualByComparingTo("-3");
+        assertThat(result.getFirst().lastAdjustmentDate()).isEqualTo(LocalDate.of(2026, 6, 13));
+    }
+
+    @Test
     void issueRejectsQuantityGreaterThanAvailableStock() {
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
@@ -316,6 +476,10 @@ class InventoryTransactionServiceTest {
         InventoryStatisticsDto expected = new InventoryStatisticsDto(
                 2,
                 1,
+                0,
+                0,
+                0,
+                3,
                 BigDecimal.valueOf(1000),
                 BigDecimal.ZERO,
                 BigDecimal.valueOf(20),
@@ -414,15 +578,29 @@ class InventoryTransactionServiceTest {
     }
 
     private InventoryTransaction transaction(InventoryTransactionType type, UUID warehouseId, UUID sparePartId) {
+        return transaction(type, warehouseId, sparePartId, BigDecimal.ONE);
+    }
+
+    private InventoryTransaction transaction(InventoryTransactionType type, UUID warehouseId, UUID sparePartId, BigDecimal quantity) {
         InventoryTransaction tx = new InventoryTransaction();
         tx.setId(UUID.randomUUID());
         tx.setType(type);
         tx.setWarehouseId(warehouseId);
         tx.setSparePartId(sparePartId);
-        tx.setQuantity(BigDecimal.ONE);
+        tx.setQuantity(quantity);
         tx.setUnit("PCS");
         tx.setTransactionDate(LocalDate.of(2026, 6, 13));
         return tx;
+    }
+
+    private StockMovement movement(UUID warehouseId, UUID sparePartId, UUID workOrderId, StockMovementType type, double quantity) {
+        StockMovement movement = new StockMovement();
+        movement.setWarehouseId(warehouseId);
+        movement.setSparePartId(sparePartId);
+        movement.setWorkOrderId(workOrderId);
+        movement.setType(type);
+        movement.setQuantity(quantity);
+        return movement;
     }
 
     private <T> T withId(T entity) {

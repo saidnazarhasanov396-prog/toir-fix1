@@ -1,8 +1,12 @@
 package com.toir.entity;
 import com.toir.enums.InventoryItemKind;
+import com.toir.enums.CriticalityLevel;
 
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.math.BigDecimal;
+import java.util.UUID;
 
 @Entity
 @Table(name = "spare_parts")
@@ -40,4 +44,26 @@ public class SparePart extends BaseEntity {
 
     @Column(name = "min_stock", nullable = false)
     private double minStock;
+
+    @Column(name = "preferred_supplier_id")
+    private UUID preferredSupplierId;
+
+    @Column(name = "lead_time_days")
+    private Integer leadTimeDays;
+
+    @Column(name = "last_purchase_price", precision = 19, scale = 2)
+    private BigDecimal lastPurchasePrice;
+
+    @Column(name = "average_cost", precision = 19, scale = 2)
+    private BigDecimal averageCost;
+
+    @Column(name = "last_purchase_cost", precision = 19, scale = 2)
+    private BigDecimal lastPurchaseCost;
+
+    @Column(name = "inventory_value", precision = 19, scale = 2)
+    private BigDecimal inventoryValue;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "criticality", length = 20)
+    private CriticalityLevel criticality = CriticalityLevel.LOW;
 }

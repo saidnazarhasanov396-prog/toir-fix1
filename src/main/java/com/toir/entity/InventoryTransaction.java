@@ -1,6 +1,7 @@
 package com.toir.entity;
 
 import com.toir.enums.InventoryTransactionType;
+import com.toir.enums.InventoryAdjustmentReason;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -45,11 +46,24 @@ public class InventoryTransaction {
     @Column(name = "warehouse_id", nullable = false)
     private UUID warehouseId;
 
+    @Column(name = "destination_warehouse_id")
+    private UUID destinationWarehouseId;
+
     @Column(name = "spare_part_id", nullable = false)
     private UUID sparePartId;
 
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal quantity;
+
+    @Column(name = "actual_quantity", precision = 19, scale = 4)
+    private BigDecimal actualQuantity;
+
+    @Column(name = "variance", precision = 19, scale = 4)
+    private BigDecimal variance;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "adjustment_reason", length = 30)
+    private InventoryAdjustmentReason adjustmentReason;
 
     @Column(length = 30)
     private String unit;

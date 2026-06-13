@@ -198,6 +198,18 @@ class RbacApprovalSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = APPROVAL_APPROVE)
+    void failedApprovalFinalizationReturnsConflict() throws Exception {
+        UUID approvalId = UUID.randomUUID();
+        when(approvalService.approve(any(), any())).thenReturn(approvalDto(approvalId, ApprovalStatus.FAILED));
+
+        mockMvc.perform(post("/api/v1/approvals/{id}/approve", approvalId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(decisionPayload()))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     @WithMockUser(authorities = APPROVAL_REJECT)
     void approvalRejectCanRejectApproval() throws Exception {
         UUID approvalId = UUID.randomUUID();
@@ -261,13 +273,17 @@ class RbacApprovalSecurityTest {
     }
 
     private ApprovalRequestDto approvalDto(UUID id) {
+        return approvalDto(id, ApprovalStatus.PENDING);
+    }
+
+    private ApprovalRequestDto approvalDto(UUID id, ApprovalStatus status) {
         return new ApprovalRequestDto(
                 id,
                 "WORK_ORDER",
                 UUID.randomUUID(),
                 "Approve work order",
                 UUID.randomUUID(),
-                ApprovalStatus.PENDING,
+                status,
                 1,
                 null,
                 "Approval request",
