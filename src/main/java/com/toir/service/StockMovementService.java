@@ -1,6 +1,8 @@
 package com.toir.service;
 
 import com.toir.dto.stockmovement.StockMovementDto;
+import com.toir.dto.stockmovement.StockMovementIssueRequest;
+import com.toir.dto.stockmovement.StockMovementReceiptRequest;
 import com.toir.dto.stockmovement.StockMovementRequest;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
@@ -23,6 +25,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -49,11 +53,33 @@ public class StockMovementService {
 
     @Transactional(readOnly = true)
     public Page<StockMovementDto> findAll(int page, int size) {
+        return findAll(page, size, null, null, null, null, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<StockMovementDto> findAll(
+            int page,
+            int size,
+            StockMovementType type,
+            UUID sparePartId,
+            UUID warehouseId,
+            LocalDate from,
+            LocalDate to,
+            UUID responsiblePersonId,
+            UUID workOrderId
+    ) {
         boolean scopeAdmin = scopeAccessService.isScopeAdmin();
         return repository.findListRows(
                         scopeAdmin,
                         scopeAdmin ? null : scopeAccessService.currentDepartmentIdOrNull(),
                         scopeAdmin ? null : scopeAccessService.currentEmployeeId().orElse(null),
+                        type == null ? null : type.name(),
+                        sparePartId,
+                        warehouseId,
+                        from,
+                        to,
+                        responsiblePersonId,
+                        workOrderId,
                         PaginationUtils.pageRequest(page, size))
                 .map(StockMovementDto::from);
     }
@@ -61,22 +87,12 @@ public class StockMovementService {
     @Transactional
     public StockMovementDto create(StockMovementRequest request) {
         validatePositiveQuantity(request.quantity());
+        assertGenericMovementTypeIsSupported(request.type());
         assertWorkOrderIssueUsesMaterialUsageEndpoint(request);
         assertCanAccessWarehouseId(request.warehouseId());
         assertMovementHasReasonOrSource(request);
 
-        WarehouseStock stock = findStockForMovement(request.warehouseId(), request.sparePartId())
-                .orElseGet(() -> {
-                    SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(request.sparePartId())
-                            .orElseThrow(() -> RestException.notFound("SparePart not found: " + request.sparePartId()));
-                    WarehouseStock s = new WarehouseStock();
-                    s.setWarehouseId(request.warehouseId());
-                    s.setSparePart(sparePart);
-                    s.setQuantity(0);
-                    s.setReservedQty(0);
-                    s.setMinQty(0);
-                    return stockRepository.save(s);
-                });
+        WarehouseStock stock = stockForMovement(request.warehouseId(), request.sparePartId());
 
         switch (request.type()) {
             case RECEIPT, RETURN -> stock.setQuantity(stock.getQuantity() + request.quantity());
@@ -127,6 +143,7 @@ public class StockMovementService {
         movement.setUnitCost(request.unitCost());
         movement.setDocumentNumber(request.documentNumber());
         movement.setNotes(request.notes());
+        movement.setComment(request.notes());
         StockMovement saved = repository.save(movement);
 
         if (shouldEvaluateLowStock(request.type())) {
@@ -146,6 +163,69 @@ public class StockMovementService {
         return StockMovementDto.from(saved);
     }
 
+    @Transactional
+    public StockMovementDto receipt(StockMovementReceiptRequest request) {
+        validatePositiveQuantity(request.quantity());
+        validateOptionalUnitPrice(request.unitPrice());
+        assertCanAccessWarehouseId(request.warehouseId());
+
+        WarehouseStock stock = stockForMovement(request.warehouseId(), request.sparePartId());
+        stock.setQuantity(stock.getQuantity() + request.quantity());
+
+        StockMovement movement = new StockMovement();
+        movement.setWarehouseId(request.warehouseId());
+        movement.setSparePartId(request.sparePartId());
+        movement.setType(StockMovementType.RECEIPT);
+        movement.setQuantity(request.quantity());
+        movement.setUnit(normalizeRequiredToken(request.unit(), "unit"));
+        movement.setUnitPrice(request.unitPrice());
+        movement.setUnitCost(request.unitPrice() == null ? null : request.unitPrice().doubleValue());
+        movement.setTotalAmount(totalAmount(request.quantity(), request.unitPrice()));
+        movement.setMovementDate(defaultDate(request.receivedAt()));
+        movement.setResponsiblePersonId(request.responsiblePersonId());
+        movement.setSupplierName(trimToNull(request.supplierName()));
+        movement.setDocumentNumber(trimToNull(request.documentNumber()));
+        movement.setComment(trimToNull(request.comment()));
+        movement.setNotes(trimToNull(request.comment()));
+
+        StockMovement saved = repository.save(movement);
+        auditMovement(saved);
+        return StockMovementDto.from(saved);
+    }
+
+    @Transactional
+    public StockMovementDto issue(StockMovementIssueRequest request) {
+        validatePositiveQuantity(request.quantity());
+        assertCanAccessWarehouseId(request.warehouseId());
+
+        WarehouseStock stock = stockForMovement(request.warehouseId(), request.sparePartId());
+        if (stock.getAvailable() < request.quantity()) {
+            throw RestException.badRequest("Cannot issue more than available: available="
+                    + stock.getAvailable() + ", requested=" + request.quantity());
+        }
+        stock.setQuantity(stock.getQuantity() - request.quantity());
+
+        StockMovement movement = new StockMovement();
+        movement.setWarehouseId(request.warehouseId());
+        movement.setSparePartId(request.sparePartId());
+        movement.setWorkOrderId(request.workOrderId());
+        movement.setType(StockMovementType.ISSUE);
+        movement.setQuantity(request.quantity());
+        movement.setUnit(normalizeRequiredToken(request.unit(), "unit"));
+        movement.setMovementDate(defaultDate(request.issuedAt()));
+        movement.setTakenById(request.takenById());
+        movement.setResponsiblePersonId(request.responsiblePersonId());
+        movement.setDepartmentId(request.departmentId());
+        movement.setDocumentNumber(trimToNull(request.documentNumber()));
+        movement.setComment(trimToNull(request.comment()));
+        movement.setNotes(trimToNull(request.comment()));
+
+        StockMovement saved = repository.save(movement);
+        lowStockRecommendationService.evaluateStockSafely(stock);
+        auditMovement(saved);
+        return StockMovementDto.from(saved);
+    }
+
     private boolean shouldEvaluateLowStock(StockMovementType type) {
         return type == StockMovementType.ISSUE
                 || type == StockMovementType.TRANSFER
@@ -155,6 +235,18 @@ public class StockMovementService {
     private void validatePositiveQuantity(double quantity) {
         if (quantity <= 0) {
             throw RestException.badRequest("Quantity must be greater than 0");
+        }
+    }
+
+    private void validateOptionalUnitPrice(BigDecimal unitPrice) {
+        if (unitPrice != null && unitPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            throw RestException.badRequest("unitPrice must be greater than 0 when provided");
+        }
+    }
+
+    private void assertGenericMovementTypeIsSupported(StockMovementType type) {
+        if (type == StockMovementType.RESERVATION || type == StockMovementType.RELEASE) {
+            throw RestException.badRequest("Stock reservations must be recorded through /api/v1/reservations");
         }
     }
 
@@ -180,6 +272,57 @@ public class StockMovementService {
         return locked != null && locked.isPresent()
                 ? locked
                 : stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId);
+    }
+
+    private WarehouseStock stockForMovement(UUID warehouseId, UUID sparePartId) {
+        return findStockForMovement(warehouseId, sparePartId)
+                .orElseGet(() -> {
+                    SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)
+                            .orElseThrow(() -> RestException.notFound("SparePart not found: " + sparePartId));
+                    WarehouseStock stock = new WarehouseStock();
+                    stock.setWarehouseId(warehouseId);
+                    stock.setSparePart(sparePart);
+                    stock.setQuantity(0);
+                    stock.setReservedQty(0);
+                    stock.setMinQty(0);
+                    return stockRepository.save(stock);
+                });
+    }
+
+    private BigDecimal totalAmount(double quantity, BigDecimal unitPrice) {
+        return unitPrice == null ? null : unitPrice.multiply(BigDecimal.valueOf(quantity));
+    }
+
+    private LocalDate defaultDate(LocalDate movementDate) {
+        return movementDate == null ? LocalDate.now() : movementDate;
+    }
+
+    private String normalizeRequiredToken(String value, String fieldName) {
+        String token = trimToNull(value);
+        if (token == null) {
+            throw RestException.badRequest(fieldName + " is required");
+        }
+        return token;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private void auditMovement(StockMovement saved) {
+        auditBuilderService.log(
+                "stock_movement",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.STOCK_MOVEMENT,
+                "Движение склада создано",
+                null,
+                saved
+        );
     }
 
     private void assertCanAccessWarehouseId(UUID warehouseId) {

@@ -2,6 +2,7 @@ package com.toir.repository;
 
 import com.toir.entity.SparePart;
 import com.toir.enums.InventoryItemKind;
+import com.toir.enums.SparePartType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -43,6 +44,7 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
 
     @Query(value = """
         select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
+        and (:sparePartType is null or sp.type = :sparePartType)
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern
             or lower(sp.name) like :searchPattern
@@ -53,11 +55,13 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
         order by sp.updatedAt desc
 """)
     Page<SparePart> findAllByFilter(@Param("itemType") InventoryItemKind itemType,
+                                    @Param("sparePartType") SparePartType sparePartType,
                                     @Param("searchPattern") String searchPattern,
                                     Pageable pageable);
 
     @Query(value = """
         select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
+        and (:sparePartType is null or sp.type = :sparePartType)
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern
             or lower(sp.name) like :searchPattern
@@ -75,12 +79,14 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
         order by sp.updatedAt desc
 """)
     Page<SparePart> findAllByFilterAndWarehouseId(@Param("itemType") InventoryItemKind itemType,
+                                                  @Param("sparePartType") SparePartType sparePartType,
                                                   @Param("searchPattern") String searchPattern,
                                                   @Param("warehouseId") UUID warehouseId,
                                                   Pageable pageable);
 
     @Query(value = """
         select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
+        and (:sparePartType is null or sp.type = :sparePartType)
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern
             or lower(sp.name) like :searchPattern
@@ -98,6 +104,7 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
         order by sp.updatedAt desc
 """)
     Page<SparePart> findAllByFilterAndWarehouseIds(@Param("itemType") InventoryItemKind itemType,
+                                                   @Param("sparePartType") SparePartType sparePartType,
                                                    @Param("searchPattern") String searchPattern,
                                                    @Param("warehouseIds") Collection<UUID> warehouseIds,
                                                    Pageable pageable);

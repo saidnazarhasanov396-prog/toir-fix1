@@ -1,5 +1,6 @@
 package com.toir.entity;
 import com.toir.enums.InventoryItemKind;
+import com.toir.enums.SparePartType;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -24,6 +25,10 @@ public class SparePart extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private InventoryItemKind kind = InventoryItemKind.SPARE_PART;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", nullable = false)
+    private SparePartType type = SparePartType.OTHER;
 
     @Column(name = "unit", nullable = false)
     private String unit;

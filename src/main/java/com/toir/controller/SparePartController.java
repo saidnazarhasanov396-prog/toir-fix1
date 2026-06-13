@@ -29,9 +29,10 @@ public class SparePartController {
             @RequestParam(defaultValue = "0", required = false) Integer page,
             @RequestParam(name = "size", defaultValue = "20", required = false) Integer size,
             @RequestParam(required = false)String itemType,
+            @RequestParam(required = false) String type,
             @RequestParam(required = false, defaultValue = "") String search,
             @RequestParam(required = false) UUID warehouseId
-            ) { return ResponseEntity.ok(service.findAll(size, page, itemType, search, warehouseId)); }
+            ) { return ResponseEntity.ok(service.findAll(size, page, itemType, type, search, warehouseId)); }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")

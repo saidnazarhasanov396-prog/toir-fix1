@@ -1,6 +1,7 @@
 package com.toir.repository;
 
 import com.toir.entity.StockMovement;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -28,17 +29,29 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, UU
                 wh.name AS "warehouseName",
                 sm.spare_part_id AS "sparePartId",
                 sp.name AS "sparePartName",
+                sp.type AS "sparePartType",
                 sm.work_order_id AS "workOrderId",
                 wo.number AS "workOrderNumber",
                 wo.title AS "workOrderName",
                 sm.type AS type,
                 sm.quantity AS quantity,
+                sm.unit AS unit,
                 sm.unit_cost AS "unitCost",
+                sm.unit_price AS "unitPrice",
+                sm.total_amount AS "totalAmount",
                 sm.document_number AS "documentNumber",
                 sm.created_by_id AS "createdById",
                 u.full_name AS "createdByFullName",
+                sm.responsible_person_id AS "responsiblePersonId",
+                responsible.full_name AS "responsiblePersonName",
+                sm.taken_by_id AS "takenById",
+                taken.full_name AS "takenByName",
+                sm.department_id AS "departmentId",
+                sm.supplier_name AS "supplierName",
+                sm.movement_date AS "movementDate",
                 sm.occurred_at AS "occurredAt",
-                sm.notes AS notes
+                sm.notes AS notes,
+                sm.comment AS comment
             FROM stock_movements sm
             LEFT JOIN warehouses wh
                 ON wh.id = sm.warehouse_id
@@ -52,12 +65,25 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, UU
             LEFT JOIN users u
                 ON u.id = sm.created_by_id
                 AND u.is_deleted = false
+            LEFT JOIN users responsible
+                ON responsible.id = sm.responsible_person_id
+                AND responsible.is_deleted = false
+            LEFT JOIN users taken
+                ON taken.id = sm.taken_by_id
+                AND taken.is_deleted = false
             WHERE sm.is_deleted = false
               AND (
                   :scopeAdmin = true
                   OR wh.department_id = :departmentId
                   OR wh.responsible_id = :employeeId
               )
+              AND (:type IS NULL OR sm.type = :type)
+              AND (:sparePartId IS NULL OR sm.spare_part_id = :sparePartId)
+              AND (:warehouseId IS NULL OR sm.warehouse_id = :warehouseId)
+              AND (:fromDate IS NULL OR sm.movement_date >= :fromDate)
+              AND (:toDate IS NULL OR sm.movement_date <= :toDate)
+              AND (:responsiblePersonId IS NULL OR sm.responsible_person_id = :responsiblePersonId)
+              AND (:workOrderId IS NULL OR sm.work_order_id = :workOrderId)
             ORDER BY sm.updated_at DESC
             """, countQuery = """
             SELECT COUNT(*)
@@ -71,11 +97,25 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, UU
                   OR wh.department_id = :departmentId
                   OR wh.responsible_id = :employeeId
               )
+              AND (:type IS NULL OR sm.type = :type)
+              AND (:sparePartId IS NULL OR sm.spare_part_id = :sparePartId)
+              AND (:warehouseId IS NULL OR sm.warehouse_id = :warehouseId)
+              AND (:fromDate IS NULL OR sm.movement_date >= :fromDate)
+              AND (:toDate IS NULL OR sm.movement_date <= :toDate)
+              AND (:responsiblePersonId IS NULL OR sm.responsible_person_id = :responsiblePersonId)
+              AND (:workOrderId IS NULL OR sm.work_order_id = :workOrderId)
             """, nativeQuery = true)
     Page<StockMovementListRow> findListRows(
             @Param("scopeAdmin") boolean scopeAdmin,
             @Param("departmentId") UUID departmentId,
             @Param("employeeId") UUID employeeId,
+            @Param("type") String type,
+            @Param("sparePartId") UUID sparePartId,
+            @Param("warehouseId") UUID warehouseId,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate,
+            @Param("responsiblePersonId") UUID responsiblePersonId,
+            @Param("workOrderId") UUID workOrderId,
             Pageable pageable);
 
     @Query(value = "SELECT * FROM stock_movements WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)

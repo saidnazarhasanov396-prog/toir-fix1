@@ -45,6 +45,7 @@ class SparePartRepositoryFilterTest {
         Page<SparePart> result = repository.findAllByFilterAndWarehouseId(
                 null,
                 null,
+                null,
                 warehouseA.getId(),
                 PageRequest.of(0, 20)
         );
@@ -65,6 +66,7 @@ class SparePartRepositoryFilterTest {
         Page<SparePart> result = repository.findAllByFilterAndWarehouseId(
                 InventoryItemKind.MATERIAL,
                 null,
+                null,
                 warehouse.getId(),
                 PageRequest.of(0, 20)
         );
@@ -83,6 +85,7 @@ class SparePartRepositoryFilterTest {
         saveStock(warehouse, nut, 3, false);
 
         Page<SparePart> result = repository.findAllByFilterAndWarehouseId(
+                null,
                 null,
                 "%bolt%",
                 warehouse.getId(),
@@ -108,6 +111,7 @@ class SparePartRepositoryFilterTest {
         saveStock(warehouseB, deletedScopedStock, 4, false);
 
         Page<SparePart> result = repository.findAllByFilterAndWarehouseIds(
+                null,
                 null,
                 null,
                 List.of(warehouseA.getId()),

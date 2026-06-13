@@ -2,6 +2,7 @@ package com.toir.dto.sparepart;
 
 import com.toir.enums.InventoryItemKind;
 import com.toir.entity.SparePart;
+import com.toir.enums.SparePartType;
 
 import java.util.UUID;
 
@@ -23,9 +24,30 @@ public record SparePartDto(
         double currentStock,
         double reservedStock,
         double availableStock,
-        int warehouseCount
+        int warehouseCount,
+        SparePartType type
 ) {
     public record UnitRef(String code, String name) {}
+
+    public SparePartDto(
+            UUID id,
+            String entityType,
+            String code,
+            String name,
+            String kind,
+            UnitRef unit,
+            String manufacturer,
+            String sku,
+            String specification,
+            double minStock,
+            double currentStock,
+            double reservedStock,
+            double availableStock,
+            int warehouseCount
+    ) {
+        this(id, entityType, code, name, kind, unit, manufacturer, sku, specification, minStock,
+                currentStock, reservedStock, availableStock, warehouseCount, SparePartType.OTHER);
+    }
 
     public static SparePartDto from(SparePart s) {
         return from(s, 0, 0, 0, unitRef(s.getUnit()));
@@ -56,7 +78,8 @@ public record SparePartDto(
                 currentStock,
                 reservedStock,
                 Math.max(0, currentStock - reservedStock),
-                warehouseCount
+                warehouseCount,
+                s.getType() != null ? s.getType() : SparePartType.OTHER
         );
     }
 

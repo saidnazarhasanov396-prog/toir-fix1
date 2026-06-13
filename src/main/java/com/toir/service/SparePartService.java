@@ -9,6 +9,8 @@ import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.InventoryItemKind;
+import com.toir.enums.SparePartType;
+import com.toir.enums.SparePartUnit;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.UnitOfMeasurementRepository;
@@ -47,10 +49,23 @@ public class SparePartService {
 
     @Transactional(readOnly = true)
     public Page<SparePartDto> findAll(Integer pageSize, Integer page, String itemType, String search, UUID warehouseId) {
+        return findAll(pageSize, page, itemType, null, search, warehouseId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SparePartDto> findAll(
+            Integer pageSize,
+            Integer page,
+            String itemType,
+            String type,
+            String search,
+            UUID warehouseId
+    ) {
         int safePage = Math.max(page != null ? page : 0, 0);
         int safePageSize = Math.max(pageSize != null ? pageSize : 20, 1);
         Pageable pageable = PaginationUtils.pageRequest(safePage, safePageSize);
         InventoryItemKind inventoryItemKind = mapItemType(itemType);
+        SparePartType sparePartType = mapSparePartType(type);
         String searchPattern = toSearchPattern(search);
 
         List<UUID> scopedWarehouseIds = null;
@@ -59,6 +74,7 @@ public class SparePartService {
             assertCanAccessWarehouseId(warehouseId);
             parts = repository.findAllByFilterAndWarehouseId(
                     inventoryItemKind,
+                    sparePartType,
                     searchPattern,
                     warehouseId,
                     pageable
@@ -66,6 +82,7 @@ public class SparePartService {
         } else if (scopeAccessService.isScopeAdmin()) {
             parts = repository.findAllByFilter(
                     inventoryItemKind,
+                    sparePartType,
                     searchPattern,
                     pageable
             );
@@ -76,6 +93,7 @@ public class SparePartService {
             }
             parts = repository.findAllByFilterAndWarehouseIds(
                     inventoryItemKind,
+                    sparePartType,
                     searchPattern,
                     scopedWarehouseIds,
                     pageable
@@ -137,6 +155,21 @@ public class SparePartService {
             case "CONSUMABLE", "CONSUMABLES" -> InventoryItemKind.CONSUMABLE;
             default -> throw RestException.badRequest("Invalid itemType: " + itemType);
         };
+    }
+
+    private SparePartType mapSparePartType(String type) {
+        if (type == null) {
+            return null;
+        }
+        String normalized = type.trim();
+        if (normalized.isEmpty() || normalized.equalsIgnoreCase("ALL")) {
+            return null;
+        }
+        try {
+            return SparePartType.valueOf(normalized.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw RestException.badRequest("Invalid type: " + type);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -215,10 +248,37 @@ public class SparePartService {
         entity.setName(request.name());
         entity.setSku(request.sku());
         if (request.kind() != null) entity.setKind(request.kind());
-        entity.setUnit(unitOfMeasurementService.normalizeRequiredUnitOrThrow(request.unit(), "spare part unit"));
+        SparePartType type = request.type() != null ? request.type() : SparePartType.OTHER;
+        entity.setType(type);
+        entity.setUnit(resolveUnit(request.unit(), type));
         entity.setSpecification(request.specification());
         entity.setManufacturer(request.manufacturer());
         entity.setMinStock(request.minStock());
+    }
+
+    private String resolveUnit(String rawUnit, SparePartType type) {
+        String token = rawUnit == null ? null : rawUnit.trim();
+        if (token == null || token.isBlank()) {
+            return defaultUnit(type).name();
+        }
+        try {
+            String normalized = unitOfMeasurementService.normalizeOptionalUnitOrNull(token);
+            if (normalized != null && !normalized.isBlank()) {
+                return normalized;
+            }
+        } catch (RestException ignored) {
+            // Spare part units remain flexible; the UoM dictionary is a normalization aid, not a hard policy.
+        }
+        return token;
+    }
+
+    private SparePartUnit defaultUnit(SparePartType type) {
+        return switch (type != null ? type : SparePartType.OTHER) {
+            case OIL, CHEMICAL -> SparePartUnit.LITER;
+            case GREASE, RAW_MATERIAL -> SparePartUnit.KG;
+            case BELT -> SparePartUnit.METER;
+            case FILTER, BEARING, ELECTRICAL, MECHANICAL, FASTENER, CONSUMABLE, OTHER -> SparePartUnit.PCS;
+        };
     }
 
     private String nextCode() {
