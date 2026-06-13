@@ -68,6 +68,21 @@ public class ApprovalRequest extends BaseEntity {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
+    @Column(name = "escalated_at")
+    private Instant escalatedAt;
+
+    @Column(name = "executed", nullable = false)
+    private boolean executed;
+
+    @Column(name = "executed_at")
+    private Instant executedAt;
+
+    @Column(name = "execution_id")
+    private UUID executionId;
+
     @Column(columnDefinition = "text")
     private String description;
 

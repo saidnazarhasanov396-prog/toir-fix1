@@ -1,6 +1,7 @@
 package com.toir.service.maintanance;
 
 import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
+import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.maintenancedue.MaintenanceDueEventDto;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
@@ -9,6 +10,7 @@ import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.enums.ApprovalActionType;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.DuplicatePolicy;
@@ -35,6 +37,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.security.SecurityAccessService;
 import com.toir.service.WorkOrderNumberService;
 import com.toir.service.WorkOrderService;
+import com.toir.service.ApprovalService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -52,6 +55,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -77,6 +81,7 @@ public class MaintenanceAutomationService {
     private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
     private final SecurityAccessService securityAccessService;
     private final MaintenanceAutomationNotificationService notificationService;
+    private final ObjectProvider<ApprovalService> approvalServiceProvider;
 
     @Transactional
     public EvaluationResult evaluateEquipment(UUID equipmentId, MaintenanceTriggerSource source) {
@@ -230,30 +235,23 @@ public class MaintenanceAutomationService {
     }
 
     @Transactional
-    public MaintenanceDueEventDto approveDueEvent(UUID eventId, UUID userId) {
+    public ApprovalRequestDto approveDueEvent(UUID eventId, UUID userId) {
         MaintenanceDueEvent event = eventService.getOrThrow(eventId);
         eventService.assertCanAccessEvent(event);
         if (isBlocked(event)) {
-            return blockedEventDto(event);
+            blockedEventDto(event);
+            throw RestException.badRequest("Blocked maintenance due events cannot be approved");
         }
         if (event.getStatus() != MaintenanceDueEventStatus.AWAITING_APPROVAL
                 && event.getStatus() != MaintenanceDueEventStatus.DETECTED) {
-            return eventService.toDto(event);
+            throw RestException.conflict("Maintenance due event is already processed: " + event.getStatus());
         }
         EquipmentMaintenanceEffectiveRule rule = effectiveRule(event);
         enforceApprovalAuthority(rule);
         Equipment equipment = equipment(event);
-        if (approvalResultAction(rule) == ApprovalResultAction.CREATE_TASK) {
-            createTask(event, rule, userId);
-        } else {
-            WorkOrderDto workOrder = createWorkOrder(event, rule, userId);
-            if (workOrder != null) {
-                notificationService.notifyWorkOrderCreated(event, rule, equipment);
-            }
-        }
-        log.info("maintenance_due_event_approved eventId={} equipmentId={} regulationId={} ruleId={} userId={} status={}",
-                eventId, event.getEquipmentId(), event.getRegulationId(), event.getEquipmentMaintenanceRuleId(), userId, event.getStatus());
-        return eventService.toDto(eventRepository.save(event));
+        event.setStatus(MaintenanceDueEventStatus.AWAITING_APPROVAL);
+        eventRepository.save(event);
+        return createOrReuseApprovalRequest(event, rule, equipment, userId);
     }
 
     @Transactional
@@ -317,6 +315,7 @@ public class MaintenanceAutomationService {
         int notifications = notificationService.notifyEventStatus(event, rule, equipment);
         if (event.getStatus() == MaintenanceDueEventStatus.AWAITING_APPROVAL) {
             notifications += notificationService.notifyRequiresApproval(event, rule, equipment);
+            createOrReuseApprovalRequest(event, rule, equipment, userId);
         }
         if (!canCreateDownstream(due.status())
                 || rule.automationAction() == AutomationAction.TRACK_ONLY
@@ -376,6 +375,49 @@ public class MaintenanceAutomationService {
         return rule.automationAction() == AutomationAction.CREATE_WORK_ORDER
                 ? ApprovalResultAction.CREATE_WORK_ORDER
                 : ApprovalResultAction.CREATE_TASK;
+    }
+
+    @Transactional
+    public String finalizeDueEventApproval(UUID eventId, ApprovalActionType actionType, UUID userId) {
+        MaintenanceDueEvent event = eventService.getOrThrow(eventId);
+        if (event.getStatus() != MaintenanceDueEventStatus.AWAITING_APPROVAL
+                && event.getStatus() != MaintenanceDueEventStatus.DETECTED) {
+            throw RestException.conflict("Maintenance due event is already processed: " + event.getStatus());
+        }
+        if (event.getCreatedTaskId() != null || event.getCreatedWorkOrderId() != null) {
+            throw RestException.conflict("Maintenance due event already has a downstream item");
+        }
+        if (isBlocked(event)) {
+            event.setStatus(MaintenanceDueEventStatus.DETECTED);
+            eventRepository.save(event);
+            throw RestException.badRequest("Blocked maintenance due events cannot be finalized");
+        }
+        EquipmentMaintenanceEffectiveRule rule = effectiveRule(event);
+        Equipment equipment = equipment(event);
+        if (actionType == ApprovalActionType.CREATE_WORK_ORDER) {
+            WorkOrderDto workOrder = createWorkOrder(event, rule, userId);
+            if (workOrder != null) {
+                notificationService.notifyWorkOrderCreated(event, rule, equipment);
+            }
+            eventRepository.save(event);
+            return "{\"status\":\"WORK_ORDER_CREATED\"}";
+        }
+        PprTask task = createTask(event, rule, userId);
+        eventRepository.save(event);
+        return task == null ? "{\"status\":\"SUPPRESSED_DUPLICATE\"}" : "{\"status\":\"TASK_CREATED\"}";
+    }
+
+    @Transactional
+    public String rejectDueEventApproval(UUID eventId, String reason) {
+        MaintenanceDueEvent event = eventService.getOrThrow(eventId);
+        if (event.getCreatedTaskId() != null || event.getCreatedWorkOrderId() != null) {
+            throw RestException.conflict("Maintenance due event already has a downstream item");
+        }
+        event.setStatus(MaintenanceDueEventStatus.CANCELLED);
+        event.setResolvedAt(Instant.now());
+        event.setResolutionReason(StringUtils.hasText(reason) ? reason.trim() : "Approval rejected");
+        eventRepository.save(event);
+        return "{\"status\":\"CANCELLED\"}";
     }
 
     private boolean isDuplicateSuppressed(EquipmentMaintenanceEffectiveRule rule, MaintenanceDueEvent event) {
@@ -702,6 +744,37 @@ public class MaintenanceAutomationService {
             return addition;
         }
         return base + "; " + addition;
+    }
+
+    private ApprovalRequestDto createOrReuseApprovalRequest(MaintenanceDueEvent event,
+                                                            EquipmentMaintenanceEffectiveRule rule,
+                                                            Equipment equipment,
+                                                            UUID requesterId) {
+        ApprovalActionType actionType = approvalResultAction(rule) == ApprovalResultAction.CREATE_WORK_ORDER
+                ? ApprovalActionType.CREATE_WORK_ORDER
+                : ApprovalActionType.CREATE_TASK;
+        UUID effectiveRequesterId = requesterId == null ? effectiveUserId(null) : requesterId;
+        UUID approverId = effectiveApproverId(rule, equipment, effectiveRequesterId);
+        return approvalServiceProvider.getObject().createOrReuseSystemApprovalForDocument(
+                "MAINTENANCE_DUE_EVENT",
+                event.getId(),
+                actionType,
+                effectiveRequesterId,
+                approverId,
+                StringUtils.hasText(rule.approvalRole()) ? rule.approvalRole() : "MAINTENANCE_EVENT_APPROVER",
+                "Maintenance due event approval: " + event.getCycleKey(),
+                "Approval request for maintenance due event " + event.getCycleKey()
+        );
+    }
+
+    private UUID effectiveApproverId(EquipmentMaintenanceEffectiveRule rule, Equipment equipment, UUID fallbackUserId) {
+        if (rule.defaultResponsibleId() != null) {
+            return rule.defaultResponsibleId();
+        }
+        if (equipment.getResponsibleId() != null) {
+            return equipment.getResponsibleId();
+        }
+        return fallbackUserId;
     }
 
     private record EvaluationOutcome(

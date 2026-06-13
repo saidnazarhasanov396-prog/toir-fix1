@@ -27,6 +27,12 @@ public class ApprovalStep extends BaseEntity {
     @Column(name = "approver_id", nullable = false)
     private UUID approverId;
 
+    @Column(name = "decided_by_id")
+    private UUID decidedById;
+
+    @Column(name = "delegated_for_id")
+    private UUID delegatedForId;
+
     @Column(name = "approver_role")
     private String approverRole;
 
@@ -39,4 +45,8 @@ public class ApprovalStep extends BaseEntity {
 
     @Column(columnDefinition = "text")
     private String comment;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 }

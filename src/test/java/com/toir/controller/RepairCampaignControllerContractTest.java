@@ -4,6 +4,7 @@ import com.toir.controller.repair.RepairCampaignController;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairCampaignService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,11 +30,14 @@ class RepairCampaignControllerContractTest {
     @Mock
     private RepairCampaignService service;
 
+    @Mock
+    private ApprovalService approvalService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, approvalService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

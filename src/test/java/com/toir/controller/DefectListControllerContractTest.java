@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.controller.defects.DefectListController;
 import com.toir.dto.defectlist.DefectListStatsResponse;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.service.ApprovalService;
 import com.toir.service.defects.DefectListService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,12 +27,15 @@ class DefectListControllerContractTest {
     @Mock
     DefectListService service;
 
+    @Mock
+    ApprovalService approvalService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new DefectListController(service))
+                .standaloneSetup(new DefectListController(service, approvalService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

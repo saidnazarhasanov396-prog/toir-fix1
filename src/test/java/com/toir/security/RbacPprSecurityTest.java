@@ -78,6 +78,9 @@ class RbacPprSecurityTest {
     @MockBean
     ScopeAccessService scopeAccessService;
 
+    @MockBean
+    ApprovalService approvalService;
+
 
 
     @BeforeEach

@@ -12,6 +12,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.service.ApprovalService;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,12 +66,15 @@ class PprPbacScopeTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    ApprovalService approvalService;
+
     MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new PprPlanController(service, generatorService, planRepository, taskRepository, scopeAccessService)
+                        new PprPlanController(service, generatorService, planRepository, taskRepository, scopeAccessService, approvalService)
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

@@ -3,6 +3,7 @@ package com.toir.security;
 import com.toir.controller.ActualCostController;
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.enums.ActualCostStatus;
+import com.toir.service.ApprovalService;
 import com.toir.service.ActualCostService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +46,9 @@ class RbacActualCostSecurityTest {
 
     @MockBean
     ActualCostService actualCostService;
+
+    @MockBean
+    ApprovalService approvalService;
 
     @TestConfiguration
     static class SecurityBeans {
@@ -129,13 +133,11 @@ class RbacActualCostSecurityTest {
     void actualCostRejectCanRejectActualCost() throws Exception {
         UUID id = UUID.randomUUID();
         UUID reviewerId = UUID.randomUUID();
-        when(actualCostService.review(eq(id), eq(false), eq(reviewerId), eq("Rejected")))
-                .thenReturn(actualCostDto(ActualCostStatus.REJECTED));
 
         mockMvc.perform(post("/api/v1/actual-costs/{id}/reject", id)
                         .param("reviewerId", reviewerId.toString())
                         .param("comment", "Rejected"))
-                .andExpect(status().isOk());
+                .andExpect(status().isConflict());
     }
 
     @Test

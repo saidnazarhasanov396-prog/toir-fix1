@@ -9,6 +9,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
 import com.toir.enums.RequestStatus;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairRequestService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,6 +59,9 @@ class RbacRepairRequestSecurityTest {
 
     @MockBean
     RepairRequestService repairRequestService;
+
+    @MockBean
+    ApprovalService approvalService;
 
     @MockBean
     RepairRequestRepository repairRequestRepository;
@@ -192,8 +196,6 @@ class RbacRepairRequestSecurityTest {
     @WithMockUser(authorities = PermissionConstants.REPAIR_REQUEST_APPROVE)
     void repairRequestApproveCanUseExplicitApproveButCannotUseGenericStatusOverride() throws Exception {
         UUID requestId = UUID.randomUUID();
-        when(repairRequestService.approve(requestId))
-                .thenReturn(repairRequestDto(requestId));
 
         mockMvc.perform(post("/api/v1/repair-requests/{id}/approve", requestId))
                 .andExpect(status().isOk());
@@ -271,11 +273,10 @@ class RbacRepairRequestSecurityTest {
     @WithMockUser(authorities = PermissionConstants.REPAIR_REQUEST_REJECT)
     void repairRequestRejectCanRejectRequest() throws Exception {
         UUID requestId = UUID.randomUUID();
-        when(repairRequestService.reject(requestId, "Invalid request")).thenReturn(repairRequestDto(requestId));
 
         mockMvc.perform(post("/api/v1/repair-requests/{id}/reject", requestId)
                         .param("reason", "Invalid request"))
-                .andExpect(status().isOk());
+                .andExpect(status().isConflict());
     }
 
     @Test

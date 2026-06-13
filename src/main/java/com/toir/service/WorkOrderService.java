@@ -605,11 +605,7 @@ public class WorkOrderService {
     @Transactional
     public WorkOrderDto approve(UUID id, UUID approverId) {
         WorkOrder entity = getOrThrow(id);
-        if (entity.getStatus() != WorkOrderStatus.DRAFT && entity.getStatus() != WorkOrderStatus.PLANNED) {
-            throw RestException.badRequest("Only DRAFT/PLANNED work orders can be approved");
-        }
-        assertDefectListGate(entity);
-        validatePerformerSkillsForWorkOrder(entity);
+        validateCanApprove(entity);
         entity.setStatus(WorkOrderStatus.APPROVED);
         entity.setApprovedById(approverId);
         ensureReplacementEquipmentReservedOnStart(entity);
@@ -628,6 +624,21 @@ public class WorkOrderService {
         notifyAssignedPerformer(saved);
 
         return toDto(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public WorkOrderDto validateCanApprove(UUID id) {
+        WorkOrder entity = getOrThrow(id);
+        validateCanApprove(entity);
+        return toDto(entity);
+    }
+
+    private void validateCanApprove(WorkOrder entity) {
+        if (entity.getStatus() != WorkOrderStatus.DRAFT && entity.getStatus() != WorkOrderStatus.PLANNED) {
+            throw RestException.badRequest("Only DRAFT/PLANNED work orders can be approved");
+        }
+        assertDefectListGate(entity);
+        validatePerformerSkillsForWorkOrder(entity);
     }
 
     @Transactional

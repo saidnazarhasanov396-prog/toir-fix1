@@ -152,10 +152,9 @@ class RbacProcurementSecurityTest {
     @WithMockUser(authorities = PermissionConstants.PROCUREMENT_REJECT)
     void procurementRejectCanRejectRequest() throws Exception {
         UUID requestId = UUID.randomUUID();
-        when(procurementRequestService.reject(requestId, "duplicate")).thenReturn(procurementRequestDto(requestId));
 
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/reject?reason=duplicate", requestId))
-                .andExpect(status().isOk());
+                .andExpect(status().isConflict());
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.enums.ActualCostStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
+import com.toir.service.ApprovalService;
 import com.toir.service.ActualCostService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,11 +32,14 @@ class ActualCostControllerContractTest {
     @Mock
     ActualCostService service;
 
+    @Mock
+    ApprovalService approvalService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new ActualCostController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new ActualCostController(service, approvalService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -57,14 +61,12 @@ class ActualCostControllerContractTest {
     void rejectWithBlankCommentShouldReturnBadRequest() throws Exception {
         UUID id = UUID.randomUUID();
         UUID reviewerId = UUID.randomUUID();
-        when(service.review(id, false, reviewerId, "   "))
-                .thenThrow(RestException.badRequest("Rejection comment is required"));
 
         mockMvc.perform(post("/api/v1/actual-costs/{id}/reject", id)
                         .param("reviewerId", reviewerId.toString())
                         .param("comment", "   "))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Rejection comment is required"));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Use /api/v1/approvals/{id}/reject to reject approval requests"));
     }
 
     @Test
@@ -86,14 +88,12 @@ class ActualCostControllerContractTest {
                 Instant.now(),
                 null
         );
-        when(service.review(id, false, reviewerId, "Reason")).thenReturn(dto);
 
         mockMvc.perform(post("/api/v1/actual-costs/{id}/reject", id)
                         .param("reviewerId", reviewerId.toString())
                         .param("comment", "Reason"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("REJECTED"))
-                .andExpect(jsonPath("$.reviewComment").value("Reason"));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Use /api/v1/approvals/{id}/reject to reject approval requests"));
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.toir.security;
 
+import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.controller.equipment.EquipmentMaintenanceAutomationController;
 import com.toir.controller.maintenance.MaintenanceDueEventController;
 import com.toir.controller.maintenance.MaintenanceRegulationController;
@@ -7,6 +8,7 @@ import com.toir.dto.maintenancedue.MaintenanceDueEventDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationImpactDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationPreviewDto;
+import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
@@ -18,6 +20,7 @@ import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.service.maintanance.MaintenanceAutomationService;
+import com.toir.service.ApprovalService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.service.maintanance.MaintenanceImpactService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
@@ -83,6 +86,9 @@ class RbacMaintenanceAutomationSecurityTest {
 
     @MockBean
     MaintenanceAutomationService maintenanceAutomationService;
+
+    @MockBean
+    ApprovalService approvalService;
 
     @MockBean
     ScopeAccessService scopeAccessService;
@@ -171,7 +177,7 @@ class RbacMaintenanceAutomationSecurityTest {
     @WithMockUser(authorities = PermissionConstants.MAINTENANCE_EVENT_APPROVE)
     void maintenanceEventApproveCanApproveDueEvent() throws Exception {
         UUID eventId = UUID.randomUUID();
-        when(maintenanceAutomationService.approveDueEvent(eq(eventId), any())).thenReturn(dueEventDto(eventId));
+        when(maintenanceAutomationService.approveDueEvent(eq(eventId), any())).thenReturn(approvalDto(eventId));
 
         mockMvc.perform(post("/api/v1/maintenance-due-events/{id}/approve", eventId))
                 .andExpect(status().isOk());
@@ -298,6 +304,22 @@ class RbacMaintenanceAutomationSecurityTest {
                 null,
                 null,
                 null
+        );
+    }
+
+    private ApprovalRequestDto approvalDto(UUID documentId) {
+        return new ApprovalRequestDto(
+                UUID.randomUUID(),
+                "MAINTENANCE_DUE_EVENT",
+                documentId,
+                "Maintenance due event approval",
+                UUID.randomUUID(),
+                ApprovalStatus.PENDING,
+                1,
+                null,
+                "Approval request",
+                Instant.parse("2026-06-03T00:00:00Z"),
+                List.of()
         );
     }
 }

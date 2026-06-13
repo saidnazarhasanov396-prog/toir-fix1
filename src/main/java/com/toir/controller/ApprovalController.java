@@ -1,15 +1,20 @@
 package com.toir.controller;
 
+import com.toir.dto.approval.ApprovalHistoryDto;
+import com.toir.dto.approval.ApprovalAnalyticsDto;
 import com.toir.dto.approval.ApprovalRequestDto;
+import com.toir.dto.approval.ApprovalStatisticsDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
 import com.toir.enums.ApprovalStatus;
 import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.ApprovalService;
+import com.toir.service.approval.ApprovalAnalyticsService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -28,6 +33,7 @@ import org.springframework.web.bind.annotation.*;
 public class ApprovalController {
 
     private final ApprovalService service;
+    private final ApprovalAnalyticsService analyticsService;
 
 
     @GetMapping
@@ -54,6 +60,31 @@ public class ApprovalController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_READ')")
     public ResponseEntity<ApprovalRequestDto> get(@PathVariable UUID id) {
         return ResponseEntity.ok(service.findById(id));
+    }
+
+    @GetMapping("/statistics")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_READ')")
+    public ResponseEntity<ApprovalStatisticsDto> statistics() {
+        return ResponseEntity.ok(service.statistics());
+    }
+
+    @GetMapping("/analytics")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_READ')")
+    public ResponseEntity<ApprovalAnalyticsDto> analytics() {
+        return ResponseEntity.ok(analyticsService.dashboard());
+    }
+
+    @GetMapping("/overdue")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_READ')")
+    public ResponseEntity<Page<ApprovalRequestDto>> overdue(@RequestParam(defaultValue = "0") int page,
+                                                            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.overdue(), page, size));
+    }
+
+    @GetMapping("/{id}/history")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_READ')")
+    public ResponseEntity<List<ApprovalHistoryDto>> history(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.history(id));
     }
 
     @PostMapping

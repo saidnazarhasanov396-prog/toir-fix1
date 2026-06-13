@@ -5,6 +5,7 @@ import com.toir.dto.defectlist.DefectListDto;
 import com.toir.dto.defectlist.DefectListLineDto;
 import com.toir.dto.defectlist.DefectListStatsResponse;
 import com.toir.enums.DefectListStatus;
+import com.toir.service.ApprovalService;
 import com.toir.service.defects.DefectListService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +52,9 @@ class RbacDefectListSecurityTest {
 
     @MockBean
     DefectListService defectListService;
+
+    @MockBean
+    ApprovalService approvalService;
 
     @TestConfiguration
     static class SecurityBeans {
@@ -186,7 +190,7 @@ class RbacDefectListSecurityTest {
     void defectListApproveCanApproveDefectList() throws Exception {
         UUID listId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();
-        when(defectListService.approve(listId, approverId)).thenReturn(defectListDto(listId));
+        when(defectListService.findById(listId)).thenReturn(defectListDto(listId));
 
         mockMvc.perform(post("/api/v1/defect-lists/{id}/approve", listId)
                         .param("approverId", approverId.toString()))

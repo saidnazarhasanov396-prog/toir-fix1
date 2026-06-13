@@ -1,4 +1,5 @@
 package com.toir.controller.repair;
+import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestClarificationRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
@@ -10,6 +11,7 @@ import com.toir.enums.RequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairRequestService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.*;
 public class RepairRequestController {
 
     private final RepairRequestService service;
+    private final ApprovalService approvalService;
     private final RepairRequestRepository repository;
     private final ScopeAccessService scopeAccessService;
 
@@ -91,9 +94,18 @@ public class RepairRequestController {
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_APPROVE')")
-    public ResponseEntity<RepairRequestDto> approve(@PathVariable UUID id) {
-        assertCanMutateRequest(requestOrThrow(id));
-        return ResponseEntity.ok(service.approve(id));
+    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id,
+                                                      @RequestParam(required = false) UUID approverId) {
+        RepairRequest repairRequest = requestOrThrow(id);
+        assertCanMutateRequest(repairRequest);
+        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
+                "REPAIR_REQUEST",
+                id,
+                null,
+                approverId,
+                "REPAIR_REQUEST_APPROVER",
+                "Repair request approval: " + repairRequest.getNumber(),
+                "Approval workflow request for repair request " + repairRequest.getNumber()));
     }
 
     @PostMapping("/{id}/close")
@@ -114,7 +126,7 @@ public class RepairRequestController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_REJECT')")
     public ResponseEntity<RepairRequestDto> reject(@PathVariable UUID id, @RequestParam String reason) {
         assertCanMutateRequest(requestOrThrow(id));
-        return ResponseEntity.ok(service.reject(id, reason));
+        throw RestException.conflict("Use /api/v1/approvals/{id}/reject to reject approval requests");
     }
 
     @PostMapping("/{id}/request-clarification")

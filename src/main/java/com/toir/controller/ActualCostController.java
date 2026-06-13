@@ -1,6 +1,10 @@
 package com.toir.controller;
 import com.toir.dto.actualcost.ActualCostDto;
+import com.toir.dto.approval.ApprovalRequestDto;
+import com.toir.enums.ApprovalActionType;
+import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
+import com.toir.service.ApprovalService;
 import com.toir.service.ActualCostService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 public class ActualCostController {
 
     private final ActualCostService service;
+    private final ApprovalService approvalService;
 
     @GetMapping("/pending")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ')")
@@ -45,13 +50,23 @@ public class ActualCostController {
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_APPROVE')")
-    public ResponseEntity<ActualCostDto> approve(@PathVariable UUID id, @RequestParam UUID reviewerId, @RequestParam(required = false) String comment) {
-        return ResponseEntity.ok(service.review(id, true, reviewerId, comment));
+    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id,
+                                                      @RequestParam(required = false) UUID reviewerId,
+                                                      @RequestParam(required = false) String comment) {
+        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
+                "ACTUAL_COST",
+                id,
+                ApprovalActionType.APPROVE,
+                null,
+                reviewerId,
+                "ACTUAL_COST_APPROVER",
+                "Actual cost approval: " + id,
+                comment));
     }
 
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_REJECT')")
     public ResponseEntity<ActualCostDto> reject(@PathVariable UUID id, @RequestParam UUID reviewerId, @RequestParam String comment) {
-        return ResponseEntity.ok(service.review(id, false, reviewerId, comment));
+        throw RestException.conflict("Use /api/v1/approvals/{id}/reject to reject approval requests");
     }
 }

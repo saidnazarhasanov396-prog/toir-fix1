@@ -1,5 +1,6 @@
 package com.toir.controller;
 
+import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.pprplanning.CompletePprTaskRequest;
 import com.toir.dto.pprplanning.PostponeTaskRequest;
 import com.toir.dto.pprplanning.PprPlanDto;
@@ -9,11 +10,13 @@ import com.toir.dto.pprplanning.PprTaskDto;
 import com.toir.dto.pprplanning.PprTaskRequest;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
+import com.toir.enums.ApprovalActionType;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.ApprovalService;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
 
@@ -62,18 +65,21 @@ public class PprPlanController {
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
     private final ScopeAccessService scopeAccessService;
+    private final ApprovalService approvalService;
 
     @Autowired
     public PprPlanController(PprPlanService service,
                              PprGeneratorService generatorService,
                              PprPlanRepository planRepository,
                              PprTaskRepository taskRepository,
-                             ScopeAccessService scopeAccessService) {
+                             ScopeAccessService scopeAccessService,
+                             ApprovalService approvalService) {
         this.service = service;
         this.generatorService = generatorService;
         this.planRepository = planRepository;
         this.taskRepository = taskRepository;
         this.scopeAccessService = scopeAccessService;
+        this.approvalService = approvalService;
     }
 
     @GetMapping
@@ -149,10 +155,21 @@ public class PprPlanController {
 
     @PostMapping("/{id}/approve")
     @PreAuthorize(PPR_PLAN_APPROVE_AUTH)
-    public ResponseEntity<PprPlanDto> approve(@PathVariable UUID id, @RequestParam UUID approverId) {
+    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id, @RequestParam UUID approverId) {
         PprPlan plan = planOrThrow(id);
         assertCanAccessPlan(plan);
-        return ResponseEntity.ok(service.approve(id, approverId));
+        service.validateCanApprove(id);
+        UUID requesterId = currentUserId();
+        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
+                "PPR_PLAN",
+                id,
+                ApprovalActionType.APPROVE,
+                requesterId == null ? approverId : requesterId,
+                approverId,
+                "PPR_PLAN_APPROVER",
+                "PPR plan approval: " + plan.getCode(),
+                "Approval request for PPR plan " + plan.getCode()
+        ));
     }
 
     @PostMapping("/{id}/generate")

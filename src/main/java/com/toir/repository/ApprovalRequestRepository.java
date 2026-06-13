@@ -53,4 +53,65 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
             @Param("documentId") UUID documentId,
             @Param("status") ApprovalStatus status
     );
+
+    @Query(value = """
+            SELECT *
+            FROM approval_requests
+            WHERE is_deleted = false
+              AND status = cast(:status as varchar)
+              AND (
+                    (target_type = :targetType AND target_id = cast(:targetId as uuid))
+                 OR (document_type = :targetType AND document_id = cast(:targetId as uuid))
+              )
+              AND (
+                    action_type = :actionType
+                 OR action_type IS NULL
+              )
+            ORDER BY created_at DESC
+            LIMIT 1
+            """, nativeQuery = true)
+    Optional<ApprovalRequest> findFirstPendingByTargetAndAction(
+            @Param("targetType") String targetType,
+            @Param("targetId") UUID targetId,
+            @Param("actionType") String actionType,
+            @Param("status") ApprovalStatus status
+    );
+
+    @Query(value = """
+            SELECT *
+            FROM approval_requests
+            WHERE is_deleted = false
+              AND status = 'PENDING'
+              AND expires_at IS NOT NULL
+              AND expires_at < :now
+            ORDER BY expires_at ASC
+            """, nativeQuery = true)
+    List<ApprovalRequest> findExpiredPending(@Param("now") java.time.Instant now);
+
+    @Query(value = """
+            SELECT *
+            FROM approval_requests
+            WHERE is_deleted = false
+              AND status = 'PENDING'
+              AND escalated_at IS NULL
+            ORDER BY created_at ASC
+            """, nativeQuery = true)
+    List<ApprovalRequest> findPendingWithoutEscalation();
+
+    @Query(value = """
+            SELECT *
+            FROM approval_requests
+            WHERE is_deleted = false
+              AND status = 'PENDING'
+              AND expires_at IS NOT NULL
+              AND expires_at < :now
+            ORDER BY expires_at ASC
+            """, nativeQuery = true)
+    List<ApprovalRequest> findOverdue(@Param("now") java.time.Instant now);
+
+    @Query(value = "SELECT COUNT(*) FROM approval_requests WHERE is_deleted = false AND status = cast(:status as varchar)", nativeQuery = true)
+    long countByStatus(@Param("status") ApprovalStatus status);
+
+    @Query(value = "SELECT COUNT(*) FROM approval_requests WHERE is_deleted = false AND escalated_at IS NOT NULL", nativeQuery = true)
+    long countEscalated();
 }

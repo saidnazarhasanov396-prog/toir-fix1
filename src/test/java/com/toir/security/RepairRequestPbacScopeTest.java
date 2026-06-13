@@ -11,6 +11,7 @@ import com.toir.enums.RequestSource;
 import com.toir.enums.RequestStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairRequestService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,12 +52,15 @@ class RepairRequestPbacScopeTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    ApprovalService approvalService;
+
     MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new RepairRequestController(service, repository, scopeAccessService)
+                        new RepairRequestController(service, approvalService, repository, scopeAccessService)
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

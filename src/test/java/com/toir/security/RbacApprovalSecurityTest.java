@@ -4,6 +4,7 @@ import com.toir.controller.ApprovalController;
 import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.enums.ApprovalStatus;
 import com.toir.service.ApprovalService;
+import com.toir.service.approval.ApprovalAnalyticsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -52,6 +53,9 @@ class RbacApprovalSecurityTest {
 
     @MockBean
     ApprovalService approvalService;
+
+    @MockBean
+    ApprovalAnalyticsService approvalAnalyticsService;
 
     @TestConfiguration
     static class SecurityBeans {

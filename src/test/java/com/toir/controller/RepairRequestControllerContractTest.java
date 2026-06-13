@@ -16,6 +16,7 @@ import com.toir.enums.WorkType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairRequestService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,9 @@ class RepairRequestControllerContractTest {
     RepairRequestService service;
 
     @Mock
+    ApprovalService approvalService;
+
+    @Mock
     RepairRequestRepository repository;
 
     @Mock
@@ -64,7 +68,7 @@ class RepairRequestControllerContractTest {
     void setUp() {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         lenient().when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairRequestController(service, repository, scopeAccessService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RepairRequestController(service, approvalService, repository, scopeAccessService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -311,17 +315,23 @@ class RepairRequestControllerContractTest {
     }
 
     @Test
-    void approveEndpointDelegatesToExplicitApproveTransition() throws Exception {
+    void approveEndpointCreatesApprovalRequest() throws Exception {
         UUID requestId = UUID.randomUUID();
         RepairRequestDto response = dtoWithLinks(requestId);
         when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
-        when(service.approve(requestId)).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/repair-requests/{id}/approve", requestId))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(requestId.toString()));
+                .andExpect(status().isOk());
 
-        verify(service).approve(requestId);
+        verify(approvalService).createOrReuseApprovalForDocument(
+                org.mockito.ArgumentMatchers.eq("REPAIR_REQUEST"),
+                org.mockito.ArgumentMatchers.eq(requestId),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq("REPAIR_REQUEST_APPROVER"),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
+        verify(service, never()).approve(requestId);
     }
 
     @Test
