@@ -74,7 +74,7 @@ class RbacStockMovementSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.STOCK_READ)
     void stockReadCanReadStockMovements() throws Exception {
-        when(stockMovementService.findAll(0, 1)).thenReturn(new PageImpl<>(
+        when(stockMovementService.findAll(0, 1, null, null, null, null, null, null, null)).thenReturn(new PageImpl<>(
                 List.of(stockMovementDto(StockMovementType.RECEIPT)),
                 PageRequest.of(0, 1),
                 1));
@@ -91,7 +91,8 @@ class RbacStockMovementSecurityTest {
     @Test
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void systemAdminCanReadStockMovements() throws Exception {
-        when(stockMovementService.findAll(0, 1)).thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 1), 0));
+        when(stockMovementService.findAll(0, 1, null, null, null, null, null, null, null))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 1), 0));
 
         mockMvc.perform(get("/api/v1/stock-movements?page=0&size=1"))
                 .andExpect(status().isOk());
@@ -100,7 +101,8 @@ class RbacStockMovementSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.WILDCARD)
     void wildcardCanReadStockMovements() throws Exception {
-        when(stockMovementService.findAll(0, 1)).thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 1), 0));
+        when(stockMovementService.findAll(0, 1, null, null, null, null, null, null, null))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 1), 0));
 
         mockMvc.perform(get("/api/v1/stock-movements?page=0&size=1"))
                 .andExpect(status().isOk());

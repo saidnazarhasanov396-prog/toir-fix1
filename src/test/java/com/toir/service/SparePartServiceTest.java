@@ -2,15 +2,25 @@ package com.toir.service;
 
 import com.toir.dto.sparepart.SparePartDto;
 import com.toir.entity.SparePart;
+import com.toir.entity.Department;
+import com.toir.entity.Location;
+import com.toir.entity.StockMovement;
 import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.StockMovementType;
 import com.toir.enums.InventoryItemKind;
+import com.toir.enums.SparePartType;
 import com.toir.exception.RestException;
+import com.toir.repository.InventoryTransactionRepository;
+import com.toir.repository.LocationRepository;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.SparePartTypeRepository;
+import com.toir.repository.StockMovementRepository;
 import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +35,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,10 +58,25 @@ class SparePartServiceTest {
     SparePartRepository repository;
 
     @Mock
+    SparePartTypeRepository typeRepository;
+
+    @Mock
+    InventoryTransactionRepository inventoryTransactionRepository;
+
+    @Mock
     WarehouseStockRepository stockRepository;
 
     @Mock
+    StockMovementRepository stockMovementRepository;
+
+    @Mock
     WarehouseRepository warehouseRepository;
+
+    @Mock
+    DepartmentRepository departmentRepository;
+
+    @Mock
+    LocationRepository locationRepository;
 
     @Mock
     UnitOfMeasurementRepository unitOfMeasurementRepository;
@@ -69,8 +96,13 @@ class SparePartServiceTest {
     void setUp() {
         service = new SparePartService(
                 repository,
+                typeRepository,
+                inventoryTransactionRepository,
                 stockRepository,
+                stockMovementRepository,
                 warehouseRepository,
+                departmentRepository,
+                locationRepository,
                 unitOfMeasurementRepository,
                 unitOfMeasurementService,
                 scopeAccessService,
@@ -81,45 +113,73 @@ class SparePartServiceTest {
     @Test
     void itemTypeSparePartReturnsOnlySpareParts() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), any()))
+        when(repository.findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, "SPARE_PART", "", null);
 
-        verify(repository).findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), any());
+        verify(repository).findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), any());
+    }
+
+    @Test
+    void sparePartTypeFilterReturnsMatchingType() {
+        UUID typeId = UUID.randomUUID();
+        com.toir.entity.SparePartType oilType = sparePartType(typeId, "OIL", "Oil", "LITER");
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(typeRepository.findByCodeIgnoreCaseAndActiveTrue("OIL")).thenReturn(Optional.of(oilType));
+        when(repository.findAllByFilter(isNull(), eq(typeId), isNull(), any()))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        service.findAll(20, 0, null, "OIL", "", null);
+
+        verify(repository).findAllByFilter(isNull(), eq(typeId), isNull(), any());
+    }
+
+    @Test
+    void typeIdFilterReturnsMatchingType() {
+        UUID typeId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(typeRepository.findByIdAndActiveTrue(typeId)).thenReturn(Optional.of(sparePartType(typeId, "OIL", "Oil", "LITER")));
+        when(repository.findAllByFilter(isNull(), eq(typeId), isNull(), any()))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        service.findAll(20, 0, null, typeId, "", null);
+
+        verify(repository).findAllByFilter(isNull(), eq(typeId), isNull(), any());
     }
 
     @Test
     void itemTypeSparePartsAliasWorks() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), any()))
+        when(repository.findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, "SPARE_PARTS", "", null);
 
-        verify(repository).findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), any());
+        verify(repository).findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), any());
     }
 
     @Test
     void itemTypeMaterialReturnsMaterialKind() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), any()))
+        when(repository.findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, "MATERIAL", "", null);
 
-        verify(repository).findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), any());
+        verify(repository).findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), any());
     }
 
     @Test
     void itemTypeMaterialsAliasWorks() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), any()))
+        when(repository.findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, "MATERIALS", "", null);
 
-        verify(repository).findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), any());
+        verify(repository).findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), any());
     }
 
     @Test
@@ -143,7 +203,7 @@ class SparePartServiceTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
-        when(repository.findAllByFilterAndWarehouseId(isNull(), isNull(), eq(warehouseId), any())).thenReturn(page);
+        when(repository.findAllByFilterAndWarehouseId(isNull(), isNull(), isNull(), eq(warehouseId), any())).thenReturn(page);
         when(stockRepository.findAllBySparePartIdInAndWarehouseIdAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection(), eq(warehouseId)))
                 .thenReturn(List.of(stock));
 
@@ -165,12 +225,12 @@ class SparePartServiceTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
-        when(repository.findAllByFilterAndWarehouseId(eq(InventoryItemKind.MATERIAL), eq("%bolt%"), eq(warehouseId), any()))
+        when(repository.findAllByFilterAndWarehouseId(eq(InventoryItemKind.MATERIAL), isNull(), eq("%bolt%"), eq(warehouseId), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, "MATERIALS", "bolt", warehouseId);
 
-        verify(repository).findAllByFilterAndWarehouseId(eq(InventoryItemKind.MATERIAL), eq("%bolt%"), eq(warehouseId), any());
+        verify(repository).findAllByFilterAndWarehouseId(eq(InventoryItemKind.MATERIAL), isNull(), eq("%bolt%"), eq(warehouseId), any());
     }
 
     @Test
@@ -186,7 +246,7 @@ class SparePartServiceTest {
         assertThatThrownBy(() -> service.findAll(20, 0, null, "", warehouseId))
                 .isInstanceOf(AccessDeniedException.class);
 
-        verify(repository, never()).findAllByFilterAndWarehouseId(any(), any(), any(), any());
+        verify(repository, never()).findAllByFilterAndWarehouseId(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -206,7 +266,7 @@ class SparePartServiceTest {
                 .thenReturn(List.of(allowedWarehouse, deniedWarehouse));
         when(scopeAccessService.canAccessDepartment(allowedDepartmentId)).thenReturn(true);
         when(scopeAccessService.canAccessDepartment(deniedDepartmentId)).thenReturn(false);
-        when(repository.findAllByFilterAndWarehouseIds(isNull(), isNull(), anyCollection(), any())).thenReturn(page);
+        when(repository.findAllByFilterAndWarehouseIds(isNull(), isNull(), isNull(), anyCollection(), any())).thenReturn(page);
         when(stockRepository.findAllBySparePartIdInAndWarehouseIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection(), anyCollection()))
                 .thenReturn(List.of(stock));
 
@@ -216,7 +276,7 @@ class SparePartServiceTest {
         assertThat(result.getContent().getFirst().id()).isEqualTo(part.getId());
 
         ArgumentCaptor<List<UUID>> warehouseIdsCaptor = ArgumentCaptor.forClass(List.class);
-        verify(repository).findAllByFilterAndWarehouseIds(isNull(), isNull(), warehouseIdsCaptor.capture(), any());
+        verify(repository).findAllByFilterAndWarehouseIds(isNull(), isNull(), isNull(), warehouseIdsCaptor.capture(), any());
         assertThat(warehouseIdsCaptor.getValue()).containsExactly(allowedWarehouseId);
     }
 
@@ -227,15 +287,15 @@ class SparePartServiceTest {
         Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);
 
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(isNull(), isNull(), any())).thenReturn(page);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), any())).thenReturn(page);
         when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
                 .thenReturn(List.of(stock));
 
         Page<SparePartDto> result = service.findAll(20, 0, null, "", null);
 
         assertThat(result.getContent()).hasSize(1);
-        verify(repository).findAllByFilter(isNull(), isNull(), any());
-        verify(repository, never()).findAllByFilterAndWarehouseIds(any(), any(), anyCollection(), any());
+        verify(repository).findAllByFilter(isNull(), isNull(), isNull(), any());
+        verify(repository, never()).findAllByFilterAndWarehouseIds(any(), any(), any(), anyCollection(), any());
     }
 
     @Test
@@ -246,15 +306,16 @@ class SparePartServiceTest {
         Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);
 
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(isNull(), isNull(), any())).thenReturn(page);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), any())).thenReturn(page);
         when(unitOfMeasurementRepository.findAllByTokenIgnoreCaseIn(List.of("l"))).thenReturn(List.of(unit));
         when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
                 .thenReturn(List.of());
 
         Page<SparePartDto> result = service.findAll(20, 0, null, "", null);
 
-        assertThat(result.getContent().getFirst().unit().code()).isEqualTo("L");
-        assertThat(result.getContent().getFirst().unit().name()).isEqualTo("Литр");
+        assertThat(result.getContent().getFirst().unit()).isEqualTo("L");
+        assertThat(result.getContent().getFirst().unitCode()).isEqualTo("L");
+        assertThat(result.getContent().getFirst().unitName()).isEqualTo("Литр");
     }
 
     @Test
@@ -269,17 +330,20 @@ class SparePartServiceTest {
 
         SparePartDto result = service.findById(sparePartId);
 
-        assertThat(result.unit().code()).isEqualTo("legacy-unit");
-        assertThat(result.unit().name()).isEqualTo("legacy-unit");
+        assertThat(result.unit()).isEqualTo("legacy-unit");
+        assertThat(result.unitCode()).isEqualTo("legacy-unit");
+        assertThat(result.unitName()).isEqualTo("legacy-unit");
     }
 
     @Test
     void createNormalizesUnitTokenBeforeSaving() {
         String codePrefix = "SP-" + java.time.Year.now().getValue() + "-";
         String generatedCode = codePrefix + "0001";
+        com.toir.entity.SparePartType oilType = sparePartType(UUID.randomUUID(), "OIL", "Oil", "LITER");
         when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
         when(repository.existsByCodeAndIsDeletedFalse(generatedCode)).thenReturn(false);
-        when(unitOfMeasurementService.normalizeRequiredUnitOrThrow("UOM-2026-0026", "spare part unit"))
+        when(typeRepository.findByCodeIgnoreCaseAndActiveTrue("OIL")).thenReturn(Optional.of(oilType));
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull("UOM-2026-0026"))
                 .thenReturn("Литр");
         when(repository.save(any(SparePart.class))).thenAnswer(invocation -> {
             SparePart saved = invocation.getArgument(0);
@@ -294,6 +358,7 @@ class SparePartServiceTest {
                 "Oil",
                 null,
                 InventoryItemKind.MATERIAL,
+                SparePartType.OIL,
                 "UOM-2026-0026",
                 null,
                 null,
@@ -304,6 +369,70 @@ class SparePartServiceTest {
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getCode()).isEqualTo(generatedCode);
         assertThat(captor.getValue().getUnit()).isEqualTo("Литр");
+        assertThat(captor.getValue().getType()).isEqualTo(oilType);
+    }
+
+    @Test
+    void createDefaultsTypeToOtherAndUnitFromTypeWhenMissing() {
+        String codePrefix = "SP-" + java.time.Year.now().getValue() + "-";
+        com.toir.entity.SparePartType otherType = sparePartType(UUID.randomUUID(), "OTHER", "Other", "PCS");
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(codePrefix + "0001")).thenReturn(false);
+        when(typeRepository.findByCodeIgnoreCaseAndActiveTrue("OTHER")).thenReturn(Optional.of(otherType));
+        when(repository.save(any(SparePart.class))).thenAnswer(invocation -> {
+            SparePart saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        service.create(new com.toir.dto.sparepart.SparePartRequest(
+                null,
+                "Unknown item",
+                null,
+                InventoryItemKind.SPARE_PART,
+                null,
+                null,
+                null,
+                null,
+                0
+        ));
+
+        ArgumentCaptor<SparePart> captor = ArgumentCaptor.forClass(SparePart.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getType()).isEqualTo(otherType);
+        assertThat(captor.getValue().getUnit()).isEqualTo("PCS");
+    }
+
+    @Test
+    void createAllowsFlexibleUnitOverrideForType() {
+        String codePrefix = "SP-" + java.time.Year.now().getValue() + "-";
+        com.toir.entity.SparePartType oilType = sparePartType(UUID.randomUUID(), "OIL", "Oil", "LITER");
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(codePrefix + "0001")).thenReturn(false);
+        when(typeRepository.findByCodeIgnoreCaseAndActiveTrue("OIL")).thenReturn(Optional.of(oilType));
+        when(unitOfMeasurementService.normalizeOptionalUnitOrNull("KG")).thenReturn(null);
+        when(repository.save(any(SparePart.class))).thenAnswer(invocation -> {
+            SparePart saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        service.create(new com.toir.dto.sparepart.SparePartRequest(
+                null,
+                "Motor oil by weight",
+                null,
+                InventoryItemKind.MATERIAL,
+                SparePartType.OIL,
+                "KG",
+                null,
+                null,
+                0
+        ));
+
+        ArgumentCaptor<SparePart> captor = ArgumentCaptor.forClass(SparePart.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getType()).isEqualTo(oilType);
+        assertThat(captor.getValue().getUnit()).isEqualTo("KG");
     }
 
     @Test
@@ -313,6 +442,7 @@ class SparePartServiceTest {
                 "Oil",
                 null,
                 InventoryItemKind.MATERIAL,
+                SparePartType.OIL,
                 "PCS",
                 null,
                 null,
@@ -326,12 +456,111 @@ class SparePartServiceTest {
         verify(repository, never()).save(any());
     }
 
+    @Test
+    void findLocationsReturnsOnlyWarehouseScopedStockWithNames() {
+        UUID sparePartId = UUID.randomUUID();
+        UUID allowedWarehouseId = UUID.randomUUID();
+        UUID blockedWarehouseId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID locationId = UUID.randomUUID();
+        SparePart part = sparePart(sparePartId, "SP-LOC", "Engine Oil", InventoryItemKind.SPARE_PART);
+        Warehouse allowedWarehouse = warehouse(allowedWarehouseId, departmentId, null);
+        allowedWarehouse.setName("Central Warehouse");
+        allowedWarehouse.setLocationId(locationId);
+        Warehouse blockedWarehouse = warehouse(blockedWarehouseId, UUID.randomUUID(), null);
+        WarehouseStock allowedStock = stock(allowedWarehouseId, sparePartId, 120, 20);
+        allowedStock.setBinLocation("A-12");
+        allowedStock.setMinQty(30);
+        allowedStock.setMaxQty(200.0);
+        allowedStock.setReorderPoint(50.0);
+        WarehouseStock blockedStock = stock(blockedWarehouseId, sparePartId, 999, 0);
+        Department department = department(departmentId, "Mechanical Department");
+        Location location = location(locationId, "Workshop A");
+
+        when(repository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(part));
+        when(stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId))
+                .thenReturn(List.of(allowedStock, blockedStock));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(allowedWarehouseId, blockedWarehouseId)))
+                .thenReturn(List.of(allowedWarehouse, blockedWarehouse));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+        when(scopeAccessService.canAccessDepartment(blockedWarehouse.getDepartmentId())).thenReturn(false);
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(List.of(departmentId))).thenReturn(List.of(department));
+        when(locationRepository.findAllByIdInAndIsDeletedFalse(List.of(locationId))).thenReturn(List.of(location));
+
+        List<com.toir.dto.sparepart.SparePartLocationDto> result = service.findLocations(sparePartId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().warehouseId()).isEqualTo(allowedWarehouseId);
+        assertThat(result.getFirst().warehouseName()).isEqualTo("Central Warehouse");
+        assertThat(result.getFirst().departmentName()).isEqualTo("Mechanical Department");
+        assertThat(result.getFirst().locationName()).isEqualTo("Workshop A");
+        assertThat(result.getFirst().binLocation()).isEqualTo("A-12");
+        assertThat(result.getFirst().quantity()).isEqualTo(120);
+        assertThat(result.getFirst().reservedQty()).isEqualTo(20);
+        assertThat(result.getFirst().availableQty()).isEqualTo(100);
+        assertThat(result.getFirst().unit()).isEqualTo("PCS");
+        assertThat(result.getFirst().minQty()).isEqualTo(30);
+        assertThat(result.getFirst().maxQty()).isEqualTo(200);
+        assertThat(result.getFirst().reorderPoint()).isEqualTo(50);
+    }
+
+    @Test
+    void findDetailReturnsTotalsLocationsAndRecentMovementsWithinScope() {
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        SparePart part = sparePart(sparePartId, "SP-DET", "Engine Oil", InventoryItemKind.SPARE_PART);
+        part.setSku("OIL-10W40");
+        part.setSpecification("10W-40");
+        part.setManufacturer("Shell");
+        part.setUnit("LITER");
+        part.setType(sparePartType(UUID.randomUUID(), "OIL", "Oil", "LITER"));
+        Warehouse warehouse = warehouse(warehouseId, departmentId, null);
+        warehouse.setName("Central Warehouse");
+        WarehouseStock stock = stock(warehouseId, sparePartId, 300, 40);
+        StockMovement movement = new StockMovement();
+        movement.setId(UUID.randomUUID());
+        movement.setSparePartId(sparePartId);
+        movement.setWarehouseId(warehouseId);
+        movement.setType(StockMovementType.RECEIPT);
+        movement.setQuantity(100);
+        movement.setUnit("LITER");
+        movement.setUnitPrice(BigDecimal.valueOf(45000));
+        movement.setTotalAmount(BigDecimal.valueOf(4500000));
+        movement.setMovementDate(LocalDate.of(2026, 6, 13));
+        movement.setDocumentNumber("RCV-2026-0001");
+
+        when(repository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(part));
+        when(stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId)).thenReturn(List.of(stock));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId))).thenReturn(List.of(warehouse));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(stockMovementRepository.findAllBySparePartIdAndIsDeletedFalseOrderByOccurredAtDesc(sparePartId))
+                .thenReturn(List.of(movement));
+
+        com.toir.dto.sparepart.SparePartDetailDto result = service.findDetail(sparePartId);
+
+        assertThat(result.id()).isEqualTo(sparePartId);
+        assertThat(result.typeCode()).isEqualTo("OIL");
+        assertThat(result.typeName()).isEqualTo("Oil");
+        assertThat(result.unit()).isEqualTo("LITER");
+        assertThat(result.totalQuantity()).isEqualTo(300);
+        assertThat(result.totalReservedQty()).isEqualTo(40);
+        assertThat(result.totalAvailableQty()).isEqualTo(260);
+        assertThat(result.locations()).hasSize(1);
+        assertThat(result.recentMovements()).hasSize(1);
+        assertThat(result.recentMovements().getFirst().type()).isEqualTo(StockMovementType.RECEIPT);
+        assertThat(result.recentMovements().getFirst().warehouseName()).isEqualTo("Central Warehouse");
+        assertThat(result.recentMovements().getFirst().totalAmount()).isEqualByComparingTo("4500000");
+    }
+
     private SparePart sparePart(UUID id, String code, String name, InventoryItemKind kind) {
         SparePart sparePart = new SparePart();
         sparePart.setId(id);
         sparePart.setCode(code);
         sparePart.setName(name);
         sparePart.setKind(kind);
+        sparePart.setType(sparePartType(UUID.randomUUID(), "OTHER", "Other", "PCS"));
         sparePart.setUnit("PCS");
         sparePart.setMinStock(0);
         return sparePart;
@@ -357,6 +586,32 @@ class SparePartServiceTest {
         stock.setReservedQty(reservedQty);
         stock.setMinQty(0);
         return stock;
+    }
+
+    private com.toir.entity.SparePartType sparePartType(UUID id, String code, String name, String defaultUnit) {
+        com.toir.entity.SparePartType type = new com.toir.entity.SparePartType();
+        type.setId(id);
+        type.setCode(code);
+        type.setName(name);
+        type.setDefaultUnit(defaultUnit);
+        type.setActive(true);
+        return type;
+    }
+
+    private Department department(UUID id, String name) {
+        Department department = new Department();
+        department.setId(id);
+        department.setCode("DEP-" + id.toString().substring(0, 8));
+        department.setName(name);
+        return department;
+    }
+
+    private Location location(UUID id, String name) {
+        Location location = new Location();
+        location.setId(id);
+        location.setCode("LOC-" + id.toString().substring(0, 8));
+        location.setName(name);
+        return location;
     }
 
     private UnitOfMeasurement unit(String code, String name) {

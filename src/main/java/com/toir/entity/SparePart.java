@@ -25,6 +25,13 @@ public class SparePart extends BaseEntity {
     @Column(nullable = false)
     private InventoryItemKind kind = InventoryItemKind.SPARE_PART;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "type_id", nullable = false)
+    private SparePartType type;
+
+    @Column(name = "type", nullable = false)
+    private String legacyType = "OTHER";
+
     @Column(name = "unit", nullable = false)
     private String unit;
 

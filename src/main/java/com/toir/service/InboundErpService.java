@@ -2,10 +2,12 @@ package com.toir.service;
 
 import com.toir.entity.Department;
 import com.toir.entity.SparePart;
+import com.toir.entity.SparePartType;
 import com.toir.enums.DepartmentType;
 import com.toir.enums.InventoryItemKind;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.SparePartTypeRepository;
 import com.toir.repository.department.DepartmentRepository;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ import java.util.List;
 public class InboundErpService {
 
     private final SparePartRepository sparePartRepository;
+    private final SparePartTypeRepository sparePartTypeRepository;
     private final DepartmentRepository departmentRepository;
 
     @Transactional
@@ -36,6 +39,9 @@ public class InboundErpService {
                 sp.setName(item.name);
                 sp.setSku(item.sku);
                 sp.setKind(parseKind(item.kind));
+                SparePartType otherType = defaultSparePartType();
+                sp.setType(otherType);
+                sp.setLegacyType(otherType.getCode());
                 sp.setUnit(item.unit != null ? item.unit : "шт");
                 sp.setSpecification(item.specification);
                 sp.setManufacturer(item.manufacturer);
@@ -100,6 +106,11 @@ public class InboundErpService {
         } catch (IllegalArgumentException e) {
             throw RestException.badRequest("Invalid department type: " + type);
         }
+    }
+
+    private SparePartType defaultSparePartType() {
+        return sparePartTypeRepository.findByCodeIgnoreCaseAndActiveTrue("OTHER")
+                .orElseThrow(() -> RestException.badRequest("Default spare part type OTHER is not configured"));
     }
 
     public record UpsertResult(int created, int updated, int received) {}

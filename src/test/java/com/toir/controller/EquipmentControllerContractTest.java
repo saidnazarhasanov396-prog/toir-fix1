@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.controller.equipment.EquipmentController;
 import com.toir.dto.equipment.EquipmentDetailDto;
+import com.toir.dto.equipment.EquipmentDocumentDto;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipment.EquipmentPictureDto;
 import com.toir.dto.equipment.EquipmentStatusHistoryResponse;
@@ -52,6 +53,7 @@ import java.util.UUID;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -67,6 +69,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
@@ -125,6 +128,52 @@ class EquipmentControllerContractTest {
                 .andExpect(jsonPath("$[1].pictureName").value("Nameplate"));
 
         verify(pictureService).uploadPictures(eq(equipmentId), any(), eq(List.of("Front", "Nameplate")), eq("INSPECTION"), any());
+    }
+
+    @Test
+    void attachDocumentsWithSingularDocumentNameCreatesOneMultiFileDocument() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID frontFileId = UUID.randomUUID();
+        UUID backFileId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipmentEntity(equipmentId, UUID.randomUUID())));
+        when(service.attachDocumentFiles(eq(equipmentId), any(), eq("Technical Passport"), eq("PASSPORT"), any()))
+                .thenReturn(equipmentDocument(equipmentId, documentId, "Technical Passport", "PASSPORT", frontFileId, backFileId));
+
+        mockMvc.perform(multipart("/api/v1/equipment/{equipmentId}/documents", equipmentId)
+                        .file(new MockMultipartFile("files", "front.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .file(new MockMultipartFile("files", "back.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .param("documentName", "Technical Passport")
+                        .param("documentType", "PASSPORT"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].id").value(documentId.toString()))
+                .andExpect(jsonPath("$[0].documentName").value("Technical Passport"))
+                .andExpect(jsonPath("$[0].fileId").value(frontFileId.toString()))
+                .andExpect(jsonPath("$[0].files.length()").value(2))
+                .andExpect(jsonPath("$[0].files[0].id").value(frontFileId.toString()))
+                .andExpect(jsonPath("$[0].files[1].id").value(backFileId.toString()));
+
+        verify(service).attachDocumentFiles(eq(equipmentId), any(), eq("Technical Passport"), eq("PASSPORT"), any());
+    }
+
+    @Test
+    void downloadDocumentFileReturnsSelectedFileBlobWithOriginalFilename() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID frontFileId = UUID.randomUUID();
+        UUID backFileId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipmentEntity(equipmentId, UUID.randomUUID())));
+        when(service.getDocument(eq(equipmentId), eq(documentId), any()))
+                .thenReturn(equipmentDocument(equipmentId, documentId, "Technical Passport", "PASSPORT", frontFileId, backFileId));
+        when(service.downloadDocumentFile(eq(equipmentId), eq(documentId), eq(backFileId), any()))
+                .thenReturn(new ByteArrayResource("pdf".getBytes()));
+
+        mockMvc.perform(get("/api/v1/equipment/{equipmentId}/documents/{documentId}/files/{fileId}/download",
+                        equipmentId, documentId, backFileId))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", containsString("back.pdf")));
+
+        verify(service).downloadDocumentFile(eq(equipmentId), eq(documentId), eq(backFileId), any());
     }
 
     @Test
@@ -1177,6 +1226,52 @@ class EquipmentControllerContractTest {
         );
     }
 
+    private EquipmentDocumentDto equipmentDocument(
+            UUID equipmentId,
+            UUID documentId,
+            String documentName,
+            String documentType,
+            UUID frontFileId,
+            UUID backFileId
+    ) {
+        EquipmentDocumentDto.FileRef front = new EquipmentDocumentDto.FileRef(
+                frontFileId,
+                frontFileId + ".pdf",
+                "front.pdf",
+                "application/pdf",
+                123L,
+                "/api/v1/equipment/" + equipmentId + "/documents/" + documentId + "/files/" + frontFileId + "/download"
+        );
+        EquipmentDocumentDto.FileRef back = new EquipmentDocumentDto.FileRef(
+                backFileId,
+                backFileId + ".pdf",
+                "back.pdf",
+                "application/pdf",
+                124L,
+                "/api/v1/equipment/" + equipmentId + "/documents/" + documentId + "/files/" + backFileId + "/download"
+        );
+        return new EquipmentDocumentDto(
+                documentId,
+                frontFileId,
+                documentType,
+                "DOC-" + documentId.toString().substring(0, 8),
+                documentName,
+                front.originalName(),
+                front.mimeType(),
+                front.sizeBytes(),
+                "/api/v1/equipment/" + equipmentId + "/documents/" + documentId + "/download",
+                "/api/v1/equipment/" + equipmentId + "/documents/" + documentId + "/presigned-url",
+                LocalDateTime.now(),
+                LocalDateTime.now(),
+                equipmentId,
+                documentName,
+                documentType,
+                LocalDateTime.now(),
+                front,
+                List.of(front, back)
+        );
+    }
+
     private static class TestCurrentUserResolver implements HandlerMethodArgumentResolver {
         private final UUID userId;
 
@@ -1225,4 +1320,3 @@ class EquipmentControllerContractTest {
         fail("Resolved exception: " + ex.getClass().getName() + ": " + ex.getMessage() + "; root cause: " + rootMessage);
     }
 }
-

@@ -1,14 +1,17 @@
 package com.toir.service;
 
 import com.toir.dto.stockmovement.StockMovementDto;
+import com.toir.dto.stockmovement.StockMovementIssueRequest;
+import com.toir.dto.stockmovement.StockMovementReceiptRequest;
 import com.toir.dto.stockmovement.StockMovementRequest;
 import com.toir.entity.StockMovement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.SparePartType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
-import com.toir.repository.StockMovementListRow;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.StockMovementListRow;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -26,7 +29,9 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,8 +40,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -105,6 +110,18 @@ class StockMovementServiceTest {
         assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.RESERVATION, -2)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Quantity must be greater than 0");
+
+        verifyNoInteractions(stockRepository, repository, sparePartRepository);
+    }
+
+    @Test
+    void directReservationMovementIsRejectedToKeepReservationEntityAsSourceOfTruth() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.RESERVATION, 1)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("/api/v1/reservations");
 
         verifyNoInteractions(stockRepository, repository, sparePartRepository);
     }
@@ -190,6 +207,86 @@ class StockMovementServiceTest {
     }
 
     @Test
+    void receiptEndpointIncreasesStockAndStoresReceiptDocumentMetadata() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID responsiblePersonId = UUID.randomUUID();
+        WarehouseStock stock = stock(warehouseId, sparePartId, 10, 0);
+        LocalDate receivedAt = LocalDate.of(2026, 6, 13);
+
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+        when(repository.save(any(StockMovement.class)))
+                .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
+
+        StockMovementDto result = service.receipt(new StockMovementReceiptRequest(
+                sparePartId,
+                warehouseId,
+                20,
+                "LITER",
+                BigDecimal.valueOf(45000),
+                receivedAt,
+                responsiblePersonId,
+                "Local supplier",
+                "PRX-2026-0001",
+                "Motor moyi keldi"
+        ));
+
+        assertThat(stock.getQuantity()).isEqualTo(30);
+        assertThat(result.type()).isEqualTo(StockMovementType.RECEIPT);
+        assertThat(result.unit()).isEqualTo("LITER");
+        assertThat(result.unitPrice()).isEqualByComparingTo("45000");
+        assertThat(result.totalAmount()).isEqualByComparingTo("900000");
+        assertThat(result.responsiblePersonId()).isEqualTo(responsiblePersonId);
+        assertThat(result.supplierName()).isEqualTo("Local supplier");
+        assertThat(result.movementDate()).isEqualTo(receivedAt);
+        assertThat(result.comment()).isEqualTo("Motor moyi keldi");
+    }
+
+    @Test
+    void issueEndpointDecreasesAvailableStockAndStoresRecipientMetadata() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID responsiblePersonId = UUID.randomUUID();
+        UUID takenById = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        WarehouseStock stock = stock(warehouseId, sparePartId, 10, 2);
+        LocalDate issuedAt = LocalDate.of(2026, 6, 13);
+
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+        when(repository.save(any(StockMovement.class)))
+                .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
+
+        StockMovementDto result = service.issue(new StockMovementIssueRequest(
+                sparePartId,
+                warehouseId,
+                5,
+                "LITER",
+                issuedAt,
+                takenById,
+                responsiblePersonId,
+                workOrderId,
+                departmentId,
+                "RSX-2026-0001",
+                "Work order uchun moy berildi"
+        ));
+
+        assertThat(stock.getQuantity()).isEqualTo(5);
+        assertThat(stock.getReservedQty()).isEqualTo(2);
+        assertThat(result.type()).isEqualTo(StockMovementType.ISSUE);
+        assertThat(result.unit()).isEqualTo("LITER");
+        assertThat(result.takenById()).isEqualTo(takenById);
+        assertThat(result.responsiblePersonId()).isEqualTo(responsiblePersonId);
+        assertThat(result.workOrderId()).isEqualTo(workOrderId);
+        assertThat(result.departmentId()).isEqualTo(departmentId);
+        assertThat(result.movementDate()).isEqualTo(issuedAt);
+        assertThat(result.comment()).isEqualTo("Work order uchun moy berildi");
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
+    }
+
+    @Test
     void findAllPageReturnsRelationDisplayFieldsFromProjection() {
         UUID movementId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
@@ -201,6 +298,13 @@ class StockMovementServiceTest {
 
         when(repository.findListRows(
                 eq(true),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
                 eq(null),
                 eq(null),
                 eq(pageRequest)))
@@ -228,12 +332,53 @@ class StockMovementServiceTest {
         assertThat(dto.warehouseName()).isEqualTo("Main Warehouse");
         assertThat(dto.sparePartId()).isEqualTo(sparePartId);
         assertThat(dto.sparePartName()).isEqualTo("Bearing 6205");
+        assertThat(dto.sparePartType()).isEqualTo(SparePartType.BEARING);
         assertThat(dto.workOrderId()).isEqualTo(workOrderId);
         assertThat(dto.workOrderName()).isEqualTo("Pump repair");
         assertThat(dto.workOrderNumber()).isEqualTo("WO-42");
         assertThat(dto.createdById()).isEqualTo(createdById);
         assertThat(dto.createdByFullName()).isEqualTo("Jane Smith");
         assertThat(dto.occurredAt()).isEqualTo(occurredAt);
+    }
+
+    @Test
+    void findAllPassesMovementHistoryFiltersToRepository() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID responsiblePersonId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        LocalDate from = LocalDate.of(2026, 6, 1);
+        LocalDate to = LocalDate.of(2026, 6, 13);
+        PageRequest pageRequest = PageRequest.of(0, 8);
+
+        when(repository.findListRows(
+                eq(true),
+                eq(null),
+                eq(null),
+                eq(StockMovementType.ISSUE.name()),
+                eq(sparePartId),
+                eq(warehouseId),
+                eq(from),
+                eq(to),
+                eq(responsiblePersonId),
+                eq(workOrderId),
+                eq(pageRequest)))
+                .thenReturn(Page.empty(pageRequest));
+
+        service.findAll(0, 8, StockMovementType.ISSUE, sparePartId, warehouseId, from, to, responsiblePersonId, workOrderId);
+
+        verify(repository).findListRows(
+                eq(true),
+                eq(null),
+                eq(null),
+                eq(StockMovementType.ISSUE.name()),
+                eq(sparePartId),
+                eq(warehouseId),
+                eq(from),
+                eq(to),
+                eq(responsiblePersonId),
+                eq(workOrderId),
+                eq(pageRequest));
     }
 
     @Test
@@ -359,6 +504,11 @@ class StockMovementServiceTest {
             }
 
             @Override
+            public String getSparePartType() {
+                return SparePartType.BEARING.name();
+            }
+
+            @Override
             public UUID getWorkOrderId() {
                 return workOrderId;
             }
@@ -384,8 +534,23 @@ class StockMovementServiceTest {
             }
 
             @Override
+            public String getUnit() {
+                return "PCS";
+            }
+
+            @Override
             public Double getUnitCost() {
                 return 10.0;
+            }
+
+            @Override
+            public BigDecimal getUnitPrice() {
+                return BigDecimal.TEN;
+            }
+
+            @Override
+            public BigDecimal getTotalAmount() {
+                return BigDecimal.valueOf(20);
             }
 
             @Override
@@ -404,12 +569,52 @@ class StockMovementServiceTest {
             }
 
             @Override
+            public UUID getResponsiblePersonId() {
+                return createdById;
+            }
+
+            @Override
+            public String getResponsiblePersonName() {
+                return createdByFullName;
+            }
+
+            @Override
+            public UUID getTakenById() {
+                return null;
+            }
+
+            @Override
+            public String getTakenByName() {
+                return null;
+            }
+
+            @Override
+            public UUID getDepartmentId() {
+                return null;
+            }
+
+            @Override
+            public String getSupplierName() {
+                return null;
+            }
+
+            @Override
+            public LocalDate getMovementDate() {
+                return LocalDate.of(2026, 6, 5);
+            }
+
+            @Override
             public Instant getOccurredAt() {
                 return occurredAt;
             }
 
             @Override
             public String getNotes() {
+                return null;
+            }
+
+            @Override
+            public String getComment() {
                 return null;
             }
         };
