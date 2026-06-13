@@ -1254,6 +1254,7 @@ class EquipmentControllerContractTest {
                 documentId,
                 frontFileId,
                 documentType,
+                "DOC-" + documentId.toString().substring(0, 8),
                 documentName,
                 front.originalName(),
                 front.mimeType(),
