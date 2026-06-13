@@ -4,7 +4,9 @@ import com.toir.enums.StockMovementType;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -32,15 +34,42 @@ public class StockMovement extends ActorStampedEntity {
     @Column(nullable = false)
     private double quantity;
 
+    @Column(name = "unit")
+    private String unit;
+
     @Column(name = "unit_cost")
     private Double unitCost;
 
+    @Column(name = "unit_price", precision = 19, scale = 2)
+    private BigDecimal unitPrice;
+
+    @Column(name = "total_amount", precision = 19, scale = 2)
+    private BigDecimal totalAmount;
+
     @Column(name = "document_number")
     private String documentNumber;
+
+    @Column(name = "responsible_person_id")
+    private UUID responsiblePersonId;
+
+    @Column(name = "taken_by_id")
+    private UUID takenById;
+
+    @Column(name = "department_id")
+    private UUID departmentId;
+
+    @Column(name = "supplier_name")
+    private String supplierName;
+
+    @Column(name = "movement_date")
+    private LocalDate movementDate;
 
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt = Instant.now();
 
     @Column(columnDefinition = "text")
     private String notes;
+
+    @Column(name = "comment", columnDefinition = "text")
+    private String comment;
 }

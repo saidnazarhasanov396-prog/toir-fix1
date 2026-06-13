@@ -1,10 +1,15 @@
 package com.toir.controller;
 import com.toir.dto.stockmovement.StockMovementDto;
+import com.toir.dto.stockmovement.StockMovementIssueRequest;
+import com.toir.dto.stockmovement.StockMovementReceiptRequest;
 import com.toir.dto.stockmovement.StockMovementRequest;
+import com.toir.enums.StockMovementType;
 import com.toir.service.StockMovementService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
+import java.time.LocalDate;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -22,8 +27,40 @@ public class StockMovementController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
-    public ResponseEntity<Page<StockMovementDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(service.findAll(page, size));
+    public ResponseEntity<Page<StockMovementDto>> list(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) StockMovementType type,
+            @RequestParam(required = false) UUID sparePartId,
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) LocalDate from,
+            @RequestParam(required = false) LocalDate to,
+            @RequestParam(required = false) UUID responsiblePersonId,
+            @RequestParam(required = false) UUID workOrderId
+    ) {
+        return ResponseEntity.ok(service.findAll(
+                page,
+                size,
+                type,
+                sparePartId,
+                warehouseId,
+                from,
+                to,
+                responsiblePersonId,
+                workOrderId
+        ));
+    }
+
+    @PostMapping("/receipt")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_RECEIVE')")
+    public ResponseEntity<StockMovementDto> receipt(@Valid @RequestBody StockMovementReceiptRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.receipt(request));
+    }
+
+    @PostMapping("/issue")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_ISSUE')")
+    public ResponseEntity<StockMovementDto> issue(@Valid @RequestBody StockMovementIssueRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.issue(request));
     }
 
     @PostMapping

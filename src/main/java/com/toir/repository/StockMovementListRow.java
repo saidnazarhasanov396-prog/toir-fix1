@@ -1,6 +1,8 @@
 package com.toir.repository;
 
 import java.time.Instant;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 public interface StockMovementListRow {
@@ -14,6 +16,8 @@ public interface StockMovementListRow {
 
     String getSparePartName();
 
+    String getSparePartType();
+
     UUID getWorkOrderId();
 
     String getWorkOrderNumber();
@@ -24,7 +28,13 @@ public interface StockMovementListRow {
 
     double getQuantity();
 
+    String getUnit();
+
     Double getUnitCost();
+
+    BigDecimal getUnitPrice();
+
+    BigDecimal getTotalAmount();
 
     String getDocumentNumber();
 
@@ -32,7 +42,23 @@ public interface StockMovementListRow {
 
     String getCreatedByFullName();
 
+    UUID getResponsiblePersonId();
+
+    String getResponsiblePersonName();
+
+    UUID getTakenById();
+
+    String getTakenByName();
+
+    UUID getDepartmentId();
+
+    String getSupplierName();
+
+    LocalDate getMovementDate();
+
     Instant getOccurredAt();
 
     String getNotes();
+
+    String getComment();
 }

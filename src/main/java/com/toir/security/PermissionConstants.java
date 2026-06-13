@@ -75,6 +75,9 @@ public final class PermissionConstants {
     public static final String STOCK_ISSUE = "STOCK_ISSUE";
     public static final String STOCK_RECEIVE = "STOCK_RECEIVE";
     public static final String STOCK_ADJUST = "STOCK_ADJUST";
+    public static final String INVENTORY_READ = "INVENTORY_READ";
+    public static final String INVENTORY_RECEIPT = "INVENTORY_RECEIPT";
+    public static final String INVENTORY_ISSUE = "INVENTORY_ISSUE";
     public static final String MATERIAL_USAGE_READ = "MATERIAL_USAGE_READ";
     public static final String MATERIAL_USAGE_ISSUE = "MATERIAL_USAGE_ISSUE";
     public static final String PROCUREMENT_READ = "PROCUREMENT_READ";

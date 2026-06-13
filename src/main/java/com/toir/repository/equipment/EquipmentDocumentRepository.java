@@ -13,21 +13,25 @@ import org.springframework.stereotype.Repository;
 public interface EquipmentDocumentRepository extends JpaRepository<EquipmentDocument, UUID> {
 
     @Query("""
-            select ed
+            select distinct ed
             from EquipmentDocument ed
             join fetch ed.file f
+            left join fetch ed.files edf
+            left join fetch edf.file edff
             join ed.equipment equipment
             where equipment.id = :equipmentId
               and equipment.isDeleted = false
               and f.deleted = false
-            order by ed.createdAt desc
+            order by ed.createdAt desc, edf.sortOrder asc
             """)
     List<EquipmentDocument> findAllByEquipmentId(@Param("equipmentId") UUID equipmentId);
 
     @Query("""
-            select ed
+            select distinct ed
             from EquipmentDocument ed
             join fetch ed.file f
+            left join fetch ed.files edf
+            left join fetch edf.file edff
             join ed.equipment equipment
             where ed.id = :id
               and equipment.id = :equipmentId
