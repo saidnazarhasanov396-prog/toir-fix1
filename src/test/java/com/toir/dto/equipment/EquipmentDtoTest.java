@@ -34,6 +34,52 @@ class EquipmentDtoTest {
     }
 
     @Test
+    void passportRefContainsAllFields() {
+        LocalDate installDate = LocalDate.of(2022, 3, 15);
+        LocalDate lastInspectionDate = LocalDate.of(2024, 6, 1);
+
+        EquipmentDto.PassportRef ref = new EquipmentDto.PassportRef(
+                "PP-001",
+                55.5,
+                380.0,
+                6.0,
+                "FAC-123",
+                "SER-456",
+                120.0,
+                installDate,
+                lastInspectionDate,
+                "Some notes"
+        );
+
+        assertThat(ref.passportNumber()).isEqualTo("PP-001");
+        assertThat(ref.powerKw()).isEqualTo(55.5);
+        assertThat(ref.voltageV()).isEqualTo(380.0);
+        assertThat(ref.pressureBar()).isEqualTo(6.0);
+        assertThat(ref.factoryNumber()).isEqualTo("FAC-123");
+        assertThat(ref.manufacturerSerial()).isEqualTo("SER-456");
+        assertThat(ref.throughput()).isEqualTo(120.0);
+        assertThat(ref.installDate()).isEqualTo(installDate);
+        assertThat(ref.lastInspectionDate()).isEqualTo(lastInspectionDate);
+        assertThat(ref.notes()).isEqualTo("Some notes");
+    }
+
+    @Test
+    void passportRefAllowsNullOptionalFields() {
+        EquipmentDto.PassportRef ref = new EquipmentDto.PassportRef(
+                "PP-002", null, null, null,
+                null, null, null, null, null, null
+        );
+
+        assertThat(ref.passportNumber()).isEqualTo("PP-002");
+        assertThat(ref.factoryNumber()).isNull();
+        assertThat(ref.manufacturerSerial()).isNull();
+        assertThat(ref.throughput()).isNull();
+        assertThat(ref.installDate()).isNull();
+        assertThat(ref.lastInspectionDate()).isNull();
+        assertThat(ref.notes()).isNull();
+    }
+
+    @Test
     void fromIncludesCalculatedLifetimeFields() {
         Equipment equipment = new Equipment();
         equipment.setOperationStartDate(LocalDate.now().minusMonths(6));

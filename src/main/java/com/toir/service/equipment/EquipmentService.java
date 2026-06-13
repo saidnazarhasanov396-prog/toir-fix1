@@ -766,7 +766,9 @@ public class EquipmentService {
 
     private static EquipmentDto.PassportRef passportRef(EquipmentPassport p) {
         return p == null ? null : new EquipmentDto.PassportRef(
-                p.getPassportNumber(), p.getPowerKw(), p.getVoltageV(), p.getPressureBar());
+                p.getPassportNumber(), p.getPowerKw(), p.getVoltageV(), p.getPressureBar(),
+                p.getFactoryNumber(), p.getManufacturerSerial(), p.getThroughput(),
+                p.getInstallDate(), p.getLastInspectionDate(), p.getNotes());
     }
 
     private static Warehouse resolvePlacementWarehouse(Equipment equipment,
