@@ -51,7 +51,15 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, UU
                 sm.movement_date AS "movementDate",
                 sm.occurred_at AS "occurredAt",
                 sm.notes AS notes,
-                sm.comment AS comment
+                sm.comment AS comment,
+                (
+                    SELECT COUNT(*)
+                    FROM stock_movement_files smf
+                    JOIN uploaded_files uf
+                        ON uf.id = smf.file_id
+                       AND uf.deleted = false
+                    WHERE smf.stock_movement_id = sm.id
+                ) AS "fileCount"
             FROM stock_movements sm
             LEFT JOIN warehouses wh
                 ON wh.id = sm.warehouse_id

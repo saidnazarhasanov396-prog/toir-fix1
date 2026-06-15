@@ -157,6 +157,7 @@ public class EquipmentController {
             @Parameter(description = "Single document title. When present, all files are attached to one document.")
             @RequestParam(value = "documentName", required = false) String documentName,
             @RequestParam(required = false) String documentType,
+            @RequestParam(required = false) String documentNumber,
             @Parameter(description = "Document type per file, in the same order as files.")
             @RequestParam(value = "documentTypes", required = false) List<String> documentTypes,
             @Parameter(description = "Document number per file, in the same order as files.")
@@ -169,7 +170,7 @@ public class EquipmentController {
                 throw RestException.badRequest("Use either documentName or documentNames, not both");
             }
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(List.of(service.attachDocumentFiles(id, files, documentName, documentType, user)));
+                    .body(List.of(service.attachDocumentFiles(id, files, documentName, documentType, documentNumber, user)));
         }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(service.attachDocuments(id, files, documentNames, documentTypes, documentNumbers, user));

@@ -61,4 +61,6 @@ public interface StockMovementListRow {
     String getNotes();
 
     String getComment();
+
+    long getFileCount();
 }

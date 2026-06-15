@@ -1,24 +1,32 @@
 package com.toir.service;
 
 import com.toir.dto.stockmovement.StockMovementDto;
+import com.toir.dto.stockmovement.StockMovementFileDto;
 import com.toir.dto.stockmovement.StockMovementIssueRequest;
 import com.toir.dto.stockmovement.StockMovementReceiptRequest;
 import com.toir.dto.stockmovement.StockMovementRequest;
 import com.toir.dto.warehouse.StockIssueCommand;
 import com.toir.dto.warehouse.StockReceiptCommand;
+import com.toir.dto.file.UploadFileResponse;
+import com.toir.entity.StockMovementFile;
 import com.toir.entity.StockMovement;
+import com.toir.entity.UploadedFile;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.FileCategory;
 import com.toir.enums.SparePartType;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
+import com.toir.repository.StockMovementFileRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementListRow;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.file_management.FileService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +39,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -76,6 +85,15 @@ class StockMovementServiceTest {
 
     @Mock
     ToirStockService toirStockService;
+
+    @Mock
+    FileService fileService;
+
+    @Mock
+    UploadedFileRepository uploadedFileRepository;
+
+    @Mock
+    StockMovementFileRepository stockMovementFileRepository;
 
     @InjectMocks
     StockMovementService service;
@@ -384,6 +402,74 @@ class StockMovementServiceTest {
         assertThat(dto.createdById()).isEqualTo(createdById);
         assertThat(dto.createdByFullName()).isEqualTo("Jane Smith");
         assertThat(dto.occurredAt()).isEqualTo(occurredAt);
+        assertThat(dto.fileCount()).isEqualTo(2);
+    }
+
+    @Test
+    void attachFilesUploadsRepeatedFilesToReceiptMovement() {
+        UUID movementId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID frontFileId = UUID.randomUUID();
+        UUID invoiceFileId = UUID.randomUUID();
+        StockMovement movement = movement(movementId, warehouseId, StockMovementType.RECEIPT);
+        MockMultipartFile front = documentFile("invoice-front.pdf");
+        MockMultipartFile invoice = documentFile("invoice.xlsx");
+        UploadedFile frontFile = uploadedFile(frontFileId, userId, "invoice-front.pdf", "application/pdf", 100L);
+        UploadedFile invoiceFile = uploadedFile(
+                invoiceFileId,
+                userId,
+                "invoice.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                120L
+        );
+
+        when(repository.findByIdAndIsDeletedFalse(movementId)).thenReturn(Optional.of(movement));
+        when(fileService.upload(front, FileCategory.STOCK_MOVEMENT_DOCUMENT, userId))
+                .thenReturn(uploadResponse(frontFile));
+        when(fileService.upload(invoice, FileCategory.STOCK_MOVEMENT_DOCUMENT, userId))
+                .thenReturn(uploadResponse(invoiceFile));
+        when(uploadedFileRepository.findByIdAndDeletedFalse(frontFileId)).thenReturn(Optional.of(frontFile));
+        when(uploadedFileRepository.findByIdAndDeletedFalse(invoiceFileId)).thenReturn(Optional.of(invoiceFile));
+        when(stockMovementFileRepository.countByMovementId(movementId)).thenReturn(0L);
+        when(stockMovementFileRepository.saveAllAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<StockMovementFileDto> result = service.attachFiles(
+                movementId,
+                List.of(front, invoice),
+                authenticatedUser(userId)
+        );
+
+        assertThat(result).extracting(StockMovementFileDto::id)
+                .containsExactly(frontFileId, invoiceFileId);
+        assertThat(result).extracting(StockMovementFileDto::originalName)
+                .containsExactly("invoice-front.pdf", "invoice.xlsx");
+        ArgumentCaptor<List<StockMovementFile>> captor = ArgumentCaptor.forClass(List.class);
+        verify(stockMovementFileRepository).saveAllAndFlush(captor.capture());
+        assertThat(captor.getValue()).extracting(link -> link.getFile().getId())
+                .containsExactly(frontFileId, invoiceFileId);
+        assertThat(captor.getValue()).extracting(StockMovementFile::getSortOrder)
+                .containsExactly(0, 1);
+    }
+
+    @Test
+    void attachFilesRejectsTransferMovementBeforeUpload() {
+        UUID movementId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        StockMovement movement = movement(movementId, warehouseId, StockMovementType.TRANSFER);
+
+        when(repository.findByIdAndIsDeletedFalse(movementId)).thenReturn(Optional.of(movement));
+
+        assertThatThrownBy(() -> service.attachFiles(
+                movementId,
+                List.of(documentFile("transfer.pdf")),
+                authenticatedUser(userId)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Stock movement files are supported only for RECEIPT and ISSUE");
+
+        verifyNoInteractions(fileService);
     }
 
     @Test
@@ -662,6 +748,72 @@ class StockMovementServiceTest {
             public String getComment() {
                 return null;
             }
+
+            @Override
+            public long getFileCount() {
+                return 2;
+            }
         };
+    }
+
+    private StockMovement movement(UUID movementId, UUID warehouseId, StockMovementType type) {
+        StockMovement movement = new StockMovement();
+        ReflectionTestUtils.setField(movement, "id", movementId);
+        movement.setWarehouseId(warehouseId);
+        movement.setSparePartId(UUID.randomUUID());
+        movement.setType(type);
+        movement.setQuantity(1);
+        return movement;
+    }
+
+    private MockMultipartFile documentFile(String originalName) {
+        return new MockMultipartFile("files", originalName, "application/pdf", "%PDF-1.4\n".getBytes());
+    }
+
+    private UploadedFile uploadedFile(
+            UUID id,
+            UUID uploadedBy,
+            String originalName,
+            String contentType,
+            long size
+    ) {
+        return UploadedFile.builder()
+                .id(id)
+                .originalName(originalName)
+                .storedName(id + "-" + originalName)
+                .objectName("stock-movement-documents/" + originalName)
+                .contentType(contentType)
+                .extension(originalName.substring(originalName.lastIndexOf('.') + 1))
+                .size(size)
+                .uploadedBy(uploadedBy)
+                .category(FileCategory.STOCK_MOVEMENT_DOCUMENT)
+                .deleted(false)
+                .build();
+    }
+
+    private UploadFileResponse uploadResponse(UploadedFile file) {
+        return UploadFileResponse.builder()
+                .id(file.getId())
+                .originalName(file.getOriginalName())
+                .storedName(file.getStoredName())
+                .url(file.getUrl())
+                .contentType(file.getContentType())
+                .extension(file.getExtension())
+                .size(file.getSize())
+                .category(file.getCategory())
+                .createdAt(file.getCreatedAt())
+                .build();
+    }
+
+    private com.toir.security.AuthenticatedUser authenticatedUser(UUID userId) {
+        return new com.toir.security.AuthenticatedUser(
+                userId.toString(),
+                "user",
+                "user@example.com",
+                "User",
+                null,
+                "USER",
+                List.of()
+        );
     }
 }

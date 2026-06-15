@@ -38,8 +38,45 @@ public record StockMovementDto(
         LocalDate movementDate,
         Instant occurredAt,
         String notes,
-        String comment
+        String comment,
+        int fileCount
 ) {
+    public StockMovementDto(
+            UUID id,
+            UUID warehouseId,
+            String warehouseName,
+            UUID sparePartId,
+            String sparePartName,
+            SparePartType sparePartType,
+            UUID workOrderId,
+            String workOrderNumber,
+            String workOrderName,
+            StockMovementType type,
+            double quantity,
+            String unit,
+            Double unitCost,
+            BigDecimal unitPrice,
+            BigDecimal totalAmount,
+            String documentNumber,
+            UUID createdById,
+            String createdByFullName,
+            UUID responsiblePersonId,
+            String responsiblePersonName,
+            UUID takenById,
+            String takenByName,
+            UUID departmentId,
+            String supplierName,
+            LocalDate movementDate,
+            Instant occurredAt,
+            String notes,
+            String comment
+    ) {
+        this(id, warehouseId, warehouseName, sparePartId, sparePartName, sparePartType, workOrderId,
+                workOrderNumber, workOrderName, type, quantity, unit, unitCost, unitPrice, totalAmount,
+                documentNumber, createdById, createdByFullName, responsiblePersonId, responsiblePersonName,
+                takenById, takenByName, departmentId, supplierName, movementDate, occurredAt, notes, comment, 0);
+    }
+
     public StockMovementDto(
             UUID id,
             UUID warehouseId,
@@ -62,7 +99,7 @@ public record StockMovementDto(
                 workOrderNumber, workOrderName, type, quantity, null, unitCost,
                 unitPriceFromLegacy(unitCost), totalAmount(quantity, unitPriceFromLegacy(unitCost), null),
                 documentNumber, createdById, createdByFullName, null, null, null, null,
-                null, null, null, occurredAt, notes, notes);
+                null, null, null, occurredAt, notes, notes, 0);
     }
 
     public static StockMovementDto from(StockMovement m) {
@@ -95,7 +132,8 @@ public record StockMovementDto(
                 m.getMovementDate(),
                 m.getOccurredAt(),
                 m.getNotes(),
-                m.getComment() != null ? m.getComment() : m.getNotes()
+                m.getComment() != null ? m.getComment() : m.getNotes(),
+                0
         );
     }
 
@@ -129,7 +167,8 @@ public record StockMovementDto(
                 row.getMovementDate(),
                 row.getOccurredAt(),
                 row.getNotes(),
-                row.getComment() != null ? row.getComment() : row.getNotes()
+                row.getComment() != null ? row.getComment() : row.getNotes(),
+                Math.toIntExact(row.getFileCount())
         );
     }
 
