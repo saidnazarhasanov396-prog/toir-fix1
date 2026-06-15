@@ -1,12 +1,17 @@
 package com.toir.service.repair;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.dto.meter.MeterReadingDto;
+import com.toir.dto.meter.MeterReadingRequest;
+import com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest;
+import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.workorder.CompletionMeterSnapshotRequest;
 import com.toir.entity.*;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
+import com.toir.entity.equipment.MeterReading;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
@@ -17,9 +22,12 @@ import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.MeterReadingContext;
+import com.toir.enums.MeterSource;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.UserStatus;
 import com.toir.enums.WorkOrderStatus;
+import com.toir.repository.MeterReadingRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -36,6 +44,7 @@ import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.MeterService;
 import com.toir.service.NotificationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
@@ -82,6 +91,8 @@ public class RepairRequestService {
     private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
     private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
     private final EquipmentMeterRepository equipmentMeterRepository;
+    private final MeterReadingRepository meterReadingRepository;
+    private final MeterService meterService;
     private final ObjectMapper objectMapper;
 
     private static final Set<RequestStatus> REVIEWABLE_STATUSES = EnumSet.of(
@@ -314,6 +325,7 @@ public class RepairRequestService {
     public RepairRequestDto approve(UUID id) {
         RepairRequest entity = getOrThrow(id);
         assertCanTransition(entity, RequestStatus.APPROVED, REVIEWABLE_STATUSES, "Cannot approve repair request from status ");
+        assertRequiredMeterReadings(entity, "approve");
 
         captureReaction(entity, RequestStatus.APPROVED);
         entity.setStatus(RequestStatus.APPROVED);
@@ -344,6 +356,7 @@ public class RepairRequestService {
                 Set.of(RequestStatus.APPROVED),
                 "Cannot assign repair request from status "
         );
+        assertRequiredMeterReadings(entity, "assign");
         validateAssignee(assigneeId);
 
         captureReaction(entity, RequestStatus.ASSIGNED);
@@ -519,6 +532,118 @@ public class RepairRequestService {
         return value == null ? 0L : value;
     }
 
+    @Transactional(readOnly = true)
+    public List<RepairRequestMeterRequirementDto> getMeterRequirements(UUID id) {
+        RepairRequest entity = getOrThrow(id);
+        List<EquipmentMeter> meters = activeMeters(entity.getEquipmentId());
+        Map<UUID, MeterReading> latestByMeterId = latestRepairReadingsByMeter(id);
+
+        return meters.stream()
+                .map(meter -> {
+                    MeterReading latest = latestByMeterId.get(meter.getId());
+                    return new RepairRequestMeterRequirementDto(
+                            meter.getId(),
+                            meter.getMeterType(),
+                            meter.getName(),
+                            meter.getUnit(),
+                            meter.getCurrentValue(),
+                            true,
+                            latest != null,
+                            latest == null ? null : latest.getValue(),
+                            latest == null ? null : latest.getReadAt()
+                    );
+                })
+                .toList();
+    }
+
+    @Transactional
+    public List<MeterReadingDto> addMeterReadings(UUID id, RepairRequestMeterReadingBatchRequest request) {
+        RepairRequest entity = getOrThrow(id);
+        if (TERMINAL_REQUEST_STATUSES.contains(entity.getStatus())) {
+            throw RestException.badRequest("Cannot add meter readings to terminal repair request from status " + entity.getStatus());
+        }
+        if (request == null || request.readings() == null || request.readings().isEmpty()) {
+            throw RestException.badRequest("At least one meter reading is required");
+        }
+
+        List<MeterReadingDto> result = new ArrayList<>();
+        for (var reading : request.readings()) {
+            EquipmentMeter meter = equipmentMeterRepository.findByIdAndIsDeletedFalse(reading.meterId())
+                    .orElseThrow(() -> RestException.notFound("Equipment meter not found: " + reading.meterId()));
+            if (!meter.getEquipmentId().equals(entity.getEquipmentId())) {
+                throw RestException.badRequest("Meter " + meter.getId() + " does not belong to repair request equipment");
+            }
+            result.add(meterService.addReading(
+                    new MeterReadingRequest(
+                            reading.meterId(),
+                            reading.value(),
+                            reading.readAt(),
+                            MeterSource.MANUAL,
+                            reading.recordedByUserId(),
+                            reading.deviceId(),
+                            reading.note()
+                    ),
+                    MeterReadingContext.FAILURE_DETECTED,
+                    id,
+                    null,
+                    null
+            ));
+        }
+        return List.copyOf(result);
+    }
+
+    @Transactional(readOnly = true)
+    public void assertMeterReadingsReadyForApproval(UUID id) {
+        assertRequiredMeterReadings(getOrThrow(id), "approve");
+    }
+
+    private void assertRequiredMeterReadings(RepairRequest entity, String action) {
+        List<EquipmentMeter> requiredMeters = activeMeters(entity.getEquipmentId());
+        if (requiredMeters.isEmpty()) {
+            return;
+        }
+        Set<UUID> providedMeterIds = latestRepairReadingsByMeter(entity.getId()).keySet();
+        List<String> missingNames = requiredMeters.stream()
+                .filter(meter -> !providedMeterIds.contains(meter.getId()))
+                .map(this::meterLabel)
+                .toList();
+        if (!missingNames.isEmpty()) {
+            throw RestException.badRequest(
+                    "Repair request meter readings are required before " + action + ": "
+                            + String.join(", ", missingNames));
+        }
+    }
+
+    private List<EquipmentMeter> activeMeters(UUID equipmentId) {
+        if (equipmentId == null) {
+            return List.of();
+        }
+        List<EquipmentMeter> meters = equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId);
+        return meters == null ? List.of() : meters;
+    }
+
+    private Map<UUID, MeterReading> latestRepairReadingsByMeter(UUID repairRequestId) {
+        List<MeterReading> readings = meterReadingRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(repairRequestId);
+        if (readings == null || readings.isEmpty()) {
+            return Map.of();
+        }
+        return readings.stream()
+                .filter(reading -> reading.getMeterId() != null)
+                .collect(Collectors.toMap(
+                        MeterReading::getMeterId,
+                        reading -> reading,
+                        (first, ignored) -> first
+                ));
+    }
+
+    private String meterLabel(EquipmentMeter meter) {
+        if (meter.getName() != null && !meter.getName().isBlank()) {
+            return meter.getName();
+        }
+        return meter.getMeterType() == null ? String.valueOf(meter.getId()) : meter.getMeterType().name();
+    }
+
     private void captureReaction(RepairRequest entity, RequestStatus nextStatus) {
         if (entity.getReactedAt() == null
                 && nextStatus != RequestStatus.OPEN
@@ -628,6 +753,13 @@ public class RepairRequestService {
     private RepairRequestDto toDto(RepairRequest r,
                                    List<DefectBriefDto> linkedDefects,
                                    List<WorkOrderBriefDto> linkedWorkOrders) {
+        return toDto(r, linkedDefects, linkedWorkOrders, List.of());
+    }
+
+    private RepairRequestDto toDto(RepairRequest r,
+                                   List<DefectBriefDto> linkedDefects,
+                                   List<WorkOrderBriefDto> linkedWorkOrders,
+                                   List<MeterReadingDto> meterReadings) {
         String equipmentName = r.getEquipmentId() == null ? null
                 : equipmentRepository.findByIdAndIsDeletedFalse(r.getEquipmentId())
                 .map(Equipment::getName)
@@ -671,7 +803,8 @@ public class RepairRequestService {
                 r.getClarificationReason(),
                 r.getCloseResult(),
                 linkedDefects,
-                linkedWorkOrders
+                linkedWorkOrders,
+                meterReadings
         );
     }
 
@@ -686,7 +819,17 @@ public class RepairRequestService {
                 .stream()
                 .map(TriadLinkMapper::toWorkOrderBrief)
                 .toList();
-        return toDto(repairRequest, linkedDefects, linkedWorkOrders);
+        List<MeterReadingDto> meterReadings = repairMeterReadingDtos(repairRequest.getId());
+        return toDto(repairRequest, linkedDefects, linkedWorkOrders, meterReadings);
+    }
+
+    private List<MeterReadingDto> repairMeterReadingDtos(UUID repairRequestId) {
+        List<MeterReading> readings = meterReadingRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(repairRequestId);
+        if (readings == null || readings.isEmpty()) {
+            return List.of();
+        }
+        return readings.stream().map(MeterReadingDto::from).toList();
     }
 
     private void validateMaintenanceTemplate(UUID templateId) {
@@ -796,12 +939,20 @@ public class RepairRequestService {
                         WorkOrder::getRepairRequestId,
                         Collectors.mapping(TriadLinkMapper::toWorkOrderBrief, Collectors.toList())
                 ));
+        Map<UUID, List<MeterReadingDto>> readingsByRequestId = meterReadingRepository
+                .findAllByRepairRequestIdInAndIsDeletedFalseOrderByReadAtDesc(requestIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        MeterReading::getRepairRequestId,
+                        Collectors.mapping(MeterReadingDto::from, Collectors.toList())
+                ));
 
         List<RepairRequestDto> dtos = requests.stream()
                 .map(request -> toDto(
                         request,
                         defectsByRequestId.getOrDefault(request.getId(), List.of()),
-                        workOrdersByRequestId.getOrDefault(request.getId(), List.of())
+                        workOrdersByRequestId.getOrDefault(request.getId(), List.of()),
+                        readingsByRequestId.getOrDefault(request.getId(), List.of())
                 ))
                 .toList();
         return new PageImpl<>(dtos, page.getPageable(), page.getTotalElements());

@@ -2,13 +2,18 @@ package com.toir.service.repair;
 
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestClarificationRequest;
+import com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest;
+import com.toir.dto.repairrequest.RepairRequestMeterReadingRequest;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.triad.DefectBriefDto;
+import com.toir.dto.meter.MeterReadingDto;
+import com.toir.dto.meter.MeterReadingRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.EquipmentMeter;
+import com.toir.entity.equipment.MeterReading;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
 import com.toir.entity.maintenance.MaintenanceRegulation;
@@ -22,6 +27,8 @@ import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceRecalculationPolicy;
 import com.toir.enums.MaintenanceTriggerPolicy;
+import com.toir.enums.MeterReadingContext;
+import com.toir.enums.MeterSource;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
@@ -32,6 +39,7 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
+import com.toir.repository.MeterReadingRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.department.DepartmentRepository;
@@ -44,6 +52,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.MeterService;
 import com.toir.service.NotificationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
@@ -60,6 +69,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.List;
@@ -68,7 +78,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -120,6 +132,12 @@ class RepairRequestServiceTest {
 
     @Mock
     EquipmentMeterRepository equipmentMeterRepository;
+
+    @Mock
+    MeterReadingRepository meterReadingRepository;
+
+    @Mock
+    MeterService meterService;
 
     @Mock
     ObjectMapper objectMapper;
@@ -757,6 +775,164 @@ class RepairRequestServiceTest {
                 eq("RepairRequest"),
                 eq(id.toString())
         );
+    }
+
+    @Test
+    void getMeterRequirementsReturnsActiveEquipmentMetersAndExistingRequestReadings() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        EquipmentMeter odometer = meter(entity.getEquipmentId(), MeterType.MILEAGE_KM, 9_000.0);
+        odometer.setName("Odometer");
+        odometer.setUnit("km");
+        MeterReading reading = meterReading(id, odometer.getId(), entity.getEquipmentId(), 10_000.0);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(entity.getEquipmentId()))
+                .thenReturn(List.of(odometer));
+        when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(id))
+                .thenReturn(List.of(reading));
+
+        var result = service.getMeterRequirements(id);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().meterId()).isEqualTo(odometer.getId());
+        assertThat(result.getFirst().meterType()).isEqualTo(MeterType.MILEAGE_KM);
+        assertThat(result.getFirst().required()).isTrue();
+        assertThat(result.getFirst().provided()).isTrue();
+        assertThat(result.getFirst().latestValue()).isEqualTo(10_000.0);
+    }
+
+    @Test
+    void addMeterReadingsLinksManualReadingsToRepairRequest() {
+        UUID id = UUID.randomUUID();
+        UUID recordedByUserId = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        EquipmentMeter meter = meter(entity.getEquipmentId(), MeterType.MILEAGE_KM, 9_000.0);
+        Instant readAt = Instant.parse("2026-06-15T06:30:00Z");
+        MeterReadingDto savedReading = new MeterReadingDto(
+                UUID.randomUUID(),
+                meter.getId(),
+                entity.getEquipmentId(),
+                10_000.0,
+                1_000.0,
+                readAt,
+                MeterSource.MANUAL,
+                recordedByUserId,
+                null,
+                "Odometer",
+                null,
+                "tablet-1",
+                "breakdown intake",
+                Instant.parse("2026-06-15T06:31:00Z"),
+                id,
+                null,
+                null,
+                MeterReadingContext.FAILURE_DETECTED
+        );
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(equipmentMeterRepository.findByIdAndIsDeletedFalse(meter.getId())).thenReturn(Optional.of(meter));
+        when(meterService.addReading(
+                any(),
+                eq(MeterReadingContext.FAILURE_DETECTED),
+                eq(id),
+                isNull(),
+                isNull()
+        )).thenReturn(savedReading);
+
+        var result = service.addMeterReadings(
+                id,
+                new RepairRequestMeterReadingBatchRequest(List.of(new RepairRequestMeterReadingRequest(
+                        meter.getId(),
+                        10_000.0,
+                        readAt,
+                        recordedByUserId,
+                        "tablet-1",
+                        "breakdown intake"
+                )))
+        );
+
+        assertThat(result).containsExactly(savedReading);
+        verify(meterService).addReading(
+                argThat((MeterReadingRequest request) ->
+                        meter.getId().equals(request.meterId())
+                                && request.value().equals(10_000.0)
+                                && request.source() == MeterSource.MANUAL
+                                && recordedByUserId.equals(request.recordedByUserId())
+                ),
+                eq(MeterReadingContext.FAILURE_DETECTED),
+                eq(id),
+                isNull(),
+                isNull()
+        );
+    }
+
+    @Test
+    void addMeterReadingsRejectsMeterFromDifferentEquipment() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        EquipmentMeter otherEquipmentMeter = meter(UUID.randomUUID(), MeterType.ENGINE_HOURS, 100.0);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(equipmentMeterRepository.findByIdAndIsDeletedFalse(otherEquipmentMeter.getId()))
+                .thenReturn(Optional.of(otherEquipmentMeter));
+
+        assertThatThrownBy(() -> service.addMeterReadings(
+                id,
+                new RepairRequestMeterReadingBatchRequest(List.of(new RepairRequestMeterReadingRequest(
+                        otherEquipmentMeter.getId(),
+                        120.0,
+                        Instant.parse("2026-06-15T06:30:00Z"),
+                        null,
+                        null,
+                        null
+                )))
+        )).hasMessageContaining("does not belong to repair request equipment");
+
+        verify(meterService, never()).addReading(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void approveBlocksWhenActiveMeterHasNoRepairRequestReading() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.OPEN);
+        EquipmentMeter meter = meter(entity.getEquipmentId(), MeterType.MILEAGE_KM, 9_000.0);
+        meter.setName("Odometer");
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(entity.getEquipmentId()))
+                .thenReturn(List.of(meter));
+        when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(id))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.approve(id))
+                .hasMessageContaining("Repair request meter readings are required before approve")
+                .hasMessageContaining("Odometer");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void assignBlocksWhenActiveMeterHasNoRepairRequestReading() {
+        UUID id = UUID.randomUUID();
+        UUID assigneeId = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.APPROVED);
+        EquipmentMeter meter = meter(entity.getEquipmentId(), MeterType.ENGINE_HOURS, 100.0);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(entity.getEquipmentId()))
+                .thenReturn(List.of(meter));
+        when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(id))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.assign(id, assigneeId))
+                .hasMessageContaining("Repair request meter readings are required before assign")
+                .hasMessageContaining("Engine hours");
+
+        verify(userRepository, never()).findByIdAndIsDeletedFalse(assigneeId);
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -1498,5 +1674,19 @@ class RepairRequestServiceTest {
         meter.setCurrentValue(currentValue);
         meter.setActive(true);
         return meter;
+    }
+
+    private MeterReading meterReading(UUID repairRequestId, UUID meterId, UUID equipmentId, double value) {
+        MeterReading reading = new MeterReading();
+        reading.setId(UUID.randomUUID());
+        reading.setRepairRequestId(repairRequestId);
+        reading.setMeterId(meterId);
+        reading.setEquipmentId(equipmentId);
+        reading.setValue(value);
+        reading.setDelta(1_000.0);
+        reading.setReadAt(Instant.parse("2026-06-15T06:30:00Z"));
+        reading.setSource(MeterSource.MANUAL);
+        reading.setReadingContext(MeterReadingContext.FAILURE_DETECTED);
+        return reading;
     }
 }
