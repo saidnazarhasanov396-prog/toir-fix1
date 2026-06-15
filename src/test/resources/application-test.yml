@@ -27,3 +27,7 @@ minio:
   secret-key: test-secret
   bucket-name: test-bucket
   public-url:
+
+app:
+  firebase:
+    enabled: false

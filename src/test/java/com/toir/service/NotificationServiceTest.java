@@ -44,6 +44,9 @@ class NotificationServiceTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    FirebasePushNotificationSender firebasePushNotificationSender;
+
     @InjectMocks
     NotificationService service;
 

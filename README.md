@@ -65,6 +65,18 @@ Docker Compose is for local/demo verification and runs the backend with `SPRING_
 
 Production must run with the `prod` profile and provide `TOIR_DB_URL`, `TOIR_DB_USERNAME`, `TOIR_DB_PASSWORD`, and `TOIR_JWT_SECRET` through environment configuration or a secret manager. `TOIR_JWT_SECRET` must be at least 32 bytes / 256 bits for HS256. Generate production/runtime values outside the repo, for example with `openssl rand -hex 32`.
 
+### Firebase Cloud Messaging
+
+FCM push is optional and additive to the existing in-app notification store. Keep `APP_FIREBASE_ENABLED=false` until Firebase credentials are available. To enable push delivery, set:
+
+```bash
+APP_FIREBASE_ENABLED=true
+APP_FIREBASE_PROJECT_ID=<firebase-project-id>
+APP_FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/firebase-service-account.json
+```
+
+Instead of a file path, the service account can be supplied through `APP_FIREBASE_SERVICE_ACCOUNT_JSON` or `APP_FIREBASE_SERVICE_ACCOUNT_BASE64`. Do not commit Firebase service-account JSON credentials.
+
 DB schema source of truth is Flyway migrations under `db/migration`.
 - `spring.flyway.enabled=true`
 - `spring.flyway.validate-on-migrate=true`

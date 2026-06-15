@@ -16,6 +16,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,12 +32,14 @@ import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NotificationService {
 
     private final NotificationRepository repository;
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
     private final ScopeAccessService scopeAccessService;
+    private final FirebasePushNotificationSender firebasePushNotificationSender;
 
 
     @Transactional(readOnly = true)
@@ -67,7 +70,9 @@ public class NotificationService {
         n.setEntityType(r.entityType());
         n.setEntityId(r.entityId());
         n.setStatus(NotificationStatus.SENT);
-        return NotificationDto.from(repository.save(n));
+        NotificationDto saved = NotificationDto.from(repository.save(n));
+        trySendPush(saved);
+        return saved;
     }
 
     @Transactional
@@ -206,5 +211,14 @@ public class NotificationService {
                 ? Stream.empty()
                 : user.getRoles().stream();
         return Stream.concat(primary, additional).filter(Objects::nonNull);
+    }
+
+    private void trySendPush(NotificationDto notification) {
+        try {
+            firebasePushNotificationSender.sendToUser(notification);
+        } catch (RuntimeException ex) {
+            // Push delivery is best-effort; the saved in-app notification remains the source of truth.
+            log.warn("Firebase push delivery failed for notification {}: {}", notification.id(), ex.getMessage());
+        }
     }
 }
