@@ -20,8 +20,24 @@ public record NotificationDto(
         NotificationSeverity severity,
         String entityType,
         String entityId,
-        Instant readAt
+        Instant readAt,
+        Instant createdAt
 ) {
+    public NotificationDto(
+            UUID id,
+            @NotNull UUID recipientId,
+            @NotBlank String title,
+            @NotBlank String message,
+            NotificationChannel channel,
+            NotificationStatus status,
+            NotificationSeverity severity,
+            String entityType,
+            String entityId,
+            Instant readAt
+    ) {
+        this(id, recipientId, title, message, channel, status, severity, entityType, entityId, readAt, null);
+    }
+
     public NotificationDto {
         channel = channel != null ? channel : NotificationChannel.WEB;
         status = status != null ? status : NotificationStatus.PENDING;
@@ -30,6 +46,7 @@ public record NotificationDto(
 
     public static NotificationDto from(Notification n) {
         return new NotificationDto(n.getId(), n.getRecipientId(), n.getTitle(), n.getMessage(),
-                n.getChannel(), n.getStatus(), n.getSeverity(), n.getEntityType(), n.getEntityId(), n.getReadAt());
+                n.getChannel(), n.getStatus(), n.getSeverity(), n.getEntityType(), n.getEntityId(), n.getReadAt(),
+                n.getCreatedAt());
     }
 }

@@ -7,12 +7,10 @@ import com.toir.repository.users.UserCertificationRepository;
 import com.toir.entity.EscalationEvent;
 import com.toir.repository.EscalationEventRepository;
 import com.toir.enums.EscalationStatus;
-import com.toir.entity.Notification;
-import com.toir.enums.NotificationChannel;
-import com.toir.repository.NotificationRepository;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.NotificationStatus;
 import com.toir.entity.PprTask;
+import com.toir.repository.NotificationRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.enums.PprTaskStatus;
 import com.toir.entity.repair.RepairRequest;
@@ -47,6 +45,7 @@ public class OverdueDetectorService {
     private final RepairRequestRepository repairRequestRepository;
     private final WorkOrderRepository workOrderRepository;
     private final NotificationRepository notificationRepository;
+    private final NotificationService notificationService;
     private final EscalationEventRepository escalationEventRepository;
     private final UserRepository userRepository;
     private final CalibrationRecordRepository calibrationRecordRepository;
@@ -184,17 +183,9 @@ public class OverdueDetectorService {
                         && entityId.equals(n.getEntityId())
                         && (n.getStatus() == NotificationStatus.PENDING || n.getStatus() == NotificationStatus.SENT));
         if (exists) return 0;
-        Notification n = new Notification();
-        n.setRecipientId(recipientId);
-        n.setTitle(title);
-        n.setMessage(message);
-        n.setChannel(NotificationChannel.WEB);
-        n.setStatus(NotificationStatus.SENT);
-        n.setSeverity(severity);
-        n.setEntityType(entityType);
-        n.setEntityId(entityId);
-        notificationRepository.save(n);
-        return 1;
+        return notificationService.notifyUser(recipientId, title, message, severity, entityType, entityId)
+                .map(ignored -> 1)
+                .orElse(0);
     }
 
     private int raiseEscalation(String entityType, String entityId, SlaTriggerType trigger) {
