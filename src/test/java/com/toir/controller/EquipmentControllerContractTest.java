@@ -137,23 +137,25 @@ class EquipmentControllerContractTest {
         UUID frontFileId = UUID.randomUUID();
         UUID backFileId = UUID.randomUUID();
         when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipmentEntity(equipmentId, UUID.randomUUID())));
-        when(service.attachDocumentFiles(eq(equipmentId), any(), eq("Technical Passport"), eq("PASSPORT"), any()))
-                .thenReturn(equipmentDocument(equipmentId, documentId, "Technical Passport", "PASSPORT", frontFileId, backFileId));
+        when(service.attachDocumentFiles(eq(equipmentId), any(), eq("Technical Passport"), eq("PASSPORT"), eq("PAS-2024-001"), any()))
+                .thenReturn(equipmentDocument(equipmentId, documentId, "Technical Passport", "PASSPORT", "PAS-2024-001", frontFileId, backFileId));
 
         mockMvc.perform(multipart("/api/v1/equipment/{equipmentId}/documents", equipmentId)
                         .file(new MockMultipartFile("files", "front.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
                         .file(new MockMultipartFile("files", "back.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
                         .param("documentName", "Technical Passport")
-                        .param("documentType", "PASSPORT"))
+                        .param("documentType", "PASSPORT")
+                        .param("documentNumber", "PAS-2024-001"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$[0].id").value(documentId.toString()))
                 .andExpect(jsonPath("$[0].documentName").value("Technical Passport"))
+                .andExpect(jsonPath("$[0].documentNumber").value("PAS-2024-001"))
                 .andExpect(jsonPath("$[0].fileId").value(frontFileId.toString()))
                 .andExpect(jsonPath("$[0].files.length()").value(2))
                 .andExpect(jsonPath("$[0].files[0].id").value(frontFileId.toString()))
                 .andExpect(jsonPath("$[0].files[1].id").value(backFileId.toString()));
 
-        verify(service).attachDocumentFiles(eq(equipmentId), any(), eq("Technical Passport"), eq("PASSPORT"), any());
+        verify(service).attachDocumentFiles(eq(equipmentId), any(), eq("Technical Passport"), eq("PASSPORT"), eq("PAS-2024-001"), any());
     }
 
     @Test
@@ -164,7 +166,7 @@ class EquipmentControllerContractTest {
         UUID backFileId = UUID.randomUUID();
         when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipmentEntity(equipmentId, UUID.randomUUID())));
         when(service.getDocument(eq(equipmentId), eq(documentId), any()))
-                .thenReturn(equipmentDocument(equipmentId, documentId, "Technical Passport", "PASSPORT", frontFileId, backFileId));
+                .thenReturn(equipmentDocument(equipmentId, documentId, "Technical Passport", "PASSPORT", null, frontFileId, backFileId));
         when(service.downloadDocumentFile(eq(equipmentId), eq(documentId), eq(backFileId), any()))
                 .thenReturn(new ByteArrayResource("pdf".getBytes()));
 
@@ -1231,6 +1233,7 @@ class EquipmentControllerContractTest {
             UUID documentId,
             String documentName,
             String documentType,
+            String documentNumber,
             UUID frontFileId,
             UUID backFileId
     ) {
@@ -1254,7 +1257,7 @@ class EquipmentControllerContractTest {
                 documentId,
                 frontFileId,
                 documentType,
-                "DOC-" + documentId.toString().substring(0, 8),
+                documentNumber,
                 documentName,
                 front.originalName(),
                 front.mimeType(),

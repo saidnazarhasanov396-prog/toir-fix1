@@ -1,6 +1,7 @@
 package com.toir.security;
 
 import com.toir.controller.StockMovementController;
+import com.toir.dto.stockmovement.StockMovementFileDto;
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.enums.StockMovementType;
 import com.toir.service.StockMovementService;
@@ -22,8 +23,11 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -86,6 +90,61 @@ class RbacStockMovementSecurityTest {
                 .andExpect(jsonPath("$.content[0].workOrderName").value("Pump repair"))
                 .andExpect(jsonPath("$.content[0].workOrderNumber").value("WO-42"))
                 .andExpect(jsonPath("$.content[0].createdByFullName").value("Jane Smith"));
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.STOCK_READ)
+    void stockReadCanListMovementFiles() throws Exception {
+        UUID movementId = UUID.randomUUID();
+        when(stockMovementService.listFiles(eq(movementId), any()))
+                .thenReturn(List.of(stockMovementFileDto()));
+
+        mockMvc.perform(get("/api/v1/stock-movements/{movementId}/files", movementId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].originalName").value("invoice.pdf"));
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.STOCK_READ)
+    void stockReadCannotUploadMovementFiles() throws Exception {
+        mockMvc.perform(multipart("/api/v1/stock-movements/{movementId}/files", UUID.randomUUID())
+                        .file("files", "pdf".getBytes()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.STOCK_RECEIVE)
+    void stockReceiveCanUploadReceiptMovementFiles() throws Exception {
+        UUID movementId = UUID.randomUUID();
+        when(stockMovementService.movementType(movementId)).thenReturn(StockMovementType.RECEIPT);
+        when(stockMovementService.attachFiles(eq(movementId), any(), any()))
+                .thenReturn(List.of(stockMovementFileDto()));
+
+        mockMvc.perform(multipart("/api/v1/stock-movements/{movementId}/files", movementId)
+                        .file("files", "pdf".getBytes()))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.STOCK_RECEIVE)
+    void stockReceiveCannotUploadIssueMovementFiles() throws Exception {
+        UUID movementId = UUID.randomUUID();
+        when(stockMovementService.movementType(movementId)).thenReturn(StockMovementType.ISSUE);
+
+        mockMvc.perform(multipart("/api/v1/stock-movements/{movementId}/files", movementId)
+                        .file("files", "pdf".getBytes()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.STOCK_ISSUE)
+    void stockIssueCanDeleteIssueMovementFiles() throws Exception {
+        UUID movementId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        when(stockMovementService.movementType(movementId)).thenReturn(StockMovementType.ISSUE);
+
+        mockMvc.perform(delete("/api/v1/stock-movements/{movementId}/files/{fileId}", movementId, fileId))
+                .andExpect(status().isNoContent());
     }
 
     @Test
@@ -209,5 +268,15 @@ class RbacStockMovementSecurityTest {
                   "quantity": 1
                 }
                 """.formatted(UUID.randomUUID(), UUID.randomUUID(), type.name());
+    }
+
+    private StockMovementFileDto stockMovementFileDto() {
+        return new StockMovementFileDto(
+                UUID.randomUUID(),
+                "invoice.pdf",
+                "application/pdf",
+                100L,
+                "/api/v1/stock-movements/movement-1/files/file-1/download"
+        );
     }
 }

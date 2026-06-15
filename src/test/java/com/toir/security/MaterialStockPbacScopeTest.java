@@ -7,12 +7,15 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.StockMovementType;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.StockMovementFileRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.service.LowStockRecommendationService;
 import com.toir.service.StockMovementService;
 import com.toir.service.WarehouseReorderService;
+import com.toir.service.file_management.FileService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,7 +63,10 @@ class MaterialStockPbacScopeTest {
                 warehouseRepository,
                 scopeAccessService,
                 lowStockRecommendationService,
-                mock(ToirStockService.class)
+                mock(ToirStockService.class),
+                mock(FileService.class),
+                mock(UploadedFileRepository.class),
+                mock(StockMovementFileRepository.class)
         );
         when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
         reorderService = new WarehouseReorderService(stockRepository, warehouseRepository, sparePartRepository, scopeAccessService);

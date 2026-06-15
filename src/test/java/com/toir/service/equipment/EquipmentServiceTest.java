@@ -236,12 +236,14 @@ class EquipmentServiceTest {
                 List.of(front, back),
                 " Technical Passport ",
                 " PASSPORT ",
+                " PAS-2024-001 ",
                 authenticatedUser(currentUserId)
         );
 
         assertThat(result.id()).isEqualTo(documentId);
         assertThat(result.documentName()).isEqualTo("Technical Passport");
         assertThat(result.documentType()).isEqualTo("PASSPORT");
+        assertThat(result.documentNumber()).isEqualTo("PAS-2024-001");
         assertThat(result.fileId()).isEqualTo(frontFileId);
         assertThat(result.files()).extracting(EquipmentDocumentDto.FileRef::id)
                 .containsExactly(frontFileId, backFileId);
@@ -249,6 +251,7 @@ class EquipmentServiceTest {
         verify(equipmentDocumentRepository).saveAndFlush(documentCaptor.capture());
         EquipmentDocument savedDocument = documentCaptor.getValue();
         assertThat(savedDocument.getFile().getId()).isEqualTo(frontFileId);
+        assertThat(savedDocument.getDocumentNumber()).isEqualTo("PAS-2024-001");
         assertThat(savedDocument.getFiles()).hasSize(2);
         assertThat(savedDocument.getFiles()).extracting(link -> link.getFile().getId())
                 .containsExactly(frontFileId, backFileId);
@@ -273,6 +276,7 @@ class EquipmentServiceTest {
                 equipmentId,
                 files,
                 "Oversized document",
+                null,
                 null,
                 authenticatedUser(currentUserId)
         ))

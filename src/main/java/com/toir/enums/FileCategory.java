@@ -9,6 +9,7 @@ public enum FileCategory {
     VEHICLE_PICTURE("vehicle-pictures"),
     EQUIPMENT_DOCUMENT("equipment-documents"),
     EQUIPMENT_PICTURE("equipment-pictures"),
+    STOCK_MOVEMENT_DOCUMENT("stock-movement-documents"),
     WORK_ORDER_DOCUMENT("work-order-documents"),
     CHAT_ATTACHMENT("chat-attachments"),
     DOCUMENT("documents"),

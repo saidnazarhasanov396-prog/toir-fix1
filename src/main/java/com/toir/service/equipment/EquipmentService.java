@@ -379,6 +379,7 @@ public class EquipmentService {
             List<MultipartFile> files,
             String documentName,
             String documentType,
+            String documentNumber,
             AuthenticatedUser user
     ) {
         UUID currentUserId = currentUserId(user);
@@ -387,6 +388,7 @@ public class EquipmentService {
         validateEquipmentDocumentFileLimit(files.size());
         String normalizedDocumentName = normalizeDocumentName(documentName);
         String normalizedDocumentType = normalizeDocumentType(documentType);
+        String normalizedDocumentNumber = normalizeDocumentNumber(documentNumber, 0);
 
         List<UUID> uploadedFileIds = new ArrayList<>();
         try {
@@ -395,6 +397,7 @@ public class EquipmentService {
                     .equipment(equipment)
                     .file(uploadedFiles.getFirst())
                     .documentType(normalizedDocumentType)
+                    .documentNumber(normalizedDocumentNumber)
                     .documentName(normalizedDocumentName)
                     .build();
             for (int i = 0; i < uploadedFiles.size(); i++) {

@@ -1,6 +1,8 @@
 package com.toir.service;
 
+import com.toir.dto.file.UploadFileResponse;
 import com.toir.dto.stockmovement.StockMovementDto;
+import com.toir.dto.stockmovement.StockMovementFileDto;
 import com.toir.dto.stockmovement.StockMovementIssueRequest;
 import com.toir.dto.stockmovement.StockMovementReceiptRequest;
 import com.toir.dto.stockmovement.StockMovementRequest;
@@ -8,35 +10,49 @@ import com.toir.dto.warehouse.StockIssueCommand;
 import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
+import com.toir.entity.StockMovementFile;
+import com.toir.entity.UploadedFile;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.FileCategory;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.StockMovementFileRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.file_management.FileService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StockMovementService {
+
+    private static final int MAX_STOCK_MOVEMENT_FILES = 25;
 
     private final StockMovementRepository repository;
     private final WarehouseStockRepository stockRepository;
@@ -46,6 +62,9 @@ public class StockMovementService {
     private final ScopeAccessService scopeAccessService;
     private final LowStockRecommendationService lowStockRecommendationService;
     private final ToirStockService toirStockService;
+    private final FileService fileService;
+    private final UploadedFileRepository uploadedFileRepository;
+    private final StockMovementFileRepository stockMovementFileRepository;
 
 
     @Transactional(readOnly = true)
@@ -233,6 +252,151 @@ public class StockMovementService {
         lowStockRecommendationService.evaluateStockSafely(stock);
         auditMovement(saved);
         return StockMovementDto.from(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public StockMovementType movementType(UUID movementId) {
+        return movementOrThrow(movementId).getType();
+    }
+
+    @Transactional(readOnly = true)
+    public List<StockMovementFileDto> listFiles(UUID movementId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        StockMovement movement = movementOrThrow(movementId);
+        assertCanAccessWarehouseId(movement.getWarehouseId());
+        return stockMovementFileRepository.findActiveByMovementId(movementId)
+                .stream()
+                .map(link -> toFileDtoWithMetadata(movementId, link, currentUserId))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public StockMovementFileDto getFile(UUID movementId, UUID fileId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        StockMovement movement = movementOrThrow(movementId);
+        assertCanAccessWarehouseId(movement.getWarehouseId());
+        return toFileDtoWithMetadata(movementId, findStockMovementFile(movementId, fileId), currentUserId);
+    }
+
+    @Transactional
+    public List<StockMovementFileDto> attachFiles(
+            UUID movementId,
+            List<MultipartFile> files,
+            AuthenticatedUser user
+    ) {
+        UUID currentUserId = currentUserId(user);
+        StockMovement movement = movementOrThrow(movementId);
+        assertSupportedFileMovement(movement.getType());
+        assertCanAccessWarehouseId(movement.getWarehouseId());
+        validateStockMovementFiles(files);
+        long existingCount = stockMovementFileRepository.countByMovementId(movementId);
+        validateStockMovementFileLimit(existingCount + files.size());
+
+        List<UUID> uploadedFileIds = new ArrayList<>();
+        try {
+            List<StockMovementFile> links = new ArrayList<>(files.size());
+            int nextSortOrder = Math.toIntExact(existingCount);
+            for (MultipartFile file : files) {
+                UploadFileResponse uploaded = fileService.upload(
+                        file,
+                        FileCategory.STOCK_MOVEMENT_DOCUMENT,
+                        currentUserId
+                );
+                uploadedFileIds.add(uploaded.id());
+                UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
+                        .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
+                links.add(StockMovementFile.builder()
+                        .movement(movement)
+                        .file(uploadedFile)
+                        .sortOrder(nextSortOrder++)
+                        .build());
+            }
+            return stockMovementFileRepository.saveAllAndFlush(links)
+                    .stream()
+                    .map(link -> StockMovementFileDto.from(movementId, link))
+                    .toList();
+        } catch (RuntimeException e) {
+            cleanupUploadedFiles(uploadedFileIds, currentUserId);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Resource downloadFile(UUID movementId, UUID fileId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        StockMovement movement = movementOrThrow(movementId);
+        assertCanAccessWarehouseId(movement.getWarehouseId());
+        StockMovementFile link = findStockMovementFile(movementId, fileId);
+        return fileService.download(link.getFile().getId(), currentUserId);
+    }
+
+    @Transactional
+    public void deleteFile(UUID movementId, UUID fileId, AuthenticatedUser user) {
+        UUID currentUserId = currentUserId(user);
+        StockMovement movement = movementOrThrow(movementId);
+        assertSupportedFileMovement(movement.getType());
+        assertCanAccessWarehouseId(movement.getWarehouseId());
+        StockMovementFile link = findStockMovementFile(movementId, fileId);
+        stockMovementFileRepository.delete(link);
+        fileService.delete(link.getFile().getId(), currentUserId);
+    }
+
+    private StockMovement movementOrThrow(UUID movementId) {
+        return repository.findByIdAndIsDeletedFalse(movementId)
+                .orElseThrow(() -> RestException.notFound("Stock movement not found: " + movementId));
+    }
+
+    private StockMovementFile findStockMovementFile(UUID movementId, UUID fileId) {
+        return stockMovementFileRepository.findActiveByMovementIdAndFileId(movementId, fileId)
+                .orElseThrow(() -> RestException.notFound("Stock movement file not found: " + fileId));
+    }
+
+    private StockMovementFileDto toFileDtoWithMetadata(
+            UUID movementId,
+            StockMovementFile link,
+            UUID currentUserId
+    ) {
+        fileService.getMetadata(link.getFile().getId(), currentUserId);
+        return StockMovementFileDto.from(movementId, link);
+    }
+
+    private void assertSupportedFileMovement(StockMovementType type) {
+        if (type != StockMovementType.RECEIPT && type != StockMovementType.ISSUE) {
+            throw RestException.badRequest("Stock movement files are supported only for RECEIPT and ISSUE");
+        }
+    }
+
+    private void validateStockMovementFiles(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) {
+            throw RestException.badRequest("At least one stock movement file is required");
+        }
+    }
+
+    private void validateStockMovementFileLimit(long fileCount) {
+        if (fileCount > MAX_STOCK_MOVEMENT_FILES) {
+            throw RestException.badRequest("A stock movement cannot contain more than 25 files");
+        }
+    }
+
+    private void cleanupUploadedFiles(List<UUID> fileIds, UUID currentUserId) {
+        for (UUID fileId : fileIds) {
+            deleteFileQuietly(fileId, currentUserId);
+        }
+    }
+
+    private void deleteFileQuietly(UUID fileId, UUID currentUserId) {
+        try {
+            fileService.delete(fileId, currentUserId);
+        } catch (RuntimeException e) {
+            log.warn("Failed to cleanup stock movement file '{}': {}", fileId, e.getMessage());
+        }
+    }
+
+    private UUID currentUserId(AuthenticatedUser user) {
+        if (user == null || user.id() == null || user.id().isBlank()) {
+            throw RestException.unauthorized("Authenticated user is required");
+        }
+        return UUID.fromString(user.id());
     }
 
     private boolean shouldEvaluateLowStock(StockMovementType type) {
