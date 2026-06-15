@@ -12,6 +12,7 @@ import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.meter.MeterReadingRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.equipment.MeterReading;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
@@ -174,6 +175,60 @@ class RepairRequestServiceTest {
         assertThat(result.linkedDefects().getFirst().id()).isEqualTo(defectId);
         assertThat(defect.getRepairRequestId()).isEqualTo(savedRequestId);
         verify(defectRepository).save(defect);
+    }
+
+    @Test
+    void createUsesEquipmentDepartmentWhenRequestDepartmentIsMissing() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentDepartmentId = UUID.randomUUID();
+        UUID reporterId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = new RepairRequestRequest(
+                "RR-2026-0002",
+                "Pump vibration",
+                "Excess vibration on pump",
+                null,
+                null,
+                null,
+                equipmentId,
+                null,
+                null,
+                reporterId,
+                PriorityLevel.HIGH,
+                CriticalityLevel.HIGH,
+                RequestSource.MANUAL,
+                null,
+                null
+        );
+        Equipment equipment = equipment(equipmentId, equipmentDepartmentId);
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        when(departmentRepository.findByIdAndIsDeletedFalse(equipmentDepartmentId)).thenReturn(Optional.empty());
+        when(userRepository.findByIdAndIsDeletedFalse(reporterId)).thenReturn(Optional.empty());
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        RepairRequestDto result = service.create(request);
+
+        assertThat(result.departmentId()).isEqualTo(equipmentDepartmentId);
+        verify(repository).save(argThat(saved -> equipmentDepartmentId.equals(saved.getDepartmentId())));
+        verify(notificationService).notifyDepartmentByPermission(
+                eq(equipmentDepartmentId),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
     }
 
     @Test
@@ -1595,6 +1650,14 @@ class RepairRequestServiceTest {
         defect.setStatus(DefectStatus.OPEN);
         defect.setSeverity("HIGH");
         return defect;
+    }
+
+    private Equipment equipment(UUID equipmentId, UUID departmentId) {
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setName("Pump #1");
+        equipment.setDepartmentId(departmentId);
+        return equipment;
     }
 
     private Defect defect(UUID repairRequestId) {

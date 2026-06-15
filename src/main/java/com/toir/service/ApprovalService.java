@@ -27,6 +27,7 @@ import com.toir.service.approval.ApprovalRouteResolver;
 import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,6 +64,7 @@ public class ApprovalService {
     private final ApprovalGovernanceService governanceService;
     private final ApprovalSlaPolicyService slaPolicyService;
     private final ApprovalRouteResolver routeResolver;
+    private final JdbcTemplate jdbcTemplate;
     private final AuditBuilderService auditBuilderService;
     private final ApprovalScopeService approvalScopeService;
     private final ScopeAccessService scopeAccessService;
@@ -270,17 +272,9 @@ public class ApprovalService {
         }
 
         ApprovalActionType effectiveActionType = actionType == null ? ApprovalActionType.APPROVE : actionType;
-        return requestRepository
-                .findFirstPendingByTargetAndAction(
-                        normalizedType,
-                        documentId,
-                        effectiveActionType.name(),
-                        ApprovalStatus.PENDING
-                )
-                .map(existing -> {
-                    notifyCurrentStep(existing);
-                    return toDto(existing);
-                })
+        lockApprovalTargetAction(normalizedType, documentId, effectiveActionType);
+        return findPendingApproval(normalizedType, documentId, effectiveActionType)
+                .map(this::toDtoAfterReuse)
                 .orElseGet(() -> createNewApproval(
                         normalizedType,
                         documentId,
@@ -290,8 +284,38 @@ public class ApprovalService {
                         effectiveApproverId == null
                                 ? List.of()
                                 : List.of(new CreateApprovalRequest.StepInput(effectiveApproverId, approverRole)),
-                        effectiveActionType
+                        effectiveActionType,
+                        true
                 ));
+    }
+
+    private void lockApprovalTargetAction(String normalizedType, UUID documentId, ApprovalActionType actionType) {
+        int lockNamespace = normalizedType.hashCode();
+        int lockResource = (documentId + ":" + actionType.name()).hashCode();
+        jdbcTemplate.query(
+                "SELECT pg_advisory_xact_lock(?, ?)",
+                ps -> {
+                    ps.setInt(1, lockNamespace);
+                    ps.setInt(2, lockResource);
+                },
+                rs -> null
+        );
+    }
+
+    private java.util.Optional<ApprovalRequest> findPendingApproval(String normalizedType,
+                                                                    UUID documentId,
+                                                                    ApprovalActionType actionType) {
+        return requestRepository.findFirstPendingByTargetAndAction(
+                normalizedType,
+                documentId,
+                actionType.name(),
+                ApprovalStatus.PENDING.name()
+        );
+    }
+
+    private ApprovalRequestDto toDtoAfterReuse(ApprovalRequest existing) {
+        notifyCurrentStep(existing);
+        return toDto(existing);
     }
 
     @Transactional
@@ -479,7 +503,7 @@ public class ApprovalService {
                                                  UUID requesterId,
                                                  String description,
                                                  List<CreateApprovalRequest.StepInput> steps) {
-        return createNewApproval(normalizedDocumentType, documentId, title, requesterId, description, steps, null);
+        return createNewApproval(normalizedDocumentType, documentId, title, requesterId, description, steps, null, false);
     }
 
     private ApprovalRequestDto createNewApproval(String normalizedDocumentType,
@@ -489,6 +513,17 @@ public class ApprovalService {
                                                  String description,
                                                  List<CreateApprovalRequest.StepInput> steps,
                                                  ApprovalActionType actionType) {
+        return createNewApproval(normalizedDocumentType, documentId, title, requesterId, description, steps, actionType, false);
+    }
+
+    private ApprovalRequestDto createNewApproval(String normalizedDocumentType,
+                                                 UUID documentId,
+                                                 String title,
+                                                 UUID requesterId,
+                                                 String description,
+                                                 List<CreateApprovalRequest.StepInput> steps,
+                                                 ApprovalActionType actionType,
+                                                 boolean flushBeforeSideEffects) {
         if (!StringUtils.hasText(normalizedDocumentType)) {
             throw RestException.badRequest("documentType is required");
         }
@@ -536,7 +571,9 @@ public class ApprovalService {
             request.getSteps().add(step);
         }
 
-        ApprovalRequest saved = requestRepository.save(request);
+        ApprovalRequest saved = flushBeforeSideEffects
+                ? requestRepository.saveAndFlush(request)
+                : requestRepository.save(request);
         governanceService.record(saved, null, ApprovalStatus.PENDING, requesterId, "Approval created");
         notifyCurrentStep(saved);
 

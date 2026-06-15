@@ -196,7 +196,13 @@ public class RepairRequestController {
     }
 
     private void assertCanCreateRequest(RepairRequestRequest request) {
-        assertCanAccessDepartmentForMutation(request.departmentId());
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        UUID departmentId = request.departmentId() != null
+                ? request.departmentId()
+                : service.resolveDepartmentIdForCreate(request);
+        assertCanAccessDepartmentForMutation(departmentId);
     }
 
     private void assertCanMutateRequest(RepairRequest request) {

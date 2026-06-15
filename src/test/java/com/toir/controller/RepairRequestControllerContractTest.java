@@ -529,6 +529,38 @@ class RepairRequestControllerContractTest {
     }
 
     @Test
+    void createEndpointAcceptsMissingDepartmentIdWhenEquipmentIsProvided() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID reporterId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithoutLinks(requestId);
+        when(service.create(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/repair-requests")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "number": "RR-2026-0001",
+                                  "title": "Pump vibration",
+                                  "description": "Excess vibration on pump",
+                                  "equipmentId": "%s",
+                                  "reporterId": "%s",
+                                  "priority": "HIGH",
+                                  "criticality": "HIGH",
+                                  "source": "MANUAL"
+                                }
+                                """.formatted(equipmentId, reporterId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(requestId.toString()));
+
+        ArgumentCaptor<com.toir.dto.repairrequest.RepairRequestRequest> captor =
+                ArgumentCaptor.forClass(com.toir.dto.repairrequest.RepairRequestRequest.class);
+        verify(service).create(captor.capture());
+        assertThat(captor.getValue().equipmentId()).isEqualTo(equipmentId);
+        assertThat(captor.getValue().departmentId()).isNull();
+    }
+
+    @Test
     void createEndpointAcceptsInlineDefectsArrayAndReturnsLinkedDefect() throws Exception {
         UUID requestId = UUID.randomUUID();
         UUID defectId = UUID.randomUUID();

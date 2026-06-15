@@ -142,12 +142,29 @@ public class RepairRequestService {
         return toDtoWithLinks(getOrThrow(id));
     }
 
+    @Transactional(readOnly = true)
+    public UUID resolveDepartmentIdForCreate(RepairRequestRequest request) {
+        if (request.departmentId() != null) {
+            return request.departmentId();
+        }
+        if (request.equipmentId() == null) {
+            throw RestException.badRequest("equipmentId is required to resolve department");
+        }
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + request.equipmentId()));
+        if (equipment.getDepartmentId() == null) {
+            throw RestException.badRequest("departmentId is required because selected equipment has no department");
+        }
+        return equipment.getDepartmentId();
+    }
+
     @Transactional
     public RepairRequestDto create(RepairRequestRequest request) {
         if (repository.existsByNumberAndIsDeletedFalse(request.number())) {
             throw RestException.conflict("Request number already exists: " + request.number());
         }
         equipmentStatusLifecycleService.assertOperationallyAllowed(request.equipmentId(), "create repair request");
+        UUID effectiveDepartmentId = resolveDepartmentIdForCreate(request);
         List<RepairRequestRequest.InlineDefectRequest> inlineDefects = normalizeInlineDefects(request);
         if (request.defectId() != null && !inlineDefects.isEmpty()) {
             throw RestException.badRequest("Use either defectId or inline defects, not both");
@@ -161,7 +178,7 @@ public class RepairRequestService {
         entity.setDescription(request.description());
         entity.setTemplateId(request.templateId());
         entity.setEquipmentId(request.equipmentId());
-        entity.setDepartmentId(request.departmentId());
+        entity.setDepartmentId(effectiveDepartmentId);
         entity.setLocationId(request.locationId());
         entity.setReporterId(request.reporterId());
         if (request.priority() != null) entity.setPriority(request.priority());
