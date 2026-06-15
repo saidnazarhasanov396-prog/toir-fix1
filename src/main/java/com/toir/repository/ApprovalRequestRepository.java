@@ -58,15 +58,10 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
             SELECT *
             FROM approval_requests
             WHERE is_deleted = false
-              AND status = cast(:status as varchar)
-              AND (
-                    (target_type = :targetType AND target_id = cast(:targetId as uuid))
-                 OR (document_type = :targetType AND document_id = cast(:targetId as uuid))
-              )
-              AND (
-                    action_type = :actionType
-                 OR action_type IS NULL
-              )
+              AND status = :status
+              AND COALESCE(target_type, document_type) = :targetType
+              AND COALESCE(target_id, document_id) = cast(:targetId as uuid)
+              AND COALESCE(action_type, 'APPROVE') = :actionType
             ORDER BY created_at DESC
             LIMIT 1
             """, nativeQuery = true)
@@ -74,7 +69,7 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
             @Param("targetType") String targetType,
             @Param("targetId") UUID targetId,
             @Param("actionType") String actionType,
-            @Param("status") ApprovalStatus status
+            @Param("status") String status
     );
 
     @Query(value = """

@@ -1,8 +1,11 @@
 package com.toir.controller.repair;
 import com.toir.dto.approval.ApprovalRequestDto;
+import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestClarificationRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
+import com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest;
+import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.entity.repair.RepairRequest;
@@ -15,6 +18,7 @@ import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairRequestService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -73,6 +77,23 @@ public class RepairRequestController {
         return ResponseEntity.ok(service.findById(id));
     }
 
+    @GetMapping("/{id}/meter-readings/requirements")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_READ')")
+    public ResponseEntity<List<RepairRequestMeterRequirementDto>> meterRequirements(@PathVariable UUID id) {
+        assertCanReadRequest(requestOrThrow(id));
+        return ResponseEntity.ok(service.getMeterRequirements(id));
+    }
+
+    @PostMapping("/{id}/meter-readings")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_UPDATE') or hasAuthority('METER_READING_CREATE')")
+    public ResponseEntity<List<MeterReadingDto>> addMeterReadings(
+            @PathVariable UUID id,
+            @Valid @RequestBody RepairRequestMeterReadingBatchRequest request
+    ) {
+        assertCanMutateRequest(requestOrThrow(id));
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.addMeterReadings(id, request));
+    }
+
     @PostMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_CREATE')")
     public ResponseEntity<RepairRequestDto> create(@Valid @RequestBody RepairRequestRequest request) {
@@ -98,6 +119,7 @@ public class RepairRequestController {
                                                       @RequestParam(required = false) UUID approverId) {
         RepairRequest repairRequest = requestOrThrow(id);
         assertCanMutateRequest(repairRequest);
+        service.assertMeterReadingsReadyForApproval(id);
         return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
                 "REPAIR_REQUEST",
                 id,
@@ -174,7 +196,13 @@ public class RepairRequestController {
     }
 
     private void assertCanCreateRequest(RepairRequestRequest request) {
-        assertCanAccessDepartmentForMutation(request.departmentId());
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        UUID departmentId = request.departmentId() != null
+                ? request.departmentId()
+                : service.resolveDepartmentIdForCreate(request);
+        assertCanAccessDepartmentForMutation(departmentId);
     }
 
     private void assertCanMutateRequest(RepairRequest request) {

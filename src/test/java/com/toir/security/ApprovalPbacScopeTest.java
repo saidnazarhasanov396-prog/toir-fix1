@@ -47,6 +47,7 @@ import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
@@ -81,6 +82,7 @@ class ApprovalPbacScopeTest {
     NotificationService notificationService;
     ApprovalGovernanceService governanceService;
     ApprovalSlaPolicyService slaPolicyService;
+    JdbcTemplate jdbcTemplate;
     ApprovalService service;
 
     @BeforeEach
@@ -100,6 +102,7 @@ class ApprovalPbacScopeTest {
         notificationService = mock(NotificationService.class);
         governanceService = mock(ApprovalGovernanceService.class);
         slaPolicyService = mock(ApprovalSlaPolicyService.class);
+        jdbcTemplate = mock(JdbcTemplate.class);
         when(slaPolicyService.slaFor(any())).thenReturn(Duration.ofHours(24));
         service = new ApprovalService(
                 requestRepository,
@@ -114,6 +117,7 @@ class ApprovalPbacScopeTest {
                 governanceService,
                 slaPolicyService,
                 new DefaultApprovalRouteResolver(templateRepository, userRepository),
+                jdbcTemplate,
                 auditBuilderService,
                 approvalScopeService,
                 scopeAccessService,
@@ -616,7 +620,7 @@ class ApprovalPbacScopeTest {
                 "WORK_ORDER",
                 documentId,
                 ApprovalActionType.APPROVE.name(),
-                ApprovalStatus.PENDING
+                ApprovalStatus.PENDING.name()
         )).thenReturn(Optional.of(existing));
 
         var result = service.createOrReuseApprovalForDocument(
@@ -631,6 +635,7 @@ class ApprovalPbacScopeTest {
 
         assertThat(result.id()).isEqualTo(existing.getId());
         verify(requestRepository, never()).save(any(ApprovalRequest.class));
+        verify(requestRepository, never()).saveAndFlush(any(ApprovalRequest.class));
     }
 
     @Test
@@ -642,9 +647,9 @@ class ApprovalPbacScopeTest {
                 "PROCUREMENT_REQUEST",
                 documentId,
                 ApprovalActionType.APPROVE.name(),
-                ApprovalStatus.PENDING
+                ApprovalStatus.PENDING.name()
         )).thenReturn(Optional.empty());
-        when(requestRepository.save(any())).thenAnswer(invocation -> {
+        when(requestRepository.saveAndFlush(any())).thenAnswer(invocation -> {
             ApprovalRequest saved = invocation.getArgument(0);
             saved.setId(UUID.randomUUID());
             return saved;
@@ -663,7 +668,7 @@ class ApprovalPbacScopeTest {
         assertThat(result.documentType()).isEqualTo("PROCUREMENT_REQUEST");
         assertThat(result.documentId()).isEqualTo(documentId);
         org.mockito.ArgumentCaptor<ApprovalRequest> captor = org.mockito.ArgumentCaptor.forClass(ApprovalRequest.class);
-        verify(requestRepository).save(captor.capture());
+        verify(requestRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getTargetType()).isEqualTo(ApprovalTargetType.PROCUREMENT_REQUEST);
         assertThat(captor.getValue().getTargetId()).isEqualTo(documentId);
     }
@@ -677,9 +682,9 @@ class ApprovalPbacScopeTest {
                 "MAINTENANCE_BUDGET",
                 documentId,
                 ApprovalActionType.APPROVE.name(),
-                ApprovalStatus.PENDING
+                ApprovalStatus.PENDING.name()
         )).thenReturn(Optional.empty());
-        when(requestRepository.save(any())).thenAnswer(invocation -> {
+        when(requestRepository.saveAndFlush(any())).thenAnswer(invocation -> {
             ApprovalRequest saved = invocation.getArgument(0);
             saved.setId(UUID.randomUUID());
             return saved;
@@ -698,7 +703,7 @@ class ApprovalPbacScopeTest {
         assertThat(result.documentType()).isEqualTo("MAINTENANCE_BUDGET");
         assertThat(result.documentId()).isEqualTo(documentId);
         org.mockito.ArgumentCaptor<ApprovalRequest> captor = org.mockito.ArgumentCaptor.forClass(ApprovalRequest.class);
-        verify(requestRepository).save(captor.capture());
+        verify(requestRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getTargetType()).isEqualTo(ApprovalTargetType.MAINTENANCE_BUDGET);
         assertThat(captor.getValue().getTargetId()).isEqualTo(documentId);
     }
@@ -712,9 +717,9 @@ class ApprovalPbacScopeTest {
                 "MAINTENANCE_DUE_EVENT",
                 eventId,
                 ApprovalActionType.CREATE_WORK_ORDER.name(),
-                ApprovalStatus.PENDING
+                ApprovalStatus.PENDING.name()
         )).thenReturn(Optional.empty());
-        when(requestRepository.save(any())).thenAnswer(invocation -> {
+        when(requestRepository.saveAndFlush(any())).thenAnswer(invocation -> {
             ApprovalRequest saved = invocation.getArgument(0);
             saved.setId(UUID.randomUUID());
             return saved;
@@ -734,7 +739,7 @@ class ApprovalPbacScopeTest {
         assertThat(result.documentType()).isEqualTo("MAINTENANCE_DUE_EVENT");
         assertThat(result.documentId()).isEqualTo(eventId);
         org.mockito.ArgumentCaptor<ApprovalRequest> captor = org.mockito.ArgumentCaptor.forClass(ApprovalRequest.class);
-        verify(requestRepository).save(captor.capture());
+        verify(requestRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getTargetType()).isEqualTo(ApprovalTargetType.MAINTENANCE_DUE_EVENT);
         assertThat(captor.getValue().getTargetId()).isEqualTo(eventId);
         assertThat(captor.getValue().getActionType()).isEqualTo(ApprovalActionType.CREATE_WORK_ORDER);
@@ -752,7 +757,7 @@ class ApprovalPbacScopeTest {
                 "MAINTENANCE_DUE_EVENT",
                 eventId,
                 ApprovalActionType.CREATE_TASK.name(),
-                ApprovalStatus.PENDING
+                ApprovalStatus.PENDING.name()
         )).thenReturn(Optional.of(existing));
 
         var result = service.createOrReuseApprovalForDocument(
@@ -768,6 +773,7 @@ class ApprovalPbacScopeTest {
 
         assertThat(result.id()).isEqualTo(existing.getId());
         verify(requestRepository, never()).save(any(ApprovalRequest.class));
+        verify(requestRepository, never()).saveAndFlush(any(ApprovalRequest.class));
     }
 
     @Test

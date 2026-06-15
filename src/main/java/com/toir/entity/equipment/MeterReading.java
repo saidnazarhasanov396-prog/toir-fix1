@@ -1,5 +1,6 @@
 package com.toir.entity.equipment;
 import com.toir.entity.BaseEntity;
+import com.toir.enums.MeterReadingContext;
 import com.toir.enums.MeterSource;
 
 import jakarta.persistence.*;
@@ -41,6 +42,19 @@ public class MeterReading extends BaseEntity {
 
     @Column(name = "recorded_by_user_id")
     private UUID recordedByUserId;
+
+    @Column(name = "repair_request_id")
+    private UUID repairRequestId;
+
+    @Column(name = "work_order_id")
+    private UUID workOrderId;
+
+    @Column(name = "defect_id")
+    private UUID defectId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reading_context", nullable = false)
+    private MeterReadingContext readingContext = MeterReadingContext.MANUAL_UPDATE;
 
     @Column(name = "device_id")
     private String deviceId;

@@ -1,13 +1,18 @@
 package com.toir.controller;
 
 import com.toir.controller.repair.RepairRequestController;
+import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.repairrequest.RepairRequestDto;
+import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.MeterReadingContext;
+import com.toir.enums.MeterSource;
+import com.toir.enums.MeterType;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
 import com.toir.enums.RequestStatus;
@@ -37,6 +42,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -331,7 +337,118 @@ class RepairRequestControllerContractTest {
                 org.mockito.ArgumentMatchers.eq("REPAIR_REQUEST_APPROVER"),
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString());
+        verify(service).assertMeterReadingsReadyForApproval(requestId);
         verify(service, never()).approve(requestId);
+    }
+
+    @Test
+    void approveEndpointBlocksWhenRepairRequestMeterReadingsAreMissing() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithLinks(requestId);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
+        org.mockito.Mockito.doThrow(com.toir.exception.RestException.badRequest(
+                        "Repair request meter readings are required before approve: Odometer"))
+                .when(service).assertMeterReadingsReadyForApproval(requestId);
+
+        mockMvc.perform(post("/api/v1/repair-requests/{id}/approve", requestId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Repair request meter readings are required before approve: Odometer"));
+
+        verify(approvalService, never()).createOrReuseApprovalForDocument(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
+    }
+
+    @Test
+    void meterRequirementsEndpointReturnsConfiguredRepairRequestMeters() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        UUID meterId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithLinks(requestId);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
+        when(service.getMeterRequirements(requestId)).thenReturn(List.of(new RepairRequestMeterRequirementDto(
+                meterId,
+                MeterType.MILEAGE_KM,
+                "Odometer",
+                "km",
+                9_000.0,
+                true,
+                true,
+                10_000.0,
+                Instant.parse("2026-06-15T06:30:00Z")
+        )));
+
+        mockMvc.perform(get("/api/v1/repair-requests/{id}/meter-readings/requirements", requestId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].meterId").value(meterId.toString()))
+                .andExpect(jsonPath("$[0].meterType").value("MILEAGE_KM"))
+                .andExpect(jsonPath("$[0].required").value(true))
+                .andExpect(jsonPath("$[0].provided").value(true))
+                .andExpect(jsonPath("$[0].latestValue").value(10_000.0));
+    }
+
+    @Test
+    void addMeterReadingsEndpointPassesBatchToService() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        UUID meterId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID readingId = UUID.randomUUID();
+        UUID recordedByUserId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithLinks(requestId);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
+        when(service.addMeterReadings(eq(requestId), any())).thenReturn(List.of(new MeterReadingDto(
+                readingId,
+                meterId,
+                equipmentId,
+                10_000.0,
+                1_000.0,
+                Instant.parse("2026-06-15T06:30:00Z"),
+                MeterSource.MANUAL,
+                recordedByUserId,
+                "Mechanic",
+                "Odometer",
+                "Truck",
+                "tablet-1",
+                "breakdown intake",
+                Instant.parse("2026-06-15T06:31:00Z"),
+                requestId,
+                null,
+                null,
+                MeterReadingContext.FAILURE_DETECTED
+        )));
+
+        mockMvc.perform(post("/api/v1/repair-requests/{id}/meter-readings", requestId)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "readings": [
+                                    {
+                                      "meterId": "%s",
+                                      "value": 10000.0,
+                                      "readAt": "2026-06-15T06:30:00Z",
+                                      "recordedByUserId": "%s",
+                                      "deviceId": "tablet-1",
+                                      "note": "breakdown intake"
+                                    }
+                                  ]
+                                }
+                                """.formatted(meterId, recordedByUserId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].id").value(readingId.toString()))
+                .andExpect(jsonPath("$[0].repairRequestId").value(requestId.toString()))
+                .andExpect(jsonPath("$[0].readingContext").value("FAILURE_DETECTED"));
+
+        ArgumentCaptor<com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest> captor =
+                ArgumentCaptor.forClass(com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest.class);
+        verify(service).addMeterReadings(eq(requestId), captor.capture());
+        assertThat(captor.getValue().readings()).hasSize(1);
+        assertThat(captor.getValue().readings().getFirst().meterId()).isEqualTo(meterId);
+        assertThat(captor.getValue().readings().getFirst().value()).isEqualTo(10_000.0);
     }
 
     @Test
@@ -409,6 +526,38 @@ class RepairRequestControllerContractTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(requestId.toString()))
                 .andExpect(jsonPath("$.linkedDefects[0].id").value(defectId.toString()));
+    }
+
+    @Test
+    void createEndpointAcceptsMissingDepartmentIdWhenEquipmentIsProvided() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID reporterId = UUID.randomUUID();
+        RepairRequestDto response = dtoWithoutLinks(requestId);
+        when(service.create(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/repair-requests")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "number": "RR-2026-0001",
+                                  "title": "Pump vibration",
+                                  "description": "Excess vibration on pump",
+                                  "equipmentId": "%s",
+                                  "reporterId": "%s",
+                                  "priority": "HIGH",
+                                  "criticality": "HIGH",
+                                  "source": "MANUAL"
+                                }
+                                """.formatted(equipmentId, reporterId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(requestId.toString()));
+
+        ArgumentCaptor<com.toir.dto.repairrequest.RepairRequestRequest> captor =
+                ArgumentCaptor.forClass(com.toir.dto.repairrequest.RepairRequestRequest.class);
+        verify(service).create(captor.capture());
+        assertThat(captor.getValue().equipmentId()).isEqualTo(equipmentId);
+        assertThat(captor.getValue().departmentId()).isNull();
     }
 
     @Test

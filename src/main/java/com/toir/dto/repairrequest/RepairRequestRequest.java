@@ -22,7 +22,8 @@ public record RepairRequestRequest(
         @Schema(description = "Optional inline defects to create with the repair request", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         List<InlineDefectRequest> defects,
         @NotNull UUID equipmentId,
-        @NotNull UUID departmentId,
+        @Schema(description = "Optional; when omitted it is inferred from selected equipment", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        UUID departmentId,
         UUID locationId,
         @NotNull UUID reporterId,
         PriorityLevel priority,
