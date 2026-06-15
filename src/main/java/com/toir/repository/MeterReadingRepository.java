@@ -45,6 +45,12 @@ public interface MeterReadingRepository extends JpaRepository<MeterReading, UUID
     @Query(value = "SELECT * FROM meter_readings WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<MeterReading> findAllByEquipmentIdAndIsDeletedFalseOrderByReadAtDesc(@Param("equipmentId") UUID equipmentId);
 
+    @Query(value = "SELECT * FROM meter_readings WHERE repair_request_id = :repairRequestId AND is_deleted = false ORDER BY read_at DESC, created_at DESC", nativeQuery = true)
+    List<MeterReading> findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(@Param("repairRequestId") UUID repairRequestId);
+
+    @Query(value = "SELECT * FROM meter_readings WHERE repair_request_id IN (:repairRequestIds) AND is_deleted = false ORDER BY read_at DESC, created_at DESC", nativeQuery = true)
+    List<MeterReading> findAllByRepairRequestIdInAndIsDeletedFalseOrderByReadAtDesc(@Param("repairRequestIds") Collection<UUID> repairRequestIds);
+
     @Query(value = """
             SELECT *
             FROM meter_readings r

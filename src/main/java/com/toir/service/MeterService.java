@@ -4,13 +4,16 @@ import com.toir.dto.meter.*;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.equipment.MeterReading;
+import com.toir.entity.equipment.VehicleDetails;
 import com.toir.entity.users.User;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.MaintenanceTriggerSource;
+import com.toir.enums.MeterReadingContext;
 import com.toir.enums.MeterType;
 import com.toir.exception.RestException;
 import com.toir.repository.MeterReadingRepository;
+import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.users.UserRepository;
@@ -42,6 +45,7 @@ public class MeterService {
     private final EquipmentMeterRepository meterRepository;
     private final MeterReadingRepository readingRepository;
     private final EquipmentRepository equipmentRepository;
+    private final VehicleDetailsRepository vehicleDetailsRepository;
     private final UserRepository userRepository;
     private final AuditBuilderService auditBuilderService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
@@ -153,6 +157,17 @@ public class MeterService {
 
     @Transactional
     public MeterReadingDto addReading(MeterReadingRequest request) {
+        return addReading(request, MeterReadingContext.MANUAL_UPDATE, null, null, null);
+    }
+
+    @Transactional
+    public MeterReadingDto addReading(
+            MeterReadingRequest request,
+            MeterReadingContext readingContext,
+            UUID repairRequestId,
+            UUID workOrderId,
+            UUID defectId
+    ) {
         EquipmentMeter meter = getMeterOrThrow(request.meterId());
         if (!meter.isActive()) {
             throw RestException.conflict("Meter is not active: " + meter.getId());
@@ -180,12 +195,17 @@ public class MeterService {
         reading.setReadAt(readAt);
         reading.setSource(request.source());
         reading.setRecordedByUserId(request.recordedByUserId());
+        reading.setRepairRequestId(repairRequestId);
+        reading.setWorkOrderId(workOrderId);
+        reading.setDefectId(defectId);
+        reading.setReadingContext(readingContext == null ? MeterReadingContext.MANUAL_UPDATE : readingContext);
         reading.setDeviceId(request.deviceId());
         reading.setNote(request.note());
         MeterReading saved = readingRepository.save(reading);
 
         meter.setCurrentValue(newValue);
         meter.setLastReadAt(readAt);
+        syncVehicleMeter(meter, newValue);
 
         auditBuilderService.log(
                 "meter_reading",
@@ -221,6 +241,25 @@ public class MeterService {
         }
 
         return enrichReading(saved);
+    }
+
+    private void syncVehicleMeter(EquipmentMeter meter, double newValue) {
+        if (meter.getMeterType() != MeterType.MILEAGE_KM && meter.getMeterType() != MeterType.ENGINE_HOURS) {
+            return;
+        }
+        vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(meter.getEquipmentId())
+                .ifPresent(vehicleDetails -> syncVehicleMeterValue(vehicleDetails, meter.getMeterType(), newValue));
+    }
+
+    private void syncVehicleMeterValue(VehicleDetails vehicleDetails, MeterType meterType, double newValue) {
+        if (meterType == MeterType.MILEAGE_KM) {
+            vehicleDetails.setCurrentOdometerKm(newValue);
+        } else if (meterType == MeterType.ENGINE_HOURS) {
+            vehicleDetails.setCurrentEngineHours(newValue);
+        } else {
+            return;
+        }
+        vehicleDetailsRepository.save(vehicleDetails);
     }
 
     @Transactional(readOnly = true)

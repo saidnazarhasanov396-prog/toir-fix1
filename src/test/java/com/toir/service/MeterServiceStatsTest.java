@@ -5,10 +5,13 @@ import com.toir.dto.meter.MeterStatsResponse;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.equipment.MeterReading;
+import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.MaintenanceTriggerSource;
+import com.toir.enums.MeterReadingContext;
 import com.toir.enums.MeterSource;
 import com.toir.enums.MeterType;
 import com.toir.repository.MeterReadingRepository;
+import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.MeterStatsProjection;
@@ -46,6 +49,8 @@ class MeterServiceStatsTest {
     MeterReadingRepository readingRepository;
     @Mock
     EquipmentRepository equipmentRepository;
+    @Mock
+    VehicleDetailsRepository vehicleDetailsRepository;
     @Mock
     UserRepository userRepository;
     @Mock
@@ -194,6 +199,73 @@ class MeterServiceStatsTest {
         assertThat(meter.getLastReadAt()).isEqualTo(readAt);
         verify(meterRepository).save(meter);
         verify(maintenanceAutomationService).evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
+    }
+
+    @Test
+    void addReadingWithRepairRequestContextStoresContextAndSyncsVehicleOdometer() {
+        UUID meterId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        Instant readAt = Instant.parse("2026-06-15T06:30:00Z");
+
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setId(meterId);
+        meter.setEquipmentId(equipmentId);
+        meter.setMeterType(MeterType.MILEAGE_KM);
+        meter.setName("Odometer");
+        meter.setUnit("km");
+        meter.setCurrentValue(9_000.0);
+        meter.setActive(true);
+
+        VehicleDetails vehicleDetails = new VehicleDetails();
+        vehicleDetails.setId(UUID.randomUUID());
+        vehicleDetails.setEquipmentId(equipmentId);
+        vehicleDetails.setCurrentOdometerKm(9_000.0);
+        vehicleDetails.setCurrentEngineHours(250.0);
+
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setName("Truck");
+
+        when(meterRepository.findByIdAndIsDeletedFalse(meterId)).thenReturn(java.util.Optional.of(meter));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(java.util.Optional.of(vehicleDetails));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(readingRepository.save(any(MeterReading.class))).thenAnswer(invocation -> {
+            MeterReading saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(meterRepository.save(any(EquipmentMeter.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(java.util.Optional.of(equipment));
+
+        var result = service.addReading(
+                new MeterReadingRequest(
+                        meterId,
+                        10_000.0,
+                        readAt,
+                        MeterSource.MANUAL,
+                        null,
+                        "tablet-1",
+                        "breakdown intake"
+                ),
+                MeterReadingContext.FAILURE_DETECTED,
+                repairRequestId,
+                null,
+                null
+        );
+
+        assertThat(result.value()).isEqualTo(10_000.0);
+        assertThat(result.repairRequestId()).isEqualTo(repairRequestId);
+        assertThat(result.readingContext()).isEqualTo(MeterReadingContext.FAILURE_DETECTED);
+        assertThat(vehicleDetails.getCurrentOdometerKm()).isEqualTo(10_000.0);
+        verify(vehicleDetailsRepository).save(vehicleDetails);
+        verify(readingRepository).save(org.mockito.ArgumentMatchers.argThat(reading ->
+                repairRequestId.equals(reading.getRepairRequestId())
+                        && reading.getReadingContext() == MeterReadingContext.FAILURE_DETECTED
+                        && reading.getWorkOrderId() == null
+                        && reading.getDefectId() == null
+        ));
     }
 
     private MeterStatsProjection mockProjection(Long total, Long active, Long readings, Long due) {
