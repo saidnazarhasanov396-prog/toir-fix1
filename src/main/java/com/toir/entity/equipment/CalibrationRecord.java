@@ -59,4 +59,6 @@ public class CalibrationRecord extends BaseEntity {
 
     @Column(columnDefinition = "text")
     private String notes;
+
+
 }

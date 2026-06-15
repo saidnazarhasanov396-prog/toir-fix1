@@ -4,6 +4,7 @@ import com.toir.dto.defect.DefectResponse;
 import com.toir.dto.defect.DefectStatsResponse;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.KnowledgeArticle;
+import com.toir.enums.DefectStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.KnowledgeArticleRepository;
@@ -36,12 +37,13 @@ public class DefectController {
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) UUID repairRequestId,
             @RequestParam(name = "requestId", required = false) UUID requestIdAlias,
+            @RequestParam(required = false) DefectStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String search
     ) {
         UUID resolvedRepairRequestId = resolveRepairRequestIdFilter(repairRequestId, requestIdAlias);
-        return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, page, size, search));
+        return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, status, page, size, search));
     }
 
     @GetMapping("/stats")

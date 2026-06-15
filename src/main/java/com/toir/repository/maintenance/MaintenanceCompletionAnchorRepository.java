@@ -13,6 +13,8 @@ public interface MaintenanceCompletionAnchorRepository extends JpaRepository<Mai
 
     Optional<MaintenanceCompletionAnchor> findByWorkOrderIdAndIsDeletedFalse(UUID workOrderId);
 
+    Optional<MaintenanceCompletionAnchor> findByRepairRequestIdAndIsDeletedFalse(UUID repairRequestId);
+
     Optional<MaintenanceCompletionAnchor> findByMaintenanceDueEventIdAndIsDeletedFalse(UUID maintenanceDueEventId);
 
     @Query(value = """

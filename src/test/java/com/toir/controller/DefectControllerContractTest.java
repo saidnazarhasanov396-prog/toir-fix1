@@ -75,7 +75,7 @@ class DefectControllerContractTest {
     void listWithRepairRequestIdReturnsOnlyMatchingDefects() throws Exception {
         UUID repairRequestId = UUID.randomUUID();
         DefectResponse response = defectResponse(UUID.randomUUID(), repairRequestId);
-        when(service.search(null, repairRequestId, 0, 100, null))
+        when(service.search(null, repairRequestId, null, 0, 100, null))
                 .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
 
         mockMvc.perform(get("/api/v1/defects")
@@ -85,7 +85,7 @@ class DefectControllerContractTest {
                 .andExpect(jsonPath("$.content[0].repairRequestId").value(repairRequestId.toString()))
                 .andExpect(jsonPath("$.content[0].requestId").value(repairRequestId.toString()));
 
-        verify(service).search(null, repairRequestId, 0, 100, null);
+        verify(service).search(null, repairRequestId, null, 0, 100, null);
     }
 
     @Test
@@ -93,7 +93,7 @@ class DefectControllerContractTest {
         UUID repairRequestId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
         DefectResponse response = defectResponse(equipmentId, repairRequestId);
-        when(service.search(equipmentId, repairRequestId, 0, 100, null))
+        when(service.search(equipmentId, repairRequestId, null, 0, 100, null))
                 .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
 
         mockMvc.perform(get("/api/v1/defects")
@@ -104,13 +104,13 @@ class DefectControllerContractTest {
                 .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
                 .andExpect(jsonPath("$.content[0].repairRequestId").value(repairRequestId.toString()));
 
-        verify(service).search(equipmentId, repairRequestId, 0, 100, null);
+        verify(service).search(equipmentId, repairRequestId, null, 0, 100, null);
     }
 
     @Test
     void listWithRepairRequestIdReturnsEmptyWhenNoMatches() throws Exception {
         UUID repairRequestId = UUID.randomUUID();
-        when(service.search(null, repairRequestId, 0, 100, null))
+        when(service.search(null, repairRequestId, null, 0, 100, null))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 100), 0));
 
         mockMvc.perform(get("/api/v1/defects")
@@ -126,7 +126,7 @@ class DefectControllerContractTest {
     void listWithoutRepairRequestIdReturnsAllNonDeletedDefects() throws Exception {
         DefectResponse first = defectResponse(UUID.randomUUID(), UUID.randomUUID());
         DefectResponse second = defectResponse(UUID.randomUUID(), null);
-        when(service.search(null, null, 0, 100, null))
+        when(service.search(null, null, null, 0, 100, null))
                 .thenReturn(new PageImpl<>(List.of(first, second), PageRequest.of(0, 100), 2));
 
         mockMvc.perform(get("/api/v1/defects")
@@ -137,14 +137,14 @@ class DefectControllerContractTest {
                 .andExpect(jsonPath("$.content[1].id").value(second.id().toString()))
                 .andExpect(jsonPath("$.totalElements").value(2));
 
-        verify(service).search(null, null, 0, 100, null);
+        verify(service).search(null, null, null, 0, 100, null);
     }
 
     @Test
     void listWithLegacyRequestIdAliasReturnsOnlyMatchingDefects() throws Exception {
         UUID repairRequestId = UUID.randomUUID();
         DefectResponse response = defectResponse(UUID.randomUUID(), repairRequestId);
-        when(service.search(null, repairRequestId, 0, 100, null))
+        when(service.search(null, repairRequestId, null, 0, 100, null))
                 .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
 
         mockMvc.perform(get("/api/v1/defects")
@@ -154,7 +154,7 @@ class DefectControllerContractTest {
                 .andExpect(jsonPath("$.content[0].repairRequestId").value(repairRequestId.toString()))
                 .andExpect(jsonPath("$.content[0].requestId").value(repairRequestId.toString()));
 
-        verify(service).search(null, repairRequestId, 0, 100, null);
+        verify(service).search(null, repairRequestId, null, 0, 100, null);
     }
 
     @Test

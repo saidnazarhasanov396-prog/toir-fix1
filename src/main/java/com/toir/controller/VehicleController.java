@@ -24,6 +24,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -139,11 +140,35 @@ public class VehicleController {
             @Parameter(description = "Document names/titles in the same order as files.")
             @RequestParam(value = "documentNames", required = false) List<String> documentNames,
             @RequestParam(required = false) String documentType,
+            @Parameter(description = "Document type per file, in the same order as files.")
+            @RequestParam(value = "documentTypes", required = false) List<String> documentTypes,
+            @Parameter(description = "Document number per file, in the same order as files.")
+            @RequestParam(value = "documentNumbers", required = false) List<String> documentNumbers,
             @CurrentUser AuthenticatedUser user
     ) {
         assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(service.attachDocuments(equipmentId, files, documentNames, documentType, user));
+                .body(service.attachDocuments(
+                        equipmentId,
+                        files,
+                        documentNames,
+                        effectiveDocumentTypes(files, documentTypes, documentType),
+                        documentNumbers,
+                        user));
+    }
+
+    private static List<String> effectiveDocumentTypes(
+            List<MultipartFile> files,
+            List<String> documentTypes,
+            String documentType
+    ) {
+        if (documentTypes != null && !documentTypes.isEmpty()) {
+            return documentTypes;
+        }
+        if (documentType == null || documentType.isBlank() || files == null) {
+            return null;
+        }
+        return Collections.nCopies(files.size(), documentType);
     }
 
     @GetMapping("/{equipmentId}/documents")

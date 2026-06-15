@@ -7,11 +7,14 @@ import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.entity.defects.Defect;
+import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
+import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.User;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.MaintenanceKind;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
 import com.toir.enums.RequestStatus;
@@ -19,11 +22,14 @@ import com.toir.enums.UserStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
+import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
+import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.users.UserRepository;
@@ -90,6 +96,12 @@ class RepairRequestServiceTest {
 
     @Mock
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+
+    @Mock
+    MaintenanceTemplateRepository maintenanceTemplateRepository;
+
+    @Mock
+    MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
 
     @InjectMocks
     RepairRequestService service;
@@ -185,6 +197,50 @@ class RepairRequestServiceTest {
         assertThat(result.linkedDefects()).isEmpty();
         verify(defectRepository, never()).findByIdAndIsDeletedFalse(any());
         verify(defectRepository, never()).save(any(Defect.class));
+    }
+
+    @Test
+    void createStoresOptionalMaintenanceTemplate() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequest(null, equipmentId, templateId);
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(maintenanceTemplateRepository.findByIdAndIsDeletedFalse(templateId))
+                .thenReturn(Optional.of(maintenanceTemplate(templateId)));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        stubNameLookups(repairRequestForCreate(savedRequestId, request));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        RepairRequestDto result = service.create(request);
+
+        assertThat(result.templateId()).isEqualTo(templateId);
+        verify(repository).save(org.mockito.ArgumentMatchers.argThat(saved ->
+                templateId.equals(saved.getTemplateId())
+        ));
+    }
+
+    @Test
+    void createRejectsUnknownMaintenanceTemplate() {
+        UUID templateId = UUID.randomUUID();
+        RepairRequestRequest request = createRequest(null, UUID.randomUUID(), templateId);
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(maintenanceTemplateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Maintenance template not found");
+
+        verify(repository, never()).save(any(RepairRequest.class));
     }
 
     @Test
@@ -845,11 +901,24 @@ class RepairRequestServiceTest {
                 .thenReturn(List.of(closedWorkOrder));
         when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
                 .thenReturn(List.of(resolvedDefect));
+        when(maintenanceCompletionAnchorRepository.findByRepairRequestIdAndIsDeletedFalse(id))
+                .thenReturn(Optional.empty());
+        when(maintenanceCompletionAnchorRepository.save(any(MaintenanceCompletionAnchor.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         RepairRequestDto result = service.close(id, new CloseRequestRequest("Resolved"));
 
         assertThat(result.status()).isEqualTo(RequestStatus.CLOSED);
         assertThat(result.closeResult()).isEqualTo("Resolved");
+
+        org.mockito.ArgumentCaptor<MaintenanceCompletionAnchor> anchorCaptor =
+                org.mockito.ArgumentCaptor.forClass(MaintenanceCompletionAnchor.class);
+        verify(maintenanceCompletionAnchorRepository).save(anchorCaptor.capture());
+        MaintenanceCompletionAnchor anchor = anchorCaptor.getValue();
+        assertThat(anchor.getEquipmentId()).isEqualTo(entity.getEquipmentId());
+        assertThat(anchor.getRepairRequestId()).isEqualTo(id);
+        assertThat(anchor.getPerformedAt()).isEqualTo(entity.getActualCompletionAt());
+        assertThat(anchor.getSource()).isEqualTo("REPAIR_REQUEST");
     }
 
     @Test
@@ -1181,6 +1250,10 @@ class RepairRequestServiceTest {
     }
 
     private RepairRequestRequest createRequest(UUID defectId, UUID equipmentId) {
+        return createRequest(defectId, equipmentId, null);
+    }
+
+    private RepairRequestRequest createRequest(UUID defectId, UUID equipmentId, UUID templateId) {
         return new RepairRequestRequest(
                 "RR-2026-0001",
                 "Pump vibration",
@@ -1195,7 +1268,8 @@ class RepairRequestServiceTest {
                 PriorityLevel.HIGH,
                 CriticalityLevel.HIGH,
                 RequestSource.MANUAL,
-                null
+                null,
+                templateId
         );
     }
 
@@ -1241,8 +1315,21 @@ class RepairRequestServiceTest {
                 PriorityLevel.HIGH,
                 CriticalityLevel.HIGH,
                 RequestSource.MANUAL,
+                null,
                 null
         );
+    }
+
+    private MaintenanceTemplate maintenanceTemplate(UUID id) {
+        MaintenanceTemplate template = new MaintenanceTemplate();
+        template.setId(id);
+        template.setCode("TPL-001");
+        template.setName("Repair template");
+        template.setEquipmentTypeId(UUID.randomUUID());
+        template.setMaintenanceKind(MaintenanceKind.CURRENT_REPAIR);
+        template.setNormativeLaborHours(2.5);
+        template.setActive(true);
+        return template;
     }
 
     private Defect defect(UUID defectId, UUID equipmentId) {

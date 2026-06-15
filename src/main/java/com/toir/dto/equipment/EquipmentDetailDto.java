@@ -14,6 +14,7 @@ import java.util.UUID;
 
 public record EquipmentDetailDto(
         EquipmentDto equipment,
+        int repairCount,
         List<RepairRequestShortDto> repairRequests,
         List<DefectShortDto> defects,
         List<WorkOrderShortDto> workOrders,
@@ -28,9 +29,22 @@ public record EquipmentDetailDto(
             List<DefectShortDto> defects,
             List<WorkOrderShortDto> workOrders,
             List<DowntimeEventShortDto> downtimeEvents,
+            List<EquipmentAttributeValueDto> attributes,
+            List<EquipmentManualAttributeDto> manualAttributes,
+            List<EquipmentDocumentDto> documents
+    ) {
+        this(equipment, 0, repairRequests, defects, workOrders, downtimeEvents, attributes, manualAttributes, documents);
+    }
+
+    public EquipmentDetailDto(
+            EquipmentDto equipment,
+            List<RepairRequestShortDto> repairRequests,
+            List<DefectShortDto> defects,
+            List<WorkOrderShortDto> workOrders,
+            List<DowntimeEventShortDto> downtimeEvents,
             List<EquipmentAttributeValueDto> attributes
     ) {
-        this(equipment, repairRequests, defects, workOrders, downtimeEvents, attributes, List.of(), List.of());
+        this(equipment, 0, repairRequests, defects, workOrders, downtimeEvents, attributes, List.of(), List.of());
     }
 
     public EquipmentDetailDto(
@@ -42,7 +56,7 @@ public record EquipmentDetailDto(
             List<EquipmentAttributeValueDto> attributes,
             List<EquipmentManualAttributeDto> manualAttributes
     ) {
-        this(equipment, repairRequests, defects, workOrders, downtimeEvents, attributes, manualAttributes, List.of());
+        this(equipment, 0, repairRequests, defects, workOrders, downtimeEvents, attributes, manualAttributes, List.of());
     }
 
     public EquipmentDetailDto(
@@ -52,7 +66,7 @@ public record EquipmentDetailDto(
             List<WorkOrderShortDto> workOrders,
             List<DowntimeEventShortDto> downtimeEvents
     ) {
-        this(equipment, repairRequests, defects, workOrders, downtimeEvents, List.of(), List.of(), List.of());
+        this(equipment, 0, repairRequests, defects, workOrders, downtimeEvents, List.of(), List.of(), List.of());
     }
 
     public EquipmentDetailDto {

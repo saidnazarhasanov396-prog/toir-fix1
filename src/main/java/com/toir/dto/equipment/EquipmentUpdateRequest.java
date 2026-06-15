@@ -4,6 +4,8 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeRequest;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 
 import java.time.LocalDate;
@@ -17,6 +19,7 @@ public record EquipmentUpdateRequest(
         String technicalNumber,
         String serialNumber,
         String model,
+        @Min(1900) @Max(2100) Integer producedYear,
         UUID equipmentTypeId,
         UUID departmentId,
         UUID locationId,
@@ -66,6 +69,46 @@ public record EquipmentUpdateRequest(
                 LocalDate warrantyStartDate,
                 LocalDate warrantyEndDate,
                 String description,
+                LocalDate operationStartDate,
+                @Positive Integer expectedLifetimeMonths,
+                @Positive Integer expectedLifetimeYears,
+                @Positive Long expectedLifetimeHours,
+                List<EquipmentAttributeValueRequest> attributes,
+                List<EquipmentManualAttributeRequest> manualAttributes,
+                EquipmentLocationRequest location
+        ) {
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
+                        departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
+                        status, category, commissionedAt, arrivalDate, warrantyUntil, hasWarranty,
+                        warrantyAttachmentId, warrantyStartDate, warrantyEndDate, description, operationStartDate,
+                        expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, attributes,
+                        manualAttributes, location);
+        }
+
+        public EquipmentUpdateRequest(
+                String code,
+                String name,
+                String inventoryNumber,
+                String technicalNumber,
+                String serialNumber,
+                String model,
+                UUID equipmentTypeId,
+                UUID departmentId,
+                UUID locationId,
+                UUID parentId,
+                UUID criticalityClassId,
+                UUID responsibleId,
+                String manufacturer,
+                EquipmentStatus status,
+                EquipmentCategory category,
+                LocalDate commissionedAt,
+                LocalDate arrivalDate,
+                LocalDate warrantyUntil,
+                Boolean hasWarranty,
+                UUID warrantyAttachmentId,
+                LocalDate warrantyStartDate,
+                LocalDate warrantyEndDate,
+                String description,
                 Long expectedLifetimeHoursFallback,
                 LocalDate operationStartDate,
                 @Positive Integer expectedLifetimeMonths,
@@ -75,7 +118,7 @@ public record EquipmentUpdateRequest(
                 List<EquipmentManualAttributeRequest> manualAttributes,
                 EquipmentLocationRequest location
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
                         status, category, commissionedAt, arrivalDate, warrantyUntil, hasWarranty,
                         warrantyAttachmentId, warrantyStartDate, warrantyEndDate, description, operationStartDate,
@@ -114,7 +157,7 @@ public record EquipmentUpdateRequest(
                 List<EquipmentManualAttributeRequest> manualAttributes,
                 EquipmentLocationRequest location
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
                         status, category, commissionedAt, arrivalDate, warrantyUntil, hasWarranty,
                         warrantyAttachmentId, null, null, description, operationStartDate,
@@ -143,7 +186,7 @@ public record EquipmentUpdateRequest(
                 String description,
                 List<EquipmentAttributeValueRequest> attributes
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
                         status, category, commissionedAt, null, warrantyUntil, null, null, null, null,
                         description, null, null, null, null, attributes, null, null);
@@ -169,7 +212,7 @@ public record EquipmentUpdateRequest(
                 LocalDate warrantyUntil,
                 String description
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
                         status, category, commissionedAt, null, warrantyUntil, null, null, null, null,
                         description, null, null, null, null, null, null, null);
@@ -196,7 +239,7 @@ public record EquipmentUpdateRequest(
                 String description,
                 Long expectedLifetimeHours
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
                         status, category, commissionedAt, null, warrantyUntil, null, null, null, null,
                         description, null, null, null, expectedLifetimeHours, null, null, null);
@@ -224,7 +267,7 @@ public record EquipmentUpdateRequest(
                 List<EquipmentAttributeValueRequest> attributes,
                 List<EquipmentManualAttributeRequest> manualAttributes
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
                         status, category, commissionedAt, null, warrantyUntil, null, null, null, null,
                         description, null, null, null, null, attributes, manualAttributes, null);

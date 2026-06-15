@@ -4,12 +4,15 @@ import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementIssueRequest;
 import com.toir.dto.stockmovement.StockMovementReceiptRequest;
 import com.toir.dto.stockmovement.StockMovementRequest;
+import com.toir.dto.warehouse.StockIssueCommand;
+import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
@@ -17,6 +20,7 @@ import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +45,7 @@ public class StockMovementService {
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
     private final LowStockRecommendationService lowStockRecommendationService;
+    private final ToirStockService toirStockService;
 
 
     @Transactional(readOnly = true)
@@ -93,6 +98,7 @@ public class StockMovementService {
         assertMovementHasReasonOrSource(request);
 
         WarehouseStock stock = stockForMovement(request.warehouseId(), request.sparePartId());
+        double previousQuantity = stock.getQuantity();
 
         switch (request.type()) {
             case RECEIPT, RETURN -> stock.setQuantity(stock.getQuantity() + request.quantity());
@@ -145,6 +151,7 @@ public class StockMovementService {
         movement.setNotes(request.notes());
         movement.setComment(request.notes());
         StockMovement saved = repository.save(movement);
+        postCoreStockMovement(saved, previousQuantity);
 
         if (shouldEvaluateLowStock(request.type())) {
             lowStockRecommendationService.evaluateStockSafely(stock);
@@ -189,6 +196,7 @@ public class StockMovementService {
         movement.setNotes(trimToNull(request.comment()));
 
         StockMovement saved = repository.save(movement);
+        postCoreStockReceipt(saved);
         auditMovement(saved);
         return StockMovementDto.from(saved);
     }
@@ -221,6 +229,7 @@ public class StockMovementService {
         movement.setNotes(trimToNull(request.comment()));
 
         StockMovement saved = repository.save(movement);
+        postCoreStockIssue(saved);
         lowStockRecommendationService.evaluateStockSafely(stock);
         auditMovement(saved);
         return StockMovementDto.from(saved);
@@ -287,6 +296,105 @@ public class StockMovementService {
                     stock.setMinQty(0);
                     return stockRepository.save(stock);
                 });
+    }
+
+    private void postCoreStockReceipt(StockMovement saved) {
+        toirStockService.postReceipt(stockReceiptCommand(
+                saved,
+                BigDecimal.valueOf(saved.getQuantity()),
+                "stock-movement-receipt:" + saved.getId()
+        ));
+    }
+
+    private void postCoreStockIssue(StockMovement saved) {
+        toirStockService.postIssue(stockIssueCommand(
+                saved,
+                BigDecimal.valueOf(saved.getQuantity()),
+                "stock-movement-issue:" + saved.getId()
+        ));
+    }
+
+    private void postCoreStockMovement(StockMovement saved, double previousQuantity) {
+        switch (saved.getType()) {
+            case RECEIPT -> postCoreStockIncrease(saved, StockLedgerMovementType.RECEIPT,
+                    BigDecimal.valueOf(saved.getQuantity()));
+            case RETURN -> postCoreStockIncrease(saved, StockLedgerMovementType.RETURN,
+                    BigDecimal.valueOf(saved.getQuantity()));
+            case ISSUE -> postCoreStockDecrease(saved, StockLedgerMovementType.ISSUE,
+                    BigDecimal.valueOf(saved.getQuantity()));
+            case TRANSFER -> postCoreStockDecrease(saved, StockLedgerMovementType.TRANSFER_OUT,
+                    BigDecimal.valueOf(saved.getQuantity()));
+            case ADJUSTMENT -> {
+                double delta = saved.getQuantity() - previousQuantity;
+                if (delta > 0) {
+                    postCoreStockIncrease(saved, StockLedgerMovementType.ADJUSTMENT_INC, BigDecimal.valueOf(delta));
+                } else if (delta < 0) {
+                    postCoreStockDecrease(saved, StockLedgerMovementType.ADJUSTMENT_DEC, BigDecimal.valueOf(Math.abs(delta)));
+                }
+            }
+            case RESERVATION, RELEASE -> {
+                // Reservation state is owned by ReservationService.
+            }
+        }
+    }
+
+    private void postCoreStockIncrease(StockMovement saved, StockLedgerMovementType movementType, BigDecimal quantity) {
+        toirStockService.postIncrease(
+                stockReceiptCommand(saved, quantity, coreStockIdempotencyKey(saved, movementType)),
+                movementType
+        );
+    }
+
+    private void postCoreStockDecrease(StockMovement saved, StockLedgerMovementType movementType, BigDecimal quantity) {
+        toirStockService.postDecrease(
+                stockIssueCommand(saved, quantity, coreStockIdempotencyKey(saved, movementType)),
+                movementType
+        );
+    }
+
+    private StockReceiptCommand stockReceiptCommand(StockMovement saved, BigDecimal quantity, String idempotencyKey) {
+        return new StockReceiptCommand(
+                saved.getWarehouseId(),
+                saved.getSparePartId(),
+                null,
+                quantity,
+                stockUnitCost(saved),
+                null,
+                null,
+                null,
+                "STOCK_MOVEMENT",
+                saved.getId(),
+                saved.getDocumentNumber(),
+                saved.getNotes(),
+                idempotencyKey
+        );
+    }
+
+    private StockIssueCommand stockIssueCommand(StockMovement saved, BigDecimal quantity, String idempotencyKey) {
+        return new StockIssueCommand(
+                saved.getWarehouseId(),
+                saved.getSparePartId(),
+                null,
+                quantity,
+                null,
+                null,
+                "STOCK_MOVEMENT",
+                saved.getId(),
+                saved.getDocumentNumber(),
+                saved.getNotes(),
+                idempotencyKey
+        );
+    }
+
+    private BigDecimal stockUnitCost(StockMovement saved) {
+        if (saved.getUnitPrice() != null) {
+            return saved.getUnitPrice();
+        }
+        return saved.getUnitCost() == null ? null : BigDecimal.valueOf(saved.getUnitCost());
+    }
+
+    private String coreStockIdempotencyKey(StockMovement saved, StockLedgerMovementType movementType) {
+        return "stock-movement-" + movementType.name().toLowerCase() + ":" + saved.getId();
     }
 
     private BigDecimal totalAmount(double quantity, BigDecimal unitPrice) {

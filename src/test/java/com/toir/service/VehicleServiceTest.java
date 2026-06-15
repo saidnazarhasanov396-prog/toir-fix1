@@ -1208,8 +1208,10 @@ class VehicleServiceTest {
         VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
         MockMultipartFile firstDocument = document("files", "passport.pdf");
         MockMultipartFile secondDocument = document("files", "insurance.pdf");
-        VehicleDocument firstVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(firstFileId, currentUserId), "TECHNICAL", "Technical Passport");
-        VehicleDocument secondVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(secondFileId, currentUserId), "TECHNICAL", "Insurance Document");
+        VehicleDocument firstVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(firstFileId, currentUserId), "PASSPORT", "Technical Passport");
+        firstVehicleDocument.setDocumentNumber("PAS-2024-001");
+        VehicleDocument secondVehicleDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(secondFileId, currentUserId), "CERTIFICATE", "Insurance Document");
+        secondVehicleDocument.setDocumentNumber("CERT-2024-015");
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
@@ -1223,19 +1225,25 @@ class VehicleServiceTest {
                 equipmentId,
                 List.of(firstDocument, secondDocument),
                 List.of(" Technical Passport ", "Insurance Document"),
-                "TECHNICAL",
+                List.of("PASSPORT", "CERTIFICATE"),
+                List.of("PAS-2024-001", "CERT-2024-015"),
                 authenticatedUser(currentUserId, equipment.getDepartmentId())
         );
 
         assertThat(result).hasSize(2);
         assertThat(result).extracting(VehicleDocumentDto::fileId).containsExactly(firstFileId, secondFileId);
-        assertThat(result).extracting(VehicleDocumentDto::documentType).containsExactly("TECHNICAL", "TECHNICAL");
+        assertThat(result).extracting(VehicleDocumentDto::documentType).containsExactly("PASSPORT", "CERTIFICATE");
+        assertThat(result).extracting(VehicleDocumentDto::documentNumber).containsExactly("PAS-2024-001", "CERT-2024-015");
         assertThat(result).extracting(VehicleDocumentDto::documentName).containsExactly("Technical Passport", "Insurance Document");
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<VehicleDocument>> documentsCaptor = ArgumentCaptor.forClass(List.class);
         verify(vehicleDocumentRepository).saveAllAndFlush(documentsCaptor.capture());
         assertThat(documentsCaptor.getValue()).extracting(VehicleDocument::getDocumentName)
                 .containsExactly("Technical Passport", "Insurance Document");
+        assertThat(documentsCaptor.getValue()).extracting(VehicleDocument::getDocumentType)
+                .containsExactly("PASSPORT", "CERTIFICATE");
+        assertThat(documentsCaptor.getValue()).extracting(VehicleDocument::getDocumentNumber)
+                .containsExactly("PAS-2024-001", "CERT-2024-015");
     }
 
     @Test
@@ -1248,6 +1256,7 @@ class VehicleServiceTest {
                 equipmentId,
                 List.of(document()),
                 List.of("Technical Passport"),
+                null,
                 null,
                 authenticatedUser(UUID.randomUUID(), UUID.randomUUID())))
                 .isInstanceOf(RestException.class)
@@ -1273,6 +1282,7 @@ class VehicleServiceTest {
                 List.of(document()),
                 List.of("Technical Passport"),
                 null,
+                null,
                 authenticatedUser(UUID.randomUUID(), userDepartmentId)))
                 .isInstanceOf(RestException.class)
                 .hasMessage("Vehicle access denied");
@@ -1293,6 +1303,7 @@ class VehicleServiceTest {
                 List.of(),
                 List.of(),
                 null,
+                null,
                 authenticatedUser(currentUserId, equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("At least one vehicle document file is required");
@@ -1311,6 +1322,7 @@ class VehicleServiceTest {
         assertThatThrownBy(() -> service.attachDocuments(
                 equipmentId,
                 List.of(document()),
+                null,
                 null,
                 null,
                 authenticatedUser(currentUserId, equipment.getDepartmentId())))
@@ -1333,6 +1345,7 @@ class VehicleServiceTest {
                 List.of(document()),
                 List.of(" "),
                 null,
+                null,
                 authenticatedUser(currentUserId, equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
                 .hasMessage("documentNames[0] must not be blank");
@@ -1352,6 +1365,7 @@ class VehicleServiceTest {
                 equipmentId,
                 List.of(document("files", "passport.pdf"), document("files", "insurance.pdf")),
                 List.of("Technical Passport"),
+                null,
                 null,
                 authenticatedUser(currentUserId, equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
@@ -1380,6 +1394,7 @@ class VehicleServiceTest {
                 equipmentId,
                 List.of(firstDocument, secondDocument),
                 List.of("Technical Passport", "Insurance Document"),
+                null,
                 null,
                 authenticatedUser(currentUserId, equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
@@ -1412,12 +1427,60 @@ class VehicleServiceTest {
                 List.of(firstDocument, secondDocument),
                 List.of("Technical Passport", "Insurance Document"),
                 null,
+                null,
                 authenticatedUser(currentUserId, equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
                 .hasMessage("Could not attach vehicle documents");
 
         verify(fileService).delete(firstFileId, currentUserId);
         verify(fileService).delete(secondFileId, currentUserId);
+    }
+
+    @Test
+    void attachDocuments_eachFileGetsItsOwnTypeAndNumber() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        UUID fileId1 = UUID.randomUUID();
+        UUID fileId2 = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
+        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
+        MockMultipartFile file1 = document("files", "passport.pdf");
+        MockMultipartFile file2 = new MockMultipartFile("files", "drawing.png", "image/png", new byte[]{1, 2, 3});
+        UploadedFile uploadedFile1 = uploadedFile(fileId1, currentUserId, "passport.pdf");
+        UploadedFile uploadedFile2 = uploadedFile(fileId2, currentUserId, "drawing.png");
+        uploadedFile2.setContentType("image/png");
+        uploadedFile2.setExtension("png");
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(fileService.upload(eq(file1), eq(FileCategory.VEHICLE_DOCUMENT), eq(currentUserId)))
+                .thenReturn(uploadResponse(fileId1, "passport.pdf"));
+        when(fileService.upload(eq(file2), eq(FileCategory.VEHICLE_DOCUMENT), eq(currentUserId)))
+                .thenReturn(uploadResponse(fileId2, "drawing.png"));
+        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId1)).thenReturn(Optional.of(uploadedFile1));
+        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId2)).thenReturn(Optional.of(uploadedFile2));
+        when(vehicleDocumentRepository.saveAllAndFlush(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.attachDocuments(
+                equipmentId,
+                List.of(file1, file2),
+                List.of("Technical Passport", "Drawing"),
+                List.of("PASSPORT", "DRAWING"),
+                List.of("АКТ-2024-001", "DRW-2024-001"),
+                authenticatedUser(currentUserId, equipment.getDepartmentId())
+        );
+
+        ArgumentCaptor<List<VehicleDocument>> captor = ArgumentCaptor.forClass(List.class);
+        verify(vehicleDocumentRepository).saveAllAndFlush(captor.capture());
+
+        List<VehicleDocument> saved = captor.getValue();
+        assertThat(saved).hasSize(2);
+        assertThat(saved.get(0).getDocumentType()).isEqualTo("PASSPORT");
+        assertThat(saved.get(0).getDocumentNumber()).isEqualTo("АКТ-2024-001");
+        assertThat(saved.get(0).getDocumentName()).isEqualTo("Technical Passport");
+        assertThat(saved.get(1).getDocumentType()).isEqualTo("DRAWING");
+        assertThat(saved.get(1).getDocumentNumber()).isEqualTo("DRW-2024-001");
+        assertThat(saved.get(1).getDocumentName()).isEqualTo("Drawing");
     }
 
     @Test

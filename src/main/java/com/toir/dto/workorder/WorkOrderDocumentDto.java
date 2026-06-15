@@ -10,6 +10,7 @@ public record WorkOrderDocumentDto(
         UUID id,
         UUID fileId,
         String documentType,
+        String documentNumber,
         String documentName,
         String originalName,
         String contentType,
@@ -38,6 +39,7 @@ public record WorkOrderDocumentDto(
             UUID id,
             UUID fileId,
             String documentType,
+            String documentNumber,
             String documentName,
             String originalName,
             String contentType,
@@ -47,7 +49,7 @@ public record WorkOrderDocumentDto(
             LocalDateTime createdAt,
             LocalDateTime uploadedAt
     ) {
-        this(id, fileId, documentType, documentName, originalName, contentType, size, downloadUrl,
+        this(id, fileId, documentType, documentNumber, documentName, originalName, contentType, size, downloadUrl,
                 presignedUrlEndpoint, createdAt, uploadedAt, null, null, documentName, documentType, createdAt, null);
     }
 
@@ -61,6 +63,7 @@ public record WorkOrderDocumentDto(
                 document.getId(),
                 file.getId(),
                 document.getDocumentType(),
+                document.getDocumentNumber(),
                 document.getDocumentName(),
                 file.getOriginalName(),
                 file.getContentType(),

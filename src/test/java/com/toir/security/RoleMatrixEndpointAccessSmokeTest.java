@@ -37,6 +37,7 @@ import com.toir.service.SparePartService;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.service.WarehouseService;
 import com.toir.service.maintanance.MaintenanceBudgetService;
+import com.toir.service.warehouse.ToirWarehouseQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -110,6 +111,9 @@ class RoleMatrixEndpointAccessSmokeTest {
 
     @MockBean
     WarehouseEquipmentItemService warehouseEquipmentItemService;
+
+    @MockBean
+    ToirWarehouseQueryService warehouseQueryService;
 
     @MockBean
     SparePartService sparePartService;

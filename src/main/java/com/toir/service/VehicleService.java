@@ -225,16 +225,29 @@ public class VehicleService {
 
     @Transactional
     public VehicleDetailDto attachDocument(UUID equipmentId, MultipartFile document, UUID currentUserId) {
-        attachDocuments(equipmentId, List.of(document), List.of(legacyDocumentName(document)), null, authenticatedUser(currentUserId));
+        attachDocuments(equipmentId, List.of(document), List.of(legacyDocumentName(document)), null, null, authenticatedUser(currentUserId));
         return findByEquipmentId(equipmentId);
     }
+
+    private static final Set<String> ALLOWED_VEHICLE_DOCUMENT_CONTENT_TYPES = Set.of(
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp"
+    );
 
     @Transactional
     public List<VehicleDocumentDto> attachDocuments(
             UUID equipmentId,
             List<MultipartFile> files,
             List<String> documentNames,
-            String documentType,
+            List<String> documentTypes,
+            List<String> documentNumbers,
             AuthenticatedUser user
     ) {
         UUID currentUserId = currentUserId(user);
@@ -244,14 +257,19 @@ public class VehicleService {
             throw RestException.badRequest("At least one vehicle document file is required");
         }
         List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
+        List<String> normalizedDocumentTypes = normalizeDocumentTypes(files, documentTypes);
+        List<String> normalizedDocumentNumbers = normalizeDocumentNumbers(files, documentNumbers);
         VehicleDetails details = findVehicleDetails(equipmentId);
-        String normalizedDocumentType = normalizeDocumentType(documentType);
 
         List<UUID> uploadedFileIds = new ArrayList<>();
         try {
             List<VehicleDocument> documents = new ArrayList<>(files.size());
             for (int i = 0; i < files.size(); i++) {
                 MultipartFile file = files.get(i);
+                String contentType = file.getContentType();
+                if (contentType == null || !ALLOWED_VEHICLE_DOCUMENT_CONTENT_TYPES.contains(contentType)) {
+                    throw RestException.badRequest("Unsupported file type: " + contentType);
+                }
                 UploadFileResponse uploaded = fileService.upload(file, FileCategory.VEHICLE_DOCUMENT, currentUserId);
                 uploadedFileIds.add(uploaded.id());
                 UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
@@ -259,7 +277,8 @@ public class VehicleService {
                 documents.add(VehicleDocument.builder()
                         .vehicleDetails(details)
                         .file(uploadedFile)
-                        .documentType(normalizedDocumentType)
+                        .documentType(normalizedDocumentTypes.get(i))
+                        .documentNumber(normalizedDocumentNumbers.get(i))
                         .documentName(normalizedDocumentNames.get(i))
                         .build());
             }
@@ -505,6 +524,7 @@ public class VehicleService {
                 file.getId(),
                 file.getId(),
                 null,
+                null,
                 file.getOriginalName(),
                 file.getOriginalName(),
                 file.getContentType(),
@@ -536,6 +556,49 @@ public class VehicleService {
             throw RestException.badRequest("documentType must be 64 characters or fewer");
         }
         return trimmed;
+    }
+
+    private String normalizeDocumentNumber(String documentNumber, int index) {
+        if (documentNumber == null || documentNumber.isBlank()) {
+            return null;
+        }
+        String trimmed = documentNumber.trim();
+        if (trimmed.length() > 128) {
+            throw RestException.badRequest("documentNumbers[" + index + "] must be 128 characters or fewer");
+        }
+        return trimmed;
+    }
+
+    private List<String> normalizeDocumentTypes(List<MultipartFile> files, List<String> documentTypes) {
+        if (documentTypes == null || documentTypes.isEmpty()) {
+            return Collections.nCopies(files.size(), null);
+        }
+        if (documentTypes.size() != files.size()) {
+            throw RestException.badRequest("files and documentTypes must have the same length");
+        }
+        List<String> normalized = new ArrayList<>(documentTypes.size());
+        for (int i = 0; i < documentTypes.size(); i++) {
+            String normalizedType = normalizeDocumentType(documentTypes.get(i));
+            if (normalizedType == null) {
+                throw RestException.badRequest("documentTypes[" + i + "] must not be blank");
+            }
+            normalized.add(normalizedType);
+        }
+        return normalized;
+    }
+
+    private List<String> normalizeDocumentNumbers(List<MultipartFile> files, List<String> documentNumbers) {
+        if (documentNumbers == null || documentNumbers.isEmpty()) {
+            return Collections.nCopies(files.size(), null);
+        }
+        if (documentNumbers.size() != files.size()) {
+            throw RestException.badRequest("files and documentNumbers must have the same length");
+        }
+        List<String> normalized = new ArrayList<>(documentNumbers.size());
+        for (int i = 0; i < documentNumbers.size(); i++) {
+            normalized.add(normalizeDocumentNumber(documentNumbers.get(i), i));
+        }
+        return normalized;
     }
 
     private String legacyDocumentName(MultipartFile document) {

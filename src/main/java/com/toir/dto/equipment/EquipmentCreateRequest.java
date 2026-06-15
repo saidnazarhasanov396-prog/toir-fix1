@@ -4,6 +4,8 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeRequest;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -19,6 +21,7 @@ public record EquipmentCreateRequest(
         String technicalNumber,
         String serialNumber,
         String model,
+        @Min(1900) @Max(2100) Integer producedYear,
         @NotNull UUID equipmentTypeId,
         UUID departmentId,
         UUID warehouseId,
@@ -70,6 +73,47 @@ public record EquipmentCreateRequest(
                 LocalDate warrantyStartDate,
                 LocalDate warrantyEndDate,
                 String description,
+                LocalDate operationStartDate,
+                @Positive Integer expectedLifetimeMonths,
+                @Positive Integer expectedLifetimeYears,
+                @Positive Long expectedLifetimeHours,
+                List<EquipmentAttributeValueRequest> attributes,
+                List<EquipmentManualAttributeRequest> manualAttributes,
+                EquipmentLocationRequest location
+        ) {
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
+                        departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
+                        manufacturer, status, category, commissionedAt, arrivalDate, warrantyUntil, hasWarranty,
+                        warrantyAttachmentId, warrantyStartDate, warrantyEndDate, description, operationStartDate,
+                        expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, attributes,
+                        manualAttributes, location);
+        }
+
+        public EquipmentCreateRequest(
+                String code,
+                @NotBlank String name,
+                @NotBlank String inventoryNumber,
+                String technicalNumber,
+                String serialNumber,
+                String model,
+                @NotNull UUID equipmentTypeId,
+                UUID departmentId,
+                UUID warehouseId,
+                UUID locationId,
+                UUID parentId,
+                UUID criticalityClassId,
+                UUID responsibleId,
+                String manufacturer,
+                EquipmentStatus status,
+                EquipmentCategory category,
+                LocalDate commissionedAt,
+                LocalDate arrivalDate,
+                LocalDate warrantyUntil,
+                Boolean hasWarranty,
+                UUID warrantyAttachmentId,
+                LocalDate warrantyStartDate,
+                LocalDate warrantyEndDate,
+                String description,
                 Long expectedLifetimeHoursFallback,
                 LocalDate operationStartDate,
                 @Positive Integer expectedLifetimeMonths,
@@ -79,7 +123,7 @@ public record EquipmentCreateRequest(
                 List<EquipmentManualAttributeRequest> manualAttributes,
                 EquipmentLocationRequest location
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
                         manufacturer, status, category, commissionedAt, arrivalDate, warrantyUntil, hasWarranty,
                         warrantyAttachmentId, warrantyStartDate, warrantyEndDate, description, operationStartDate,
@@ -119,7 +163,7 @@ public record EquipmentCreateRequest(
                 List<EquipmentManualAttributeRequest> manualAttributes,
                 EquipmentLocationRequest location
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
                         manufacturer, status, category, commissionedAt, arrivalDate, warrantyUntil, hasWarranty,
                         warrantyAttachmentId, null, null, description, operationStartDate,
@@ -149,7 +193,7 @@ public record EquipmentCreateRequest(
                 String description,
                 List<EquipmentAttributeValueRequest> attributes
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
                         manufacturer, status, category, commissionedAt, null, warrantyUntil, false, null,
                         null, null, description, null, null, null, null, attributes, null, null);
@@ -176,7 +220,7 @@ public record EquipmentCreateRequest(
                 LocalDate warrantyUntil,
                 String description
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
                         manufacturer, status, category, commissionedAt, null, warrantyUntil, false, null,
                         null, null, description, null, null, null, null, null, null, null);
@@ -205,7 +249,7 @@ public record EquipmentCreateRequest(
                 Long expectedLifetimeHours,
                 List<EquipmentAttributeValueRequest> attributes
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
                         manufacturer, status, category, commissionedAt, null, warrantyUntil, false, null,
                         null, null, description, null, null, null, expectedLifetimeHours, attributes, null, null);
@@ -235,7 +279,7 @@ public record EquipmentCreateRequest(
                 List<EquipmentAttributeValueRequest> attributes,
                 List<EquipmentManualAttributeRequest> manualAttributes
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
                         manufacturer, status, category, commissionedAt, null, warrantyUntil, false, null,
                         null, null, description, null, null, null, expectedLifetimeHours, attributes, manualAttributes, null);
@@ -266,7 +310,7 @@ public record EquipmentCreateRequest(
                 List<EquipmentManualAttributeRequest> manualAttributes,
                 EquipmentLocationRequest location
         ) {
-                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, equipmentTypeId,
+                this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
                         manufacturer, status, category, commissionedAt, null, warrantyUntil, false, null,
                         null, null, description, null, null, null, expectedLifetimeHours, attributes, manualAttributes, location);

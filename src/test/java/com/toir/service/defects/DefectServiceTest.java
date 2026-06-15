@@ -113,27 +113,27 @@ class DefectServiceTest {
     void findAllFiltersByRepairRequestId() {
         UUID repairRequestId = UUID.randomUUID();
         PageRequest pageRequest = PageRequest.of(0, 20);
-        when(repository.searchPaginated(null, repairRequestId, null, pageRequest))
+        when(repository.searchPaginated(null, repairRequestId, null, null, pageRequest))
                 .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
 
-        var result = service.search(null, repairRequestId, 0, 20, null);
+        var result = service.search(null, repairRequestId, null, 0, 20, null);
 
         assertThat(result).isNotNull();
         assertThat(result.getContent()).isEmpty();
-        verify(repository).searchPaginated(eq(null), eq(repairRequestId), eq(null), eq(pageRequest));
+        verify(repository).searchPaginated(eq(null), eq(repairRequestId), eq(null), eq(null), eq(pageRequest));
     }
 
     @Test
     void findAllWithoutRepairRequestIdKeepsExistingBehavior() {
         PageRequest pageRequest = PageRequest.of(0, 20);
-        when(repository.searchPaginated(null, null, null, pageRequest))
+        when(repository.searchPaginated(null, null, null, null, pageRequest))
                 .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
 
-        var result = service.search(null, null, 0, 20, null);
+        var result = service.search(null, null, null, 0, 20, null);
 
         assertThat(result).isNotNull();
         assertThat(result.getContent()).isEmpty();
-        verify(repository).searchPaginated(eq(null), eq(null), eq(null), eq(pageRequest));
+        verify(repository).searchPaginated(eq(null), eq(null), eq(null), eq(null), eq(pageRequest));
     }
 
     @Test
@@ -141,14 +141,14 @@ class DefectServiceTest {
         UUID repairRequestId = UUID.randomUUID();
         String search = "leak";
         PageRequest pageRequest = PageRequest.of(0, 20);
-        when(repository.searchPaginated(null, repairRequestId, search, pageRequest))
+        when(repository.searchPaginated(null, repairRequestId, null, search, pageRequest))
                 .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
 
-        var result = service.search(null, repairRequestId, 0, 20, search);
+        var result = service.search(null, repairRequestId, null, 0, 20, search);
 
         assertThat(result).isNotNull();
         assertThat(result.getContent()).isEmpty();
-        verify(repository).searchPaginated(eq(null), eq(repairRequestId), eq(search), eq(pageRequest));
+        verify(repository).searchPaginated(eq(null), eq(repairRequestId), eq(null), eq(search), eq(pageRequest));
     }
 
     @Test

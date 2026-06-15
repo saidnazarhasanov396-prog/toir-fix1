@@ -10,6 +10,8 @@ import com.toir.dto.inventory.InventoryReturnRequest;
 import com.toir.dto.inventory.InventoryStatisticsDto;
 import com.toir.dto.inventory.InventoryTransferRequest;
 import com.toir.dto.inventory.InventoryTransactionDto;
+import com.toir.dto.warehouse.StockIssueCommand;
+import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.Department;
 import com.toir.entity.InventoryTransaction;
 import com.toir.entity.SparePart;
@@ -21,6 +23,7 @@ import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.InventoryTransactionType;
+import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
@@ -32,6 +35,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -67,6 +71,7 @@ public class InventoryTransactionService {
     private final AuditBuilderService auditBuilderService;
     private final LowStockRecommendationService lowStockRecommendationService;
     private final InventoryCostService inventoryCostService;
+    private final ToirStockService toirStockService;
 
     @Transactional
     public InventoryReceiptDto createReceipt(InventoryReceiptRequest request) {
@@ -118,6 +123,8 @@ public class InventoryTransactionService {
         movement.setComment(trimToNull(request.comment()));
         movement.setNotes(trimToNull(request.comment()));
         stockMovementRepository.save(movement);
+
+        postCoreStockReceipt(saved);
 
         auditTransaction(saved, "Приход запасной части создан");
 
@@ -197,6 +204,8 @@ public class InventoryTransactionService {
         movement.setNotes(trimToNull(request.comment()));
         stockMovementRepository.save(movement);
 
+        postCoreStockIssue(saved);
+
         lowStockRecommendationService.evaluateStockSafely(stock);
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Выдача запасной части создана");
@@ -270,6 +279,7 @@ public class InventoryTransactionService {
         stockMovementRepository.save(movement(destination.getId(), sparePart.getId(), StockMovementType.TRANSFER,
                 request.quantity().doubleValue(), unit, transactionDate, responsible.getId(), null,
                 null, null, request.documentNumber(), request.comment()));
+        postCoreStockTransfer(saved, sparePart);
         lowStockRecommendationService.evaluateStockSafely(sourceStock);
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Inventory transfer created");
@@ -334,6 +344,7 @@ public class InventoryTransactionService {
         stockMovementRepository.save(movement(warehouse.getId(), sparePart.getId(), StockMovementType.RETURN,
                 request.quantity().doubleValue(), unit, transactionDate, responsible.getId(), returnedBy.getId(),
                 workOrder.getDepartmentId(), workOrder.getId(), request.documentNumber(), request.comment()));
+        postCoreStockReturn(saved, sparePart);
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Inventory return created");
 
@@ -387,6 +398,7 @@ public class InventoryTransactionService {
         stockMovementRepository.save(movement(warehouse.getId(), sparePart.getId(), StockMovementType.ADJUSTMENT,
                 variance.doubleValue(), unit, transactionDate, responsible.getId(), null,
                 null, null, request.documentNumber(), request.comment()));
+        postCoreStockAdjustment(saved, sparePart);
         lowStockRecommendationService.evaluateStockSafely(stock);
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Inventory adjustment created");
@@ -672,6 +684,131 @@ public class InventoryTransactionService {
         java.util.Optional<WarehouseStock> unlocked =
                 stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId);
         return unlocked == null ? java.util.Optional.empty() : unlocked;
+    }
+
+    private void postCoreStockReceipt(InventoryTransaction saved) {
+        toirStockService.postReceipt(new StockReceiptCommand(
+                saved.getWarehouseId(),
+                saved.getSparePartId(),
+                null,
+                saved.getQuantity(),
+                saved.getUnitPrice(),
+                null,
+                null,
+                null,
+                "INVENTORY_TRANSACTION",
+                saved.getId(),
+                saved.getDocumentNumber(),
+                saved.getComment(),
+                "inventory-receipt:" + saved.getId()
+        ));
+    }
+
+    private void postCoreStockIssue(InventoryTransaction saved) {
+        toirStockService.postIssue(new StockIssueCommand(
+                saved.getWarehouseId(),
+                saved.getSparePartId(),
+                null,
+                saved.getQuantity(),
+                null,
+                null,
+                "INVENTORY_TRANSACTION",
+                saved.getId(),
+                saved.getDocumentNumber(),
+                saved.getComment(),
+                "inventory-issue:" + saved.getId()
+        ));
+    }
+
+    private void postCoreStockTransfer(InventoryTransaction saved, SparePart sparePart) {
+        toirStockService.postDecrease(new StockIssueCommand(
+                saved.getWarehouseId(),
+                saved.getSparePartId(),
+                null,
+                saved.getQuantity(),
+                null,
+                null,
+                "INVENTORY_TRANSACTION",
+                saved.getId(),
+                saved.getDocumentNumber(),
+                saved.getComment(),
+                "inventory-transfer-out:" + saved.getId()
+        ), StockLedgerMovementType.TRANSFER_OUT);
+        toirStockService.postIncrease(new StockReceiptCommand(
+                saved.getDestinationWarehouseId(),
+                saved.getSparePartId(),
+                null,
+                saved.getQuantity(),
+                averageCost(sparePart),
+                null,
+                null,
+                null,
+                "INVENTORY_TRANSACTION",
+                saved.getId(),
+                saved.getDocumentNumber(),
+                saved.getComment(),
+                "inventory-transfer-in:" + saved.getId()
+        ), StockLedgerMovementType.TRANSFER_IN);
+    }
+
+    private void postCoreStockReturn(InventoryTransaction saved, SparePart sparePart) {
+        toirStockService.postIncrease(new StockReceiptCommand(
+                saved.getWarehouseId(),
+                saved.getSparePartId(),
+                null,
+                saved.getQuantity(),
+                averageCost(sparePart),
+                null,
+                null,
+                null,
+                "INVENTORY_TRANSACTION",
+                saved.getId(),
+                saved.getDocumentNumber(),
+                saved.getComment(),
+                "inventory-return:" + saved.getId()
+        ), StockLedgerMovementType.RETURN);
+    }
+
+    private void postCoreStockAdjustment(InventoryTransaction saved, SparePart sparePart) {
+        BigDecimal variance = saved.getVariance() != null ? saved.getVariance() : saved.getQuantity();
+        if (variance == null || variance.signum() == 0) {
+            return;
+        }
+        if (variance.signum() > 0) {
+            toirStockService.postIncrease(new StockReceiptCommand(
+                    saved.getWarehouseId(),
+                    saved.getSparePartId(),
+                    null,
+                    variance,
+                    averageCost(sparePart),
+                    null,
+                    null,
+                    null,
+                    "INVENTORY_TRANSACTION",
+                    saved.getId(),
+                    saved.getDocumentNumber(),
+                    saved.getComment(),
+                    "inventory-adjustment-inc:" + saved.getId()
+            ), StockLedgerMovementType.ADJUSTMENT_INC);
+        } else {
+            toirStockService.postDecrease(new StockIssueCommand(
+                    saved.getWarehouseId(),
+                    saved.getSparePartId(),
+                    null,
+                    variance.abs(),
+                    null,
+                    null,
+                    "INVENTORY_TRANSACTION",
+                    saved.getId(),
+                    saved.getDocumentNumber(),
+                    saved.getComment(),
+                    "inventory-adjustment-dec:" + saved.getId()
+            ), StockLedgerMovementType.ADJUSTMENT_DEC);
+        }
+    }
+
+    private BigDecimal averageCost(SparePart sparePart) {
+        return sparePart == null ? null : sparePart.getAverageCost();
     }
 
     private Warehouse warehouseOrThrow(UUID id) {

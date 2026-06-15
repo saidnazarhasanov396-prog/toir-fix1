@@ -42,6 +42,7 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
             d.is_deleted = false
             and (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
             and (cast(:repairRequestId as varchar) is null or d.repair_request_id = cast(:repairRequestId as uuid))
+            and (cast(:status as varchar) is null or d.status = cast(:status as varchar))
             and (cast(:search as varchar) is null or lower(d.code) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.title) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.description) like lower(concat('%', cast(:search as varchar), '%'))
@@ -55,6 +56,7 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
             d.is_deleted = false
             and (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
             and (cast(:repairRequestId as varchar) is null or d.repair_request_id = cast(:repairRequestId as uuid))
+            and (cast(:status as varchar) is null or d.status = cast(:status as varchar))
             and (cast(:search as varchar) is null or lower(d.code) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.title) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.description) like lower(concat('%', cast(:search as varchar), '%'))
@@ -65,6 +67,7 @@ public interface DefectRepository extends JpaRepository<Defect, UUID> {
             """)
     Page<Defect> searchPaginated(@Param("equipmentId") UUID equipmentId,
                                  @Param("repairRequestId") UUID repairRequestId,
+                                 @Param("status") String status,
                                  @Param("search") String search,
                                  Pageable pageable);
 

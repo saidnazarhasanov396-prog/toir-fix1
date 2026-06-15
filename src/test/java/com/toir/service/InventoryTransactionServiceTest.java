@@ -7,6 +7,8 @@ import com.toir.dto.inventory.InventoryReturnRequest;
 import com.toir.dto.inventory.InventoryStatisticsDto;
 import com.toir.dto.inventory.InventoryTransferRequest;
 import com.toir.dto.inventory.InventoryTransactionDto;
+import com.toir.dto.warehouse.StockIssueCommand;
+import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.Department;
 import com.toir.entity.InventoryTransaction;
 import com.toir.entity.SparePart;
@@ -17,6 +19,7 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.InventoryAdjustmentReason;
 import com.toir.enums.InventoryTransactionType;
+import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
@@ -28,6 +31,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -95,6 +99,9 @@ class InventoryTransactionServiceTest {
     @Mock
     InventoryCostService inventoryCostService;
 
+    @Mock
+    ToirStockService toirStockService;
+
     InventoryTransactionService service;
 
     @BeforeEach
@@ -111,7 +118,8 @@ class InventoryTransactionServiceTest {
                 scopeAccessService,
                 auditBuilderService,
                 lowStockRecommendationService,
-                inventoryCostService
+                inventoryCostService,
+                toirStockService
         );
     }
 
@@ -162,6 +170,18 @@ class InventoryTransactionServiceTest {
         verify(stockMovementRepository).save(movementCaptor.capture());
         assertThat(movementCaptor.getValue().getType()).isEqualTo(StockMovementType.RECEIPT);
         assertThat(movementCaptor.getValue().getDocumentNumber()).isEqualTo("RCV-2026-0001");
+
+        ArgumentCaptor<StockReceiptCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
+        verify(toirStockService).postReceipt(stockCommandCaptor.capture());
+        StockReceiptCommand stockCommand = stockCommandCaptor.getValue();
+        assertThat(stockCommand.warehouseId()).isEqualTo(warehouseId);
+        assertThat(stockCommand.sparePartId()).isEqualTo(sparePartId);
+        assertThat(stockCommand.quantity()).isEqualByComparingTo("100");
+        assertThat(stockCommand.unitCost()).isEqualByComparingTo("45000");
+        assertThat(stockCommand.referenceType()).isEqualTo("INVENTORY_TRANSACTION");
+        assertThat(stockCommand.referenceId()).isEqualTo(result.id());
+        assertThat(stockCommand.referenceDocNo()).isEqualTo("RCV-2026-0001");
+        assertThat(stockCommand.idempotencyKey()).isEqualTo("inventory-receipt:" + result.id());
     }
 
     @Test
@@ -217,6 +237,17 @@ class InventoryTransactionServiceTest {
         verify(stockMovementRepository).save(movementCaptor.capture());
         assertThat(movementCaptor.getValue().getType()).isEqualTo(StockMovementType.ISSUE);
         verify(lowStockRecommendationService).evaluateStockSafely(stock);
+
+        ArgumentCaptor<StockIssueCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
+        verify(toirStockService).postIssue(stockCommandCaptor.capture());
+        StockIssueCommand stockCommand = stockCommandCaptor.getValue();
+        assertThat(stockCommand.warehouseId()).isEqualTo(warehouseId);
+        assertThat(stockCommand.sparePartId()).isEqualTo(sparePartId);
+        assertThat(stockCommand.quantity()).isEqualByComparingTo("10");
+        assertThat(stockCommand.referenceType()).isEqualTo("INVENTORY_TRANSACTION");
+        assertThat(stockCommand.referenceId()).isEqualTo(result.id());
+        assertThat(stockCommand.referenceDocNo()).isEqualTo("ISS-2026-0001");
+        assertThat(stockCommand.idempotencyKey()).isEqualTo("inventory-issue:" + result.id());
     }
 
     @Test
@@ -268,6 +299,16 @@ class InventoryTransactionServiceTest {
                         org.assertj.core.groups.Tuple.tuple(sourceWarehouseId, -20.0),
                         org.assertj.core.groups.Tuple.tuple(destinationWarehouseId, 20.0)
                 );
+
+        ArgumentCaptor<StockIssueCommand> issueCommandCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
+        verify(toirStockService).postDecrease(issueCommandCaptor.capture(), eq(StockLedgerMovementType.TRANSFER_OUT));
+        assertThat(issueCommandCaptor.getValue().warehouseId()).isEqualTo(sourceWarehouseId);
+        assertThat(issueCommandCaptor.getValue().quantity()).isEqualByComparingTo("20");
+
+        ArgumentCaptor<StockReceiptCommand> receiptCommandCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
+        verify(toirStockService).postIncrease(receiptCommandCaptor.capture(), eq(StockLedgerMovementType.TRANSFER_IN));
+        assertThat(receiptCommandCaptor.getValue().warehouseId()).isEqualTo(destinationWarehouseId);
+        assertThat(receiptCommandCaptor.getValue().quantity()).isEqualByComparingTo("20");
     }
 
     @Test
@@ -341,6 +382,11 @@ class InventoryTransactionServiceTest {
         assertThat(result.actualQuantity()).isEqualByComparingTo("97");
         assertThat(result.variance()).isEqualByComparingTo("-3");
         assertThat(result.adjustmentReason()).isEqualTo(InventoryAdjustmentReason.PHYSICAL_COUNT);
+
+        ArgumentCaptor<StockIssueCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
+        verify(toirStockService).postDecrease(stockCommandCaptor.capture(), eq(StockLedgerMovementType.ADJUSTMENT_DEC));
+        assertThat(stockCommandCaptor.getValue().quantity()).isEqualByComparingTo("3");
+        assertThat(stockCommandCaptor.getValue().idempotencyKey()).isEqualTo("inventory-adjustment-dec:" + result.id());
     }
 
     @Test

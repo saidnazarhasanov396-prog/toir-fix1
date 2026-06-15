@@ -2,11 +2,14 @@ package com.toir.controller;
 import com.toir.dto.warehouse.WarehouseDto;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
 import com.toir.dto.warehouse.WarehouseRequest;
+import com.toir.dto.warehouse.WarehouseStockBalanceDto;
 import com.toir.dto.warehouse.WarehouseStockDto;
+import com.toir.dto.warehouse.WarehouseStockLedgerDto;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.service.WarehouseService;
+import com.toir.service.warehouse.ToirWarehouseQueryService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -28,6 +31,7 @@ public class WarehouseController {
 
     private final WarehouseService service;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
+    private final ToirWarehouseQueryService warehouseQueryService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_READ')")
@@ -56,6 +60,22 @@ public class WarehouseController {
     @GetMapping("/{id}/stocks")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
     public ResponseEntity<Page<WarehouseStockDto>> stocks(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findStocks(id), page, size)); }
+
+    @GetMapping("/{id}/stock-balances")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<Page<WarehouseStockBalanceDto>> stockBalances(@PathVariable UUID id,
+                                                                        @RequestParam(defaultValue = "0") int page,
+                                                                        @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(warehouseQueryService.stockBalances(id, page, size));
+    }
+
+    @GetMapping("/{id}/stock-ledgers")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<Page<WarehouseStockLedgerDto>> stockLedgers(@PathVariable UUID id,
+                                                                      @RequestParam(defaultValue = "0") int page,
+                                                                      @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(warehouseQueryService.stockLedgers(id, page, size));
+    }
 
     @GetMapping("/{warehouseId}/equipment")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_EQUIPMENT_READ')")

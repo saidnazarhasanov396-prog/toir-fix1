@@ -2,6 +2,7 @@ package com.toir.controller;
 import com.toir.dto.file.FileAssetDto;
 import com.toir.dto.technicaldocument.TechnicalDocumentDto;
 import com.toir.entity.FileAsset;
+import com.toir.enums.DocumentType;
 import com.toir.repository.FileAssetRepository;
 import com.toir.repository.TechnicalDocumentRepository;
 import com.toir.security.AuthenticatedUser;
@@ -10,6 +11,7 @@ import com.toir.service.FileAssetService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -53,6 +55,11 @@ public class FileAssetController {
     @GetMapping("/documents")
     public ResponseEntity<Page<TechnicalDocumentDto>> legacyDocuments(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(technicalDocumentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(TechnicalDocumentDto::from).toList(), page, size));
+    }
+
+    @GetMapping("/document-types")
+    public ResponseEntity<List<String>> documentTypes() {
+        return ResponseEntity.ok(Arrays.stream(DocumentType.values()).map(Enum::name).toList());
     }
 
     @PostMapping("/upload")

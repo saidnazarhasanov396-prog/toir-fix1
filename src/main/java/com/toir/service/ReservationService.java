@@ -13,11 +13,13 @@ import com.toir.exception.RestException;
 import com.toir.repository.ReservationRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,6 +33,7 @@ public class ReservationService {
     private final StockMovementRepository stockMovementRepository;
     private final AuditBuilderService auditBuilderService;
     private final LowStockRecommendationService lowStockRecommendationService;
+    private final ToirStockService toirStockService;
 
 
     @Transactional(readOnly = true)
@@ -58,6 +61,16 @@ public class ReservationService {
         reservation.setQuantity(r.quantity());
         Reservation saved = repository.save(reservation);
         stockMovementRepository.save(buildMovement(stock, saved, StockMovementType.RESERVATION));
+        toirStockService.reserve(
+                stock.getWarehouseId(),
+                stock.getSparePartId(),
+                null,
+                quantity(saved.getQuantity()),
+                "RESERVATION",
+                saved.getId(),
+                null,
+                "reservation-reserve:" + saved.getId()
+        );
 
         auditBuilderService.log(
                 "reservation",
@@ -87,6 +100,16 @@ public class ReservationService {
 
         Reservation saved = repository.save(reservation);
         stockMovementRepository.save(buildMovement(stock, saved, StockMovementType.RELEASE));
+        toirStockService.releaseReservation(
+                stock.getWarehouseId(),
+                stock.getSparePartId(),
+                null,
+                quantity(saved.getQuantity()),
+                "RESERVATION",
+                saved.getId(),
+                null,
+                "reservation-cancel:" + saved.getId()
+        );
 
         auditBuilderService.log(
                 "reservation",
@@ -123,6 +146,16 @@ public class ReservationService {
 
         Reservation saved = repository.save(reservation);
         stockMovementRepository.save(buildMovement(stock, saved, StockMovementType.ISSUE));
+        toirStockService.fulfillReservation(
+                stock.getWarehouseId(),
+                stock.getSparePartId(),
+                null,
+                quantity(saved.getQuantity()),
+                "RESERVATION",
+                saved.getId(),
+                null,
+                "reservation-fulfill:" + saved.getId()
+        );
         lowStockRecommendationService.evaluateStockSafely(stock);
 
         auditBuilderService.log(
@@ -176,5 +209,9 @@ public class ReservationService {
         movement.setType(type);
         movement.setQuantity(reservation.getQuantity());
         return movement;
+    }
+
+    private BigDecimal quantity(double value) {
+        return BigDecimal.valueOf(value).stripTrailingZeros();
     }
 }
