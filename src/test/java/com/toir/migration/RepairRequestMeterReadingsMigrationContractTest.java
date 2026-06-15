@@ -12,7 +12,7 @@ class RepairRequestMeterReadingsMigrationContractTest {
     @Test
     void migrationAddsRepairContextColumnsToMeterReadings() throws Exception {
         Path migration = Path.of(
-                "src/main/resources/db/migration/V20260615_1__repair_request_meter_readings.sql"
+                "src/main/resources/db/migration/V20260615_2__repair_request_meter_readings.sql"
         );
         assertThat(Files.exists(migration)).isTrue();
 
