@@ -1,6 +1,7 @@
 package com.toir.repository.maintenance;
 
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,7 +14,7 @@ public interface MaintenanceCompletionAnchorRepository extends JpaRepository<Mai
 
     Optional<MaintenanceCompletionAnchor> findByWorkOrderIdAndIsDeletedFalse(UUID workOrderId);
 
-    Optional<MaintenanceCompletionAnchor> findByRepairRequestIdAndIsDeletedFalse(UUID repairRequestId);
+    List<MaintenanceCompletionAnchor> findAllByRepairRequestIdAndIsDeletedFalse(UUID repairRequestId);
 
     Optional<MaintenanceCompletionAnchor> findByMaintenanceDueEventIdAndIsDeletedFalse(UUID maintenanceDueEventId);
 

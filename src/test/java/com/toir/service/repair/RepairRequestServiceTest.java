@@ -6,8 +6,12 @@ import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.triad.DefectBriefDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.EquipmentMeter;
+import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
+import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
@@ -15,6 +19,11 @@ import com.toir.entity.users.User;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.MaintenanceKind;
+import com.toir.enums.MaintenanceInitialSchedulePolicy;
+import com.toir.enums.MaintenanceRecalculationPolicy;
+import com.toir.enums.MaintenanceTriggerPolicy;
+import com.toir.enums.MeterType;
+import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
 import com.toir.enums.RequestStatus;
@@ -27,6 +36,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
@@ -36,6 +46,8 @@ import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.NotificationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
+import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -102,6 +114,15 @@ class RepairRequestServiceTest {
 
     @Mock
     MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
+
+    @Mock
+    EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
+
+    @Mock
+    EquipmentMeterRepository equipmentMeterRepository;
+
+    @Mock
+    ObjectMapper objectMapper;
 
     @InjectMocks
     RepairRequestService service;
@@ -887,12 +908,16 @@ class RepairRequestServiceTest {
     @Test
     void closeAllowsTerminalWorkOrdersAndResolvedDefects() {
         UUID id = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
         RepairRequest entity = repairRequest(id);
         entity.setStatus(RequestStatus.COMPLETED);
+        entity.setTemplateId(templateId);
         WorkOrder closedWorkOrder = workOrder(id);
         closedWorkOrder.setStatus(WorkOrderStatus.CLOSED);
         Defect resolvedDefect = defect(id);
         resolvedDefect.setStatus(DefectStatus.RESOLVED);
+        EquipmentMaintenanceEffectiveRule effectiveRule =
+                effectiveRule(entity.getEquipmentId(), UUID.randomUUID(), UUID.randomUUID(), templateId);
 
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
         when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -901,8 +926,12 @@ class RepairRequestServiceTest {
                 .thenReturn(List.of(closedWorkOrder));
         when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
                 .thenReturn(List.of(resolvedDefect));
-        when(maintenanceCompletionAnchorRepository.findByRepairRequestIdAndIsDeletedFalse(id))
-                .thenReturn(Optional.empty());
+        when(effectiveRuleResolver.resolveApplicable(entity.getEquipmentId()))
+                .thenReturn(List.of(effectiveRule));
+        when(maintenanceCompletionAnchorRepository.findAllByRepairRequestIdAndIsDeletedFalse(id))
+                .thenReturn(List.of());
+        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(entity.getEquipmentId()))
+                .thenReturn(List.of());
         when(maintenanceCompletionAnchorRepository.save(any(MaintenanceCompletionAnchor.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -919,6 +948,54 @@ class RepairRequestServiceTest {
         assertThat(anchor.getRepairRequestId()).isEqualTo(id);
         assertThat(anchor.getPerformedAt()).isEqualTo(entity.getActualCompletionAt());
         assertThat(anchor.getSource()).isEqualTo("REPAIR_REQUEST");
+    }
+
+    @Test
+    void closeCreatesScopedCompletionAnchorForTemplateMatchedEffectiveRule() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        UUID ruleId = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.COMPLETED);
+        entity.setTemplateId(templateId);
+        WorkOrder closedWorkOrder = workOrder(id);
+        closedWorkOrder.setStatus(WorkOrderStatus.CLOSED);
+        Defect resolvedDefect = defect(id);
+        resolvedDefect.setStatus(DefectStatus.RESOLVED);
+        EquipmentMaintenanceEffectiveRule effectiveRule =
+                effectiveRule(entity.getEquipmentId(), regulationId, ruleId, templateId);
+        EquipmentMeter meter = meter(entity.getEquipmentId(), MeterType.ENGINE_HOURS, 450.0);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubNameLookups(entity);
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(closedWorkOrder));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(resolvedDefect));
+        when(effectiveRuleResolver.resolveApplicable(entity.getEquipmentId()))
+                .thenReturn(List.of(effectiveRule));
+        when(maintenanceCompletionAnchorRepository.findAllByRepairRequestIdAndIsDeletedFalse(id))
+                .thenReturn(List.of());
+        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(entity.getEquipmentId()))
+                .thenReturn(List.of(meter));
+        when(objectMapper.writeValueAsString(any()))
+                .thenReturn("[{\"meterType\":\"ENGINE_HOURS\",\"value\":450.0}]");
+        when(maintenanceCompletionAnchorRepository.save(any(MaintenanceCompletionAnchor.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.close(id, new CloseRequestRequest("Resolved"));
+
+        org.mockito.ArgumentCaptor<MaintenanceCompletionAnchor> anchorCaptor =
+                org.mockito.ArgumentCaptor.forClass(MaintenanceCompletionAnchor.class);
+        verify(maintenanceCompletionAnchorRepository).save(anchorCaptor.capture());
+        MaintenanceCompletionAnchor anchor = anchorCaptor.getValue();
+        assertThat(anchor.getRegulationId()).isEqualTo(regulationId);
+        assertThat(anchor.getEquipmentMaintenanceRuleId()).isEqualTo(ruleId);
+        assertThat(anchor.getRepairRequestId()).isEqualTo(id);
+        assertThat(anchor.getSource()).isEqualTo("REPAIR_REQUEST");
+        assertThat(anchor.getMeterSnapshots()).contains("ENGINE_HOURS").contains("450.0");
     }
 
     @Test
@@ -1368,5 +1445,58 @@ class RepairRequestServiceTest {
         workOrder.setDepartmentId(UUID.randomUUID());
         workOrder.setCreatedById(UUID.randomUUID());
         return workOrder;
+    }
+
+    private EquipmentMaintenanceEffectiveRule effectiveRule(UUID equipmentId,
+                                                            UUID regulationId,
+                                                            UUID ruleId,
+                                                            UUID templateId) {
+        MaintenanceRegulation regulation = new MaintenanceRegulation();
+        regulation.setId(regulationId);
+        regulation.setTemplateId(templateId);
+        regulation.setCode("MR-001");
+        regulation.setName("Current repair");
+        regulation.setMaintenanceKind(MaintenanceKind.CURRENT_REPAIR);
+        regulation.setNormativeLaborHours(2.0);
+        regulation.setActive(true);
+        regulation.setPeriodicityUnit(PeriodicityUnit.MONTH);
+        regulation.setPeriodicityValue(1);
+        regulation.setRequiresShutdown(false);
+        regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        regulation.setTriggerMeterInterval(500.0);
+        regulation.setTriggerPolicy(MaintenanceTriggerPolicy.ANY);
+        regulation.setRecalculationPolicy(MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_OPERATION_START);
+
+        EquipmentMaintenanceRule override = new EquipmentMaintenanceRule();
+        override.setId(ruleId);
+        override.setEquipmentId(equipmentId);
+        override.setBaseRegulationId(regulationId);
+        override.setTemplateId(templateId);
+        override.setCode("EMR-001");
+        override.setName("Equipment current repair");
+        override.setMaintenanceKind(MaintenanceKind.CURRENT_REPAIR);
+        override.setNormativeLaborHours(2.0);
+        override.setActive(true);
+        override.setPeriodicityUnit(PeriodicityUnit.MONTH);
+        override.setPeriodicityValue(1);
+        override.setRequiresShutdown(false);
+        override.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        override.setTriggerMeterInterval(500.0);
+        override.setTriggerPolicy(MaintenanceTriggerPolicy.ANY);
+        override.setRecalculationPolicy(MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION);
+        return EquipmentMaintenanceEffectiveRule.fromOverride(equipmentId, regulation, override);
+    }
+
+    private EquipmentMeter meter(UUID equipmentId, MeterType meterType, double currentValue) {
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setId(UUID.randomUUID());
+        meter.setEquipmentId(equipmentId);
+        meter.setMeterType(meterType);
+        meter.setName("Engine hours");
+        meter.setUnit("h");
+        meter.setCurrentValue(currentValue);
+        meter.setActive(true);
+        return meter;
     }
 }

@@ -1,8 +1,12 @@
 package com.toir.service.repair;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
+import com.toir.dto.workorder.CompletionMeterSnapshotRequest;
 import com.toir.entity.*;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
@@ -19,6 +23,7 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
@@ -33,6 +38,8 @@ import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.NotificationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
+import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import com.toir.exception.RestException;
@@ -73,6 +80,9 @@ public class RepairRequestService {
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final MaintenanceTemplateRepository maintenanceTemplateRepository;
     private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
+    private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
+    private final EquipmentMeterRepository equipmentMeterRepository;
+    private final ObjectMapper objectMapper;
 
     private static final Set<RequestStatus> REVIEWABLE_STATUSES = EnumSet.of(
             RequestStatus.OPEN,
@@ -691,18 +701,78 @@ public class RepairRequestService {
         if (request.getId() == null || request.getEquipmentId() == null) {
             return;
         }
-        if (maintenanceCompletionAnchorRepository.findByRepairRequestIdAndIsDeletedFalse(request.getId()).isPresent()) {
+        List<EquipmentMaintenanceEffectiveRule> scopes = resolveRepairCompletionScopes(request);
+        if (scopes.isEmpty()) {
             return;
         }
 
-        MaintenanceCompletionAnchor anchor = new MaintenanceCompletionAnchor();
-        anchor.setEquipmentId(request.getEquipmentId());
-        anchor.setRepairRequestId(request.getId());
-        anchor.setPerformedAt(request.getActualCompletionAt() == null ? Instant.now() : request.getActualCompletionAt());
-        anchor.setSource("REPAIR_REQUEST");
-        anchor.setNote(request.getCloseResult());
-        anchor.setMeterSnapshots("[]");
-        maintenanceCompletionAnchorRepository.save(anchor);
+        Set<String> existingScopes = maintenanceCompletionAnchorRepository
+                .findAllByRepairRequestIdAndIsDeletedFalse(request.getId())
+                .stream()
+                .map(anchor -> scopeKey(anchor.getRegulationId(), anchor.getEquipmentMaintenanceRuleId()))
+                .collect(Collectors.toSet());
+        Instant performedAt = request.getActualCompletionAt() == null ? Instant.now() : request.getActualCompletionAt();
+        String meterSnapshots = toMeterSnapshotsJson(currentMeterSnapshots(request.getEquipmentId(), performedAt));
+
+        for (EquipmentMaintenanceEffectiveRule scope : scopes) {
+            String scopeKey = scopeKey(scope.regulationId(), scope.equipmentMaintenanceRuleId());
+            if (!existingScopes.add(scopeKey)) {
+                continue;
+            }
+            MaintenanceCompletionAnchor anchor = new MaintenanceCompletionAnchor();
+            anchor.setEquipmentId(request.getEquipmentId());
+            anchor.setRegulationId(scope.regulationId());
+            anchor.setEquipmentMaintenanceRuleId(scope.equipmentMaintenanceRuleId());
+            anchor.setRepairRequestId(request.getId());
+            anchor.setPerformedAt(performedAt);
+            anchor.setRecalculationPolicy(scope.recalculationPolicy());
+            anchor.setSource("REPAIR_REQUEST");
+            anchor.setNote(request.getCloseResult());
+            anchor.setMeterSnapshots(meterSnapshots);
+            maintenanceCompletionAnchorRepository.save(anchor);
+        }
+    }
+
+    private List<EquipmentMaintenanceEffectiveRule> resolveRepairCompletionScopes(RepairRequest request) {
+        if (request.getTemplateId() == null) {
+            return List.of();
+        }
+        return effectiveRuleResolver.resolveApplicable(request.getEquipmentId())
+                .stream()
+                .filter(rule -> request.getTemplateId().equals(rule.templateId()))
+                .filter(rule -> rule.regulationId() != null || rule.equipmentMaintenanceRuleId() != null)
+                .toList();
+    }
+
+    private List<CompletionMeterSnapshotRequest> currentMeterSnapshots(UUID equipmentId, Instant performedAt) {
+        return equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)
+                .stream()
+                .map(meter -> toMeterSnapshot(meter, performedAt))
+                .toList();
+    }
+
+    private CompletionMeterSnapshotRequest toMeterSnapshot(EquipmentMeter meter, Instant performedAt) {
+        return new CompletionMeterSnapshotRequest(
+                meter.getId(),
+                meter.getMeterType(),
+                meter.getCurrentValue(),
+                meter.getLastReadAt() == null ? performedAt : meter.getLastReadAt()
+        );
+    }
+
+    private String toMeterSnapshotsJson(List<CompletionMeterSnapshotRequest> snapshots) {
+        if (snapshots == null || snapshots.isEmpty()) {
+            return "[]";
+        }
+        try {
+            return objectMapper.writeValueAsString(snapshots);
+        } catch (JsonProcessingException ex) {
+            throw RestException.badRequest("Invalid meter snapshots");
+        }
+    }
+
+    private String scopeKey(UUID regulationId, UUID equipmentMaintenanceRuleId) {
+        return String.valueOf(regulationId) + ":" + String.valueOf(equipmentMaintenanceRuleId);
     }
 
     private Page<RepairRequestDto> toDtoPage(Page<RepairRequest> page) {
