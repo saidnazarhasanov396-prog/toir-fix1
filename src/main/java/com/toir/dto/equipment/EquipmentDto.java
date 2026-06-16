@@ -2,10 +2,12 @@ package com.toir.dto.equipment;
 
 import com.toir.entity.FileAsset;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.LifetimeStatus;
+import com.toir.enums.MeterType;
 import com.toir.enums.PlacementType;
 import com.toir.enums.WarehouseEquipmentStatus;
 
@@ -56,7 +58,17 @@ public record EquipmentDto(
         LocalDate warrantyStartDate,
         LocalDate warrantyEndDate,
         WarrantyAttachmentRef warrantyAttachment,
-        PassportCompletenessRef passportCompleteness
+        PassportCompletenessRef passportCompleteness,
+        MeterType lifetimeCounterType,
+        UUID lifetimeMeterId,
+        Double lifetimeLimitValue,
+        Double lifetimeBaselineValue,
+        Double lifetimeWarningPercent,
+        Double lifetimeCurrentValue,
+        Double lifetimeTargetValue,
+        Double lifetimeRemainingValue,
+        Double lifetimeConsumedPercent,
+        String lifetimeUnit
 ) {
     public EquipmentDto(
             UUID id,
@@ -107,7 +119,8 @@ public record EquipmentDto(
                 department, location, equipmentType, parent, passport, placement, operationStartDate,
                 expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, operatingDuration,
                 expectedEndDate, remainingLifetime, lifetimeStatus, hasWarranty, warrantyAttachmentId,
-                warrantyStartDate, warrantyEndDate, warrantyAttachment, passportCompleteness);
+                warrantyStartDate, warrantyEndDate, warrantyAttachment, passportCompleteness,
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -154,7 +167,8 @@ public record EquipmentDto(
                 category, commissionedAt, arrivalDate, warrantyUntil, description, averageOperatingLifeHours,
                 department, location, equipmentType, parent, passport, placement, operationStartDate,
                 expectedLifetimeMonths, expectedLifetimeYears, null, operatingDuration, expectedEndDate, remainingLifetime,
-                lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment, null);
+                lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment, null,
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -189,7 +203,8 @@ public record EquipmentDto(
                 departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer, status,
                 category, commissionedAt, null, warrantyUntil, description, averageOperatingLifeHours, department,
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null, null,
-                LifetimeStatus.UNKNOWN, false, null, null, null, null, null);
+                LifetimeStatus.UNKNOWN, false, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -304,6 +319,10 @@ public record EquipmentDto(
         return from(e, null, null, null, null, null, null);
     }
 
+    public static EquipmentDto from(Equipment e, EquipmentMeter lifetimeMeter) {
+        return from(e, null, null, null, null, null, null, null, null, lifetimeMeter);
+    }
+
     public static EquipmentDto from(Equipment e,
                                     Ref department,
                                     Ref location,
@@ -343,6 +362,20 @@ public record EquipmentDto(
                                     PlacementRef placement,
                                     FileAsset warrantyAttachment,
                                     PassportCompletenessRef passportCompleteness) {
+        return from(e, department, location, equipmentType, parent, passport, placement, warrantyAttachment,
+                passportCompleteness, null);
+    }
+
+    public static EquipmentDto from(Equipment e,
+                                    Ref department,
+                                    Ref location,
+                                    Ref equipmentType,
+                                    Ref parent,
+                                    PassportRef passport,
+                                    PlacementRef placement,
+                                    FileAsset warrantyAttachment,
+                                    PassportCompletenessRef passportCompleteness,
+                                    EquipmentMeter lifetimeMeter) {
         return new EquipmentDto(
                 e.getId(), e.getCode(), e.getName(), e.getInventoryNumber(), e.getTechnicalNumber(),
                 e.getSerialNumber(), e.getModel(), e.getProducedYear(), e.getEquipmentTypeId(), e.getDepartmentId(),
@@ -351,10 +384,20 @@ public record EquipmentDto(
                 e.getCommissionedAt(), e.getArrivalDate(), e.getWarrantyUntil(), e.getDescription(), e.getAverageOperatingLifeHours(),
                 department, location, equipmentType, parent, passport, placement,
                 e.getOperationStartDate(), e.getExpectedLifetimeMonths(), e.getExpectedLifetimeYears(), e.getExpectedLifetimeHours(),
-                operatingDuration(e), expectedEndDate(e), remainingLifetime(e), lifetimeStatus(e),
+                operatingDuration(e), expectedEndDate(e), remainingLifetime(e), lifetimeStatus(e, lifetimeMeter),
                 Boolean.TRUE.equals(e.getHasWarranty()), e.getWarrantyAttachmentId(),
                 e.getWarrantyStartDate(), e.getWarrantyEndDate(), warrantyAttachmentRef(warrantyAttachment),
-                passportCompleteness
+                passportCompleteness,
+                lifetimeCounterType(e),
+                lifetimeMeterId(e, lifetimeMeter),
+                lifetimeLimitValue(e),
+                lifetimeBaselineValue(e),
+                lifetimeWarningPercent(e),
+                lifetimeCurrentValue(lifetimeMeter),
+                lifetimeTargetValue(e),
+                lifetimeRemainingValue(e, lifetimeMeter),
+                lifetimeConsumedPercent(e, lifetimeMeter),
+                lifetimeUnit(e, lifetimeMeter)
         );
     }
 
@@ -411,6 +454,14 @@ public record EquipmentDto(
     }
 
     private static LifetimeStatus lifetimeStatus(Equipment e) {
+        return lifetimeStatus(e, null);
+    }
+
+    private static LifetimeStatus lifetimeStatus(Equipment e, EquipmentMeter lifetimeMeter) {
+        return mostSevere(calendarLifetimeStatus(e), meterLifetimeStatus(e, lifetimeMeter));
+    }
+
+    private static LifetimeStatus calendarLifetimeStatus(Equipment e) {
         LocalDate end = expectedEndDate(e);
         if (end == null) {
             return LifetimeStatus.UNKNOWN;
@@ -420,5 +471,108 @@ public record EquipmentDto(
             return LifetimeStatus.EXPIRED;
         }
         return !end.isAfter(today.plusMonths(3)) ? LifetimeStatus.EXPIRING_SOON : LifetimeStatus.NORMAL;
+    }
+
+    private static LifetimeStatus meterLifetimeStatus(Equipment e, EquipmentMeter lifetimeMeter) {
+        Double remaining = lifetimeRemainingValue(e, lifetimeMeter);
+        Double limit = lifetimeLimitValue(e);
+        if (remaining == null || limit == null || limit <= 0) {
+            return LifetimeStatus.UNKNOWN;
+        }
+        if (remaining <= 0) {
+            return LifetimeStatus.EXPIRED;
+        }
+        double warningThreshold = Math.max(1.0, limit * lifetimeWarningPercent(e) / 100.0);
+        return remaining <= warningThreshold ? LifetimeStatus.EXPIRING_SOON : LifetimeStatus.NORMAL;
+    }
+
+    private static LifetimeStatus mostSevere(LifetimeStatus calendar, LifetimeStatus meter) {
+        if (calendar == LifetimeStatus.EXPIRED || meter == LifetimeStatus.EXPIRED) {
+            return LifetimeStatus.EXPIRED;
+        }
+        if (calendar == LifetimeStatus.EXPIRING_SOON || meter == LifetimeStatus.EXPIRING_SOON) {
+            return LifetimeStatus.EXPIRING_SOON;
+        }
+        if (calendar == LifetimeStatus.NORMAL || meter == LifetimeStatus.NORMAL) {
+            return LifetimeStatus.NORMAL;
+        }
+        return LifetimeStatus.UNKNOWN;
+    }
+
+    private static MeterType lifetimeCounterType(Equipment e) {
+        if (e.getLifetimeCounterType() != null) {
+            return e.getLifetimeCounterType();
+        }
+        return e.getExpectedLifetimeHours() != null && e.getExpectedLifetimeHours() > 0
+                ? MeterType.ENGINE_HOURS
+                : null;
+    }
+
+    private static UUID lifetimeMeterId(Equipment e, EquipmentMeter lifetimeMeter) {
+        if (e.getLifetimeMeterId() != null) {
+            return e.getLifetimeMeterId();
+        }
+        return lifetimeMeter == null ? null : lifetimeMeter.getId();
+    }
+
+    private static Double lifetimeLimitValue(Equipment e) {
+        if (e.getLifetimeLimitValue() != null && e.getLifetimeLimitValue() > 0) {
+            return e.getLifetimeLimitValue();
+        }
+        return e.getExpectedLifetimeHours() != null && e.getExpectedLifetimeHours() > 0
+                ? e.getExpectedLifetimeHours().doubleValue()
+                : null;
+    }
+
+    private static Double lifetimeBaselineValue(Equipment e) {
+        return e.getLifetimeBaselineValue() != null ? e.getLifetimeBaselineValue() : 0.0;
+    }
+
+    private static Double lifetimeWarningPercent(Equipment e) {
+        return e.getLifetimeWarningPercent() != null && e.getLifetimeWarningPercent() > 0
+                ? e.getLifetimeWarningPercent()
+                : 10.0;
+    }
+
+    private static Double lifetimeCurrentValue(EquipmentMeter lifetimeMeter) {
+        return lifetimeMeter == null ? null : lifetimeMeter.getCurrentValue();
+    }
+
+    private static Double lifetimeTargetValue(Equipment e) {
+        Double limit = lifetimeLimitValue(e);
+        return limit == null ? null : lifetimeBaselineValue(e) + limit;
+    }
+
+    private static Double lifetimeRemainingValue(Equipment e, EquipmentMeter lifetimeMeter) {
+        Double target = lifetimeTargetValue(e);
+        Double current = lifetimeCurrentValue(lifetimeMeter);
+        return target == null || current == null ? null : target - current;
+    }
+
+    private static Double lifetimeConsumedPercent(Equipment e, EquipmentMeter lifetimeMeter) {
+        Double limit = lifetimeLimitValue(e);
+        Double current = lifetimeCurrentValue(lifetimeMeter);
+        if (limit == null || limit <= 0 || current == null) {
+            return null;
+        }
+        return ((current - lifetimeBaselineValue(e)) / limit) * 100.0;
+    }
+
+    private static String lifetimeUnit(Equipment e, EquipmentMeter lifetimeMeter) {
+        if (lifetimeMeter != null && lifetimeMeter.getUnit() != null && !lifetimeMeter.getUnit().isBlank()) {
+            return lifetimeMeter.getUnit();
+        }
+        MeterType type = lifetimeCounterType(e);
+        if (type == null) {
+            return null;
+        }
+        return switch (type) {
+            case ENGINE_HOURS -> "h";
+            case MILEAGE_KM -> "km";
+            case CYCLES -> "cycle";
+            case TONS_PRODUCED -> "t";
+            case KWH_CONSUMED -> "kWh";
+            case CUSTOM -> null;
+        };
     }
 }
