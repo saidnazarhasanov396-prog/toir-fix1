@@ -3,7 +3,9 @@ package com.toir.service;
 import com.toir.dto.spareparttype.SparePartTypeDto;
 import com.toir.dto.spareparttype.SparePartTypeRequest;
 import com.toir.entity.SparePartType;
+import com.toir.enums.InventoryItemKind;
 import com.toir.exception.RestException;
+import com.toir.repository.SparePartTypeCountProjection;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.SparePartTypeRepository;
 import com.toir.util.AuditBuilderService;
@@ -49,13 +51,48 @@ class SparePartTypeServiceTest {
     void listReturnsOnlyActiveTypesByDefault() {
         SparePartType oil = type(UUID.randomUUID(), "OIL", "Oil", "LITER", true);
         when(repository.findAllActive(null)).thenReturn(List.of(oil));
+        when(sparePartRepository.countActiveByTypeIdsAndKind(
+                List.of(oil.getId()),
+                InventoryItemKind.SPARE_PART
+        )).thenReturn(List.of(typeCount(oil.getId(), 3)));
 
         List<SparePartTypeDto> result = service.findAll(null, false);
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().code()).isEqualTo("OIL");
         assertThat(result.getFirst().defaultUnit()).isEqualTo("LITER");
+        assertThat(result.getFirst().sparePartCount()).isEqualTo(3);
         verify(repository).findAllActive(null);
+    }
+
+    @Test
+    void listDefaultsSparePartCountToZeroWhenTypeHasNoParts() {
+        SparePartType bearing = type(UUID.randomUUID(), "BEARING", "Bearing", "PCS", true);
+        SparePartType oil = type(UUID.randomUUID(), "OIL", "Oil", "LITER", true);
+        when(repository.findAllActive(null)).thenReturn(List.of(bearing, oil));
+        when(sparePartRepository.countActiveByTypeIdsAndKind(
+                List.of(bearing.getId(), oil.getId()),
+                InventoryItemKind.SPARE_PART
+        )).thenReturn(List.of(typeCount(oil.getId(), 4)));
+
+        List<SparePartTypeDto> result = service.findAll(null, false);
+
+        assertThat(result).extracting(SparePartTypeDto::sparePartCount).containsExactly(0L, 4L);
+    }
+
+    @Test
+    void findByIdIncludesSparePartCount() {
+        UUID typeId = UUID.randomUUID();
+        SparePartType bearing = type(typeId, "BEARING", "Bearing", "PCS", true);
+        when(repository.findById(typeId)).thenReturn(Optional.of(bearing));
+        when(sparePartRepository.countActiveByTypeIdsAndKind(
+                List.of(typeId),
+                InventoryItemKind.SPARE_PART
+        )).thenReturn(List.of(typeCount(typeId, 7)));
+
+        SparePartTypeDto result = service.findById(typeId);
+
+        assertThat(result.sparePartCount()).isEqualTo(7);
     }
 
     @Test
@@ -124,5 +161,19 @@ class SparePartTypeServiceTest {
         type.setDefaultUnit(defaultUnit);
         type.setActive(active);
         return type;
+    }
+
+    private SparePartTypeCountProjection typeCount(UUID typeId, long sparePartCount) {
+        return new SparePartTypeCountProjection() {
+            @Override
+            public UUID getTypeId() {
+                return typeId;
+            }
+
+            @Override
+            public long getSparePartCount() {
+                return sparePartCount;
+            }
+        };
     }
 }

@@ -12,10 +12,15 @@ public record SparePartTypeDto(
         String description,
         String defaultUnit,
         Boolean active,
+        Long sparePartCount,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
     public static SparePartTypeDto from(SparePartType type) {
+        return from(type, 0L);
+    }
+
+    public static SparePartTypeDto from(SparePartType type, long sparePartCount) {
         return new SparePartTypeDto(
                 type.getId(),
                 type.getCode(),
@@ -23,6 +28,7 @@ public record SparePartTypeDto(
                 type.getDescription(),
                 type.getDefaultUnit(),
                 type.getActive(),
+                sparePartCount,
                 type.getCreatedAt(),
                 type.getUpdatedAt()
         );
