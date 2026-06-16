@@ -12,6 +12,8 @@ src/main/java/com/toir/Main.java
 uploads/
 
 /docs/*
+!/docs/attachment-groups-backend-audit.md
+!/docs/frontend-attachment-groups.md
 !/docs/uat/
 !/docs/uat/**
 /logs/

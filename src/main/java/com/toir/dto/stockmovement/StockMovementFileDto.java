@@ -1,5 +1,6 @@
 package com.toir.dto.stockmovement;
 
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.entity.StockMovementFile;
 import com.toir.entity.UploadedFile;
 
@@ -23,6 +24,19 @@ public record StockMovementFileDto(
                 file.getContentType(),
                 file.getSize(),
                 "/api/v1/stock-movements/" + movementId + "/files/" + file.getId() + "/download"
+        );
+    }
+
+    public static StockMovementFileDto fromAttachmentFile(UUID movementId, AttachmentGroupDto.FileItem file) {
+        if (file == null) {
+            return null;
+        }
+        return new StockMovementFileDto(
+                file.fileId(),
+                file.originalName(),
+                file.contentType(),
+                file.size(),
+                "/api/v1/stock-movements/" + movementId + "/files/" + file.fileId() + "/download"
         );
     }
 }

@@ -1,5 +1,6 @@
 package com.toir.dto.vehicle;
 
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.VehicleDocument;
 
@@ -81,6 +82,40 @@ public record VehicleDocumentDto(
                         file.getContentType(),
                         file.getSize(),
                         "/api/v1/vehicles/" + equipmentId + "/documents/" + document.getId() + "/download"
+                )
+        );
+    }
+
+    public static VehicleDocumentDto fromAttachmentGroup(UUID equipmentId, AttachmentGroupDto group) {
+        if (group == null || group.files() == null || group.files().isEmpty()) {
+            return null;
+        }
+        AttachmentGroupDto.FileItem file = group.files().getFirst();
+        String downloadUrl = "/api/v1/vehicles/" + equipmentId + "/documents/" + group.id() + "/download";
+        return new VehicleDocumentDto(
+                group.id(),
+                file.fileId(),
+                group.documentType(),
+                group.documentNumber(),
+                group.title(),
+                file.originalName(),
+                file.contentType(),
+                file.size(),
+                downloadUrl,
+                "/api/v1/vehicles/" + equipmentId + "/documents/" + group.id() + "/presigned-url",
+                group.createdAt(),
+                file.uploadedAt(),
+                equipmentId,
+                group.title(),
+                group.documentType(),
+                group.createdAt(),
+                new FileRef(
+                        file.fileId(),
+                        file.storedName(),
+                        file.originalName(),
+                        file.contentType(),
+                        file.size(),
+                        downloadUrl
                 )
         );
     }

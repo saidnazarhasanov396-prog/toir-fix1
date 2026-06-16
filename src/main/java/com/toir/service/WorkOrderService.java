@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.workorder.*;
 import com.toir.dto.triad.TriadLinkMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -82,6 +83,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
@@ -158,6 +160,7 @@ public class WorkOrderService {
     private final FileService fileService;
     private final UploadedFileRepository uploadedFileRepository;
     private final WorkOrderDocumentRepository workOrderDocumentRepository;
+    private final AttachmentGroupService attachmentGroupService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final RepairMaterialUsageService repairMaterialUsageService;
     private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
@@ -350,7 +353,6 @@ public class WorkOrderService {
             List<String> documentNumbers,
             AuthenticatedUser user
     ) {
-        UUID currentUserId = currentUserId(user);
         WorkOrder workOrder = getOrThrow(workOrderId);
         assertCanAccessWorkOrder(workOrder);
         if (files == null || files.isEmpty()) {
@@ -359,60 +361,43 @@ public class WorkOrderService {
         List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
         List<String> normalizedDocumentTypes = normalizeDocumentTypes(files, documentTypes);
         List<String> normalizedDocumentNumbers = normalizeDocumentNumbers(files, documentNumbers);
-
-        List<UUID> uploadedFileIds = new ArrayList<>();
-        try {
-            List<WorkOrderDocument> documents = new ArrayList<>(files.size());
-            for (int i = 0; i < files.size(); i++) {
-                MultipartFile file = files.get(i);
-                String contentType = file.getContentType();
-                if (contentType == null || !ALLOWED_WORK_ORDER_DOCUMENT_CONTENT_TYPES.contains(contentType)) {
-                    throw RestException.badRequest("Unsupported file type: " + contentType);
-                }
-                var uploaded = fileService.upload(file, FileCategory.WORK_ORDER_DOCUMENT, currentUserId);
-                uploadedFileIds.add(uploaded.id());
-                UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
-                        .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
-                documents.add(WorkOrderDocument.builder()
-                        .workOrder(workOrder)
-                        .file(uploadedFile)
-                        .documentType(normalizedDocumentTypes.get(i))
-                        .documentNumber(normalizedDocumentNumbers.get(i))
-                        .documentName(normalizedDocumentNames.get(i))
-                        .build());
+        List<WorkOrderDocumentDto> result = new ArrayList<>(files.size());
+        for (int i = 0; i < files.size(); i++) {
+            AttachmentGroupDto group = attachmentGroupService.createGroup(
+                    normalizedDocumentNames.get(i),
+                    null,
+                    "WORK_ORDER",
+                    workOrderId,
+                    normalizedDocumentTypes.get(i),
+                    normalizedDocumentNumbers.get(i),
+                    List.of(files.get(i)),
+                    null,
+                    user
+            );
+            WorkOrderDocumentDto dto = WorkOrderDocumentDto.fromAttachmentGroup(workOrderId, group);
+            if (dto != null) {
+                result.add(dto);
             }
-
-            return workOrderDocumentRepository.saveAllAndFlush(documents).stream()
-                    .map(document -> WorkOrderDocumentDto.from(workOrderId, document))
-                    .filter(Objects::nonNull)
-                    .toList();
-        } catch (RuntimeException e) {
-            cleanupUploadedFiles(uploadedFileIds, currentUserId);
-            if (e instanceof RestException restException) {
-                throw restException;
-            }
-            throw RestException.conflict("Could not attach work order documents");
         }
+        return result;
     }
 
     @Transactional(readOnly = true)
     public List<WorkOrderDocumentDto> getDocuments(UUID workOrderId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         WorkOrder workOrder = getOrThrow(workOrderId);
         assertCanAccessWorkOrder(workOrder);
-        return workOrderDocumentRepository.findAllByWorkOrderId(workOrderId)
+        return attachmentGroupService.listGroups("WORK_ORDER", workOrderId, user)
                 .stream()
-                .map(document -> toDocumentDtoWithMetadata(workOrderId, document, currentUserId))
+                .map(group -> WorkOrderDocumentDto.fromAttachmentGroup(workOrderId, group))
+                .filter(Objects::nonNull)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public WorkOrderDocumentDto getDocument(UUID workOrderId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         WorkOrder workOrder = getOrThrow(workOrderId);
         assertCanAccessWorkOrder(workOrder);
-        WorkOrderDocument document = findWorkOrderDocument(workOrderId, documentId);
-        return toDocumentDtoWithMetadata(workOrderId, document, currentUserId);
+        return WorkOrderDocumentDto.fromAttachmentGroup(workOrderId, attachmentGroupService.getGroup(documentId, user));
     }
 
     @Transactional(readOnly = true)
@@ -421,30 +406,25 @@ public class WorkOrderService {
             UUID documentId,
             AuthenticatedUser user
     ) {
-        UUID currentUserId = currentUserId(user);
         WorkOrder workOrder = getOrThrow(workOrderId);
         assertCanAccessWorkOrder(workOrder);
-        WorkOrderDocument document = findWorkOrderDocument(workOrderId, documentId);
-        return fileService.getPresignedUrl(document.getFile().getId(), currentUserId);
+        AttachmentGroupDto group = attachmentGroupService.getGroup(documentId, user);
+        return attachmentGroupService.getFilePresignedUrl(documentId, primaryFile(group).fileId(), user);
     }
 
     @Transactional(readOnly = true)
     public Resource downloadDocument(UUID workOrderId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         WorkOrder workOrder = getOrThrow(workOrderId);
         assertCanAccessWorkOrder(workOrder);
-        WorkOrderDocument document = findWorkOrderDocument(workOrderId, documentId);
-        return fileService.download(document.getFile().getId(), currentUserId);
+        AttachmentGroupDto group = attachmentGroupService.getGroup(documentId, user);
+        return attachmentGroupService.downloadFile(documentId, primaryFile(group).fileId(), user);
     }
 
     @Transactional
     public void deleteDocument(UUID workOrderId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         WorkOrder workOrder = getOrThrow(workOrderId);
         assertCanAccessWorkOrder(workOrder);
-        WorkOrderDocument document = findWorkOrderDocument(workOrderId, documentId);
-        workOrderDocumentRepository.delete(document);
-        fileService.delete(document.getFile().getId(), currentUserId);
+        attachmentGroupService.deleteGroup(documentId, user);
     }
 
     @Transactional(readOnly = true)
@@ -1341,6 +1321,13 @@ public class WorkOrderService {
     ) {
         fileService.getMetadata(document.getFile().getId(), currentUserId);
         return WorkOrderDocumentDto.from(workOrderId, document);
+    }
+
+    private AttachmentGroupDto.FileItem primaryFile(AttachmentGroupDto group) {
+        if (group == null || group.files() == null || group.files().isEmpty()) {
+            throw RestException.notFound("Attachment group file not found");
+        }
+        return group.files().getFirst();
     }
 
     private void cleanupUploadedFiles(List<UUID> fileIds, UUID currentUserId) {

@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.file.PresignedUrlResponse;
@@ -15,6 +16,7 @@ import com.toir.entity.equipment.VehicleDocument;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
@@ -30,6 +32,7 @@ import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentAttributeService;
 import com.toir.service.equipment.EquipmentManualAttributeService;
 import com.toir.service.equipment.EquipmentService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
@@ -62,6 +65,7 @@ public class VehicleService {
     private final EquipmentAttributeService equipmentAttributeService;
     private final EquipmentManualAttributeService equipmentManualAttributeService;
     private final VehicleDocumentRepository vehicleDocumentRepository;
+    private final AttachmentGroupService attachmentGroupService;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, VehicleRegistrationPlateType plateType,
@@ -250,7 +254,6 @@ public class VehicleService {
             List<String> documentNumbers,
             AuthenticatedUser user
     ) {
-        UUID currentUserId = currentUserId(user);
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
         if (files == null || files.isEmpty()) {
@@ -259,72 +262,53 @@ public class VehicleService {
         List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
         List<String> normalizedDocumentTypes = normalizeDocumentTypes(files, documentTypes);
         List<String> normalizedDocumentNumbers = normalizeDocumentNumbers(files, documentNumbers);
-        VehicleDetails details = findVehicleDetails(equipmentId);
-
-        List<UUID> uploadedFileIds = new ArrayList<>();
-        try {
-            List<VehicleDocument> documents = new ArrayList<>(files.size());
-            for (int i = 0; i < files.size(); i++) {
-                MultipartFile file = files.get(i);
-                String contentType = file.getContentType();
-                if (contentType == null || !ALLOWED_VEHICLE_DOCUMENT_CONTENT_TYPES.contains(contentType)) {
-                    throw RestException.badRequest("Unsupported file type: " + contentType);
-                }
-                UploadFileResponse uploaded = fileService.upload(file, FileCategory.VEHICLE_DOCUMENT, currentUserId);
-                uploadedFileIds.add(uploaded.id());
-                UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
-                        .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
-                documents.add(VehicleDocument.builder()
-                        .vehicleDetails(details)
-                        .file(uploadedFile)
-                        .documentType(normalizedDocumentTypes.get(i))
-                        .documentNumber(normalizedDocumentNumbers.get(i))
-                        .documentName(normalizedDocumentNames.get(i))
-                        .build());
+        List<VehicleDocumentDto> result = new ArrayList<>(files.size());
+        for (int i = 0; i < files.size(); i++) {
+            AttachmentGroupDto group = attachmentGroupService.createGroup(
+                    normalizedDocumentNames.get(i),
+                    null,
+                    "VEHICLE",
+                    equipmentId,
+                    normalizedDocumentTypes.get(i),
+                    normalizedDocumentNumbers.get(i),
+                    List.of(files.get(i)),
+                    null,
+                    user
+            );
+            VehicleDocumentDto dto = VehicleDocumentDto.fromAttachmentGroup(equipmentId, group);
+            if (dto != null) {
+                result.add(dto);
             }
-
-            return vehicleDocumentRepository.saveAllAndFlush(documents).stream()
-                    .map(document -> VehicleDocumentDto.from(equipmentId, document))
-                    .filter(Objects::nonNull)
-                    .toList();
-        } catch (RuntimeException e) {
-            cleanupUploadedFiles(uploadedFileIds, currentUserId);
-            if (e instanceof RestException restException) {
-                throw restException;
-            }
-            throw RestException.conflict("Could not attach vehicle documents");
         }
+        return result;
     }
 
     @Transactional(readOnly = true)
     public List<VehicleDocumentDto> getDocuments(UUID equipmentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
-        return vehicleDocumentRepository.findAllByEquipmentId(equipmentId)
+        return attachmentGroupService.listGroups("VEHICLE", equipmentId, user)
                 .stream()
-                .map(document -> toDocumentDtoWithMetadata(equipmentId, document, currentUserId))
+                .map(group -> VehicleDocumentDto.fromAttachmentGroup(equipmentId, group))
+                .filter(Objects::nonNull)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public VehicleDocumentDto getDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
-        VehicleDocument document = findVehicleDocument(equipmentId, documentId);
-        return toDocumentDtoWithMetadata(equipmentId, document, currentUserId);
+        return VehicleDocumentDto.fromAttachmentGroup(equipmentId, attachmentGroupService.getGroup(documentId, user));
     }
 
     @Transactional(readOnly = true)
     public VehicleDocumentDto getDocument(UUID equipmentId, UUID currentUserId) {
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
-        Optional<VehicleDocument> latestDocument = vehicleDocumentRepository.findAllByEquipmentId(equipmentId)
-                .stream()
-                .findFirst();
-        if (latestDocument.isPresent()) {
-            return toDocumentDtoWithMetadata(equipmentId, latestDocument.get(), currentUserId);
+        AuthenticatedUser user = authenticatedUser(currentUserId);
+        List<AttachmentGroupDto> groups = attachmentGroupService.listGroups("VEHICLE", equipmentId, user);
+        if (!groups.isEmpty()) {
+            return VehicleDocumentDto.fromAttachmentGroup(equipmentId, groups.getFirst());
         }
         VehicleDetails details = findVehicleDetails(equipmentId);
         UploadedFile documentFile = details.getDocumentFile();
@@ -337,31 +321,29 @@ public class VehicleService {
 
     @Transactional(readOnly = true)
     public PresignedUrlResponse getDocumentPresignedUrl(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
-        VehicleDocument document = findVehicleDocument(equipmentId, documentId);
-        return fileService.getPresignedUrl(document.getFile().getId(), currentUserId);
+        AttachmentGroupDto group = attachmentGroupService.getGroup(documentId, user);
+        return attachmentGroupService.getFilePresignedUrl(documentId, primaryFile(group).fileId(), user);
     }
 
     @Transactional(readOnly = true)
     public Resource downloadDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
-        VehicleDocument document = findVehicleDocument(equipmentId, documentId);
-        return fileService.download(document.getFile().getId(), currentUserId);
+        AttachmentGroupDto group = attachmentGroupService.getGroup(documentId, user);
+        return attachmentGroupService.downloadFile(documentId, primaryFile(group).fileId(), user);
     }
 
     @Transactional(readOnly = true)
     public PresignedUrlResponse getDocumentPresignedUrl(UUID equipmentId, UUID currentUserId) {
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
-        Optional<VehicleDocument> latestDocument = vehicleDocumentRepository.findAllByEquipmentId(equipmentId)
-                .stream()
-                .findFirst();
-        if (latestDocument.isPresent()) {
-            return fileService.getPresignedUrl(latestDocument.get().getFile().getId(), currentUserId);
+        AuthenticatedUser user = authenticatedUser(currentUserId);
+        List<AttachmentGroupDto> groups = attachmentGroupService.listGroups("VEHICLE", equipmentId, user);
+        if (!groups.isEmpty()) {
+            AttachmentGroupDto group = groups.getFirst();
+            return attachmentGroupService.getFilePresignedUrl(group.id(), primaryFile(group).fileId(), user);
         }
         VehicleDetails details = findVehicleDetails(equipmentId);
         UploadedFile documentFile = details.getDocumentFile();
@@ -375,11 +357,11 @@ public class VehicleService {
     public Resource downloadDocument(UUID equipmentId, UUID currentUserId) {
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
-        Optional<VehicleDocument> latestDocument = vehicleDocumentRepository.findAllByEquipmentId(equipmentId)
-                .stream()
-                .findFirst();
-        if (latestDocument.isPresent()) {
-            return fileService.download(latestDocument.get().getFile().getId(), currentUserId);
+        AuthenticatedUser user = authenticatedUser(currentUserId);
+        List<AttachmentGroupDto> groups = attachmentGroupService.listGroups("VEHICLE", equipmentId, user);
+        if (!groups.isEmpty()) {
+            AttachmentGroupDto group = groups.getFirst();
+            return attachmentGroupService.downloadFile(group.id(), primaryFile(group).fileId(), user);
         }
         VehicleDetails details = findVehicleDetails(equipmentId);
         UploadedFile documentFile = details.getDocumentFile();
@@ -391,25 +373,19 @@ public class VehicleService {
 
     @Transactional
     public void deleteDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
-        VehicleDocument document = findVehicleDocument(equipmentId, documentId);
-        vehicleDocumentRepository.delete(document);
-        fileService.delete(document.getFile().getId(), currentUserId);
+        attachmentGroupService.deleteGroup(documentId, user);
     }
 
     @Transactional
     public void deleteDocument(UUID equipmentId, UUID currentUserId) {
         Equipment equipment = findVehicleEquipment(equipmentId);
         enforceVehicleAccess(equipment);
-        Optional<VehicleDocument> latestDocument = vehicleDocumentRepository.findAllByEquipmentId(equipmentId)
-                .stream()
-                .findFirst();
-        if (latestDocument.isPresent()) {
-            VehicleDocument document = latestDocument.get();
-            vehicleDocumentRepository.delete(document);
-            fileService.delete(document.getFile().getId(), currentUserId);
+        AuthenticatedUser user = authenticatedUser(currentUserId);
+        List<AttachmentGroupDto> groups = attachmentGroupService.listGroups("VEHICLE", equipmentId, user);
+        if (!groups.isEmpty()) {
+            attachmentGroupService.deleteGroup(groups.getFirst().id(), user);
             return;
         }
         VehicleDetails details = findVehicleDetails(equipmentId);
@@ -534,6 +510,13 @@ public class VehicleService {
                 file.getCreatedAt(),
                 file.getCreatedAt()
         );
+    }
+
+    private AttachmentGroupDto.FileItem primaryFile(AttachmentGroupDto group) {
+        if (group == null || group.files() == null || group.files().isEmpty()) {
+            throw RestException.notFound("Attachment group file not found");
+        }
+        return group.files().getFirst();
     }
 
     private UUID currentUserId(AuthenticatedUser user) {
