@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
@@ -36,6 +37,7 @@ import com.toir.entity.users.UserCertification;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.EquipmentNodeType;
+import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.FileCategory;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
@@ -91,6 +93,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.dto.file.UploadFileResponse;
 import com.toir.security.AuthenticatedUser;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
@@ -221,6 +224,9 @@ class WorkOrderServiceTest {
     WorkOrderDocumentRepository workOrderDocumentRepository;
 
     @Mock
+    AttachmentGroupService attachmentGroupService;
+
+    @Mock
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
 
     @Mock
@@ -277,14 +283,12 @@ class WorkOrderServiceTest {
         UUID currentUserId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
         WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), UUID.randomUUID());
-        UploadedFile uploadedFile = uploadedFile(fileId, currentUserId, "act.pdf");
         MockMultipartFile file = new MockMultipartFile("files", "act.pdf", "application/pdf", "%PDF-1.4\n".getBytes());
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(fileService.upload(file, FileCategory.WORK_ORDER_DOCUMENT, currentUserId))
-                .thenReturn(UploadFileResponse.from(uploadedFile));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId)).thenReturn(Optional.of(uploadedFile));
-        when(workOrderDocumentRepository.saveAllAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(attachmentGroupService.createGroup(eq("Completion act"), any(), eq("WORK_ORDER"), eq(workOrderId),
+                eq("ACT"), eq("ACT-2024-015"), eq(List.of(file)), any(), any()))
+                .thenReturn(attachmentGroup(workOrderId, fileId, "Completion act", "ACT", "ACT-2024-015", "act.pdf", currentUserId));
 
         var result = service.attachDocuments(
                 workOrderId,
@@ -300,7 +304,8 @@ class WorkOrderServiceTest {
         assertThat(result.getFirst().documentName()).isEqualTo("Completion act");
         assertThat(result.getFirst().documentType()).isEqualTo("ACT");
         assertThat(result.getFirst().documentNumber()).isEqualTo("ACT-2024-015");
-        verify(fileService).upload(file, FileCategory.WORK_ORDER_DOCUMENT, currentUserId);
+        verify(attachmentGroupService).createGroup(eq("Completion act"), any(), eq("WORK_ORDER"), eq(workOrderId),
+                eq("ACT"), eq("ACT-2024-015"), eq(List.of(file)), any(), any());
     }
 
     @Test
@@ -332,24 +337,19 @@ class WorkOrderServiceTest {
         UUID fileId1 = UUID.randomUUID();
         UUID fileId2 = UUID.randomUUID();
         WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), UUID.randomUUID());
-        UploadedFile uploadedFile1 = uploadedFile(fileId1, currentUserId, "passport.pdf");
-        UploadedFile uploadedFile2 = uploadedFile(fileId2, currentUserId, "drawing.png");
-        uploadedFile2.setContentType("image/png");
-        uploadedFile2.setExtension("png");
         MockMultipartFile file1 = new MockMultipartFile("files", "passport.pdf", "application/pdf", "%PDF-1.4\n".getBytes());
         MockMultipartFile file2 = new MockMultipartFile("files", "drawing.png", "image/png", new byte[]{1, 2, 3});
 
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(fileService.upload(eq(file1), eq(FileCategory.WORK_ORDER_DOCUMENT), eq(currentUserId)))
-                .thenReturn(UploadFileResponse.from(uploadedFile1));
-        when(fileService.upload(eq(file2), eq(FileCategory.WORK_ORDER_DOCUMENT), eq(currentUserId)))
-                .thenReturn(UploadFileResponse.from(uploadedFile2));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId1)).thenReturn(Optional.of(uploadedFile1));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId2)).thenReturn(Optional.of(uploadedFile2));
-        when(workOrderDocumentRepository.saveAllAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(attachmentGroupService.createGroup(eq("Technical Passport"), any(), eq("WORK_ORDER"), eq(workOrderId),
+                eq("PASSPORT"), any(), eq(List.of(file1)), any(), any()))
+                .thenReturn(attachmentGroup(workOrderId, fileId1, "Technical Passport", "PASSPORT", "AKT-2024-001", "passport.pdf", currentUserId));
+        when(attachmentGroupService.createGroup(eq("Drawing"), any(), eq("WORK_ORDER"), eq(workOrderId),
+                eq("DRAWING"), eq("DRW-2024-001"), eq(List.of(file2)), any(), any()))
+                .thenReturn(attachmentGroup(workOrderId, fileId2, "Drawing", "DRAWING", "DRW-2024-001", "drawing.png", currentUserId));
 
-        service.attachDocuments(
+        var result = service.attachDocuments(
                 workOrderId,
                 List.of(file1, file2),
                 List.of("Technical Passport", "Drawing"),
@@ -358,18 +358,10 @@ class WorkOrderServiceTest {
                 authenticatedUser(currentUserId)
         );
 
-        org.mockito.ArgumentCaptor<List<WorkOrderDocument>> captor =
-                org.mockito.ArgumentCaptor.forClass(List.class);
-        verify(workOrderDocumentRepository).saveAllAndFlush(captor.capture());
-
-        List<WorkOrderDocument> saved = captor.getValue();
-        assertThat(saved).hasSize(2);
-        assertThat(saved.get(0).getDocumentType()).isEqualTo("PASSPORT");
-        assertThat(saved.get(0).getDocumentNumber()).isEqualTo("АКТ-2024-001");
-        assertThat(saved.get(0).getDocumentName()).isEqualTo("Technical Passport");
-        assertThat(saved.get(1).getDocumentType()).isEqualTo("DRAWING");
-        assertThat(saved.get(1).getDocumentNumber()).isEqualTo("DRW-2024-001");
-        assertThat(saved.get(1).getDocumentName()).isEqualTo("Drawing");
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(item -> item.documentType()).containsExactly("PASSPORT", "DRAWING");
+        assertThat(result).extracting(item -> item.documentNumber()).containsExactly("AKT-2024-001", "DRW-2024-001");
+        assertThat(result).extracting(item -> item.documentName()).containsExactly("Technical Passport", "Drawing");
     }
 
     @Test
@@ -378,16 +370,15 @@ class WorkOrderServiceTest {
         UUID currentUserId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
         WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), UUID.randomUUID());
-        WorkOrderDocument document = workOrderDocument(workOrder, uploadedFile(fileId, currentUserId, "act.pdf"));
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(workOrderDocumentRepository.findAllByWorkOrderId(workOrderId)).thenReturn(List.of(document));
+        when(attachmentGroupService.listGroups(eq("WORK_ORDER"), eq(workOrderId), any()))
+                .thenReturn(List.of(attachmentGroup(workOrderId, fileId, "Completion act", "ACT", null, "act.pdf", currentUserId)));
 
         var result = service.getDocuments(workOrderId, authenticatedUser(currentUserId));
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().downloadUrl()).contains("/api/v1/work-orders/" + workOrderId + "/documents/");
-        verify(fileService).getMetadata(fileId, currentUserId);
     }
 
     @Test
@@ -397,18 +388,17 @@ class WorkOrderServiceTest {
         UUID currentUserId = UUID.randomUUID();
         UUID fileId = UUID.randomUUID();
         WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), UUID.randomUUID());
-        WorkOrderDocument document = workOrderDocument(workOrder, uploadedFile(fileId, currentUserId, "act.pdf"));
-        document.setId(documentId);
         ByteArrayResource resource = new ByteArrayResource("content".getBytes());
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(workOrderDocumentRepository.findByIdAndWorkOrderId(documentId, workOrderId)).thenReturn(Optional.of(document));
-        when(fileService.download(fileId, currentUserId)).thenReturn(resource);
+        when(attachmentGroupService.getGroup(eq(documentId), any()))
+                .thenReturn(attachmentGroup(documentId, workOrderId, fileId, "Completion act", "ACT", null, "act.pdf", currentUserId));
+        when(attachmentGroupService.downloadFile(eq(documentId), eq(fileId), any())).thenReturn(resource);
 
         var result = service.downloadDocument(workOrderId, documentId, authenticatedUser(currentUserId));
 
         assertThat(result).isSameAs(resource);
-        verify(fileService).download(fileId, currentUserId);
+        verify(attachmentGroupService).downloadFile(eq(documentId), eq(fileId), any());
     }
 
     @Test
@@ -416,18 +406,13 @@ class WorkOrderServiceTest {
         UUID workOrderId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID currentUserId = UUID.randomUUID();
-        UUID fileId = UUID.randomUUID();
         WorkOrder workOrder = workOrder(workOrderId, UUID.randomUUID(), UUID.randomUUID());
-        WorkOrderDocument document = workOrderDocument(workOrder, uploadedFile(fileId, currentUserId, "act.pdf"));
-        document.setId(documentId);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(workOrderDocumentRepository.findByIdAndWorkOrderId(documentId, workOrderId)).thenReturn(Optional.of(document));
 
         service.deleteDocument(workOrderId, documentId, authenticatedUser(currentUserId));
 
-        verify(workOrderDocumentRepository).delete(document);
-        verify(fileService).delete(fileId, currentUserId);
+        verify(attachmentGroupService).deleteGroup(eq(documentId), any());
     }
 
     @Test
@@ -3742,6 +3727,55 @@ class WorkOrderServiceTest {
                 .build();
         document.setId(UUID.randomUUID());
         return document;
+    }
+
+    private AttachmentGroupDto attachmentGroup(
+            UUID targetId,
+            UUID fileId,
+            String title,
+            String documentType,
+            String documentNumber,
+            String originalName,
+            UUID uploadedBy
+    ) {
+        return attachmentGroup(UUID.randomUUID(), targetId, fileId, title, documentType, documentNumber, originalName, uploadedBy);
+    }
+
+    private AttachmentGroupDto attachmentGroup(
+            UUID groupId,
+            UUID targetId,
+            UUID fileId,
+            String title,
+            String documentType,
+            String documentNumber,
+            String originalName,
+            UUID uploadedBy
+    ) {
+        return new AttachmentGroupDto(
+                groupId,
+                title,
+                null,
+                AttachmentTargetType.WORK_ORDER,
+                targetId,
+                documentType,
+                documentNumber,
+                uploadedBy,
+                java.time.LocalDateTime.parse("2026-06-09T10:00:00"),
+                List.of(new AttachmentGroupDto.FileItem(
+                        UUID.randomUUID(),
+                        fileId,
+                        originalName,
+                        originalName,
+                        originalName.endsWith(".png") ? "image/png" : "application/pdf",
+                        128L,
+                        0,
+                        null,
+                        uploadedBy,
+                        java.time.LocalDateTime.parse("2026-06-09T10:00:00"),
+                        "/download",
+                        "/presigned"
+                ))
+        );
     }
 
     private RepairRequest repairRequest(UUID id, RequestStatus status) {
