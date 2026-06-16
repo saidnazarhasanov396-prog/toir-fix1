@@ -324,7 +324,7 @@ class OperationalIssueScannerServiceTest {
 
         verify(issueService).openOrUpdate(
                 eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
-                eq(NotificationSeverity.CRITICAL),
+                eq(NotificationSeverity.WARNING),
                 eq(EquipmentRiskLevel.HIGH),
                 eq(equipmentId),
                 eq(departmentId),
@@ -346,18 +346,7 @@ class OperationalIssueScannerServiceTest {
 
         service.scanAll();
 
-        verify(issueService).openOrUpdate(
-                eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
-                eq(NotificationSeverity.INFO),
-                eq(EquipmentRiskLevel.LOW),
-                eq(equipmentId),
-                eq(departmentId),
-                eq("EquipmentLifecycle"),
-                eq(equipmentId),
-                eq("Equipment lifecycle risk: EQ-1"),
-                any(),
-                org.mockito.ArgumentMatchers.<java.util.Map<String, Object>>any()
-        );
+        verify(issueService).resolveOpen("EquipmentLifecycle", equipmentId);
     }
 
     private EquipmentRiskScore riskScore(UUID equipmentId, int risk) {
