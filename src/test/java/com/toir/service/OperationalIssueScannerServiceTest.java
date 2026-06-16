@@ -201,6 +201,39 @@ class OperationalIssueScannerServiceTest {
     }
 
     @Test
+    void scanCreatesMileageLifetimeWarningFromDynamicCounter() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentId);
+        equipment.setLifetimeCounterType(MeterType.MILEAGE_KM);
+        equipment.setLifetimeBaselineValue(20_000.0);
+        equipment.setLifetimeLimitValue(10_000.0);
+        equipment.setLifetimeWarningPercent(10.0);
+
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setEquipmentId(equipmentId);
+        meter.setMeterType(MeterType.MILEAGE_KM);
+        meter.setUnit("km");
+        meter.setCurrentValue(29_100.0);
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(List.of(meter));
+
+        service.scanAll();
+
+        verify(issueService).openOrUpdate(
+                eq(OperationalIssueType.EQUIPMENT_LIFETIME_WARNING),
+                eq(NotificationSeverity.WARNING),
+                eq(equipmentId),
+                eq(departmentId),
+                eq("EquipmentLifetime"),
+                eq(equipmentId),
+                eq("Equipment lifetime expiring soon: EQ-1"),
+                org.mockito.ArgumentMatchers.contains("Remaining lifetime: 900 km")
+        );
+    }
+
+    @Test
     void scanCreatesMaintenanceBlockedAsMissingMeterIssue() {
         UUID eventId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();

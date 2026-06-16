@@ -17,6 +17,7 @@ import com.toir.entity.equipment.EquipmentAttributeValue;
 import com.toir.entity.equipment.EquipmentDocument;
 import com.toir.entity.equipment.EquipmentDocumentFile;
 import com.toir.entity.equipment.EquipmentLocationHistory;
+import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.equipment.EquipmentPassport;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.maintenance.WorkOrder;
@@ -29,6 +30,7 @@ import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
+import com.toir.enums.MeterType;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
 import com.toir.enums.RequestStatus;
@@ -47,6 +49,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
+import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentDocumentFileRepository;
 import com.toir.repository.equipment.EquipmentDocumentRepository;
@@ -89,6 +92,7 @@ public class EquipmentService {
     private final EquipmentPassportRepository passportRepository;
     private final EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
     private final EquipmentAttributeValueRepository attributeValueRepository;
+    private final EquipmentMeterRepository equipmentMeterRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
@@ -770,6 +774,11 @@ public class EquipmentService {
         Map<UUID, FileAsset> warrantyAttachmentMap = warrantyAttachmentIds.isEmpty()
                 ? Collections.emptyMap()
                 : byId(fileAssetRepository.findAllByIdInAndIsDeletedFalse(warrantyAttachmentIds), FileAsset::getId);
+        Map<UUID, List<EquipmentMeter>> activeMetersByEquipment = equipmentIds.isEmpty()
+                ? Collections.emptyMap()
+                : equipmentMeterRepository.findAllByEquipmentIdInAndActiveTrueAndIsDeletedFalse(equipmentIds)
+                        .stream()
+                        .collect(Collectors.groupingBy(EquipmentMeter::getEquipmentId));
 
         return items.stream()
                 .map(e -> {
@@ -799,10 +808,41 @@ public class EquipmentService {
                                     e,
                                     requiredDefinitionsByType.getOrDefault(e.getEquipmentTypeId(), List.of()),
                                     valuesByEquipment.getOrDefault(e.getId(), Map.of())
-                            )
+                            ),
+                            resolveLifetimeMeter(e, activeMetersByEquipment.getOrDefault(e.getId(), List.of()))
                     );
                 })
                 .toList();
+    }
+
+    private EquipmentMeter resolveLifetimeMeter(Equipment equipment, List<EquipmentMeter> activeMeters) {
+        if (activeMeters.isEmpty()) {
+            return null;
+        }
+        UUID configuredMeterId = equipment.getLifetimeMeterId();
+        if (configuredMeterId != null) {
+            return activeMeters.stream()
+                    .filter(meter -> configuredMeterId.equals(meter.getId()))
+                    .findFirst()
+                    .orElse(null);
+        }
+        MeterType type = effectiveLifetimeCounterType(equipment);
+        if (type == null) {
+            return null;
+        }
+        return activeMeters.stream()
+                .filter(meter -> meter.getMeterType() == type)
+                .max(Comparator.comparingDouble(EquipmentMeter::getCurrentValue))
+                .orElse(null);
+    }
+
+    private MeterType effectiveLifetimeCounterType(Equipment equipment) {
+        if (equipment.getLifetimeCounterType() != null) {
+            return equipment.getLifetimeCounterType();
+        }
+        return equipment.getExpectedLifetimeHours() != null && equipment.getExpectedLifetimeHours() > 0
+                ? MeterType.ENGINE_HOURS
+                : null;
     }
 
     private Map<UUID, List<EquipmentAttributeDefinition>> requiredPassportDefinitionsByType(Set<UUID> typeIds) {
@@ -1079,10 +1119,13 @@ public class EquipmentService {
         entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths());
         entity.setExpectedLifetimeYears(request.expectedLifetimeYears());
         entity.setExpectedLifetimeHours(request.expectedLifetimeHours());
+        applyDynamicLifetimeForCreate(entity, request);
         entity.setAverageOperatingLifeHours(calculateAverageOperatingLifeHours(
                 request.expectedLifetimeYears(),
                 request.expectedLifetimeMonths(),
-                request.expectedLifetimeHours()
+                request.expectedLifetimeHours(),
+                effectiveLifetimeCounterType(entity),
+                entity.getLifetimeLimitValue()
         ));
         entity.setDescription(request.description());
     }
@@ -1698,11 +1741,14 @@ public class EquipmentService {
         entity.setExpectedLifetimeMonths(expectedLifetimeMonths);
         entity.setExpectedLifetimeYears(expectedLifetimeYears);
         entity.setExpectedLifetimeHours(expectedLifetimeHours);
+        applyDynamicLifetimeForUpdate(entity, request);
         if (hasExpectedLifetimeChange(request)) {
             entity.setAverageOperatingLifeHours(calculateAverageOperatingLifeHours(
                     expectedLifetimeYears,
                     expectedLifetimeMonths,
-                    expectedLifetimeHours
+                    expectedLifetimeHours,
+                    effectiveLifetimeCounterType(entity),
+                    entity.getLifetimeLimitValue()
             ));
         }
         entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
@@ -1711,22 +1757,113 @@ public class EquipmentService {
     private boolean hasExpectedLifetimeChange(EquipmentUpdateRequest request) {
         return request.expectedLifetimeYears() != null
                 || request.expectedLifetimeMonths() != null
-                || request.expectedLifetimeHours() != null;
+                || request.expectedLifetimeHours() != null
+                || request.lifetimeCounterType() != null
+                || request.lifetimeMeterId() != null
+                || request.lifetimeLimitValue() != null
+                || request.lifetimeBaselineValue() != null
+                || request.lifetimeWarningPercent() != null;
     }
 
-    private long calculateAverageOperatingLifeHours(
+    private Long calculateAverageOperatingLifeHours(
             Integer expectedLifetimeYears,
             Integer expectedLifetimeMonths,
-            Long expectedLifetimeHours
+            Long expectedLifetimeHours,
+            MeterType lifetimeCounterType,
+            Double lifetimeLimitValue
     ) {
         long yearsHours = expectedLifetimeYears == null ? 0 : expectedLifetimeYears * 365L * 24L;
         long monthsHours = expectedLifetimeMonths == null ? 0 : expectedLifetimeMonths * 30L * 24L;
         long directHours = expectedLifetimeHours == null ? 0 : expectedLifetimeHours;
         long total = yearsHours + monthsHours + directHours;
-        if (total <= 0) {
-            throw RestException.badRequest("Expected lifetime must be specified and greater than zero");
+        if (total > 0) {
+            return total;
         }
-        return total;
+        if (lifetimeCounterType == MeterType.ENGINE_HOURS
+                && lifetimeLimitValue != null
+                && lifetimeLimitValue > 0) {
+            return Math.round(lifetimeLimitValue);
+        }
+        if (lifetimeCounterType != null && lifetimeLimitValue != null && lifetimeLimitValue > 0) {
+            return null;
+        }
+        throw RestException.badRequest("Expected lifetime must be specified and greater than zero");
+    }
+
+    private void applyDynamicLifetimeForCreate(Equipment entity, EquipmentCreateRequest request) {
+        MeterType counterType = request.lifetimeCounterType();
+        Double limitValue = request.lifetimeLimitValue();
+        UUID meterId = request.lifetimeMeterId();
+        Double baselineValue = request.lifetimeBaselineValue();
+        Double warningPercent = request.lifetimeWarningPercent();
+
+        if (counterType == null && limitValue == null
+                && request.expectedLifetimeHours() != null
+                && request.expectedLifetimeHours() > 0) {
+            counterType = MeterType.ENGINE_HOURS;
+            limitValue = request.expectedLifetimeHours().doubleValue();
+        }
+        validateDynamicLifetimeConfig(counterType, meterId, limitValue);
+        entity.setLifetimeCounterType(counterType);
+        entity.setLifetimeMeterId(meterId);
+        entity.setLifetimeLimitValue(limitValue);
+        entity.setLifetimeBaselineValue(limitValue == null ? baselineValue : defaultIfNull(baselineValue, 0.0));
+        entity.setLifetimeWarningPercent(limitValue == null ? warningPercent : defaultIfNull(warningPercent, 10.0));
+    }
+
+    private void applyDynamicLifetimeForUpdate(Equipment entity, EquipmentUpdateRequest request) {
+        boolean hasDynamicLifetimeRequest = request.lifetimeCounterType() != null
+                || request.lifetimeMeterId() != null
+                || request.lifetimeLimitValue() != null
+                || request.lifetimeBaselineValue() != null
+                || request.lifetimeWarningPercent() != null;
+        if (hasDynamicLifetimeRequest) {
+            MeterType counterType = request.lifetimeCounterType() != null
+                    ? request.lifetimeCounterType()
+                    : entity.getLifetimeCounterType();
+            UUID meterId = request.lifetimeMeterId() != null
+                    ? request.lifetimeMeterId()
+                    : entity.getLifetimeMeterId();
+            Double limitValue = request.lifetimeLimitValue() != null
+                    ? request.lifetimeLimitValue()
+                    : entity.getLifetimeLimitValue();
+            validateDynamicLifetimeConfig(counterType, meterId, limitValue);
+            entity.setLifetimeCounterType(counterType);
+            entity.setLifetimeMeterId(meterId);
+            entity.setLifetimeLimitValue(limitValue);
+            entity.setLifetimeBaselineValue(request.lifetimeBaselineValue() != null
+                    ? request.lifetimeBaselineValue()
+                    : entity.getLifetimeBaselineValue());
+            entity.setLifetimeWarningPercent(request.lifetimeWarningPercent() != null
+                    ? request.lifetimeWarningPercent()
+                    : entity.getLifetimeWarningPercent());
+            if (limitValue != null) {
+                entity.setLifetimeBaselineValue(defaultIfNull(entity.getLifetimeBaselineValue(), 0.0));
+                entity.setLifetimeWarningPercent(defaultIfNull(entity.getLifetimeWarningPercent(), 10.0));
+            }
+        } else if (request.expectedLifetimeHours() != null
+                && request.expectedLifetimeHours() > 0
+                && entity.getLifetimeCounterType() == null
+                && entity.getLifetimeLimitValue() == null) {
+            entity.setLifetimeCounterType(MeterType.ENGINE_HOURS);
+            entity.setLifetimeLimitValue(request.expectedLifetimeHours().doubleValue());
+            entity.setLifetimeBaselineValue(defaultIfNull(entity.getLifetimeBaselineValue(), 0.0));
+            entity.setLifetimeWarningPercent(defaultIfNull(entity.getLifetimeWarningPercent(), 10.0));
+        }
+    }
+
+    private void validateDynamicLifetimeConfig(MeterType counterType, UUID meterId, Double limitValue) {
+        boolean hasConfig = counterType != null || meterId != null || limitValue != null;
+        if (!hasConfig) {
+            return;
+        }
+        if (counterType == null || limitValue == null || limitValue <= 0) {
+            throw RestException.badRequest("Dynamic lifetime must include counter type and positive limit value");
+        }
+    }
+
+    private Double defaultIfNull(Double value, double fallback) {
+        return value != null ? value : fallback;
     }
 
     private void validateWarrantyAttachment(Boolean hasWarranty, UUID warrantyAttachmentId) {

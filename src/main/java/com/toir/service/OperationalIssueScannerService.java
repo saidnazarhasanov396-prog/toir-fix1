@@ -199,10 +199,10 @@ public class OperationalIssueScannerService {
                 issueService.resolveOpen("EquipmentLifetime", item.getId());
                 continue;
             }
-            Optional<Double> remainingLifetimeHours = remainingLifetimeHours(item);
-            if (remainingLifetimeHours.isPresent()) {
-                double remainingHours = remainingLifetimeHours.get();
-                if (remainingHours <= 0) {
+            Optional<MeterLifetimeSnapshot> meterLifetime = meterLifetime(item);
+            if (meterLifetime.isPresent()) {
+                MeterLifetimeSnapshot snapshot = meterLifetime.get();
+                if (snapshot.remainingValue() <= 0) {
                     count += open(
                             OperationalIssueType.EQUIPMENT_LIFETIME_EXPIRED,
                             NotificationSeverity.CRITICAL,
@@ -211,11 +211,9 @@ public class OperationalIssueScannerService {
                             "EquipmentLifetime",
                             item.getId(),
                             "Equipment lifetime expired: " + item.getCode(),
-                            "Expected lifetime of " + item.getExpectedLifetimeHours()
-                                    + " operating hours has been reached. Remaining lifetime hours: "
-                                    + formatHours(remainingHours) + "."
+                            expiredLifetimeDetails(item, snapshot)
                     );
-                } else if (remainingHours <= lifetimeWarningHours(item.getExpectedLifetimeHours())) {
+                } else if (snapshot.remainingValue() <= snapshot.warningThreshold()) {
                     count += open(
                             OperationalIssueType.EQUIPMENT_LIFETIME_WARNING,
                             NotificationSeverity.WARNING,
@@ -224,7 +222,7 @@ public class OperationalIssueScannerService {
                             "EquipmentLifetime",
                             item.getId(),
                             "Equipment lifetime expiring soon: " + item.getCode(),
-                            "Remaining lifetime hours: " + formatHours(remainingHours) + "."
+                            warningLifetimeDetails(snapshot)
                     );
                 } else {
                     issueService.resolveOpen("EquipmentLifetime", item.getId());
@@ -544,33 +542,119 @@ public class OperationalIssueScannerService {
         return null;
     }
 
-    private Optional<Double> remainingLifetimeHours(Equipment equipment) {
-        Long expectedLifetimeHours = equipment.getExpectedLifetimeHours();
-        if (expectedLifetimeHours == null || expectedLifetimeHours <= 0) {
+    private Optional<MeterLifetimeSnapshot> meterLifetime(Equipment equipment) {
+        MeterType counterType = effectiveLifetimeCounterType(equipment);
+        Double limitValue = effectiveLifetimeLimitValue(equipment);
+        if (counterType == null || limitValue == null || limitValue <= 0) {
             return Optional.empty();
         }
-        return currentOperatingHours(equipment.getId())
-                .map(currentOperatingHours -> expectedLifetimeHours - currentOperatingHours);
+        return lifetimeMeter(equipment, counterType)
+                .map(meter -> {
+                    double baselineValue = equipment.getLifetimeBaselineValue() != null
+                            ? equipment.getLifetimeBaselineValue()
+                            : 0.0;
+                    double targetValue = baselineValue + limitValue;
+                    double remainingValue = targetValue - meter.getCurrentValue();
+                    double warningPercent = equipment.getLifetimeWarningPercent() != null
+                            && equipment.getLifetimeWarningPercent() > 0
+                            ? equipment.getLifetimeWarningPercent()
+                            : 10.0;
+                    double warningThreshold = Math.max(1.0, limitValue * warningPercent / 100.0);
+                    boolean legacyHours = counterType == MeterType.ENGINE_HOURS
+                            && equipment.getExpectedLifetimeHours() != null
+                            && equipment.getExpectedLifetimeHours() > 0
+                            && (equipment.getLifetimeLimitValue() == null
+                            || equipment.getLifetimeLimitValue().longValue() == equipment.getExpectedLifetimeHours());
+                    return new MeterLifetimeSnapshot(
+                            counterType,
+                            lifetimeUnit(counterType, meter),
+                            limitValue,
+                            meter.getCurrentValue(),
+                            remainingValue,
+                            warningThreshold,
+                            legacyHours
+                    );
+                });
     }
 
-    private Optional<Double> currentOperatingHours(UUID equipmentId) {
-        if (equipmentId == null) {
+    private Optional<EquipmentMeter> lifetimeMeter(Equipment equipment, MeterType counterType) {
+        if (equipment.getId() == null) {
             return Optional.empty();
         }
-        return equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)
+        return equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipment.getId())
                 .stream()
-                .filter(meter -> meter.getMeterType() == MeterType.ENGINE_HOURS)
-                .map(EquipmentMeter::getCurrentValue)
-                .max(Double::compareTo);
+                .filter(meter -> equipment.getLifetimeMeterId() == null
+                        ? meter.getMeterType() == counterType
+                        : equipment.getLifetimeMeterId().equals(meter.getId()))
+                .max(java.util.Comparator.comparingDouble(EquipmentMeter::getCurrentValue));
     }
 
-    private double lifetimeWarningHours(Long expectedLifetimeHours) {
-        return Math.max(1.0, expectedLifetimeHours * LIFETIME_WARNING_HOURS_RATIO);
+    private MeterType effectiveLifetimeCounterType(Equipment equipment) {
+        if (equipment.getLifetimeCounterType() != null) {
+            return equipment.getLifetimeCounterType();
+        }
+        return equipment.getExpectedLifetimeHours() != null && equipment.getExpectedLifetimeHours() > 0
+                ? MeterType.ENGINE_HOURS
+                : null;
     }
 
-    private String formatHours(double hours) {
-        return "%.0f".formatted(hours);
+    private Double effectiveLifetimeLimitValue(Equipment equipment) {
+        if (equipment.getLifetimeLimitValue() != null && equipment.getLifetimeLimitValue() > 0) {
+            return equipment.getLifetimeLimitValue();
+        }
+        return equipment.getExpectedLifetimeHours() != null && equipment.getExpectedLifetimeHours() > 0
+                ? equipment.getExpectedLifetimeHours().doubleValue()
+                : null;
     }
+
+    private String expiredLifetimeDetails(Equipment equipment, MeterLifetimeSnapshot snapshot) {
+        if (snapshot.legacyHours()) {
+            return "Expected lifetime of " + equipment.getExpectedLifetimeHours()
+                    + " operating hours has been reached. Remaining lifetime hours: "
+                    + formatLifetimeValue(snapshot.remainingValue()) + ".";
+        }
+        return "Expected lifetime of " + formatLifetimeValue(snapshot.limitValue()) + " "
+                + snapshot.unit() + " has been reached. Current value: "
+                + formatLifetimeValue(snapshot.currentValue()) + " " + snapshot.unit()
+                + ". Remaining lifetime: " + formatLifetimeValue(snapshot.remainingValue())
+                + " " + snapshot.unit() + ".";
+    }
+
+    private String warningLifetimeDetails(MeterLifetimeSnapshot snapshot) {
+        if (snapshot.legacyHours()) {
+            return "Remaining lifetime hours: " + formatLifetimeValue(snapshot.remainingValue()) + ".";
+        }
+        return "Remaining lifetime: " + formatLifetimeValue(snapshot.remainingValue()) + " "
+                + snapshot.unit() + ".";
+    }
+
+    private String lifetimeUnit(MeterType counterType, EquipmentMeter meter) {
+        if (meter.getUnit() != null && !meter.getUnit().isBlank()) {
+            return meter.getUnit();
+        }
+        return switch (counterType) {
+            case ENGINE_HOURS -> "h";
+            case MILEAGE_KM -> "km";
+            case CYCLES -> "cycle";
+            case TONS_PRODUCED -> "t";
+            case KWH_CONSUMED -> "kWh";
+            case CUSTOM -> "unit";
+        };
+    }
+
+    private String formatLifetimeValue(double value) {
+        return Math.rint(value) == value ? "%.0f".formatted(value) : "%.2f".formatted(value);
+    }
+
+    private record MeterLifetimeSnapshot(
+            MeterType counterType,
+            String unit,
+            double limitValue,
+            double currentValue,
+            double remainingValue,
+            double warningThreshold,
+            boolean legacyHours
+    ) {}
 
     private SourceScope approvalScope(ApprovalRequest request) {
         if ("WorkOrder".equals(request.getDocumentType())) {

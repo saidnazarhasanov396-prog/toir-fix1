@@ -4,6 +4,7 @@ import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.MeterType;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -118,6 +119,22 @@ public class Equipment extends BaseEntity {
 
     @Column(name = "expected_lifetime_hours")
     private Long expectedLifetimeHours;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "lifetime_counter_type")
+    private MeterType lifetimeCounterType;
+
+    @Column(name = "lifetime_meter_id")
+    private UUID lifetimeMeterId;
+
+    @Column(name = "lifetime_limit_value")
+    private Double lifetimeLimitValue;
+
+    @Column(name = "lifetime_baseline_value")
+    private Double lifetimeBaselineValue;
+
+    @Column(name = "lifetime_warning_percent")
+    private Double lifetimeWarningPercent;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "outside_reason")
