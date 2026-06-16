@@ -14,6 +14,7 @@ import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.VehicleDocument;
 import com.toir.entity.equipment.VehicleDetails;
+import com.toir.entity.users.Employee;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.AttachmentTargetType;
@@ -27,6 +28,8 @@ import com.toir.repository.VehicleDocumentRepository;
 import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.VehicleStatsProjection;
+import com.toir.repository.users.EmployeeRepository;
+import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentAttributeService;
@@ -66,6 +69,8 @@ public class VehicleService {
     private final EquipmentManualAttributeService equipmentManualAttributeService;
     private final VehicleDocumentRepository vehicleDocumentRepository;
     private final AttachmentGroupService attachmentGroupService;
+    private final EmployeeRepository employeeRepository;
+    private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, VehicleRegistrationPlateType plateType,
@@ -141,6 +146,7 @@ public class VehicleService {
         Equipment equipment = new Equipment();
         equipment.setCode(nextEquipmentCode());
         applyEquipment(equipment, request);
+        validateAssignedDriver(request.assignedDriverId(), request.departmentId(), null);
         Equipment savedEquipment = equipmentRepository.save(equipment);
 
         VehicleDetails details = new VehicleDetails();
@@ -193,6 +199,7 @@ public class VehicleService {
         validateUniqueUpdate(equipmentId, equipment, details, request);
         boolean equipmentTypeChanged = isEquipmentTypeChanged(equipment.getEquipmentTypeId(), request.equipmentTypeId());
         validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
+        validateAssignedDriver(request.assignedDriverId(), request.departmentId(), equipmentId);
         applyEquipment(equipment, request);
         applyDetails(details, request);
 
@@ -704,6 +711,32 @@ public class VehicleService {
         details.setInsuranceExpiryDate(request.insuranceExpiryDate());
         details.setTechnicalInspectionExpiryDate(request.technicalInspectionExpiryDate());
         details.setGpsDeviceId(request.gpsDeviceId());
+    }
+
+    private void validateAssignedDriver(UUID assignedDriverId, UUID vehicleDepartmentId, UUID currentEquipmentId) {
+        if (assignedDriverId == null) {
+            return;
+        }
+        if (vehicleDepartmentId == null) {
+            throw RestException.badRequest("Vehicle department is required before assigning a driver");
+        }
+        Employee driver = employeeRepository.findByIdAndIsDeletedFalse(assignedDriverId)
+                .orElseThrow(() -> RestException.badRequest("Assigned driver employee not found: " + assignedDriverId));
+        if (!driver.isActive()) {
+            throw RestException.badRequest("Assigned driver employee is not active: " + assignedDriverId);
+        }
+        if (!employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(assignedDriverId, "DRIVER")) {
+            throw RestException.badRequest("Assigned employee must have DRIVER work role");
+        }
+        if (!Objects.equals(driver.getDepartmentId(), vehicleDepartmentId)) {
+            throw RestException.badRequest("Assigned driver must be in the same department as the vehicle");
+        }
+        boolean assignedElsewhere = currentEquipmentId == null
+                ? vehicleDetailsRepository.existsByAssignedDriverIdAndIsDeletedFalse(assignedDriverId)
+                : vehicleDetailsRepository.existsAssignedDriverOnAnotherVehicle(assignedDriverId, currentEquipmentId);
+        if (assignedElsewhere) {
+            throw RestException.conflict("Assigned driver already has a default vehicle");
+        }
     }
 
     private static boolean hasText(String value) {

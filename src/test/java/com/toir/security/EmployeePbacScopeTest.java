@@ -8,6 +8,8 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
+import com.toir.repository.users.EmployeeWorkRoleRepository;
 import com.toir.service.users.HrService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +59,12 @@ class EmployeePbacScopeTest {
 
     @Mock
     ScopeAccessService scopeAccessService;
+
+    @Mock
+    EmployeeWorkRoleRepository employeeWorkRoleRepository;
+
+    @Mock
+    EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
     @InjectMocks
     HrService service;

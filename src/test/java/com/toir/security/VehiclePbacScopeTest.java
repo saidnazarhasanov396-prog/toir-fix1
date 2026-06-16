@@ -7,6 +7,7 @@ import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.service.VehicleDrivingSessionService;
 import com.toir.service.VehicleService;
 import com.toir.service.VehiclePictureService;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,6 +53,9 @@ class VehiclePbacScopeTest {
     @Mock
     VehiclePictureService pictureService;
 
+    @Mock
+    VehicleDrivingSessionService drivingSessionService;
+
     MockMvc mockMvc;
     UUID departmentId;
 
@@ -59,7 +63,7 @@ class VehiclePbacScopeTest {
     void setUp() {
         departmentId = UUID.randomUUID();
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new VehicleController(service, scopeAccessService, equipmentRepository, pictureService))
+                .standaloneSetup(new VehicleController(service, scopeAccessService, equipmentRepository, pictureService, drivingSessionService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
