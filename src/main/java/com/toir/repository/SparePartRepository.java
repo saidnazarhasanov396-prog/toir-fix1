@@ -37,6 +37,19 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
     boolean existsByTypeIdAndIsDeletedFalse(@Param("typeId") UUID typeId);
 
     @Query(value = """
+            select sp.type.id as typeId, count(sp.id) as sparePartCount
+            from SparePart sp
+            where sp.isDeleted = false
+              and sp.kind = :kind
+              and sp.type.id in :typeIds
+            group by sp.type.id
+            """)
+    List<SparePartTypeCountProjection> countActiveByTypeIdsAndKind(
+            @Param("typeIds") Collection<UUID> typeIds,
+            @Param("kind") InventoryItemKind kind
+    );
+
+    @Query(value = """
             SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
             FROM spare_parts
             WHERE code LIKE CONCAT(:prefix, '%')

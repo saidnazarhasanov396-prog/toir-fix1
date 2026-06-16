@@ -5,8 +5,10 @@ import com.toir.dto.spareparttype.SparePartTypeRequest;
 import com.toir.entity.SparePartType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.InventoryItemKind;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.SparePartTypeCountProjection;
 import com.toir.repository.SparePartTypeRepository;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -31,12 +36,16 @@ public class SparePartTypeService {
         List<SparePartType> types = includeInactive
                 ? repository.findAllIncludingInactive(searchPattern)
                 : repository.findAllActive(searchPattern);
-        return types.stream().map(SparePartTypeDto::from).toList();
+        Map<UUID, Long> countsByTypeId = countsByTypeId(types);
+        return types.stream()
+                .map(type -> SparePartTypeDto.from(type, countsByTypeId.getOrDefault(type.getId(), 0L)))
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public SparePartTypeDto findById(UUID id) {
-        return SparePartTypeDto.from(getOrThrow(id));
+        SparePartType type = getOrThrow(id);
+        return SparePartTypeDto.from(type, countFor(type));
     }
 
     @Transactional
@@ -57,7 +66,7 @@ public class SparePartTypeService {
                 null,
                 saved
         );
-        return SparePartTypeDto.from(saved);
+        return SparePartTypeDto.from(saved, 0L);
     }
 
     @Transactional
@@ -78,7 +87,7 @@ public class SparePartTypeService {
                 entity,
                 saved
         );
-        return SparePartTypeDto.from(saved);
+        return SparePartTypeDto.from(saved, countFor(saved));
     }
 
     @Transactional
@@ -104,6 +113,27 @@ public class SparePartTypeService {
     private SparePartType getOrThrow(UUID id) {
         return repository.findById(id)
                 .orElseThrow(() -> RestException.notFound("Spare part type not found: " + id));
+    }
+
+    private long countFor(SparePartType type) {
+        return countsByTypeId(List.of(type)).getOrDefault(type.getId(), 0L);
+    }
+
+    private Map<UUID, Long> countsByTypeId(List<SparePartType> types) {
+        List<UUID> typeIds = types.stream()
+                .map(SparePartType::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (typeIds.isEmpty()) {
+            return Map.of();
+        }
+        return sparePartRepository.countActiveByTypeIdsAndKind(typeIds, InventoryItemKind.SPARE_PART)
+                .stream()
+                .collect(Collectors.toMap(
+                        SparePartTypeCountProjection::getTypeId,
+                        SparePartTypeCountProjection::getSparePartCount,
+                        (left, right) -> left
+                ));
     }
 
     private void apply(SparePartType entity, SparePartTypeRequest request, String code) {
