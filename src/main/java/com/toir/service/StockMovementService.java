@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.file.UploadFileResponse;
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementFileDto;
@@ -16,6 +17,7 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.FileCategory;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementType;
@@ -28,6 +30,7 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
@@ -65,6 +68,7 @@ public class StockMovementService {
     private final FileService fileService;
     private final UploadedFileRepository uploadedFileRepository;
     private final StockMovementFileRepository stockMovementFileRepository;
+    private final AttachmentGroupService attachmentGroupService;
 
 
     @Transactional(readOnly = true)
@@ -261,21 +265,30 @@ public class StockMovementService {
 
     @Transactional(readOnly = true)
     public List<StockMovementFileDto> listFiles(UUID movementId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         StockMovement movement = movementOrThrow(movementId);
         assertCanAccessWarehouseId(movement.getWarehouseId());
-        return stockMovementFileRepository.findActiveByMovementId(movementId)
+        return attachmentGroupService.listGroups("STOCK_MOVEMENT", movementId, user)
                 .stream()
-                .map(link -> toFileDtoWithMetadata(movementId, link, currentUserId))
+                .flatMap(group -> group.files().stream())
+                .map(file -> StockMovementFileDto.fromAttachmentFile(movementId, file))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public StockMovementFileDto getFile(UUID movementId, UUID fileId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         StockMovement movement = movementOrThrow(movementId);
         assertCanAccessWarehouseId(movement.getWarehouseId());
-        return toFileDtoWithMetadata(movementId, findStockMovementFile(movementId, fileId), currentUserId);
+        AttachmentGroupDto group = attachmentGroupService.findGroupByTargetAndFile(
+                AttachmentTargetType.STOCK_MOVEMENT,
+                movementId,
+                fileId,
+                user
+        );
+        return group.files().stream()
+                .filter(file -> fileId.equals(file.fileId()))
+                .findFirst()
+                .map(file -> StockMovementFileDto.fromAttachmentFile(movementId, file))
+                .orElseThrow(() -> RestException.notFound("Stock movement file not found: " + fileId));
     }
 
     @Transactional
@@ -284,61 +297,50 @@ public class StockMovementService {
             List<MultipartFile> files,
             AuthenticatedUser user
     ) {
-        UUID currentUserId = currentUserId(user);
         StockMovement movement = movementOrThrow(movementId);
         assertSupportedFileMovement(movement.getType());
         assertCanAccessWarehouseId(movement.getWarehouseId());
         validateStockMovementFiles(files);
-        long existingCount = stockMovementFileRepository.countByMovementId(movementId);
+        List<AttachmentGroupDto> groups = attachmentGroupService.listGroups("STOCK_MOVEMENT", movementId, user);
+        long existingCount = groups.stream().mapToLong(group -> group.files().size()).sum();
         validateStockMovementFileLimit(existingCount + files.size());
 
-        List<UUID> uploadedFileIds = new ArrayList<>();
-        try {
-            List<StockMovementFile> links = new ArrayList<>(files.size());
-            int nextSortOrder = Math.toIntExact(existingCount);
-            for (MultipartFile file : files) {
-                UploadFileResponse uploaded = fileService.upload(
-                        file,
-                        FileCategory.STOCK_MOVEMENT_DOCUMENT,
-                        currentUserId
-                );
-                uploadedFileIds.add(uploaded.id());
-                UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
-                        .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
-                links.add(StockMovementFile.builder()
-                        .movement(movement)
-                        .file(uploadedFile)
-                        .sortOrder(nextSortOrder++)
-                        .build());
-            }
-            return stockMovementFileRepository.saveAllAndFlush(links)
-                    .stream()
-                    .map(link -> StockMovementFileDto.from(movementId, link))
-                    .toList();
-        } catch (RuntimeException e) {
-            cleanupUploadedFiles(uploadedFileIds, currentUserId);
-            throw e;
-        }
+        AttachmentGroupDto group = groups.isEmpty()
+                ? attachmentGroupService.createGroup(
+                "Stock movement documents",
+                null,
+                "STOCK_MOVEMENT",
+                movementId,
+                files,
+                null,
+                user
+        )
+                : attachmentGroupService.addFiles(groups.getFirst().id(), files, null, user);
+        return group.files().stream()
+                .skip(existingCount)
+                .map(file -> StockMovementFileDto.fromAttachmentFile(movementId, file))
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public Resource downloadFile(UUID movementId, UUID fileId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         StockMovement movement = movementOrThrow(movementId);
         assertCanAccessWarehouseId(movement.getWarehouseId());
-        StockMovementFile link = findStockMovementFile(movementId, fileId);
-        return fileService.download(link.getFile().getId(), currentUserId);
+        AttachmentGroupDto group = attachmentGroupService.findGroupByTargetAndFile(
+                AttachmentTargetType.STOCK_MOVEMENT,
+                movementId,
+                fileId,
+                user
+        );
+        return attachmentGroupService.downloadFile(group.id(), fileId, user);
     }
 
     @Transactional
     public void deleteFile(UUID movementId, UUID fileId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         StockMovement movement = movementOrThrow(movementId);
         assertSupportedFileMovement(movement.getType());
         assertCanAccessWarehouseId(movement.getWarehouseId());
-        StockMovementFile link = findStockMovementFile(movementId, fileId);
-        stockMovementFileRepository.delete(link);
-        fileService.delete(link.getFile().getId(), currentUserId);
+        attachmentGroupService.removeFileByTarget(AttachmentTargetType.STOCK_MOVEMENT, movementId, fileId, user);
     }
 
     private StockMovement movementOrThrow(UUID movementId) {

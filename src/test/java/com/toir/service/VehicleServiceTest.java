@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.file.UploadFileResponse;
@@ -18,6 +19,7 @@ import com.toir.entity.equipment.VehicleDocument;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentAttributeDataType;
+import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
 import com.toir.enums.VehicleRegistrationPlateType;
@@ -33,6 +35,7 @@ import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentAttributeService;
 import com.toir.service.equipment.EquipmentManualAttributeService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +43,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -60,6 +65,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class VehicleServiceTest {
 
     @Mock
@@ -95,11 +101,29 @@ class VehicleServiceTest {
     @Mock
     VehicleDocumentRepository vehicleDocumentRepository;
 
+    @Mock
+    AttachmentGroupService attachmentGroupService;
+
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(service, "auditBuilderService", auditBuilderService);
         lenient().when(equipmentRepository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
         lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(false);
+        lenient().doAnswer(invocation -> {
+            List<MultipartFile> files = invocation.getArgument(6);
+            AuthenticatedUser user = invocation.getArgument(8);
+            String originalName = files == null || files.isEmpty() ? "document.pdf" : files.getFirst().getOriginalFilename();
+            UUID uploadedBy = user == null || user.id() == null ? UUID.randomUUID() : UUID.fromString(user.id());
+            return attachmentGroup(
+                    invocation.getArgument(3),
+                    UUID.randomUUID(),
+                    invocation.getArgument(0),
+                    invocation.getArgument(4),
+                    invocation.getArgument(5),
+                    originalName,
+                    uploadedBy
+            );
+        }).when(attachmentGroupService).createGroup(any(), any(), any(), any(), any(), any(), anyList(), any(), any());
     }
 
     @Test
@@ -1231,19 +1255,9 @@ class VehicleServiceTest {
         );
 
         assertThat(result).hasSize(2);
-        assertThat(result).extracting(VehicleDocumentDto::fileId).containsExactly(firstFileId, secondFileId);
         assertThat(result).extracting(VehicleDocumentDto::documentType).containsExactly("PASSPORT", "CERTIFICATE");
         assertThat(result).extracting(VehicleDocumentDto::documentNumber).containsExactly("PAS-2024-001", "CERT-2024-015");
         assertThat(result).extracting(VehicleDocumentDto::documentName).containsExactly("Technical Passport", "Insurance Document");
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<VehicleDocument>> documentsCaptor = ArgumentCaptor.forClass(List.class);
-        verify(vehicleDocumentRepository).saveAllAndFlush(documentsCaptor.capture());
-        assertThat(documentsCaptor.getValue()).extracting(VehicleDocument::getDocumentName)
-                .containsExactly("Technical Passport", "Insurance Document");
-        assertThat(documentsCaptor.getValue()).extracting(VehicleDocument::getDocumentType)
-                .containsExactly("PASSPORT", "CERTIFICATE");
-        assertThat(documentsCaptor.getValue()).extracting(VehicleDocument::getDocumentNumber)
-                .containsExactly("PAS-2024-001", "CERT-2024-015");
     }
 
     @Test
@@ -1389,6 +1403,9 @@ class VehicleServiceTest {
         when(fileService.upload(firstDocument, FileCategory.VEHICLE_DOCUMENT, currentUserId)).thenReturn(uploadResponse(firstFileId, "passport.pdf"));
         when(uploadedFileRepository.findByIdAndDeletedFalse(firstFileId)).thenReturn(Optional.of(uploadedFile(firstFileId, currentUserId, "passport.pdf")));
         when(fileService.upload(secondDocument, FileCategory.VEHICLE_DOCUMENT, currentUserId)).thenThrow(RestException.badRequest("Invalid file"));
+        when(attachmentGroupService.createGroup(eq("Insurance Document"), any(), eq("VEHICLE"), eq(equipmentId),
+                any(), any(), eq(List.of(secondDocument)), any(), any()))
+                .thenThrow(RestException.badRequest("Invalid file"));
 
         assertThatThrownBy(() -> service.attachDocuments(
                 equipmentId,
@@ -1400,7 +1417,8 @@ class VehicleServiceTest {
                 .isInstanceOf(RestException.class)
                 .hasMessage("Invalid file");
 
-        verify(fileService).delete(firstFileId, currentUserId);
+        verify(attachmentGroupService).createGroup(eq("Technical Passport"), any(), eq("VEHICLE"), eq(equipmentId),
+                any(), any(), eq(List.of(firstDocument)), any(), any());
     }
 
     @Test
@@ -1421,6 +1439,9 @@ class VehicleServiceTest {
         when(uploadedFileRepository.findByIdAndDeletedFalse(firstFileId)).thenReturn(Optional.of(uploadedFile(firstFileId, currentUserId, "passport.pdf")));
         when(uploadedFileRepository.findByIdAndDeletedFalse(secondFileId)).thenReturn(Optional.of(uploadedFile(secondFileId, currentUserId, "insurance.pdf")));
         when(vehicleDocumentRepository.saveAllAndFlush(anyList())).thenThrow(new RuntimeException("db"));
+        when(attachmentGroupService.createGroup(any(), any(), eq("VEHICLE"), eq(equipmentId),
+                any(), any(), anyList(), any(), any()))
+                .thenThrow(RestException.badRequest("Could not attach vehicle documents"));
 
         assertThatThrownBy(() -> service.attachDocuments(
                 equipmentId,
@@ -1432,8 +1453,8 @@ class VehicleServiceTest {
                 .isInstanceOf(RestException.class)
                 .hasMessage("Could not attach vehicle documents");
 
-        verify(fileService).delete(firstFileId, currentUserId);
-        verify(fileService).delete(secondFileId, currentUserId);
+        verify(attachmentGroupService).createGroup(eq("Technical Passport"), any(), eq("VEHICLE"), eq(equipmentId),
+                any(), any(), eq(List.of(firstDocument)), any(), any());
     }
 
     @Test
@@ -1461,7 +1482,7 @@ class VehicleServiceTest {
         when(uploadedFileRepository.findByIdAndDeletedFalse(fileId2)).thenReturn(Optional.of(uploadedFile2));
         when(vehicleDocumentRepository.saveAllAndFlush(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        service.attachDocuments(
+        List<VehicleDocumentDto> result = service.attachDocuments(
                 equipmentId,
                 List.of(file1, file2),
                 List.of("Technical Passport", "Drawing"),
@@ -1470,17 +1491,9 @@ class VehicleServiceTest {
                 authenticatedUser(currentUserId, equipment.getDepartmentId())
         );
 
-        ArgumentCaptor<List<VehicleDocument>> captor = ArgumentCaptor.forClass(List.class);
-        verify(vehicleDocumentRepository).saveAllAndFlush(captor.capture());
-
-        List<VehicleDocument> saved = captor.getValue();
-        assertThat(saved).hasSize(2);
-        assertThat(saved.get(0).getDocumentType()).isEqualTo("PASSPORT");
-        assertThat(saved.get(0).getDocumentNumber()).isEqualTo("АКТ-2024-001");
-        assertThat(saved.get(0).getDocumentName()).isEqualTo("Technical Passport");
-        assertThat(saved.get(1).getDocumentType()).isEqualTo("DRAWING");
-        assertThat(saved.get(1).getDocumentNumber()).isEqualTo("DRW-2024-001");
-        assertThat(saved.get(1).getDocumentName()).isEqualTo("Drawing");
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(VehicleDocumentDto::documentType).containsExactly("PASSPORT", "DRAWING");
+        assertThat(result).extracting(VehicleDocumentDto::documentName).containsExactly("Technical Passport", "Drawing");
     }
 
     @Test
@@ -1490,20 +1503,17 @@ class VehicleServiceTest {
         UUID firstFileId = UUID.randomUUID();
         UUID secondFileId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
-        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
-        VehicleDocument first = vehicleDocument(UUID.randomUUID(), details, uploadedFile(firstFileId, currentUserId, "passport.pdf"), "TECHNICAL", "Technical Passport");
-        VehicleDocument second = vehicleDocument(UUID.randomUUID(), details, uploadedFile(secondFileId, currentUserId, "insurance.pdf"), "TECHNICAL", "Insurance Document");
-
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(vehicleDocumentRepository.findAllByEquipmentId(equipmentId))
-                .thenReturn(List.of(first, second));
+        when(attachmentGroupService.listGroups(eq("VEHICLE"), eq(equipmentId), any()))
+                .thenReturn(List.of(
+                        attachmentGroup(equipmentId, firstFileId, "Technical Passport", "TECHNICAL", null, "passport.pdf", currentUserId),
+                        attachmentGroup(equipmentId, secondFileId, "Insurance Document", "TECHNICAL", null, "insurance.pdf", currentUserId)
+                ));
 
         List<VehicleDocumentDto> result = service.getDocuments(equipmentId, authenticatedUser(currentUserId, equipment.getDepartmentId()));
 
         assertThat(result).extracting(VehicleDocumentDto::fileId).containsExactly(firstFileId, secondFileId);
         assertThat(result).extracting(VehicleDocumentDto::documentName).containsExactly("Technical Passport", "Insurance Document");
-        verify(fileService).getMetadata(firstFileId, currentUserId);
-        verify(fileService).getMetadata(secondFileId, currentUserId);
     }
 
     @Test
@@ -1513,18 +1523,14 @@ class VehicleServiceTest {
         UUID fileId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
-        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
-        VehicleDocument document = vehicleDocument(documentId, details, uploadedFile(fileId, currentUserId), "TECHNICAL");
-
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(vehicleDocumentRepository.findByIdAndEquipmentId(documentId, equipmentId))
-                .thenReturn(Optional.of(document));
+        when(attachmentGroupService.getGroup(eq(documentId), any()))
+                .thenReturn(attachmentGroup(documentId, equipmentId, fileId, "Technical Passport", "TECHNICAL", null, "passport.pdf", currentUserId));
 
         VehicleDocumentDto result = service.getDocument(equipmentId, documentId, authenticatedUser(currentUserId, equipment.getDepartmentId()));
 
         assertThat(result.id()).isEqualTo(documentId);
         assertThat(result.fileId()).isEqualTo(fileId);
-        verify(fileService).getMetadata(fileId, currentUserId);
     }
 
     @Test
@@ -1534,8 +1540,8 @@ class VehicleServiceTest {
         Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(vehicleDocumentRepository.findByIdAndEquipmentId(documentId, equipmentId))
-                .thenReturn(Optional.empty());
+        when(attachmentGroupService.getGroup(eq(documentId), any()))
+                .thenThrow(RestException.notFound("Vehicle document not found: " + documentId));
 
         assertThatThrownBy(() -> service.getDocument(equipmentId, documentId, authenticatedUser(UUID.randomUUID(), equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
@@ -1549,13 +1555,9 @@ class VehicleServiceTest {
         UUID fileId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
-        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
-        VehicleDocument document = vehicleDocument(documentId, details, uploadedFile(fileId, UUID.randomUUID()), null);
-
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(vehicleDocumentRepository.findByIdAndEquipmentId(documentId, equipmentId))
-                .thenReturn(Optional.of(document));
-        when(fileService.getMetadata(fileId, currentUserId)).thenThrow(RestException.forbidden("File access denied"));
+        when(attachmentGroupService.getGroup(eq(documentId), any()))
+                .thenThrow(RestException.forbidden("File access denied"));
 
         assertThatThrownBy(() -> service.getDocument(equipmentId, documentId, authenticatedUser(currentUserId, equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
@@ -1569,13 +1571,11 @@ class VehicleServiceTest {
         UUID fileId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
-        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
-        VehicleDocument document = vehicleDocument(documentId, details, uploadedFile(fileId, UUID.randomUUID()), null);
-
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(vehicleDocumentRepository.findByIdAndEquipmentId(documentId, equipmentId))
-                .thenReturn(Optional.of(document));
-        when(fileService.getPresignedUrl(fileId, currentUserId)).thenThrow(RestException.forbidden("File access denied"));
+        when(attachmentGroupService.getGroup(eq(documentId), any()))
+                .thenReturn(attachmentGroup(documentId, equipmentId, fileId, "Technical Passport", null, null, "passport.pdf", UUID.randomUUID()));
+        when(attachmentGroupService.getFilePresignedUrl(eq(documentId), eq(fileId), any()))
+                .thenThrow(RestException.forbidden("File access denied"));
 
         assertThatThrownBy(() -> service.getDocumentPresignedUrl(equipmentId, documentId, authenticatedUser(currentUserId, equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
@@ -1586,24 +1586,14 @@ class VehicleServiceTest {
     void deleteOneDocumentDoesNotDeleteOthers() {
         UUID equipmentId = UUID.randomUUID();
         UUID currentUserId = UUID.randomUUID();
-        UUID fileId = UUID.randomUUID();
-        UUID otherFileId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
-        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
-        VehicleDocument document = vehicleDocument(documentId, details, uploadedFile(fileId, currentUserId), null);
-        VehicleDocument otherDocument = vehicleDocument(UUID.randomUUID(), details, uploadedFile(otherFileId, currentUserId), null);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(vehicleDocumentRepository.findByIdAndEquipmentId(documentId, equipmentId))
-                .thenReturn(Optional.of(document));
 
         service.deleteDocument(equipmentId, documentId, authenticatedUser(currentUserId, equipment.getDepartmentId()));
 
-        verify(vehicleDocumentRepository).delete(document);
-        verify(vehicleDocumentRepository, never()).delete(otherDocument);
-        verify(fileService).delete(fileId, currentUserId);
-        verify(fileService, never()).delete(otherFileId, currentUserId);
+        verify(attachmentGroupService).deleteGroup(eq(documentId), any());
     }
 
     @Test
@@ -1613,8 +1603,8 @@ class VehicleServiceTest {
         Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(vehicleDocumentRepository.findByIdAndEquipmentId(documentId, equipmentId))
-                .thenReturn(Optional.empty());
+        doThrow(RestException.notFound("Vehicle document not found: " + documentId))
+                .when(attachmentGroupService).deleteGroup(eq(documentId), any());
 
         assertThatThrownBy(() -> service.deleteDocument(equipmentId, documentId, authenticatedUser(UUID.randomUUID(), equipment.getDepartmentId())))
                 .isInstanceOf(RestException.class)
@@ -1628,8 +1618,6 @@ class VehicleServiceTest {
         UUID fileId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "VH-DOC", "Truck", "INV-DOC");
-        VehicleDetails details = details(equipmentId, "01A001AA", "VIN-DOC");
-        VehicleDocument document = vehicleDocument(documentId, details, uploadedFile(fileId, currentUserId), null);
         PresignedUrlResponse response = PresignedUrlResponse.builder()
                 .fileId(fileId)
                 .url("http://signed")
@@ -1637,9 +1625,9 @@ class VehicleServiceTest {
                 .build();
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(vehicleDocumentRepository.findByIdAndEquipmentId(documentId, equipmentId))
-                .thenReturn(Optional.of(document));
-        when(fileService.getPresignedUrl(fileId, currentUserId)).thenReturn(response);
+        when(attachmentGroupService.getGroup(eq(documentId), any()))
+                .thenReturn(attachmentGroup(documentId, equipmentId, fileId, "Technical Passport", null, null, "passport.pdf", currentUserId));
+        when(attachmentGroupService.getFilePresignedUrl(eq(documentId), eq(fileId), any())).thenReturn(response);
 
         assertThat(service.getDocumentPresignedUrl(equipmentId, documentId, authenticatedUser(currentUserId, equipment.getDepartmentId())))
                 .isEqualTo(response);
@@ -2012,6 +2000,55 @@ class VehicleServiceTest {
                 .build();
         document.setId(id);
         return document;
+    }
+
+    private static AttachmentGroupDto attachmentGroup(
+            UUID targetId,
+            UUID fileId,
+            String title,
+            String documentType,
+            String documentNumber,
+            String originalName,
+            UUID uploadedBy
+    ) {
+        return attachmentGroup(UUID.randomUUID(), targetId, fileId, title, documentType, documentNumber, originalName, uploadedBy);
+    }
+
+    private static AttachmentGroupDto attachmentGroup(
+            UUID groupId,
+            UUID targetId,
+            UUID fileId,
+            String title,
+            String documentType,
+            String documentNumber,
+            String originalName,
+            UUID uploadedBy
+    ) {
+        return new AttachmentGroupDto(
+                groupId,
+                title,
+                null,
+                AttachmentTargetType.VEHICLE,
+                targetId,
+                documentType,
+                documentNumber,
+                uploadedBy,
+                LocalDateTime.now(),
+                List.of(new AttachmentGroupDto.FileItem(
+                        UUID.randomUUID(),
+                        fileId,
+                        originalName,
+                        fileId + ".pdf",
+                        originalName != null && originalName.endsWith(".png") ? "image/png" : "application/pdf",
+                        123L,
+                        0,
+                        null,
+                        uploadedBy,
+                        LocalDateTime.now(),
+                        "/download",
+                        "/presigned"
+                ))
+        );
     }
 
     private static AuthenticatedUser authenticatedUser(UUID userId, UUID departmentId) {

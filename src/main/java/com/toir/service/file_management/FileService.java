@@ -16,7 +16,11 @@ public interface FileService {
 
     PresignedUrlResponse getPresignedUrl(UUID fileId, UUID currentUserId);
 
+    PresignedUrlResponse getPresignedUrlForAuthorizedFile(UUID fileId);
+
     void delete(UUID fileId, UUID currentUserId);
 
     Resource download(UUID fileId, UUID currentUserId);
+
+    Resource downloadAuthorizedFile(UUID fileId);
 }

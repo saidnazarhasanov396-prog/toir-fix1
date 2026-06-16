@@ -1,6 +1,7 @@
 package com.toir.service.equipment;
 
 import com.toir.dto.equipment.*;
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.file.UploadFileResponse;
 import com.toir.entity.FileAsset;
@@ -61,6 +62,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.file_management.FileService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -111,6 +113,7 @@ public class EquipmentService {
     private final UploadedFileRepository uploadedFileRepository;
     private final EquipmentDocumentRepository equipmentDocumentRepository;
     private final EquipmentDocumentFileRepository equipmentDocumentFileRepository;
+    private final AttachmentGroupService attachmentGroupService;
     private final UserRepository userRepository;
     private final ScopeAccessService scopeAccessService;
     private static final int MAX_EQUIPMENT_DOCUMENT_FILES = 25;
@@ -331,50 +334,32 @@ public class EquipmentService {
             List<String> documentNumbers,
             AuthenticatedUser user
     ) {
-        UUID currentUserId = currentUserId(user);
-        Equipment equipment = getOrThrow(equipmentId);
         if (files == null || files.isEmpty()) {
             throw RestException.badRequest("At least one equipment document file is required");
         }
+        getOrThrow(equipmentId);
         List<String> normalizedDocumentNames = normalizeDocumentNames(files, documentNames);
         List<String> normalizedDocumentTypes = normalizeDocumentTypes(files, documentTypes);
         List<String> normalizedDocumentNumbers = normalizeDocumentNumbers(files, documentNumbers);
-
-        List<UUID> uploadedFileIds = new ArrayList<>();
-        try {
-            List<EquipmentDocument> documents = new ArrayList<>(files.size());
-            for (int i = 0; i < files.size(); i++) {
-                MultipartFile file = files.get(i);
-                String contentType = file.getContentType();
-                if (contentType == null || !ALLOWED_EQUIPMENT_DOCUMENT_CONTENT_TYPES.contains(contentType)) {
-                    throw RestException.badRequest("Unsupported file type: " + contentType);
-                }
-                UploadFileResponse uploaded = fileService.upload(file, FileCategory.EQUIPMENT_DOCUMENT, currentUserId);
-                uploadedFileIds.add(uploaded.id());
-                UploadedFile uploadedFile = uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
-                        .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id()));
-                EquipmentDocument document = EquipmentDocument.builder()
-                        .equipment(equipment)
-                        .file(uploadedFile)
-                        .documentType(normalizedDocumentTypes.get(i))
-                        .documentNumber(normalizedDocumentNumbers.get(i))
-                        .documentName(normalizedDocumentNames.get(i))
-                        .build();
-                document.addFile(uploadedFile, 0);
-                documents.add(document);
+        List<EquipmentDocumentDto> result = new ArrayList<>(files.size());
+        for (int i = 0; i < files.size(); i++) {
+            AttachmentGroupDto group = attachmentGroupService.createGroup(
+                    normalizedDocumentNames.get(i),
+                    null,
+                    "EQUIPMENT",
+                    equipmentId,
+                    normalizedDocumentTypes.get(i),
+                    normalizedDocumentNumbers.get(i),
+                    List.of(files.get(i)),
+                    null,
+                    user
+            );
+            EquipmentDocumentDto dto = EquipmentDocumentDto.fromAttachmentGroup(equipmentId, group);
+            if (dto != null) {
+                result.add(dto);
             }
-
-            return equipmentDocumentRepository.saveAllAndFlush(documents).stream()
-                    .map(document -> EquipmentDocumentDto.from(equipmentId, document))
-                    .filter(Objects::nonNull)
-                    .toList();
-        } catch (RuntimeException e) {
-            cleanupUploadedFiles(uploadedFileIds, currentUserId);
-            if (e instanceof RestException restException) {
-                throw restException;
-            }
-            throw RestException.conflict("Could not attach equipment documents");
         }
+        return result;
     }
 
     @Transactional
@@ -386,36 +371,24 @@ public class EquipmentService {
             String documentNumber,
             AuthenticatedUser user
     ) {
-        UUID currentUserId = currentUserId(user);
-        Equipment equipment = getOrThrow(equipmentId);
+        getOrThrow(equipmentId);
         validateEquipmentDocumentFiles(files);
         validateEquipmentDocumentFileLimit(files.size());
         String normalizedDocumentName = normalizeDocumentName(documentName);
         String normalizedDocumentType = normalizeDocumentType(documentType);
         String normalizedDocumentNumber = normalizeDocumentNumber(documentNumber, 0);
-
-        List<UUID> uploadedFileIds = new ArrayList<>();
-        try {
-            List<UploadedFile> uploadedFiles = uploadEquipmentDocumentFiles(files, currentUserId, uploadedFileIds);
-            EquipmentDocument document = EquipmentDocument.builder()
-                    .equipment(equipment)
-                    .file(uploadedFiles.getFirst())
-                    .documentType(normalizedDocumentType)
-                    .documentNumber(normalizedDocumentNumber)
-                    .documentName(normalizedDocumentName)
-                    .build();
-            for (int i = 0; i < uploadedFiles.size(); i++) {
-                document.addFile(uploadedFiles.get(i), i);
-            }
-
-            return EquipmentDocumentDto.from(equipmentId, equipmentDocumentRepository.saveAndFlush(document));
-        } catch (RuntimeException e) {
-            cleanupUploadedFiles(uploadedFileIds, currentUserId);
-            if (e instanceof RestException restException) {
-                throw restException;
-            }
-            throw RestException.conflict("Could not attach equipment document files");
-        }
+        AttachmentGroupDto group = attachmentGroupService.createGroup(
+                normalizedDocumentName,
+                null,
+                "EQUIPMENT",
+                equipmentId,
+                normalizedDocumentType,
+                normalizedDocumentNumber,
+                files,
+                null,
+                user
+        );
+        return EquipmentDocumentDto.fromAttachmentGroup(equipmentId, group);
     }
 
     @Transactional
@@ -425,70 +398,40 @@ public class EquipmentService {
             List<MultipartFile> files,
             AuthenticatedUser user
     ) {
-        UUID currentUserId = currentUserId(user);
         getOrThrow(equipmentId);
-        EquipmentDocument document = findEquipmentDocument(equipmentId, documentId);
         validateEquipmentDocumentFiles(files);
-        List<EquipmentDocumentFile> activeLinks = activeDocumentFileLinks(document);
-        int existingFileCount = activeDocumentFileIds(document).size();
-        validateEquipmentDocumentFileLimit(existingFileCount + files.size());
-        int nextSortOrder = activeLinks.stream()
-                .map(EquipmentDocumentFile::getSortOrder)
-                .filter(Objects::nonNull)
-                .max(Integer::compareTo)
-                .orElse(-1) + 1;
-
-        List<UUID> uploadedFileIds = new ArrayList<>();
-        try {
-            List<UploadedFile> uploadedFiles = uploadEquipmentDocumentFiles(files, currentUserId, uploadedFileIds);
-            if (document.getFile() == null || Boolean.TRUE.equals(document.getFile().getDeleted())) {
-                document.setFile(uploadedFiles.getFirst());
-            }
-            for (int i = 0; i < uploadedFiles.size(); i++) {
-                document.addFile(uploadedFiles.get(i), nextSortOrder + i);
-            }
-            return EquipmentDocumentDto.from(equipmentId, equipmentDocumentRepository.saveAndFlush(document));
-        } catch (RuntimeException e) {
-            cleanupUploadedFiles(uploadedFileIds, currentUserId);
-            if (e instanceof RestException restException) {
-                throw restException;
-            }
-            throw RestException.conflict("Could not attach equipment document files");
-        }
+        AttachmentGroupDto group = attachmentGroupService.addFiles(documentId, files, null, user);
+        return EquipmentDocumentDto.fromAttachmentGroup(equipmentId, group);
     }
 
     @Transactional(readOnly = true)
     public List<EquipmentDocumentDto> getDocuments(UUID equipmentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         getOrThrow(equipmentId);
-        return equipmentDocumentRepository.findAllByEquipmentId(equipmentId)
+        return attachmentGroupService.listGroups("EQUIPMENT", equipmentId, user)
                 .stream()
-                .map(document -> toDocumentDtoWithMetadata(equipmentId, document, currentUserId))
+                .map(group -> EquipmentDocumentDto.fromAttachmentGroup(equipmentId, group))
+                .filter(Objects::nonNull)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public EquipmentDocumentDto getDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         getOrThrow(equipmentId);
-        com.toir.entity.equipment.EquipmentDocument document = findEquipmentDocument(equipmentId, documentId);
-        return toDocumentDtoWithMetadata(equipmentId, document, currentUserId);
+        return EquipmentDocumentDto.fromAttachmentGroup(equipmentId, attachmentGroupService.getGroup(documentId, user));
     }
 
     @Transactional(readOnly = true)
     public PresignedUrlResponse getDocumentPresignedUrl(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         getOrThrow(equipmentId);
-        EquipmentDocument document = findEquipmentDocument(equipmentId, documentId);
-        return fileService.getPresignedUrl(document.getFile().getId(), currentUserId);
+        AttachmentGroupDto group = attachmentGroupService.getGroup(documentId, user);
+        return attachmentGroupService.getFilePresignedUrl(documentId, primaryFile(group).fileId(), user);
     }
 
     @Transactional(readOnly = true)
     public Resource downloadDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         getOrThrow(equipmentId);
-        EquipmentDocument document = findEquipmentDocument(equipmentId, documentId);
-        return fileService.download(document.getFile().getId(), currentUserId);
+        AttachmentGroupDto group = attachmentGroupService.getGroup(documentId, user);
+        return attachmentGroupService.downloadFile(documentId, primaryFile(group).fileId(), user);
     }
 
     @Transactional(readOnly = true)
@@ -498,10 +441,8 @@ public class EquipmentService {
             UUID fileId,
             AuthenticatedUser user
     ) {
-        UUID currentUserId = currentUserId(user);
         getOrThrow(equipmentId);
-        EquipmentDocumentFile link = findEquipmentDocumentFile(equipmentId, documentId, fileId);
-        return fileService.getPresignedUrl(link.getFile().getId(), currentUserId);
+        return attachmentGroupService.getFilePresignedUrl(documentId, fileId, user);
     }
 
     @Transactional(readOnly = true)
@@ -511,46 +452,20 @@ public class EquipmentService {
             UUID fileId,
             AuthenticatedUser user
     ) {
-        UUID currentUserId = currentUserId(user);
         getOrThrow(equipmentId);
-        EquipmentDocumentFile link = findEquipmentDocumentFile(equipmentId, documentId, fileId);
-        return fileService.download(link.getFile().getId(), currentUserId);
+        return attachmentGroupService.downloadFile(documentId, fileId, user);
     }
 
     @Transactional
     public void deleteDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         getOrThrow(equipmentId);
-        EquipmentDocument document = findEquipmentDocument(equipmentId, documentId);
-        List<UUID> fileIds = activeDocumentFileIds(document);
-        equipmentDocumentRepository.delete(document);
-        fileIds.forEach(fileId -> fileService.delete(fileId, currentUserId));
+        attachmentGroupService.deleteGroup(documentId, user);
     }
 
     @Transactional
     public void deleteDocumentFile(UUID equipmentId, UUID documentId, UUID fileId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
         getOrThrow(equipmentId);
-        EquipmentDocument document = findEquipmentDocument(equipmentId, documentId);
-        List<EquipmentDocumentFile> activeLinks = activeDocumentFileLinks(document);
-        EquipmentDocumentFile link = activeLinks.stream()
-                .filter(documentFile -> fileId.equals(documentFile.getFile().getId()))
-                .findFirst()
-                .orElseThrow(() -> RestException.notFound("Equipment document file not found: " + fileId));
-        if (activeDocumentFileIds(document).size() <= 1) {
-            throw RestException.badRequest("Equipment document must contain at least one file");
-        }
-        if (document.getFile() != null && fileId.equals(document.getFile().getId())) {
-            UploadedFile replacement = activeLinks.stream()
-                    .map(EquipmentDocumentFile::getFile)
-                    .filter(file -> file != null && !fileId.equals(file.getId()))
-                    .findFirst()
-                    .orElseThrow(() -> RestException.badRequest("Equipment document must contain at least one file"));
-            document.setFile(replacement);
-        }
-        document.getFiles().remove(link);
-        equipmentDocumentRepository.saveAndFlush(document);
-        fileService.delete(fileId, currentUserId);
+        attachmentGroupService.removeFile(documentId, fileId, user);
     }
 
     @Transactional(readOnly = true)
@@ -1471,6 +1386,13 @@ public class EquipmentService {
     private EquipmentDocumentFile findEquipmentDocumentFile(UUID equipmentId, UUID documentId, UUID fileId) {
         return equipmentDocumentFileRepository.findActiveByDocumentIdAndFileIdAndEquipmentId(documentId, fileId, equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment document file not found: " + fileId));
+    }
+
+    private AttachmentGroupDto.FileItem primaryFile(AttachmentGroupDto group) {
+        if (group == null || group.files() == null || group.files().isEmpty()) {
+            throw RestException.notFound("Attachment group file not found");
+        }
+        return group.files().getFirst();
     }
 
     private EquipmentDocumentDto toDocumentDtoWithMetadata(

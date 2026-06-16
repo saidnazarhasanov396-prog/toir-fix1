@@ -15,6 +15,7 @@ import com.toir.repository.WarehouseStockRepository;
 import com.toir.service.LowStockRecommendationService;
 import com.toir.service.StockMovementService;
 import com.toir.service.WarehouseReorderService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
@@ -66,7 +67,8 @@ class MaterialStockPbacScopeTest {
                 mock(ToirStockService.class),
                 mock(FileService.class),
                 mock(UploadedFileRepository.class),
-                mock(StockMovementFileRepository.class)
+                mock(StockMovementFileRepository.class),
+                mock(AttachmentGroupService.class)
         );
         when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
         reorderService = new WarehouseReorderService(stockRepository, warehouseRepository, sparePartRepository, scopeAccessService);

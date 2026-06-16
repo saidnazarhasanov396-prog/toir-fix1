@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementFileDto;
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.stockmovement.StockMovementIssueRequest;
 import com.toir.dto.stockmovement.StockMovementReceiptRequest;
 import com.toir.dto.stockmovement.StockMovementRequest;
@@ -14,6 +15,7 @@ import com.toir.entity.UploadedFile;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.FileCategory;
+import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.SparePartType;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementType;
@@ -26,6 +28,7 @@ import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
@@ -94,6 +97,9 @@ class StockMovementServiceTest {
 
     @Mock
     StockMovementFileRepository stockMovementFileRepository;
+
+    @Mock
+    AttachmentGroupService attachmentGroupService;
 
     @InjectMocks
     StockMovementService service;
@@ -425,14 +431,10 @@ class StockMovementServiceTest {
         );
 
         when(repository.findByIdAndIsDeletedFalse(movementId)).thenReturn(Optional.of(movement));
-        when(fileService.upload(front, FileCategory.STOCK_MOVEMENT_DOCUMENT, userId))
-                .thenReturn(uploadResponse(frontFile));
-        when(fileService.upload(invoice, FileCategory.STOCK_MOVEMENT_DOCUMENT, userId))
-                .thenReturn(uploadResponse(invoiceFile));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(frontFileId)).thenReturn(Optional.of(frontFile));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(invoiceFileId)).thenReturn(Optional.of(invoiceFile));
-        when(stockMovementFileRepository.countByMovementId(movementId)).thenReturn(0L);
-        when(stockMovementFileRepository.saveAllAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(attachmentGroupService.listGroups(eq("STOCK_MOVEMENT"), eq(movementId), any())).thenReturn(List.of());
+        when(attachmentGroupService.createGroup(eq("Stock movement documents"), any(), eq("STOCK_MOVEMENT"), eq(movementId),
+                eq(List.of(front, invoice)), any(), any()))
+                .thenReturn(stockMovementAttachmentGroup(movementId, List.of(frontFile, invoiceFile)));
 
         List<StockMovementFileDto> result = service.attachFiles(
                 movementId,
@@ -444,12 +446,8 @@ class StockMovementServiceTest {
                 .containsExactly(frontFileId, invoiceFileId);
         assertThat(result).extracting(StockMovementFileDto::originalName)
                 .containsExactly("invoice-front.pdf", "invoice.xlsx");
-        ArgumentCaptor<List<StockMovementFile>> captor = ArgumentCaptor.forClass(List.class);
-        verify(stockMovementFileRepository).saveAllAndFlush(captor.capture());
-        assertThat(captor.getValue()).extracting(link -> link.getFile().getId())
-                .containsExactly(frontFileId, invoiceFileId);
-        assertThat(captor.getValue()).extracting(StockMovementFile::getSortOrder)
-                .containsExactly(0, 1);
+        verify(attachmentGroupService).createGroup(eq("Stock movement documents"), any(), eq("STOCK_MOVEMENT"), eq(movementId),
+                eq(List.of(front, invoice)), any(), any());
     }
 
     @Test
@@ -789,6 +787,40 @@ class StockMovementServiceTest {
                 .category(FileCategory.STOCK_MOVEMENT_DOCUMENT)
                 .deleted(false)
                 .build();
+    }
+
+    private AttachmentGroupDto stockMovementAttachmentGroup(UUID movementId, List<UploadedFile> files) {
+        UUID groupId = UUID.randomUUID();
+        return new AttachmentGroupDto(
+                groupId,
+                "Stock movement documents",
+                null,
+                AttachmentTargetType.STOCK_MOVEMENT,
+                movementId,
+                null,
+                null,
+                files.getFirst().getUploadedBy(),
+                java.time.LocalDateTime.now(),
+                java.util.stream.IntStream.range(0, files.size())
+                        .mapToObj(index -> {
+                            UploadedFile file = files.get(index);
+                            return new AttachmentGroupDto.FileItem(
+                                    UUID.randomUUID(),
+                                    file.getId(),
+                                    file.getOriginalName(),
+                                    file.getStoredName(),
+                                    file.getContentType(),
+                                    file.getSize(),
+                                    index,
+                                    null,
+                                    file.getUploadedBy(),
+                                    java.time.LocalDateTime.now(),
+                                    "/download",
+                                    "/presigned"
+                            );
+                        })
+                        .toList()
+        );
     }
 
     private UploadFileResponse uploadResponse(UploadedFile file) {

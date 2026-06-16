@@ -1,0 +1,26 @@
+package com.toir.enums;
+
+import com.toir.exception.RestException;
+
+import java.util.Locale;
+
+public enum AttachmentTargetType {
+    EQUIPMENT,
+    VEHICLE,
+    WORK_ORDER,
+    REPAIR_REQUEST,
+    COMPLETION_ACT,
+    APPROVAL,
+    STOCK_MOVEMENT;
+
+    public static AttachmentTargetType from(String value) {
+        if (value == null || value.isBlank()) {
+            throw RestException.badRequest("targetType is required");
+        }
+        try {
+            return AttachmentTargetType.valueOf(value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw RestException.badRequest("Invalid targetType: " + value);
+        }
+    }
+}

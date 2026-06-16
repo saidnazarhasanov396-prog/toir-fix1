@@ -1,6 +1,7 @@
 package com.toir.service.equipment;
 
 import com.toir.dto.equipment.EquipmentDto;
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.equipment.EquipmentCreateRequest;
 import com.toir.dto.equipment.EquipmentDetailDto;
 import com.toir.dto.equipment.EquipmentDocumentDto;
@@ -29,6 +30,7 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.DowntimeType;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentAttributeDataType;
@@ -70,6 +72,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.WarehouseEquipmentItemService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -198,6 +201,9 @@ class EquipmentServiceTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    AttachmentGroupService attachmentGroupService;
+
 
     @BeforeEach
     void setUp() {
@@ -225,17 +231,10 @@ class EquipmentServiceTest {
         UploadedFile backUploadedFile = uploadedFile(backFileId, currentUserId, "back.pdf");
 
         when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(fileService.upload(front, FileCategory.EQUIPMENT_DOCUMENT, currentUserId))
-                .thenReturn(uploadResponse(frontFileId, "front.pdf"));
-        when(fileService.upload(back, FileCategory.EQUIPMENT_DOCUMENT, currentUserId))
-                .thenReturn(uploadResponse(backFileId, "back.pdf"));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(frontFileId)).thenReturn(Optional.of(frontUploadedFile));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(backFileId)).thenReturn(Optional.of(backUploadedFile));
-        when(equipmentDocumentRepository.saveAndFlush(any(EquipmentDocument.class))).thenAnswer(invocation -> {
-            EquipmentDocument saved = invocation.getArgument(0);
-            saved.setId(documentId);
-            return saved;
-        });
+        when(attachmentGroupService.createGroup(eq("Technical Passport"), any(), eq("EQUIPMENT"), eq(equipmentId),
+                eq("PASSPORT"), eq("PAS-2024-001"), eq(List.of(front, back)), any(), any()))
+                .thenReturn(equipmentAttachmentGroup(documentId, equipmentId, List.of(frontUploadedFile, backUploadedFile),
+                        "Technical Passport", "PASSPORT", "PAS-2024-001"));
 
         EquipmentDocumentDto result = service.attachDocumentFiles(
                 equipmentId,
@@ -253,16 +252,8 @@ class EquipmentServiceTest {
         assertThat(result.fileId()).isEqualTo(frontFileId);
         assertThat(result.files()).extracting(EquipmentDocumentDto.FileRef::id)
                 .containsExactly(frontFileId, backFileId);
-        ArgumentCaptor<EquipmentDocument> documentCaptor = ArgumentCaptor.forClass(EquipmentDocument.class);
-        verify(equipmentDocumentRepository).saveAndFlush(documentCaptor.capture());
-        EquipmentDocument savedDocument = documentCaptor.getValue();
-        assertThat(savedDocument.getFile().getId()).isEqualTo(frontFileId);
-        assertThat(savedDocument.getDocumentNumber()).isEqualTo("PAS-2024-001");
-        assertThat(savedDocument.getFiles()).hasSize(2);
-        assertThat(savedDocument.getFiles()).extracting(link -> link.getFile().getId())
-                .containsExactly(frontFileId, backFileId);
-        assertThat(savedDocument.getFiles()).extracting(link -> link.getSortOrder())
-                .containsExactly(0, 1);
+        verify(attachmentGroupService).createGroup(eq("Technical Passport"), any(), eq("EQUIPMENT"), eq(equipmentId),
+                eq("PASSPORT"), eq("PAS-2024-001"), eq(List.of(front, back)), any(), any());
     }
 
     @Test
@@ -3006,6 +2997,46 @@ class EquipmentServiceTest {
                 .build();
     }
 
+    private AttachmentGroupDto equipmentAttachmentGroup(
+            UUID groupId,
+            UUID equipmentId,
+            List<UploadedFile> files,
+            String title,
+            String documentType,
+            String documentNumber
+    ) {
+        return new AttachmentGroupDto(
+                groupId,
+                title,
+                null,
+                AttachmentTargetType.EQUIPMENT,
+                equipmentId,
+                documentType,
+                documentNumber,
+                files.getFirst().getUploadedBy(),
+                LocalDateTime.now(),
+                java.util.stream.IntStream.range(0, files.size())
+                        .mapToObj(index -> {
+                            UploadedFile file = files.get(index);
+                            return new AttachmentGroupDto.FileItem(
+                                    UUID.randomUUID(),
+                                    file.getId(),
+                                    file.getOriginalName(),
+                                    file.getStoredName(),
+                                    file.getContentType(),
+                                    file.getSize(),
+                                    index,
+                                    null,
+                                    file.getUploadedBy(),
+                                    LocalDateTime.now(),
+                                    "/download",
+                                    "/presigned"
+                            );
+                        })
+                        .toList()
+        );
+    }
+
     private UploadFileResponse uploadResponse(UUID fileId, String originalName) {
         return UploadFileResponse.builder()
                 .id(fileId)
@@ -3266,16 +3297,16 @@ class EquipmentServiceTest {
         );
 
         when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(fileService.upload(eq(file1), eq(com.toir.enums.FileCategory.EQUIPMENT_DOCUMENT), eq(userId)))
-                .thenReturn(response1);
-        when(fileService.upload(eq(file2), eq(com.toir.enums.FileCategory.EQUIPMENT_DOCUMENT), eq(userId)))
-                .thenReturn(response2);
-        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId1)).thenReturn(Optional.of(uploadedFile1));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId2)).thenReturn(Optional.of(uploadedFile2));
-        when(equipmentDocumentRepository.saveAllAndFlush(any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(attachmentGroupService.createGroup(eq("Technical Passport"), any(), eq("EQUIPMENT"), eq(equipmentId),
+                eq("PASSPORT"), any(), eq(List.of(file1)), any(), any()))
+                .thenReturn(equipmentAttachmentGroup(UUID.randomUUID(), equipmentId, List.of(uploadedFile1),
+                        "Technical Passport", "PASSPORT", "AKT-2024-001"));
+        when(attachmentGroupService.createGroup(eq("Drawing"), any(), eq("EQUIPMENT"), eq(equipmentId),
+                eq("DRAWING"), eq("DRW-2024-001"), eq(List.of(file2)), any(), any()))
+                .thenReturn(equipmentAttachmentGroup(UUID.randomUUID(), equipmentId, List.of(uploadedFile2),
+                        "Drawing", "DRAWING", "DRW-2024-001"));
 
-        service.attachDocuments(
+        List<EquipmentDocumentDto> result = service.attachDocuments(
                 equipmentId,
                 List.of(file1, file2),
                 List.of("Technical Passport", "Drawing"),
@@ -3284,17 +3315,9 @@ class EquipmentServiceTest {
                 user
         );
 
-        org.mockito.ArgumentCaptor<List<com.toir.entity.equipment.EquipmentDocument>> captor =
-                org.mockito.ArgumentCaptor.forClass(List.class);
-        verify(equipmentDocumentRepository).saveAllAndFlush(captor.capture());
-
-        List<com.toir.entity.equipment.EquipmentDocument> saved = captor.getValue();
-        assertThat(saved).hasSize(2);
-        assertThat(saved.get(0).getDocumentType()).isEqualTo("PASSPORT");
-        assertThat(saved.get(0).getDocumentNumber()).isEqualTo("АКТ-2024-001");
-        assertThat(saved.get(0).getDocumentName()).isEqualTo("Technical Passport");
-        assertThat(saved.get(1).getDocumentType()).isEqualTo("DRAWING");
-        assertThat(saved.get(1).getDocumentNumber()).isEqualTo("DRW-2024-001");
-        assertThat(saved.get(1).getDocumentName()).isEqualTo("Drawing");
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(EquipmentDocumentDto::documentType).containsExactly("PASSPORT", "DRAWING");
+        assertThat(result).extracting(EquipmentDocumentDto::documentNumber).containsExactly("AKT-2024-001", "DRW-2024-001");
+        assertThat(result).extracting(EquipmentDocumentDto::documentName).containsExactly("Technical Passport", "Drawing");
     }
 }
