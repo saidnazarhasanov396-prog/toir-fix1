@@ -1,5 +1,6 @@
 package com.toir.dto.workorder;
 
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.maintenance.WorkOrderDocument;
 
@@ -83,6 +84,41 @@ public record WorkOrderDocumentDto(
                         file.getOriginalName(),
                         file.getContentType(),
                         file.getSize(),
+                        downloadUrl
+                )
+        );
+    }
+
+    public static WorkOrderDocumentDto fromAttachmentGroup(UUID workOrderId, AttachmentGroupDto group) {
+        if (group == null || group.files() == null || group.files().isEmpty()) {
+            return null;
+        }
+        AttachmentGroupDto.FileItem file = group.files().getFirst();
+        String downloadUrl = "/api/v1/work-orders/" + workOrderId + "/documents/" + group.id() + "/download";
+        return new WorkOrderDocumentDto(
+                group.id(),
+                file.fileId(),
+                group.documentType(),
+                group.documentNumber(),
+                group.title(),
+                file.originalName(),
+                file.contentType(),
+                file.size(),
+                downloadUrl,
+                "/api/v1/work-orders/" + workOrderId + "/documents/" + group.id() + "/presigned-url",
+                group.createdAt(),
+                file.uploadedAt(),
+                workOrderId,
+                file.uploadedBy(),
+                group.title(),
+                group.documentType(),
+                group.createdAt(),
+                new FileRef(
+                        file.fileId(),
+                        file.storedName(),
+                        file.originalName(),
+                        file.contentType(),
+                        file.size(),
                         downloadUrl
                 )
         );

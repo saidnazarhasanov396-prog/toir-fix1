@@ -76,12 +76,14 @@ public class FileServiceImpl implements FileService {
     @Transactional(readOnly = true)
     public PresignedUrlResponse getPresignedUrl(UUID fileId, UUID currentUserId) {
         UploadedFile file = findOwnedFile(fileId, currentUserId);
-        String url = s3Service.generatePresignedUrl(file.getObjectName(), PRESIGNED_URL_EXPIRY_MINUTES);
-        return PresignedUrlResponse.builder()
-                .fileId(file.getId())
-                .url(url)
-                .expiresAt(LocalDateTime.now().plusMinutes(PRESIGNED_URL_EXPIRY_MINUTES))
-                .build();
+        return presignedUrl(file);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PresignedUrlResponse getPresignedUrlForAuthorizedFile(UUID fileId) {
+        UploadedFile file = findActiveFile(fileId);
+        return presignedUrl(file);
     }
 
     @Override
@@ -99,6 +101,26 @@ public class FileServiceImpl implements FileService {
     @Transactional(readOnly = true)
     public Resource download(UUID fileId, UUID currentUserId) {
         UploadedFile file = findOwnedFile(fileId, currentUserId);
+        return load(file);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Resource downloadAuthorizedFile(UUID fileId) {
+        UploadedFile file = findActiveFile(fileId);
+        return load(file);
+    }
+
+    private PresignedUrlResponse presignedUrl(UploadedFile file) {
+        String url = s3Service.generatePresignedUrl(file.getObjectName(), PRESIGNED_URL_EXPIRY_MINUTES);
+        return PresignedUrlResponse.builder()
+                .fileId(file.getId())
+                .url(url)
+                .expiresAt(LocalDateTime.now().plusMinutes(PRESIGNED_URL_EXPIRY_MINUTES))
+                .build();
+    }
+
+    private Resource load(UploadedFile file) {
         if (LocalFileResourceResolver.looksLikeLocalReference(file.getObjectName())) {
             return localFileResourceResolver.load(file.getObjectName());
         }
@@ -108,10 +130,14 @@ public class FileServiceImpl implements FileService {
         return s3Service.load(file.getObjectName());
     }
 
+    private UploadedFile findActiveFile(UUID fileId) {
+        return uploadedFileRepository.findByIdAndDeletedFalse(fileId)
+                .orElseThrow(() -> RestException.restThrow(ErrorType.FILE_NOT_FOUND));
+    }
+
     private UploadedFile findOwnedFile(UUID fileId, UUID currentUserId) {
         assertCurrentUser(currentUserId);
-        UploadedFile file = uploadedFileRepository.findByIdAndDeletedFalse(fileId)
-                .orElseThrow(() -> RestException.restThrow(ErrorType.FILE_NOT_FOUND));
+        UploadedFile file = findActiveFile(fileId);
         if (!currentUserId.equals(file.getUploadedBy())) {
             throw RestException.restThrow(ErrorType.FILE_ACCESS_DENIED);
         }

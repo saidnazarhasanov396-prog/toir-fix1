@@ -1,5 +1,6 @@
 package com.toir.dto.equipment;
 
+import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.EquipmentDocument;
 import com.toir.entity.equipment.EquipmentDocumentFile;
@@ -87,6 +88,44 @@ public record EquipmentDocumentDto(
                 document.getDocumentType(),
                 document.getCreatedAt(),
                 primaryFileRef,
+                fileRefs
+        );
+    }
+
+    public static EquipmentDocumentDto fromAttachmentGroup(UUID equipmentId, AttachmentGroupDto group) {
+        if (group == null || group.files() == null || group.files().isEmpty()) {
+            return null;
+        }
+        List<FileRef> fileRefs = group.files().stream()
+                .map(file -> new FileRef(
+                        file.fileId(),
+                        file.storedName(),
+                        file.originalName(),
+                        file.contentType(),
+                        file.size(),
+                        "/api/v1/equipment/" + equipmentId + "/documents/" + group.id()
+                                + "/files/" + file.fileId() + "/download"
+                ))
+                .toList();
+        AttachmentGroupDto.FileItem primary = group.files().getFirst();
+        return new EquipmentDocumentDto(
+                group.id(),
+                primary.fileId(),
+                group.documentType(),
+                group.documentNumber(),
+                group.title(),
+                primary.originalName(),
+                primary.contentType(),
+                primary.size(),
+                "/api/v1/equipment/" + equipmentId + "/documents/" + group.id() + "/download",
+                "/api/v1/equipment/" + equipmentId + "/documents/" + group.id() + "/presigned-url",
+                group.createdAt(),
+                primary.uploadedAt(),
+                equipmentId,
+                group.title(),
+                group.documentType(),
+                group.createdAt(),
+                fileRefs.getFirst(),
                 fileRefs
         );
     }
