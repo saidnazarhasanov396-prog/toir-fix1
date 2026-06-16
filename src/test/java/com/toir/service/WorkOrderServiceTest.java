@@ -30,6 +30,7 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderDocument;
 import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.repair.RepairRequestTemplateAction;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.BrigadeMember;
 import com.toir.entity.users.User;
@@ -89,6 +90,7 @@ import com.toir.repository.projection.WorkOrderCountProjection;
 import com.toir.repository.projection.WorkOrderCalendarBucketProjection;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.repair.RepairRequestTemplateActionRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.dto.file.UploadFileResponse;
@@ -102,6 +104,7 @@ import com.toir.service.maintanance.WorkOrderSparePartRequirementService;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -129,6 +132,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -165,6 +169,9 @@ class WorkOrderServiceTest {
 
     @Mock
     RepairRequestRepository repairRequestRepository;
+
+    @Mock
+    RepairRequestTemplateActionRepository repairRequestTemplateActionRepository;
 
     @Mock
     DefectRepository defectRepository;
@@ -276,6 +283,12 @@ class WorkOrderServiceTest {
 
     @InjectMocks
     WorkOrderService service;
+
+    @BeforeEach
+    void setUpTemplateActionSelectionDefaults() {
+        lenient().when(repairRequestTemplateActionRepository.findAllByRepairRequest_IdAndIsDeletedFalseOrderBySequenceAsc(any()))
+                .thenReturn(List.of());
+    }
 
     @Test
     void attachDocumentsUploadsFilesWithJwtUserAndPersistsDocumentRows() {

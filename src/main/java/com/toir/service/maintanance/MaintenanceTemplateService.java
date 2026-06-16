@@ -7,6 +7,7 @@ import com.toir.dto.maintenancetemplate.MaintenanceTemplateStatsResponse;
 import com.toir.entity.maintenance.MaintenanceAction;
 import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
+import com.toir.entity.users.User;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.MaintenanceKind;
@@ -17,6 +18,7 @@ import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateStatsProjection;
+import com.toir.repository.users.UserRepository;
 import com.toir.service.SparePartService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Year;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -41,6 +45,7 @@ public class MaintenanceTemplateService {
     private final MaintenanceOperationRepository operationRepository;
     private final MaintenanceActionRepository actionRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
+    private final UserRepository userRepository;
     private final SparePartService sparePartService;
     private final AuditBuilderService auditBuilderService;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
@@ -146,12 +151,16 @@ public class MaintenanceTemplateService {
                 throw RestException.badRequest("Maintenance action is inactive: " + r.actionId());
             }
         }
+        validateSpecialist(r.specialistId());
         applyOperationFields(op, r, action, sequence);
         if (op.getId() == null) {
             t.getOperations().add(op);
         }
         try {
-            return MaintenanceOperationDto.from(operationRepository.save(op));
+            MaintenanceOperation saved = operationRepository.save(op);
+            return operationDto(saved, saved.getSpecialistId() == null
+                    ? Map.of()
+                    : specialistNames(Set.of(saved.getSpecialistId())));
         } catch (DataIntegrityViolationException ex) {
             if (isOperationSequenceConflict(ex)) {
                 throw RestException.badRequest(DUPLICATE_OPERATION_SEQUENCE_MESSAGE);
@@ -195,6 +204,7 @@ public class MaintenanceTemplateService {
 
     private void applyOperationFields(MaintenanceOperation op, MaintenanceOperationDto r, MaintenanceAction action, int sequence) {
         op.setAction(action);
+        op.setSpecialistId(r.specialistId());
         op.setSequence(sequence);
         String operationName = firstText(r.name(), action != null ? action.getName() : null);
         if (operationName == null) {
@@ -239,12 +249,52 @@ public class MaintenanceTemplateService {
     }
 
     private void applyMutableFields(MaintenanceTemplate t, MaintenanceTemplateRequest r) {
+        List<UUID> equipmentTypeIds = normalizeEquipmentTypeIds(r);
         t.setName(r.name());
         t.setDescription(r.description());
-        t.setEquipmentTypeId(r.equipmentTypeId());
+        t.setEquipmentTypeId(equipmentTypeIds.getFirst());
+        if (t.getEquipmentTypeIds() == null) {
+            t.setEquipmentTypeIds(new LinkedHashSet<>());
+        }
+        t.getEquipmentTypeIds().clear();
+        t.getEquipmentTypeIds().addAll(equipmentTypeIds);
         t.setMaintenanceKind(r.maintenanceKind());
         t.setNormativeLaborHours(r.normativeLaborHours());
         if (r.active() != null) t.setActive(r.active());
+    }
+
+    private List<UUID> normalizeEquipmentTypeIds(MaintenanceTemplateRequest request) {
+        LinkedHashSet<UUID> ids = new LinkedHashSet<>();
+        if (request.equipmentTypeIds() != null) {
+            request.equipmentTypeIds().stream()
+                    .filter(Objects::nonNull)
+                    .forEach(ids::add);
+        }
+        if (ids.isEmpty() && request.equipmentTypeId() != null) {
+            ids.add(request.equipmentTypeId());
+        }
+        if (ids.isEmpty()) {
+            throw RestException.badRequest("At least one equipment type is required");
+        }
+        Set<UUID> existingIds = equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(ids)
+                .stream()
+                .map(EquipmentType::getId)
+                .collect(Collectors.toSet());
+        for (UUID id : ids) {
+            if (!existingIds.contains(id)) {
+                throw RestException.notFound("Equipment type not found: " + id);
+            }
+        }
+        return new ArrayList<>(ids);
+    }
+
+    private void validateSpecialist(UUID specialistId) {
+        if (specialistId == null) {
+            return;
+        }
+        if (!userRepository.existsByIdAndIsDeletedFalse(specialistId)) {
+            throw RestException.notFound("Specialist not found: " + specialistId);
+        }
     }
 
     private void validateClientProvidedCode(String code) {
@@ -321,7 +371,9 @@ public class MaintenanceTemplateService {
         String equipmentTypeName = equipmentTypeRepository.findByIdAndIsDeletedFalse(t.getEquipmentTypeId())
                 .map(EquipmentType::getName)
                 .orElse(null);
-        return MaintenanceTemplateDto.from(t, equipmentTypeName);
+        return templateDto(t, equipmentTypeName, specialistNames(t.getOperations().stream()
+                .map(MaintenanceOperation::getSpecialistId)
+                .collect(Collectors.toSet())));
     }
 
     private List<MaintenanceTemplateDto> toDtoList(List<MaintenanceTemplate> templates) {
@@ -333,7 +385,64 @@ public class MaintenanceTemplateService {
         Map<UUID, String> eqTypeNames = equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(eqTypeIds).stream()
                 .collect(Collectors.toMap(EquipmentType::getId, EquipmentType::getName));
         return templates.stream()
-                .map(t -> MaintenanceTemplateDto.from(t, eqTypeNames.getOrDefault(t.getEquipmentTypeId(), null)))
+                .map(t -> templateDto(t, eqTypeNames.getOrDefault(t.getEquipmentTypeId(), null), Map.of()))
                 .toList();
+    }
+
+    private MaintenanceTemplateDto templateDto(MaintenanceTemplate t, String equipmentTypeName, Map<UUID, String> specialistNames) {
+        List<UUID> equipmentTypeIds = t.getEquipmentTypeIds() == null || t.getEquipmentTypeIds().isEmpty()
+                ? (t.getEquipmentTypeId() == null ? List.of() : List.of(t.getEquipmentTypeId()))
+                : List.copyOf(t.getEquipmentTypeIds());
+        return new MaintenanceTemplateDto(
+                t.getId(),
+                t.getCode(),
+                t.getName(),
+                t.getDescription(),
+                t.getEquipmentTypeId(),
+                equipmentTypeName,
+                equipmentTypeIds,
+                t.getMaintenanceKind(),
+                t.getNormativeLaborHours(),
+                t.isActive(),
+                t.getOperations().stream()
+                        .map(operation -> operationDto(operation, specialistNames))
+                        .toList()
+        );
+    }
+
+    private MaintenanceOperationDto operationDto(MaintenanceOperation operation, Map<UUID, String> specialistNames) {
+        return new MaintenanceOperationDto(
+                operation.getId(),
+                operation.getAction() != null ? operation.getAction().getId() : null,
+                operation.getAction() != null ? operation.getAction().getCode() : null,
+                operation.getAction() != null ? operation.getAction().getName() : null,
+                operation.getSpecialistId(),
+                operation.getSpecialistId() == null ? null : specialistNames.get(operation.getSpecialistId()),
+                operation.getSequence(),
+                operation.getName(),
+                operation.getDescription(),
+                operation.getDurationHours(),
+                operation.getRequiredSkill(),
+                operation.getSafetyNotes(),
+                operation.getToolsRequired(),
+                operation.getSparePartsRequired(),
+                operation.getConsumablesRequired(),
+                operation.getControlParameter(),
+                operation.getControlUnit(),
+                operation.getControlMin(),
+                operation.getControlMax(),
+                operation.getInstructionUrl()
+        );
+    }
+
+    private Map<UUID, String> specialistNames(Set<UUID> specialistIds) {
+        Set<UUID> ids = specialistIds == null
+                ? Set.of()
+                : specialistIds.stream().filter(Objects::nonNull).collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return userRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
+                .collect(Collectors.toMap(User::getId, User::getFullName));
     }
 }

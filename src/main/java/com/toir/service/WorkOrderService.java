@@ -24,6 +24,7 @@ import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
 import com.toir.entity.CertificationType;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.repair.RepairRequestTemplateAction;
 import com.toir.entity.users.UserCertification;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.BrigadeMember;
@@ -49,6 +50,7 @@ import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.WorkExecutionRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
+import com.toir.repository.repair.RepairRequestTemplateActionRepository;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.DefectListStatus;
 import com.toir.enums.EquipmentStatus;
@@ -141,6 +143,7 @@ public class WorkOrderService {
     private final PprPlanRepository pprPlanRepository;
     private final PprTaskRepository pprTaskRepository;
     private final RepairRequestRepository repairRequestRepository;
+    private final RepairRequestTemplateActionRepository repairRequestTemplateActionRepository;
     private final DefectRepository defectRepository;
     private final DefectListRepository defectListRepository;
     private final BrigadeMemberRepository brigadeMemberRepository;
@@ -1817,9 +1820,49 @@ public class WorkOrderService {
         if (workOrder == null || workOrder.getId() == null) {
             return new TemplateTaskSyncResult(0, 0);
         }
+        if (workOrder.getRepairRequestId() != null) {
+            TemplateTaskSyncResult selectedActions = syncRepairRequestTemplateActions(workOrder, workOrder.getRepairRequestId());
+            if (selectedActions.operationsCount() > 0) {
+                return selectedActions;
+            }
+        }
         return resolveTemplateId(workOrder)
                 .map(templateId -> syncTemplateTasks(workOrder, templateId))
                 .orElseGet(() -> new TemplateTaskSyncResult(0, 0));
+    }
+
+    private TemplateTaskSyncResult syncRepairRequestTemplateActions(WorkOrder workOrder, UUID repairRequestId) {
+        List<RepairRequestTemplateAction> actions = repairRequestTemplateActionRepository
+                .findAllByRepairRequest_IdAndIsDeletedFalseOrderBySequenceAsc(repairRequestId);
+        if (actions.isEmpty()) {
+            return new TemplateTaskSyncResult(0, 0);
+        }
+        if (workOrder.getTasks() == null) {
+            workOrder.setTasks(new ArrayList<>());
+        }
+        int created = 0;
+        for (RepairRequestTemplateAction action : actions) {
+            if (hasTaskForRepairRequestAction(workOrder, action)) {
+                continue;
+            }
+            WorkOrderTask task = new WorkOrderTask();
+            task.setWorkOrder(workOrder);
+            task.setTitle(action.getNameSnapshot());
+            task.setDescription(prefixed("Required skill", action.getRequiredSkill()));
+            task.setStatus(TaskExecutionStatus.TODO);
+            task.setAssignedToId(action.getSpecialistId());
+            if (action.getDurationHours() != null && action.getDurationHours() > 0) {
+                task.setPlannedHours(action.getDurationHours());
+            }
+            task.setSourceTemplateId(action.getTemplateId());
+            task.setSourceOperationId(action.getOperationId());
+            workOrder.getTasks().add(task);
+            created++;
+        }
+        if (created > 0) {
+            repository.save(workOrder);
+        }
+        return new TemplateTaskSyncResult(actions.size(), created);
     }
 
     private TemplateTaskSyncResult syncTemplateTasks(WorkOrder workOrder, UUID templateId) {
@@ -1848,6 +1891,7 @@ public class WorkOrderService {
             if (operation.getDurationHours() > 0) {
                 task.setPlannedHours(operation.getDurationHours());
             }
+            task.setAssignedToId(operation.getSpecialistId());
             task.setSourceTemplateId(templateId);
             task.setSourceOperationId(operation.getId());
             workOrder.getTasks().add(task);
@@ -1868,6 +1912,17 @@ public class WorkOrderService {
                         || (task.getSourceOperationId() == null
                         && task.getTitle() != null
                         && task.getTitle().equals(operation.getName())));
+    }
+
+    private boolean hasTaskForRepairRequestAction(WorkOrder workOrder, RepairRequestTemplateAction action) {
+        if (workOrder.getTasks() == null || action == null) {
+            return false;
+        }
+        return workOrder.getTasks().stream().anyMatch(task ->
+                (action.getOperationId() != null && action.getOperationId().equals(task.getSourceOperationId()))
+                        || (action.getOperationId() == null
+                        && Objects.equals(task.getSourceTemplateId(), action.getTemplateId())
+                        && Objects.equals(task.getTitle(), action.getNameSnapshot())));
     }
 
     private Optional<UUID> resolveTemplateId(WorkOrder workOrder) {

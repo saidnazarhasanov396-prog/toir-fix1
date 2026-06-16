@@ -48,9 +48,13 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
+import com.toir.repository.maintenance.MaintenanceActionRepository;
+import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
+import com.toir.repository.repair.RepairRequestTemplateActionRepository;
+import com.toir.repository.repair.RepairRequestTemplateRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.MeterService;
@@ -59,6 +63,7 @@ import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
 import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -83,6 +88,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -126,6 +132,18 @@ class RepairRequestServiceTest {
     MaintenanceTemplateRepository maintenanceTemplateRepository;
 
     @Mock
+    MaintenanceOperationRepository maintenanceOperationRepository;
+
+    @Mock
+    MaintenanceActionRepository maintenanceActionRepository;
+
+    @Mock
+    RepairRequestTemplateRepository repairRequestTemplateRepository;
+
+    @Mock
+    RepairRequestTemplateActionRepository repairRequestTemplateActionRepository;
+
+    @Mock
     MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
 
     @Mock
@@ -145,6 +163,16 @@ class RepairRequestServiceTest {
 
     @InjectMocks
     RepairRequestService service;
+
+    @BeforeEach
+    void setUpTemplateSelectionDefaults() {
+        lenient().when(repairRequestTemplateRepository.findAllByRepairRequest_IdAndIsDeletedFalseOrderBySequenceAsc(any()))
+                .thenReturn(List.of());
+        lenient().when(repairRequestTemplateActionRepository.findAllByRepairRequest_IdAndIsDeletedFalseOrderBySequenceAsc(any()))
+                .thenReturn(List.of());
+        lenient().when(maintenanceOperationRepository.findAllByTemplateIdInAndIsDeletedFalse(any()))
+                .thenReturn(List.of());
+    }
 
     @Test
     void createLinksRepairRequestToDefect() {
@@ -301,8 +329,8 @@ class RepairRequestServiceTest {
         RepairRequestRequest request = createRequest(null, equipmentId, templateId);
 
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
-        when(maintenanceTemplateRepository.findByIdAndIsDeletedFalse(templateId))
-                .thenReturn(Optional.of(maintenanceTemplate(templateId)));
+        when(maintenanceTemplateRepository.findAllByIdInAndIsDeletedFalse(any()))
+                .thenReturn(List.of(maintenanceTemplate(templateId)));
         when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
             RepairRequest saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", savedRequestId);
@@ -328,8 +356,6 @@ class RepairRequestServiceTest {
         RepairRequestRequest request = createRequest(null, UUID.randomUUID(), templateId);
 
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
-        when(maintenanceTemplateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.empty());
-
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Maintenance template not found");
