@@ -4,10 +4,13 @@ import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeRequest;
 import com.toir.dto.hr.TimesheetEntryDto;
 import com.toir.dto.hr.TimesheetEntryRequest;
+import com.toir.dto.hr.EmployeeWorkRoleDto;
 import com.toir.entity.Department;
 import com.toir.entity.TimesheetEntry;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.Employee;
+import com.toir.entity.users.EmployeeWorkRole;
+import com.toir.entity.users.EmployeeWorkRoleAssignment;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.TimesheetStatus;
@@ -17,6 +20,9 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
+import com.toir.repository.users.EmployeeWorkRoleCodeProjection;
+import com.toir.repository.users.EmployeeWorkRoleRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -29,9 +35,15 @@ import org.springframework.transaction.annotation.Transactional;
 import com.toir.dto.hr.EmployeeStatsResponse;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -45,6 +57,8 @@ public class HrService {
     private final DepartmentRepository departmentRepository;
     private final BrigadeRepository brigadeRepository;
     private final ScopeAccessService scopeAccessService;
+    private final EmployeeWorkRoleRepository employeeWorkRoleRepository;
+    private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
     @Transactional(readOnly = true)
     public Page<EmployeeDto> listEmployees(
@@ -55,9 +69,23 @@ public class HrService {
             UUID departmentId,
             UUID brigadeId
     ) {
+        return listEmployees(page, pageSize, search, activeOnly, departmentId, brigadeId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EmployeeDto> listEmployees(
+            int page,
+            int pageSize,
+            String search,
+            Boolean activeOnly,
+            UUID departmentId,
+            UUID brigadeId,
+            String workRoleCode
+    ) {
         String part1 = null;
         String part2 = null;
         UUID scopedDepartmentId = enforceEmployeeListDepartmentScope(departmentId);
+        String normalizedWorkRoleCode = normalizeWorkRoleCode(workRoleCode);
 
         if (search != null && !search.isBlank()) {
             String[] parts = search.trim().split("\\s+");
@@ -67,16 +95,35 @@ public class HrService {
             }
         }
 
-        Page<Employee> employeePage = employeeRepository.searchEmployees(
-                search,
-                part1,
-                part2,
-                activeOnly,
-                scopedDepartmentId,
-                brigadeId,
-                PaginationUtils.pageRequest(page, pageSize)
-        );
+        Page<Employee> employeePage = normalizedWorkRoleCode == null
+                ? employeeRepository.searchEmployees(
+                        search,
+                        part1,
+                        part2,
+                        activeOnly,
+                        scopedDepartmentId,
+                        brigadeId,
+                        PaginationUtils.pageRequest(page, pageSize)
+                )
+                : employeeRepository.searchEmployeesByWorkRole(
+                        search,
+                        part1,
+                        part2,
+                        activeOnly,
+                        scopedDepartmentId,
+                        brigadeId,
+                        normalizedWorkRoleCode,
+                        PaginationUtils.pageRequest(page, pageSize)
+                );
         return toDtoPage(employeePage);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EmployeeWorkRoleDto> listWorkRoles() {
+        return employeeWorkRoleRepository.findAllByActiveTrueAndIsDeletedFalseOrderByCodeAsc()
+                .stream()
+                .map(EmployeeWorkRoleDto::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -118,6 +165,7 @@ public class HrService {
         Employee e = new Employee();
         applyEmployee(e, r);
         Employee saved = employeeRepository.save(e);
+        replaceWorkRoles(saved.getId(), r.workRoleCodes() == null ? List.of() : r.workRoleCodes());
 
         auditBuilderService.log(
                 "employee",
@@ -140,6 +188,9 @@ public class HrService {
         applyEmployee(e, r);
 
         Employee save = employeeRepository.save(e);
+        if (r.workRoleCodes() != null) {
+            replaceWorkRoles(save.getId(), r.workRoleCodes());
+        }
 
         auditBuilderService.log(
                 "employee",
@@ -447,11 +498,14 @@ public class HrService {
                         (a, b) -> a
                 ));
 
+        Map<UUID, List<String>> workRoleCodesByEmployee = workRoleCodesByEmployee(employees);
+
         return employees.stream()
                 .map(employee -> EmployeeDto.from(
                         employee,
                         resolveName(departmentNameById, employee.getDepartmentId()),
-                        resolveName(brigadeNameById, employee.getBrigadeId())
+                        resolveName(brigadeNameById, employee.getBrigadeId()),
+                        workRoleCodesByEmployee.getOrDefault(employee.getId(), List.of())
                 ))
                 .toList();
     }
@@ -478,6 +532,101 @@ public class HrService {
         }
 
         return "%" + search.trim().toLowerCase() + "%";
+    }
+
+    private String normalizeWorkRoleCode(String workRoleCode) {
+        if (workRoleCode == null || workRoleCode.isBlank()) {
+            return null;
+        }
+        return workRoleCode.trim().toUpperCase();
+    }
+
+    private void replaceWorkRoles(UUID employeeId, List<String> requestedCodes) {
+        List<String> normalizedCodes = normalizeWorkRoleCodes(requestedCodes);
+        Map<String, EmployeeWorkRole> rolesByCode = normalizedCodes.isEmpty()
+                ? Map.of()
+                : employeeWorkRoleRepository.findAllByCodeInAndIsDeletedFalse(normalizedCodes)
+                .stream()
+                .collect(Collectors.toMap(
+                        role -> normalizeWorkRoleCode(role.getCode()),
+                        role -> role,
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+        List<String> missingCodes = normalizedCodes.stream()
+                .filter(code -> !rolesByCode.containsKey(code))
+                .toList();
+        if (!missingCodes.isEmpty()) {
+            throw RestException.badRequest("Employee work role not found: " + String.join(", ", missingCodes));
+        }
+
+        List<EmployeeWorkRoleAssignment> existing = employeeWorkRoleAssignmentRepository
+                .findAllByEmployeeIdAndIsDeletedFalse(employeeId);
+        if (existing == null) {
+            existing = List.of();
+        }
+        Set<UUID> desiredRoleIds = rolesByCode.values().stream()
+                .map(EmployeeWorkRole::getId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<UUID> existingRoleIds = existing.stream()
+                .map(EmployeeWorkRoleAssignment::getWorkRoleId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        for (EmployeeWorkRoleAssignment assignment : existing) {
+            if (!desiredRoleIds.contains(assignment.getWorkRoleId())) {
+                assignment.setDeleted(true);
+                employeeWorkRoleAssignmentRepository.save(assignment);
+            }
+        }
+        for (EmployeeWorkRole role : rolesByCode.values()) {
+            if (!existingRoleIds.contains(role.getId())) {
+                EmployeeWorkRoleAssignment assignment = new EmployeeWorkRoleAssignment();
+                assignment.setEmployeeId(employeeId);
+                assignment.setWorkRoleId(role.getId());
+                employeeWorkRoleAssignmentRepository.save(assignment);
+            }
+        }
+    }
+
+    private List<String> normalizeWorkRoleCodes(List<String> workRoleCodes) {
+        if (workRoleCodes == null || workRoleCodes.isEmpty()) {
+            return List.of();
+        }
+        return workRoleCodes.stream()
+                .map(this::normalizeWorkRoleCode)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    private Map<UUID, List<String>> workRoleCodesByEmployee(List<Employee> employees) {
+        List<UUID> employeeIds = employees.stream()
+                .map(Employee::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (employeeIds.isEmpty()) {
+            return Map.of();
+        }
+        List<EmployeeWorkRoleCodeProjection> rows = employeeWorkRoleAssignmentRepository
+                .findActiveWorkRoleCodesByEmployeeIds(employeeIds);
+        if (rows == null || rows.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<String>> result = new HashMap<>();
+        for (EmployeeWorkRoleCodeProjection row : rows) {
+            if (row.getEmployeeId() == null || row.getCode() == null) {
+                continue;
+            }
+            result.computeIfAbsent(row.getEmployeeId(), ignored -> new ArrayList<>())
+                    .add(row.getCode());
+        }
+        result.replaceAll((employeeId, codes) -> codes.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .sorted(Comparator.naturalOrder())
+                .toList());
+        return result;
     }
 
     private long safe(Long value) {

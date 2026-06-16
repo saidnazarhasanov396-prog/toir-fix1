@@ -4,6 +4,9 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleDocumentDto;
+import com.toir.dto.vehicle.VehicleDrivingSessionResponse;
+import com.toir.dto.vehicle.VehicleDrivingSessionReturnRequest;
+import com.toir.dto.vehicle.VehicleDrivingSessionStartRequest;
 import com.toir.dto.vehicle.VehiclePictureDto;
 import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.entity.equipment.Equipment;
@@ -12,12 +15,14 @@ import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.ErrorType;
+import com.toir.enums.VehicleDrivingSessionStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.VehicleService;
+import com.toir.service.VehicleDrivingSessionService;
 import com.toir.service.VehiclePictureService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +31,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
@@ -37,6 +44,7 @@ import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.method.support.ModelAndViewContainer;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -70,6 +78,9 @@ class VehicleControllerContractTest {
     @Mock
     VehiclePictureService pictureService;
 
+    @Mock
+    VehicleDrivingSessionService drivingSessionService;
+
     private MockMvc mockMvc;
     private UUID currentUserId;
 
@@ -77,7 +88,7 @@ class VehicleControllerContractTest {
     void setUp() {
         currentUserId = UUID.randomUUID();
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new VehicleController(service, scopeAccessService, equipmentRepository, pictureService))
+                .standaloneSetup(new VehicleController(service, scopeAccessService, equipmentRepository, pictureService, drivingSessionService))
                 .setCustomArgumentResolvers(new TestCurrentUserResolver(currentUserId))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -292,6 +303,109 @@ class VehicleControllerContractTest {
                 eq(List.of("PASSPORT", "CERTIFICATE")),
                 eq(List.of("PAS-2024-001", "CERT-2024-015")),
                 any());
+    }
+
+    @Test
+    void startDrivingSessionDelegatesToServiceWithCurrentUser() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        UUID driverId = UUID.randomUUID();
+        Instant startedAt = Instant.parse("2026-06-16T06:00:00Z");
+        VehicleDrivingSessionResponse response = drivingSession(
+                sessionId,
+                equipmentId,
+                driverId,
+                startedAt,
+                null,
+                VehicleDrivingSessionStatus.OPEN
+        );
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(vehicleEquipment(equipmentId, UUID.randomUUID())));
+        when(drivingSessionService.start(eq(equipmentId), any(VehicleDrivingSessionStartRequest.class), eq(currentUserId)))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/vehicles/{equipmentId}/driving-sessions/start", equipmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "driverEmployeeId": "%s",
+                                  "startedAt": "2026-06-16T06:00:00Z",
+                                  "startOdometerKm": 1000,
+                                  "startEngineHours": 200,
+                                  "note": "dispatch"
+                                }
+                                """.formatted(driverId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(sessionId.toString()))
+                .andExpect(jsonPath("$.status").value("OPEN"));
+
+        verify(drivingSessionService).start(eq(equipmentId), any(VehicleDrivingSessionStartRequest.class), eq(currentUserId));
+    }
+
+    @Test
+    void returnDrivingSessionDelegatesToServiceWithCurrentUser() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        UUID driverId = UUID.randomUUID();
+        Instant startedAt = Instant.parse("2026-06-16T06:00:00Z");
+        Instant returnedAt = Instant.parse("2026-06-16T08:30:00Z");
+        VehicleDrivingSessionResponse response = drivingSession(
+                sessionId,
+                equipmentId,
+                driverId,
+                startedAt,
+                returnedAt,
+                VehicleDrivingSessionStatus.RETURNED
+        );
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(vehicleEquipment(equipmentId, UUID.randomUUID())));
+        when(drivingSessionService.returnVehicle(eq(equipmentId), eq(sessionId), any(VehicleDrivingSessionReturnRequest.class), eq(currentUserId)))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/vehicles/{equipmentId}/driving-sessions/{sessionId}/return", equipmentId, sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "returnedAt": "2026-06-16T08:30:00Z",
+                                  "endOdometerKm": 1125,
+                                  "endEngineHours": 225,
+                                  "note": "returned clean"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(sessionId.toString()))
+                .andExpect(jsonPath("$.status").value("RETURNED"));
+
+        verify(drivingSessionService).returnVehicle(eq(equipmentId), eq(sessionId), any(VehicleDrivingSessionReturnRequest.class), eq(currentUserId));
+    }
+
+    @Test
+    void listDrivingSessionsReturnsPagedHistory() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        UUID driverId = UUID.randomUUID();
+        Instant startedAt = Instant.parse("2026-06-16T06:00:00Z");
+        VehicleDrivingSessionResponse response = drivingSession(
+                sessionId,
+                equipmentId,
+                driverId,
+                startedAt,
+                Instant.parse("2026-06-16T08:30:00Z"),
+                VehicleDrivingSessionStatus.RETURNED
+        );
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(vehicleEquipment(equipmentId, UUID.randomUUID())));
+        when(drivingSessionService.history(equipmentId, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/vehicles/{equipmentId}/driving-sessions", equipmentId)
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(sessionId.toString()))
+                .andExpect(jsonPath("$.content[0].driverEmployeeId").value(driverId.toString()));
+
+        verify(drivingSessionService).history(equipmentId, PageRequest.of(0, 20));
     }
 
     @Test
@@ -628,6 +742,35 @@ class VehicleControllerContractTest {
                 LocalDateTime.now(),
                 currentUserId,
                 "/api/v1/vehicles/pictures/" + pictureId + "/download"
+        );
+    }
+
+    private VehicleDrivingSessionResponse drivingSession(
+            UUID sessionId,
+            UUID equipmentId,
+            UUID driverId,
+            Instant startedAt,
+            Instant returnedAt,
+            VehicleDrivingSessionStatus status
+    ) {
+        return new VehicleDrivingSessionResponse(
+                sessionId,
+                equipmentId,
+                driverId,
+                "Ali Driver",
+                startedAt,
+                returnedAt,
+                returnedAt == null ? null : 150L,
+                1_000.0,
+                returnedAt == null ? null : 1_125.0,
+                returnedAt == null ? null : 125.0,
+                200.0,
+                returnedAt == null ? null : 225.0,
+                returnedAt == null ? null : 25.0,
+                status,
+                currentUserId,
+                returnedAt == null ? null : currentUserId,
+                "dispatch"
         );
     }
 

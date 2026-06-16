@@ -6,6 +6,7 @@ import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -33,9 +34,21 @@ public class HrController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean activeOnly,
             @RequestParam(required = false) UUID departmentId,
-            @RequestParam(required = false) UUID brigadeId
+            @RequestParam(required = false) UUID brigadeId,
+            @RequestParam(required = false) String workRoleCode
     ) {
         UUID scopedDepartmentId = securityScope.enforceDepartmentScope(departmentId);
+
+        if (workRoleCode == null || workRoleCode.isBlank()) {
+            return ResponseEntity.ok(service.listEmployees(
+                    page - 1,
+                    size,
+                    search,
+                    activeOnly,
+                    scopedDepartmentId,
+                    brigadeId
+            ));
+        }
 
         return ResponseEntity.ok(service.listEmployees(
                 page - 1,
@@ -43,8 +56,15 @@ public class HrController {
                 search,
                 activeOnly,
                 scopedDepartmentId,
-                brigadeId
+                brigadeId,
+                workRoleCode
         ));
+    }
+
+    @GetMapping("/work-roles")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_READ')")
+    public ResponseEntity<List<EmployeeWorkRoleDto>> listWorkRoles() {
+        return ResponseEntity.ok(service.listWorkRoles());
     }
 
     @GetMapping("/employees/stats")

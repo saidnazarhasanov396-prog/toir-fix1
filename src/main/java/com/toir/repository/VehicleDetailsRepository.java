@@ -66,6 +66,29 @@ public interface VehicleDetailsRepository extends JpaRepository<VehicleDetails, 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM vehicle_details WHERE vin = cast(:vin as varchar) AND is_deleted = false)", nativeQuery = true)
     boolean existsByVinAndIsDeletedFalse(@Param("vin") String vin);
 
+    @Query(value = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM vehicle_details
+                WHERE assigned_driver_id = cast(:driverEmployeeId as uuid)
+                  AND is_deleted = false
+            )
+            """, nativeQuery = true)
+    boolean existsByAssignedDriverIdAndIsDeletedFalse(@Param("driverEmployeeId") UUID driverEmployeeId);
+
+    @Query(value = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM vehicle_details
+                WHERE assigned_driver_id = cast(:driverEmployeeId as uuid)
+                  AND equipment_id <> cast(:equipmentId as uuid)
+                  AND is_deleted = false
+            )
+            """, nativeQuery = true)
+    boolean existsAssignedDriverOnAnotherVehicle(
+            @Param("driverEmployeeId") UUID driverEmployeeId,
+            @Param("equipmentId") UUID equipmentId
+    );
 
     @Query("""
         select
