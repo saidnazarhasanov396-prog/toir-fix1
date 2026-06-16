@@ -6,6 +6,7 @@ import com.toir.dto.approval.ApprovalHistoryDto;
 import com.toir.dto.approval.ApprovalStatisticsDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
+import com.toir.dto.approval.ReturnApprovalRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.entity.users.User;
@@ -329,6 +330,77 @@ public class ApprovalService {
     }
 
     @Transactional
+    public ApprovalRequestDto returnToStep(UUID requestId, ReturnApprovalRequest returnRequest) {
+        ApprovalRequest request = getOrThrow(requestId);
+        expireIfNeeded(request);
+        if (request.getStatus() != ApprovalStatus.PENDING) {
+            throw RestException.conflict("Request is not pending: " + request.getStatus());
+        }
+        if (request.isExecuted()) {
+            throw RestException.conflict("Executed approvals cannot be returned");
+        }
+        if (!StringUtils.hasText(returnRequest.comment())) {
+            throw RestException.badRequest("comment is required");
+        }
+
+        ApprovalStep current = currentStepOrThrow(request);
+        UUID delegatedForId = assertCanActOnCurrentStep(request, current, returnRequest.approverId());
+        int currentStep = request.getCurrentStep();
+        int returnToStep = returnRequest.returnToStep();
+        if (returnToStep >= currentStep) {
+            throw RestException.badRequest("returnToStep must be less than currentStep");
+        }
+        if (returnToStep < 1) {
+            throw RestException.badRequest("returnToStep must be greater than or equal to 1");
+        }
+        boolean returnStepExists = request.getSteps().stream()
+                .anyMatch(step -> step.getStepNumber() == returnToStep);
+        if (!returnStepExists) {
+            throw RestException.badRequest("returnToStep does not exist: " + returnToStep);
+        }
+
+        Instant returnedAt = Instant.now();
+        request.setCurrentStep(returnToStep);
+        request.setStatus(ApprovalStatus.PENDING);
+        request.setLastReturnedAt(returnedAt);
+        request.setLastReturnedBy(returnRequest.approverId());
+        request.setLastReturnComment(returnRequest.comment());
+        request.getSteps().stream()
+                .filter(step -> step.getStepNumber() >= returnToStep)
+                .forEach(step -> {
+                    step.setDecision(ApprovalDecision.PENDING);
+                    step.setDecidedById(null);
+                    step.setDelegatedForId(null);
+                    step.setDecidedAt(null);
+                    step.setComment(null);
+                });
+
+        ApprovalRequest saved = requestRepository.save(request);
+        governanceService.record(
+                saved,
+                ApprovalStatus.PENDING,
+                ApprovalStatus.PENDING,
+                returnRequest.approverId(),
+                delegatedForId,
+                "Returned from step " + currentStep + " to step " + returnToStep + ": " + returnRequest.comment(),
+                ApprovalActionType.RETURNED_TO_STEP
+        );
+        notifyReturned(saved, currentStep, returnToStep);
+
+        auditBuilderService.log(
+                "approval_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.APPROVAL_REQUEST,
+                "Р—Р°СЏРІРєР° РЅР° СЃРѕРіР»Р°СЃРѕРІР°РЅРёРµ РѕР±РЅРѕРІР»РµРЅР°",
+                request,
+                saved
+        );
+
+        return toDto(saved);
+    }
+
+    @Transactional
     public ApprovalRequestDto cancel(UUID requestId) {
         ApprovalRequest request = getOrThrow(requestId);
         approvalScopeService.assertCanCancelApproval(request);
@@ -367,17 +439,8 @@ public class ApprovalService {
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
         }
-        ApprovalStep current = request.getSteps().stream()
-                .filter(s -> s.getStepNumber() == request.getCurrentStep())
-                .findFirst()
-                .orElseThrow(() -> RestException.conflict("No current step"));
-        boolean designatedApprover = current.getApproverId().equals(decision.approverId());
-        boolean delegateApprover = isActiveDelegate(current.getApproverId(), decision.approverId());
-        if (designatedApprover) {
-            approvalScopeService.assertCanDecideApproval(request, current);
-        } else if (!delegateApprover || !matchesCurrentPrincipal(decision.approverId())) {
-            throw RestException.forbidden("Only designated approver can act on this step");
-        }
+        ApprovalStep current = currentStepOrThrow(request);
+        boolean delegateApprover = assertCanActOnCurrentStep(request, current, decision.approverId()) != null;
         current.setDecision(outcome);
         current.setDecidedById(decision.approverId());
         current.setDelegatedForId(delegateApprover ? current.getApproverId() : null);
@@ -428,6 +491,26 @@ public class ApprovalService {
 
 
         return toDto(request);
+    }
+
+    private ApprovalStep currentStepOrThrow(ApprovalRequest request) {
+        return request.getSteps().stream()
+                .filter(s -> s.getStepNumber() == request.getCurrentStep())
+                .findFirst()
+                .orElseThrow(() -> RestException.conflict("No current step"));
+    }
+
+    private UUID assertCanActOnCurrentStep(ApprovalRequest request, ApprovalStep current, UUID actorId) {
+        boolean designatedApprover = current.getApproverId().equals(actorId);
+        boolean delegateApprover = isActiveDelegate(current.getApproverId(), actorId);
+        if (designatedApprover) {
+            approvalScopeService.assertCanDecideApproval(request, current);
+            return null;
+        }
+        if (!delegateApprover || !matchesCurrentPrincipal(actorId)) {
+            throw RestException.forbidden("Only designated approver can act on this step");
+        }
+        return current.getApproverId();
     }
 
     private void executeTerminalAction(ApprovalRequest request, ApprovalDecision outcome) {
@@ -622,6 +705,29 @@ public class ApprovalService {
         );
     }
 
+    private void notifyReturned(ApprovalRequest request, int fromStep, int returnToStep) {
+        String message = "Approval was returned to step " + returnToStep + " for correction.";
+        notificationService.notifyUser(
+                request.getRequesterId(),
+                "Approval returned: " + request.getTitle(),
+                message,
+                NotificationSeverity.WARNING,
+                notificationEntityType(request.getDocumentType()),
+                request.getDocumentId() == null ? null : request.getDocumentId().toString()
+        );
+        request.getSteps().stream()
+                .filter(step -> step.getStepNumber() == returnToStep)
+                .findFirst()
+                .ifPresent(step -> notificationService.notifyUser(
+                        step.getApproverId(),
+                        "Approval returned to your step: " + request.getTitle(),
+                        message,
+                        NotificationSeverity.INFO,
+                        "ApprovalRequest",
+                        request.getId() == null ? null : request.getId().toString()
+                ));
+    }
+
     private String notificationEntityType(String documentType) {
         return switch (normalizeDocumentType(documentType)) {
             case "WORK_ORDER" -> "WorkOrder";
@@ -732,7 +838,11 @@ public class ApprovalService {
                         request.getTitle(),
                         null,
                         request.getStatus() == null ? null : request.getStatus().name(),
-                        targetUrl));
+                        targetUrl),
+                request.getLastReturnedAt() != null,
+                request.getLastReturnedAt(),
+                request.getLastReturnedBy(),
+                request.getLastReturnComment());
     }
 
     private String userName(UUID userId) {

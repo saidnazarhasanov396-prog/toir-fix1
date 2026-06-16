@@ -107,6 +107,7 @@ public final class PermissionConstants {
     public static final String APPROVAL_CREATE = "APPROVAL_CREATE";
     public static final String APPROVAL_APPROVE = "APPROVAL_APPROVE";
     public static final String APPROVAL_REJECT = "APPROVAL_REJECT";
+    public static final String APPROVAL_RETURN = "APPROVAL_RETURN";
     public static final String APPROVAL_CANCEL = "APPROVAL_CANCEL";
     public static final String APPROVAL_UPDATE = "APPROVAL_UPDATE";
 

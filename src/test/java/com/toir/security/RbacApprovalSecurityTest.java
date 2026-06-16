@@ -43,6 +43,7 @@ class RbacApprovalSecurityTest {
     private static final String APPROVAL_CREATE = "APPROVAL_CREATE";
     private static final String APPROVAL_APPROVE = "APPROVAL_APPROVE";
     private static final String APPROVAL_REJECT = "APPROVAL_REJECT";
+    private static final String APPROVAL_RETURN = "APPROVAL_RETURN";
     private static final String APPROVAL_CANCEL = "APPROVAL_CANCEL";
 
     @Autowired
@@ -222,6 +223,18 @@ class RbacApprovalSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = APPROVAL_RETURN)
+    void approvalReturnCanReturnApproval() throws Exception {
+        UUID approvalId = UUID.randomUUID();
+        when(approvalService.returnToStep(any(), any())).thenReturn(approvalDto(approvalId));
+
+        mockMvc.perform(post("/api/v1/approvals/{id}/return", approvalId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(returnPayload()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @WithMockUser(authorities = APPROVAL_CANCEL)
     void approvalCancelCanCancelApproval() throws Exception {
         UUID approvalId = UUID.randomUUID();
@@ -247,6 +260,10 @@ class RbacApprovalSecurityTest {
         mockMvc.perform(post("/api/v1/approvals/{id}/reject", approvalId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(decisionPayload()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/approvals/{id}/return", approvalId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(returnPayload()))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/approvals/{id}/cancel", approvalId))
                 .andExpect(status().isForbidden());
@@ -315,6 +332,16 @@ class RbacApprovalSecurityTest {
                 {
                   "approverId": "33333333-3333-3333-3333-333333333333",
                   "comment": "Reviewed"
+                }
+                """;
+    }
+
+    private String returnPayload() {
+        return """
+                {
+                  "approverId": "33333333-3333-3333-3333-333333333333",
+                  "returnToStep": 1,
+                  "comment": "Needs correction"
                 }
                 """;
     }
