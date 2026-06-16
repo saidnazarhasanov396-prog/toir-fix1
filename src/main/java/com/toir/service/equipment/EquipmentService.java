@@ -26,6 +26,7 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.AuditAction;
+import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentOutsideReason;
@@ -400,6 +401,7 @@ public class EquipmentService {
     ) {
         getOrThrow(equipmentId);
         validateEquipmentDocumentFiles(files);
+        equipmentGroupOrThrow(equipmentId, documentId, user);
         AttachmentGroupDto group = attachmentGroupService.addFiles(documentId, files, null, user);
         return EquipmentDocumentDto.fromAttachmentGroup(equipmentId, group);
     }
@@ -417,20 +419,20 @@ public class EquipmentService {
     @Transactional(readOnly = true)
     public EquipmentDocumentDto getDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
         getOrThrow(equipmentId);
-        return EquipmentDocumentDto.fromAttachmentGroup(equipmentId, attachmentGroupService.getGroup(documentId, user));
+        return EquipmentDocumentDto.fromAttachmentGroup(equipmentId, equipmentGroupOrThrow(equipmentId, documentId, user));
     }
 
     @Transactional(readOnly = true)
     public PresignedUrlResponse getDocumentPresignedUrl(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
         getOrThrow(equipmentId);
-        AttachmentGroupDto group = attachmentGroupService.getGroup(documentId, user);
+        AttachmentGroupDto group = equipmentGroupOrThrow(equipmentId, documentId, user);
         return attachmentGroupService.getFilePresignedUrl(documentId, primaryFile(group).fileId(), user);
     }
 
     @Transactional(readOnly = true)
     public Resource downloadDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
         getOrThrow(equipmentId);
-        AttachmentGroupDto group = attachmentGroupService.getGroup(documentId, user);
+        AttachmentGroupDto group = equipmentGroupOrThrow(equipmentId, documentId, user);
         return attachmentGroupService.downloadFile(documentId, primaryFile(group).fileId(), user);
     }
 
@@ -442,6 +444,7 @@ public class EquipmentService {
             AuthenticatedUser user
     ) {
         getOrThrow(equipmentId);
+        equipmentGroupOrThrow(equipmentId, documentId, user);
         return attachmentGroupService.getFilePresignedUrl(documentId, fileId, user);
     }
 
@@ -453,18 +456,21 @@ public class EquipmentService {
             AuthenticatedUser user
     ) {
         getOrThrow(equipmentId);
+        equipmentGroupOrThrow(equipmentId, documentId, user);
         return attachmentGroupService.downloadFile(documentId, fileId, user);
     }
 
     @Transactional
     public void deleteDocument(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
         getOrThrow(equipmentId);
+        equipmentGroupOrThrow(equipmentId, documentId, user);
         attachmentGroupService.deleteGroup(documentId, user);
     }
 
     @Transactional
     public void deleteDocumentFile(UUID equipmentId, UUID documentId, UUID fileId, AuthenticatedUser user) {
         getOrThrow(equipmentId);
+        equipmentGroupOrThrow(equipmentId, documentId, user);
         attachmentGroupService.removeFile(documentId, fileId, user);
     }
 
@@ -1369,6 +1375,16 @@ public class EquipmentService {
     ) {}
 
     private List<EquipmentDocumentDto> equipmentDocuments(UUID equipmentId) {
+        Optional<AuthenticatedUser> currentUser = scopeAccessService == null
+                ? Optional.empty()
+                : Optional.ofNullable(scopeAccessService.currentUser()).orElse(Optional.empty());
+        if (currentUser.isPresent()) {
+            return attachmentGroupService.listGroups("EQUIPMENT", equipmentId, currentUser.get())
+                    .stream()
+                    .map(group -> EquipmentDocumentDto.fromAttachmentGroup(equipmentId, group))
+                    .filter(Objects::nonNull)
+                    .toList();
+        }
         if (equipmentDocumentRepository == null) {
             return List.of();
         }
@@ -1377,6 +1393,15 @@ public class EquipmentService {
                 .map(document -> EquipmentDocumentDto.from(equipmentId, document))
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    private AttachmentGroupDto equipmentGroupOrThrow(UUID equipmentId, UUID documentId, AuthenticatedUser user) {
+        AttachmentGroupDto group = attachmentGroupService.getGroup(documentId, user);
+        if (group.targetType() != AttachmentTargetType.EQUIPMENT
+                || !Objects.equals(group.targetId(), equipmentId)) {
+            throw RestException.notFound("Equipment document not found: " + documentId);
+        }
+        return group;
     }
 
     private EquipmentDocument findEquipmentDocument(UUID equipmentId, UUID documentId) {

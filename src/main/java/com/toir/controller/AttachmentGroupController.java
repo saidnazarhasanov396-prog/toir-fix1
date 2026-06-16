@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.file.PresignedUrlResponse;
+import com.toir.enums.AttachmentTargetType;
 import com.toir.exception.RestException;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
@@ -15,7 +16,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -51,12 +55,25 @@ public class AttachmentGroupController {
             @RequestParam(required = false) String description,
             @RequestParam String targetType,
             @RequestParam UUID targetId,
+            @RequestParam(required = false) String documentType,
+            @RequestParam(required = false) String documentNumber,
             @RequestParam("files") List<MultipartFile> files,
             @RequestParam(value = "labels", required = false) List<String> labels,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanMutateTarget(AttachmentTargetType.from(targetType));
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(service.createGroup(title, description, targetType, targetId, files, labels, user));
+                .body(service.createGroup(
+                        title,
+                        description,
+                        targetType,
+                        targetId,
+                        documentType,
+                        documentNumber,
+                        files,
+                        labels,
+                        user
+                ));
     }
 
     @PostMapping(value = "/{groupId}/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -74,6 +91,7 @@ public class AttachmentGroupController {
             @RequestParam(value = "labels", required = false) List<String> labels,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanMutateTarget(service.getGroup(groupId, user).targetType());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(service.addFiles(groupId, files, labels, user));
     }
@@ -161,6 +179,7 @@ public class AttachmentGroupController {
             @PathVariable UUID groupId,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanMutateTarget(service.getGroup(groupId, user).targetType());
         service.deleteGroup(groupId, user);
         return ResponseEntity.noContent().build();
     }
@@ -178,7 +197,31 @@ public class AttachmentGroupController {
             @PathVariable UUID fileId,
             @CurrentUser AuthenticatedUser user
     ) {
+        assertCanMutateTarget(service.getGroup(groupId, user).targetType());
         service.removeFile(groupId, fileId, user);
         return ResponseEntity.noContent().build();
+    }
+
+    private void assertCanMutateTarget(AttachmentTargetType targetType) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (hasAuthority(authentication, "SYSTEM_ADMIN") || hasAuthority(authentication, "*")) {
+            return;
+        }
+        String requiredAuthority = switch (targetType) {
+            case EQUIPMENT, VEHICLE -> "EQUIPMENT_UPDATE";
+            case WORK_ORDER, COMPLETION_ACT -> "WORK_ORDER_UPDATE";
+            case REPAIR_REQUEST -> "REPAIR_REQUEST_UPDATE";
+            case APPROVAL -> "APPROVAL_UPDATE";
+            case STOCK_MOVEMENT -> null;
+        };
+        if (requiredAuthority == null || !hasAuthority(authentication, requiredAuthority)) {
+            throw new AccessDeniedException("Access denied by attachment target permission");
+        }
+    }
+
+    private boolean hasAuthority(Authentication authentication, String authority) {
+        return authentication != null
+                && authentication.getAuthorities().stream()
+                .anyMatch(item -> authority.equals(item.getAuthority()));
     }
 }

@@ -1,4 +1,6 @@
 package com.toir.controller;
+
+import com.toir.dto.stockmovement.StockMovementDocumentDto;
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementFileDto;
 import com.toir.dto.stockmovement.StockMovementIssueRequest;
@@ -71,6 +73,59 @@ public class StockMovementController {
             @CurrentUser AuthenticatedUser user
     ) {
         return ResponseEntity.ok(service.listFiles(id, user));
+    }
+
+    @GetMapping("/{id}/documents")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<List<StockMovementDocumentDto>> listDocuments(
+            @PathVariable UUID id,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        return ResponseEntity.ok(service.listDocuments(id, user));
+    }
+
+    @GetMapping("/{id}/documents/{documentId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<StockMovementDocumentDto> getDocument(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        return ResponseEntity.ok(service.getDocument(id, documentId, user));
+    }
+
+    @PostMapping(value = "/{id}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("""
+            hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or
+            hasAuthority('STOCK_RECEIVE') or hasAuthority('STOCK_ISSUE')
+            """)
+    public ResponseEntity<StockMovementDocumentDto> attachDocument(
+            @PathVariable UUID id,
+            @RequestParam("files") List<MultipartFile> files,
+            @RequestParam("documentName") String documentName,
+            @RequestParam(required = false) String documentType,
+            @RequestParam(required = false) String documentNumber,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanModifyMovementFiles(id);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.attachDocument(id, files, documentName, documentType, documentNumber, user));
+    }
+
+    @PostMapping(value = "/{id}/documents/{documentId}/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("""
+            hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or
+            hasAuthority('STOCK_RECEIVE') or hasAuthority('STOCK_ISSUE')
+            """)
+    public ResponseEntity<StockMovementDocumentDto> attachDocumentFiles(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId,
+            @RequestParam("files") List<MultipartFile> files,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanModifyMovementFiles(id);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.attachDocumentFiles(id, documentId, files, user));
     }
 
     @PostMapping(value = "/{id}/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

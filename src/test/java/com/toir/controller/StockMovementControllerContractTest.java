@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.dto.stockmovement.StockMovementFileDto;
+import com.toir.dto.stockmovement.StockMovementDocumentDto;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.security.AuthenticatedUser;
@@ -87,6 +88,49 @@ class StockMovementControllerContractTest {
     }
 
     @Test
+    void attachDocumentCreatesNamedMultiFileDocument() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID movementId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID frontFileId = UUID.randomUUID();
+        UUID backFileId = UUID.randomUUID();
+        authenticate(userId);
+        when(service.movementType(movementId)).thenReturn(StockMovementType.RECEIPT);
+        when(service.attachDocument(
+                eq(movementId),
+                any(),
+                eq("Invoice"),
+                eq("RECEIPT_ACT"),
+                eq("INV-2026-001"),
+                any()
+        )).thenReturn(stockMovementDocument(documentId, frontFileId, backFileId));
+
+        mockMvc.perform(multipart("/api/v1/stock-movements/{movementId}/documents", movementId)
+                        .file(new MockMultipartFile("files", "invoice-front.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .file(new MockMultipartFile("files", "invoice-back.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .param("documentName", "Invoice")
+                        .param("documentType", "RECEIPT_ACT")
+                        .param("documentNumber", "INV-2026-001"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(documentId.toString()))
+                .andExpect(jsonPath("$.documentName").value("Invoice"))
+                .andExpect(jsonPath("$.documentType").value("RECEIPT_ACT"))
+                .andExpect(jsonPath("$.documentNumber").value("INV-2026-001"))
+                .andExpect(jsonPath("$.files.length()").value(2))
+                .andExpect(jsonPath("$.files[0].id").value(frontFileId.toString()))
+                .andExpect(jsonPath("$.files[1].id").value(backFileId.toString()));
+
+        verify(service).attachDocument(
+                eq(movementId),
+                any(),
+                eq("Invoice"),
+                eq("RECEIPT_ACT"),
+                eq("INV-2026-001"),
+                any(AuthenticatedUser.class)
+        );
+    }
+
+    @Test
     void listDownloadAndDeleteUseFileLevelEndpoints() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID movementId = UUID.randomUUID();
@@ -127,6 +171,20 @@ class StockMovementControllerContractTest {
                 contentType,
                 size,
                 "/api/v1/stock-movements/movement-1/files/" + id + "/download"
+        );
+    }
+
+    private StockMovementDocumentDto stockMovementDocument(UUID documentId, UUID frontFileId, UUID backFileId) {
+        return new StockMovementDocumentDto(
+                documentId,
+                "Invoice",
+                "RECEIPT_ACT",
+                "INV-2026-001",
+                java.time.LocalDateTime.now(),
+                List.of(
+                        stockMovementFile(frontFileId, "invoice-front.pdf", "application/pdf", 100L),
+                        stockMovementFile(backFileId, "invoice-back.pdf", "application/pdf", 100L)
+                )
         );
     }
 

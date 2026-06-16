@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.file.UploadFileResponse;
+import com.toir.dto.stockmovement.StockMovementDocumentDto;
 import com.toir.dto.stockmovement.StockMovementDto;
 import com.toir.dto.stockmovement.StockMovementFileDto;
 import com.toir.dto.stockmovement.StockMovementIssueRequest;
@@ -48,6 +49,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Slf4j
@@ -275,6 +277,26 @@ public class StockMovementService {
     }
 
     @Transactional(readOnly = true)
+    public List<StockMovementDocumentDto> listDocuments(UUID movementId, AuthenticatedUser user) {
+        StockMovement movement = movementOrThrow(movementId);
+        assertCanAccessWarehouseId(movement.getWarehouseId());
+        return attachmentGroupService.listGroups("STOCK_MOVEMENT", movementId, user)
+                .stream()
+                .map(group -> StockMovementDocumentDto.fromAttachmentGroup(movementId, group))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public StockMovementDocumentDto getDocument(UUID movementId, UUID documentId, AuthenticatedUser user) {
+        StockMovement movement = movementOrThrow(movementId);
+        assertCanAccessWarehouseId(movement.getWarehouseId());
+        return StockMovementDocumentDto.fromAttachmentGroup(
+                movementId,
+                stockMovementGroupOrThrow(movementId, documentId, user)
+        );
+    }
+
+    @Transactional(readOnly = true)
     public StockMovementFileDto getFile(UUID movementId, UUID fileId, AuthenticatedUser user) {
         StockMovement movement = movementOrThrow(movementId);
         assertCanAccessWarehouseId(movement.getWarehouseId());
@@ -292,6 +314,56 @@ public class StockMovementService {
     }
 
     @Transactional
+    public StockMovementDocumentDto attachDocument(
+            UUID movementId,
+            List<MultipartFile> files,
+            String documentName,
+            String documentType,
+            String documentNumber,
+            AuthenticatedUser user
+    ) {
+        StockMovement movement = movementOrThrow(movementId);
+        assertSupportedFileMovement(movement.getType());
+        assertCanAccessWarehouseId(movement.getWarehouseId());
+        validateStockMovementFiles(files);
+        List<AttachmentGroupDto> groups = attachmentGroupService.listGroups("STOCK_MOVEMENT", movementId, user);
+        long existingCount = groups.stream().mapToLong(group -> group.files().size()).sum();
+        validateStockMovementFileLimit(existingCount + files.size());
+
+        AttachmentGroupDto group = attachmentGroupService.createGroup(
+                normalizeDocumentName(documentName),
+                null,
+                "STOCK_MOVEMENT",
+                movementId,
+                normalizeDocumentType(documentType),
+                normalizeDocumentNumber(documentNumber),
+                files,
+                null,
+                user
+        );
+        return StockMovementDocumentDto.fromAttachmentGroup(movementId, group);
+    }
+
+    @Transactional
+    public StockMovementDocumentDto attachDocumentFiles(
+            UUID movementId,
+            UUID documentId,
+            List<MultipartFile> files,
+            AuthenticatedUser user
+    ) {
+        StockMovement movement = movementOrThrow(movementId);
+        assertSupportedFileMovement(movement.getType());
+        assertCanAccessWarehouseId(movement.getWarehouseId());
+        validateStockMovementFiles(files);
+        stockMovementGroupOrThrow(movementId, documentId, user);
+        List<AttachmentGroupDto> groups = attachmentGroupService.listGroups("STOCK_MOVEMENT", movementId, user);
+        long existingCount = groups.stream().mapToLong(group -> group.files().size()).sum();
+        validateStockMovementFileLimit(existingCount + files.size());
+        AttachmentGroupDto group = attachmentGroupService.addFiles(documentId, files, null, user);
+        return StockMovementDocumentDto.fromAttachmentGroup(movementId, group);
+    }
+
+    @Transactional
     public List<StockMovementFileDto> attachFiles(
             UUID movementId,
             List<MultipartFile> files,
@@ -305,6 +377,7 @@ public class StockMovementService {
         long existingCount = groups.stream().mapToLong(group -> group.files().size()).sum();
         validateStockMovementFileLimit(existingCount + files.size());
 
+        long existingSelectedGroupCount = groups.isEmpty() ? 0L : groups.getFirst().files().size();
         AttachmentGroupDto group = groups.isEmpty()
                 ? attachmentGroupService.createGroup(
                 "Stock movement documents",
@@ -317,7 +390,7 @@ public class StockMovementService {
         )
                 : attachmentGroupService.addFiles(groups.getFirst().id(), files, null, user);
         return group.files().stream()
-                .skip(existingCount)
+                .skip(existingSelectedGroupCount)
                 .map(file -> StockMovementFileDto.fromAttachmentFile(movementId, file))
                 .toList();
     }
@@ -346,6 +419,15 @@ public class StockMovementService {
     private StockMovement movementOrThrow(UUID movementId) {
         return repository.findByIdAndIsDeletedFalse(movementId)
                 .orElseThrow(() -> RestException.notFound("Stock movement not found: " + movementId));
+    }
+
+    private AttachmentGroupDto stockMovementGroupOrThrow(UUID movementId, UUID documentId, AuthenticatedUser user) {
+        AttachmentGroupDto group = attachmentGroupService.getGroup(documentId, user);
+        if (group.targetType() != AttachmentTargetType.STOCK_MOVEMENT
+                || !Objects.equals(group.targetId(), movementId)) {
+            throw RestException.notFound("Stock movement document not found: " + documentId);
+        }
+        return group;
     }
 
     private StockMovementFile findStockMovementFile(UUID movementId, UUID fileId) {
@@ -378,6 +460,33 @@ public class StockMovementService {
         if (fileCount > MAX_STOCK_MOVEMENT_FILES) {
             throw RestException.badRequest("A stock movement cannot contain more than 25 files");
         }
+    }
+
+    private String normalizeDocumentName(String documentName) {
+        String normalized = trimToNull(documentName);
+        if (normalized == null) {
+            throw RestException.badRequest("documentName is required for stock movement document uploads");
+        }
+        if (normalized.length() > 255) {
+            throw RestException.badRequest("documentName must be 255 characters or fewer");
+        }
+        return normalized;
+    }
+
+    private String normalizeDocumentType(String documentType) {
+        String normalized = trimToNull(documentType);
+        if (normalized != null && normalized.length() > 64) {
+            throw RestException.badRequest("documentType must be 64 characters or fewer");
+        }
+        return normalized;
+    }
+
+    private String normalizeDocumentNumber(String documentNumber) {
+        String normalized = trimToNull(documentNumber);
+        if (normalized != null && normalized.length() > 128) {
+            throw RestException.badRequest("documentNumber must be 128 characters or fewer");
+        }
+        return normalized;
     }
 
     private void cleanupUploadedFiles(List<UUID> fileIds, UUID currentUserId) {
