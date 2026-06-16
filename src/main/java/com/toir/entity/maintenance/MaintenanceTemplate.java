@@ -6,7 +6,9 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -29,6 +31,15 @@ public class MaintenanceTemplate extends BaseEntity {
     @Column(name = "equipment_type_id", nullable = false)
     private UUID equipmentTypeId;
 
+    @Builder.Default
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(
+            name = "maintenance_template_equipment_types",
+            joinColumns = @JoinColumn(name = "template_id")
+    )
+    @Column(name = "equipment_type_id")
+    private Set<UUID> equipmentTypeIds = new LinkedHashSet<>();
+
     @Enumerated(EnumType.STRING)
     @Column(name = "maintenance_kind", nullable = false)
     private MaintenanceKind maintenanceKind;
@@ -39,6 +50,7 @@ public class MaintenanceTemplate extends BaseEntity {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
+    @Builder.Default
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sequence ASC")
     private List<MaintenanceOperation> operations = new ArrayList<>();

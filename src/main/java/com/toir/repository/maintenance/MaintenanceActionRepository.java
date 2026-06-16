@@ -1,6 +1,7 @@
 package com.toir.repository.maintenance;
 
 import com.toir.entity.maintenance.MaintenanceAction;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,6 +15,9 @@ public interface MaintenanceActionRepository extends JpaRepository<MaintenanceAc
 
     @Query(value = "SELECT * FROM maintenance_actions WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<MaintenanceAction> findByIdAndIsDeletedFalse(@Param("id") UUID id);
+
+    @Query(value = "SELECT * FROM maintenance_actions WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
+    List<MaintenanceAction> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
     @Query(value = """
             SELECT * FROM maintenance_actions

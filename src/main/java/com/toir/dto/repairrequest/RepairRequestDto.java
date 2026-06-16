@@ -18,6 +18,9 @@ public record RepairRequestDto(
         String title,
         String description,
         UUID templateId,
+        List<UUID> templateIds,
+        List<RepairRequestTemplateSummaryDto> templates,
+        List<RepairRequestActionReferenceDto> actionReferences,
         UUID equipmentId,
         String equipmentName,
         UUID departmentId,
@@ -69,7 +72,7 @@ public record RepairRequestDto(
             List<DefectBriefDto> linkedDefects,
             List<WorkOrderBriefDto> linkedWorkOrders
     ) {
-        this(id, number, title, description, templateId, equipmentId, equipmentName, departmentId, departmentName,
+        this(id, number, title, description, templateId, List.of(), List.of(), List.of(), equipmentId, equipmentName, departmentId, departmentName,
                 locationName, reporterId, reporterName, assignedToId, priority, criticality, status, source,
                 detectedAt, targetCompletionAt, actualCompletionAt, reactedAt, rejectionReason,
                 clarificationReason, closeResult, linkedDefects, linkedWorkOrders, List.of());
@@ -102,13 +105,16 @@ public record RepairRequestDto(
             List<DefectBriefDto> linkedDefects,
             List<WorkOrderBriefDto> linkedWorkOrders
     ) {
-        this(id, number, title, description, null, equipmentId, equipmentName, departmentId, departmentName,
+        this(id, number, title, description, null, List.of(), List.of(), List.of(), equipmentId, equipmentName, departmentId, departmentName,
                 locationName, reporterId, reporterName, assignedToId, priority, criticality, status, source,
                 detectedAt, targetCompletionAt, actualCompletionAt, reactedAt, rejectionReason,
                 clarificationReason, closeResult, linkedDefects, linkedWorkOrders, List.of());
     }
 
     public RepairRequestDto {
+        templateIds = templateIds == null ? List.of() : List.copyOf(templateIds);
+        templates = templates == null ? List.of() : List.copyOf(templates);
+        actionReferences = actionReferences == null ? List.of() : List.copyOf(actionReferences);
         linkedDefects = linkedDefects == null ? List.of() : List.copyOf(linkedDefects);
         linkedWorkOrders = linkedWorkOrders == null ? List.of() : List.copyOf(linkedWorkOrders);
         meterReadings = meterReadings == null ? List.of() : List.copyOf(meterReadings);

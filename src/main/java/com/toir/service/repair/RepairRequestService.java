@@ -13,8 +13,13 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.equipment.MeterReading;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
+import com.toir.entity.maintenance.MaintenanceAction;
+import com.toir.entity.maintenance.MaintenanceOperation;
+import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.repair.RepairRequestTemplate;
+import com.toir.entity.repair.RepairRequestTemplateAction;
 import com.toir.entity.users.User;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.TriadLinkMapper;
@@ -35,9 +40,13 @@ import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
+import com.toir.repository.maintenance.MaintenanceActionRepository;
+import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
+import com.toir.repository.repair.RepairRequestTemplateActionRepository;
+import com.toir.repository.repair.RepairRequestTemplateRepository;
 import com.toir.repository.users.UserRepository;
 
 import com.toir.enums.AuditAction;
@@ -53,9 +62,11 @@ import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import com.toir.exception.RestException;
 import com.toir.dto.repairrequest.CloseRequestRequest;
+import com.toir.dto.repairrequest.RepairRequestActionReferenceDto;
 import com.toir.dto.repairrequest.RepairRequestClarificationRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
+import com.toir.dto.repairrequest.RepairRequestTemplateSummaryDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -65,11 +76,16 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.Year;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -88,6 +104,10 @@ public class RepairRequestService {
     private final NotificationService notificationService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final MaintenanceTemplateRepository maintenanceTemplateRepository;
+    private final MaintenanceOperationRepository maintenanceOperationRepository;
+    private final MaintenanceActionRepository maintenanceActionRepository;
+    private final RepairRequestTemplateRepository repairRequestTemplateRepository;
+    private final RepairRequestTemplateActionRepository repairRequestTemplateActionRepository;
     private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
     private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
     private final EquipmentMeterRepository equipmentMeterRepository;
@@ -169,14 +189,16 @@ public class RepairRequestService {
         if (request.defectId() != null && !inlineDefects.isEmpty()) {
             throw RestException.badRequest("Use either defectId or inline defects, not both");
         }
-        validateMaintenanceTemplate(request.templateId());
+        List<NormalizedTemplateSelection> templateSelections = normalizeTemplateSelections(request);
         Defect defect = getDefectForCreate(request);
 
         RepairRequest entity = new RepairRequest();
         entity.setNumber(request.number());
         entity.setTitle(request.title());
         entity.setDescription(request.description());
-        entity.setTemplateId(request.templateId());
+        entity.setTemplateId(templateSelections.isEmpty()
+                ? null
+                : templateSelections.getFirst().template().getId());
         entity.setEquipmentId(request.equipmentId());
         entity.setDepartmentId(effectiveDepartmentId);
         entity.setLocationId(request.locationId());
@@ -192,6 +214,7 @@ public class RepairRequestService {
             defectRepository.save(defect);
         }
         createInlineDefects(saved, inlineDefects);
+        persistTemplateSelections(saved, templateSelections);
 
         auditBuilderService.log(
                 "repair_request",
@@ -213,6 +236,297 @@ public class RepairRequestService {
         );
 
         return toDtoWithLinks(saved);
+    }
+
+    private List<NormalizedTemplateSelection> normalizeTemplateSelections(RepairRequestRequest request) {
+        if (request.templateSelections() != null && !request.templateSelections().isEmpty()) {
+            return normalizeExplicitTemplateSelections(request.templateSelections());
+        }
+        List<UUID> templateIds = distinctTemplateIds(request.templateIds());
+        if (templateIds.isEmpty() && request.templateId() != null) {
+            templateIds = List.of(request.templateId());
+        }
+        if (templateIds.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, MaintenanceTemplate> templates = loadAndValidateTemplates(templateIds);
+        Map<UUID, List<MaintenanceOperation>> operationsByTemplate = loadOperationsByTemplate(templateIds);
+        List<NormalizedTemplateSelection> selections = new ArrayList<>();
+        int templateSequence = 1;
+        for (UUID templateId : templateIds) {
+            MaintenanceTemplate template = templates.get(templateId);
+            List<NormalizedActionSelection> actions = new ArrayList<>();
+            int actionSequence = 1;
+            for (MaintenanceOperation operation : operationsByTemplate.getOrDefault(templateId, List.of())) {
+                actions.add(actionFromOperation(templateId, operation, actionSequence++));
+            }
+            selections.add(new NormalizedTemplateSelection(template, List.copyOf(actions), templateSequence++));
+        }
+        return List.copyOf(selections);
+    }
+
+    private List<NormalizedTemplateSelection> normalizeExplicitTemplateSelections(
+            List<RepairRequestRequest.TemplateSelectionRequest> requestSelections
+    ) {
+        List<RepairRequestRequest.TemplateSelectionRequest> safeSelections = requestSelections.stream()
+                .filter(Objects::nonNull)
+                .filter(selection -> selection.templateId() != null)
+                .toList();
+        List<UUID> templateIds = distinctTemplateIds(safeSelections.stream()
+                .map(RepairRequestRequest.TemplateSelectionRequest::templateId)
+                .toList());
+        if (templateIds.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, MaintenanceTemplate> templates = loadAndValidateTemplates(templateIds);
+        Map<UUID, List<MaintenanceOperation>> operationsByTemplate = loadOperationsByTemplate(templateIds);
+        Map<UUID, MaintenanceOperation> operationsById = operationsByTemplate.values().stream()
+                .flatMap(List::stream)
+                .collect(Collectors.toMap(MaintenanceOperation::getId, Function.identity(), (left, ignored) -> left));
+        Set<UUID> actionIds = safeSelections.stream()
+                .flatMap(selection -> selection.actions() == null
+                        ? java.util.stream.Stream.empty()
+                        : selection.actions().stream())
+                .filter(Objects::nonNull)
+                .map(RepairRequestRequest.ActionSelectionRequest::actionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, MaintenanceAction> actionsById = loadAndValidateActions(actionIds);
+        Set<UUID> specialistIds = safeSelections.stream()
+                .flatMap(selection -> selection.actions() == null
+                        ? java.util.stream.Stream.empty()
+                        : selection.actions().stream())
+                .filter(Objects::nonNull)
+                .map(RepairRequestRequest.ActionSelectionRequest::specialistId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        validateSpecialists(specialistIds);
+
+        List<NormalizedTemplateSelection> selections = new ArrayList<>();
+        int templateSequence = 1;
+        for (UUID templateId : templateIds) {
+            MaintenanceTemplate template = templates.get(templateId);
+            List<RepairRequestRequest.ActionSelectionRequest> requestedActions = safeSelections.stream()
+                    .filter(selection -> templateId.equals(selection.templateId()))
+                    .flatMap(selection -> selection.actions() == null
+                            ? java.util.stream.Stream.empty()
+                            : selection.actions().stream())
+                    .filter(Objects::nonNull)
+                    .toList();
+            List<NormalizedActionSelection> normalizedActions = new ArrayList<>();
+            int actionSequence = 1;
+            for (RepairRequestRequest.ActionSelectionRequest actionRequest : requestedActions) {
+                normalizedActions.add(actionFromRequest(
+                        templateId,
+                        actionRequest,
+                        operationsById,
+                        actionsById,
+                        actionSequence++));
+            }
+            selections.add(new NormalizedTemplateSelection(template, List.copyOf(normalizedActions), templateSequence++));
+        }
+        return List.copyOf(selections);
+    }
+
+    private List<UUID> distinctTemplateIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<UUID> unique = ids.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return new ArrayList<>(unique);
+    }
+
+    private Map<UUID, MaintenanceTemplate> loadAndValidateTemplates(List<UUID> templateIds) {
+        Map<UUID, MaintenanceTemplate> templates = maintenanceTemplateRepository.findAllByIdInAndIsDeletedFalse(templateIds)
+                .stream()
+                .collect(Collectors.toMap(MaintenanceTemplate::getId, Function.identity(), (left, ignored) -> left));
+        for (UUID templateId : templateIds) {
+            MaintenanceTemplate template = templates.get(templateId);
+            if (template == null) {
+                throw RestException.notFound("Maintenance template not found: " + templateId);
+            }
+            if (!template.isActive()) {
+                throw RestException.badRequest("Maintenance template is inactive: " + templateId);
+            }
+        }
+        return templates;
+    }
+
+    private Map<UUID, List<MaintenanceOperation>> loadOperationsByTemplate(List<UUID> templateIds) {
+        if (templateIds.isEmpty()) {
+            return Map.of();
+        }
+        return maintenanceOperationRepository.findAllByTemplateIdInAndIsDeletedFalse(templateIds)
+                .stream()
+                .filter(operation -> operation.getTemplate() != null)
+                .sorted(Comparator.comparingInt(MaintenanceOperation::getSequence))
+                .collect(Collectors.groupingBy(
+                        operation -> operation.getTemplate().getId(),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+    }
+
+    private Map<UUID, MaintenanceAction> loadAndValidateActions(Set<UUID> actionIds) {
+        if (actionIds == null || actionIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, MaintenanceAction> actions = maintenanceActionRepository.findAllByIdInAndIsDeletedFalse(actionIds)
+                .stream()
+                .collect(Collectors.toMap(MaintenanceAction::getId, Function.identity(), (left, ignored) -> left));
+        for (UUID actionId : actionIds) {
+            MaintenanceAction action = actions.get(actionId);
+            if (action == null) {
+                throw RestException.notFound("Maintenance action not found: " + actionId);
+            }
+            if (!action.isActive()) {
+                throw RestException.badRequest("Maintenance action is inactive: " + actionId);
+            }
+        }
+        return actions;
+    }
+
+    private void validateSpecialists(Set<UUID> specialistIds) {
+        if (specialistIds == null || specialistIds.isEmpty()) {
+            return;
+        }
+        Set<UUID> existingIds = userRepository.findAllByIdInAndIsDeletedFalse(specialistIds)
+                .stream()
+                .map(User::getId)
+                .collect(Collectors.toSet());
+        for (UUID specialistId : specialistIds) {
+            if (!existingIds.contains(specialistId)) {
+                throw RestException.notFound("Specialist not found: " + specialistId);
+            }
+        }
+    }
+
+    private NormalizedActionSelection actionFromRequest(
+            UUID templateId,
+            RepairRequestRequest.ActionSelectionRequest request,
+            Map<UUID, MaintenanceOperation> operationsById,
+            Map<UUID, MaintenanceAction> actionsById,
+            int sequence
+    ) {
+        MaintenanceOperation operation = null;
+        if (request.operationId() != null) {
+            operation = operationsById.get(request.operationId());
+            if (operation == null) {
+                throw RestException.badRequest("Maintenance operation does not belong to selected template: " + request.operationId());
+            }
+            if (operation.getTemplate() == null || !templateId.equals(operation.getTemplate().getId())) {
+                throw RestException.badRequest("Maintenance operation belongs to another template: " + request.operationId());
+            }
+        }
+        MaintenanceAction requestedAction = request.actionId() == null ? null : actionsById.get(request.actionId());
+        MaintenanceAction operationAction = operation == null ? null : operation.getAction();
+        if (operationAction != null && requestedAction != null && !operationAction.getId().equals(requestedAction.getId())) {
+            throw RestException.badRequest("Action does not match maintenance operation: " + request.actionId());
+        }
+        MaintenanceAction action = operationAction != null ? operationAction : requestedAction;
+        UUID actionId = action == null ? null : action.getId();
+        UUID specialistId = request.specialistId() != null
+                ? request.specialistId()
+                : operation == null ? null : operation.getSpecialistId();
+        String customName = trimToNull(request.customName());
+        String nameSnapshot = firstText(
+                customName,
+                operation != null ? operation.getName() : null,
+                action != null ? action.getName() : null
+        );
+        if (nameSnapshot == null) {
+            throw RestException.badRequest("Action name is required");
+        }
+        Double durationHours = operation != null
+                ? operation.getDurationHours()
+                : action == null ? null : action.getDefaultDurationHours();
+        String requiredSkill = operation != null
+                ? operation.getRequiredSkill()
+                : action == null ? null : action.getRequiredSkill();
+        return new NormalizedActionSelection(
+                templateId,
+                operation == null ? null : operation.getId(),
+                actionId,
+                specialistId,
+                sequence,
+                customName,
+                nameSnapshot,
+                durationHours,
+                requiredSkill
+        );
+    }
+
+    private NormalizedActionSelection actionFromOperation(UUID templateId, MaintenanceOperation operation, int sequence) {
+        MaintenanceAction action = operation.getAction();
+        String nameSnapshot = firstText(operation.getName(), action == null ? null : action.getName());
+        if (nameSnapshot == null) {
+            throw RestException.badRequest("Maintenance operation name is required: " + operation.getId());
+        }
+        return new NormalizedActionSelection(
+                templateId,
+                operation.getId(),
+                action == null ? null : action.getId(),
+                operation.getSpecialistId(),
+                sequence,
+                null,
+                nameSnapshot,
+                operation.getDurationHours(),
+                operation.getRequiredSkill()
+        );
+    }
+
+    private void persistTemplateSelections(RepairRequest repairRequest, List<NormalizedTemplateSelection> selections) {
+        if (selections == null || selections.isEmpty()) {
+            return;
+        }
+        List<RepairRequestTemplate> templateRows = new ArrayList<>();
+        List<RepairRequestTemplateAction> actionRows = new ArrayList<>();
+        int actionSequence = 1;
+        for (NormalizedTemplateSelection selection : selections) {
+            RepairRequestTemplate templateRow = new RepairRequestTemplate();
+            templateRow.setRepairRequest(repairRequest);
+            templateRow.setTemplateId(selection.template().getId());
+            templateRow.setSequence(selection.sequence());
+            templateRows.add(templateRow);
+
+            for (NormalizedActionSelection action : selection.actions()) {
+                RepairRequestTemplateAction actionRow = new RepairRequestTemplateAction();
+                actionRow.setRepairRequest(repairRequest);
+                actionRow.setTemplateId(action.templateId());
+                actionRow.setOperationId(action.operationId());
+                actionRow.setActionId(action.actionId());
+                actionRow.setSpecialistId(action.specialistId());
+                actionRow.setSequence(actionSequence++);
+                actionRow.setCustomName(action.customName());
+                actionRow.setNameSnapshot(action.nameSnapshot());
+                actionRow.setDurationHours(action.durationHours());
+                actionRow.setRequiredSkill(action.requiredSkill());
+                actionRows.add(actionRow);
+            }
+        }
+        repairRequestTemplateRepository.saveAll(templateRows);
+        if (!actionRows.isEmpty()) {
+            repairRequestTemplateActionRepository.saveAll(actionRows);
+        }
+    }
+
+    private String firstText(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            String trimmed = trimToNull(value);
+            if (trimmed != null) {
+                return trimmed;
+            }
+        }
+        return null;
+    }
+
+    private String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private List<RepairRequestRequest.InlineDefectRequest> normalizeInlineDefects(RepairRequestRequest request) {
@@ -777,6 +1091,15 @@ public class RepairRequestService {
                                    List<DefectBriefDto> linkedDefects,
                                    List<WorkOrderBriefDto> linkedWorkOrders,
                                    List<MeterReadingDto> meterReadings) {
+        return toDto(r, linkedDefects, linkedWorkOrders, meterReadings, List.of(), List.of());
+    }
+
+    private RepairRequestDto toDto(RepairRequest r,
+                                   List<DefectBriefDto> linkedDefects,
+                                   List<WorkOrderBriefDto> linkedWorkOrders,
+                                   List<MeterReadingDto> meterReadings,
+                                   List<RepairRequestTemplateSummaryDto> templates,
+                                   List<RepairRequestActionReferenceDto> actionReferences) {
         String equipmentName = r.getEquipmentId() == null ? null
                 : equipmentRepository.findByIdAndIsDeletedFalse(r.getEquipmentId())
                 .map(Equipment::getName)
@@ -800,6 +1123,9 @@ public class RepairRequestService {
                 r.getTitle(),
                 r.getDescription(),
                 r.getTemplateId(),
+                templateIdsForDto(r, templates),
+                templates,
+                actionReferences,
                 r.getEquipmentId(),
                 equipmentName,
                 r.getDepartmentId(),
@@ -837,7 +1163,103 @@ public class RepairRequestService {
                 .map(TriadLinkMapper::toWorkOrderBrief)
                 .toList();
         List<MeterReadingDto> meterReadings = repairMeterReadingDtos(repairRequest.getId());
-        return toDto(repairRequest, linkedDefects, linkedWorkOrders, meterReadings);
+        List<RepairRequestTemplateSummaryDto> templates = repairRequestTemplates(repairRequest);
+        List<RepairRequestActionReferenceDto> actionReferences = repairRequestActionReferences(repairRequest);
+        return toDto(repairRequest, linkedDefects, linkedWorkOrders, meterReadings, templates, actionReferences);
+    }
+
+    private List<UUID> templateIdsForDto(RepairRequest repairRequest, List<RepairRequestTemplateSummaryDto> templates) {
+        if (templates != null && !templates.isEmpty()) {
+            return templates.stream().map(RepairRequestTemplateSummaryDto::templateId).toList();
+        }
+        return repairRequest.getTemplateId() == null ? List.of() : List.of(repairRequest.getTemplateId());
+    }
+
+    private List<RepairRequestTemplateSummaryDto> repairRequestTemplates(RepairRequest repairRequest) {
+        if (repairRequest.getId() == null) {
+            return List.of();
+        }
+        List<RepairRequestTemplate> rows = repairRequestTemplateRepository
+                .findAllByRepairRequest_IdAndIsDeletedFalseOrderBySequenceAsc(repairRequest.getId());
+        List<UUID> templateIds = rows.stream()
+                .map(RepairRequestTemplate::getTemplateId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (templateIds.isEmpty() && repairRequest.getTemplateId() != null) {
+            templateIds = List.of(repairRequest.getTemplateId());
+        }
+        if (templateIds.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, MaintenanceTemplate> templatesById = maintenanceTemplateRepository.findAllByIdInAndIsDeletedFalse(templateIds)
+                .stream()
+                .collect(Collectors.toMap(MaintenanceTemplate::getId, Function.identity(), (left, ignored) -> left));
+        if (rows.isEmpty()) {
+            MaintenanceTemplate template = templatesById.get(repairRequest.getTemplateId());
+            return List.of(new RepairRequestTemplateSummaryDto(
+                    repairRequest.getTemplateId(),
+                    template == null ? null : template.getCode(),
+                    template == null ? null : template.getName(),
+                    1
+            ));
+        }
+        return rows.stream()
+                .map(row -> {
+                    MaintenanceTemplate template = templatesById.get(row.getTemplateId());
+                    return new RepairRequestTemplateSummaryDto(
+                            row.getTemplateId(),
+                            template == null ? null : template.getCode(),
+                            template == null ? null : template.getName(),
+                            row.getSequence()
+                    );
+                })
+                .toList();
+    }
+
+    private List<RepairRequestActionReferenceDto> repairRequestActionReferences(RepairRequest repairRequest) {
+        if (repairRequest.getId() == null) {
+            return List.of();
+        }
+        List<RepairRequestTemplateAction> rows = repairRequestTemplateActionRepository
+                .findAllByRepairRequest_IdAndIsDeletedFalseOrderBySequenceAsc(repairRequest.getId());
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> templateIds = rows.stream()
+                .map(RepairRequestTemplateAction::getTemplateId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, MaintenanceTemplate> templatesById = templateIds.isEmpty()
+                ? Map.of()
+                : maintenanceTemplateRepository.findAllByIdInAndIsDeletedFalse(templateIds).stream()
+                .collect(Collectors.toMap(MaintenanceTemplate::getId, Function.identity(), (left, ignored) -> left));
+        Set<UUID> specialistIds = rows.stream()
+                .map(RepairRequestTemplateAction::getSpecialistId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> specialistNames = specialistIds.isEmpty()
+                ? Map.of()
+                : userRepository.findAllByIdInAndIsDeletedFalse(specialistIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getFullName, (left, ignored) -> left));
+        return rows.stream()
+                .map(row -> {
+                    MaintenanceTemplate template = templatesById.get(row.getTemplateId());
+                    return new RepairRequestActionReferenceDto(
+                            row.getTemplateId(),
+                            template == null ? null : template.getCode(),
+                            template == null ? null : template.getName(),
+                            row.getOperationId(),
+                            row.getActionId(),
+                            row.getSpecialistId(),
+                            row.getSpecialistId() == null ? null : specialistNames.get(row.getSpecialistId()),
+                            row.getSequence(),
+                            row.getNameSnapshot(),
+                            row.getDurationHours(),
+                            row.getRequiredSkill(),
+                            row.getCustomName()
+                    );
+                })
+                .toList();
     }
 
     private List<MeterReadingDto> repairMeterReadingDtos(UUID repairRequestId) {
@@ -979,4 +1401,22 @@ public class RepairRequestService {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Repair request not found: " + id));
     }
+
+    private record NormalizedTemplateSelection(
+            MaintenanceTemplate template,
+            List<NormalizedActionSelection> actions,
+            int sequence
+    ) {}
+
+    private record NormalizedActionSelection(
+            UUID templateId,
+            UUID operationId,
+            UUID actionId,
+            UUID specialistId,
+            int sequence,
+            String customName,
+            String nameSnapshot,
+            Double durationHours,
+            String requiredSkill
+    ) {}
 }

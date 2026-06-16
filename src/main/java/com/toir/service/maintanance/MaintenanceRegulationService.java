@@ -999,7 +999,10 @@ public class MaintenanceRegulationService {
 
         MaintenanceTemplate template = templateRepository.findByIdAndIsDeletedFalse(templateId)
                 .orElseThrow(() -> RestException.notFound("Maintenance template not found: " + templateId));
-        if (!Objects.equals(template.getEquipmentTypeId(), request.equipmentTypeId())) {
+        boolean matchesEquipmentType = Objects.equals(template.getEquipmentTypeId(), request.equipmentTypeId())
+                || (template.getEquipmentTypeIds() != null
+                && template.getEquipmentTypeIds().contains(request.equipmentTypeId()));
+        if (!matchesEquipmentType) {
             throw RestException.badRequest("Maintenance template equipment type must match regulation equipment type");
         }
         if (template.getMaintenanceKind() != request.maintenanceKind()) {
