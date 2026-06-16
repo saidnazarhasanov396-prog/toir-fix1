@@ -12,6 +12,7 @@ import com.toir.entity.SparePart;
 import com.toir.entity.SparePartType;
 import com.toir.entity.StockMovement;
 import com.toir.entity.UnitOfMeasurement;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.AuditAction;
@@ -29,6 +30,7 @@ import com.toir.repository.SupplierRepository;
 import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
@@ -63,6 +65,7 @@ public class SparePartService {
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final WarehouseStockRepository stockRepository;
     private final StockMovementRepository stockMovementRepository;
+    private final WorkOrderRepository workOrderRepository;
     private final WarehouseRepository warehouseRepository;
     private final DepartmentRepository departmentRepository;
     private final LocationRepository locationRepository;
@@ -548,14 +551,86 @@ public class SparePartService {
                     .forEach(warehouse -> warehouseById.put(warehouse.getId(), warehouse));
         }
 
-        return movements.stream()
+        List<StockMovement> scopedMovements = movements.stream()
                 .filter(movement -> canAccessWarehouse(warehouseById.get(movement.getWarehouseId())))
                 .limit(10)
-                .map(movement -> toRecentMovementDto(part, movement, warehouseById.get(movement.getWarehouseId())))
+                .toList();
+        if (scopedMovements.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, WorkOrder> workOrderById = workOrdersById(scopedMovements);
+        Map<UUID, String> departmentNameById = recentMovementDepartmentNames(scopedMovements, warehouseById, workOrderById);
+
+        return scopedMovements.stream()
+                .map(movement -> {
+                    Warehouse warehouse = warehouseById.get(movement.getWarehouseId());
+                    WorkOrder workOrder = movement.getWorkOrderId() == null ? null : workOrderById.get(movement.getWorkOrderId());
+                    UUID departmentId = recentMovementDepartmentId(movement, workOrder, warehouse);
+                    return toRecentMovementDto(
+                            part,
+                            movement,
+                            warehouse,
+                            workOrder,
+                            departmentId,
+                            departmentId == null ? null : departmentNameById.get(departmentId)
+                    );
+                })
                 .toList();
     }
 
-    private SparePartRecentMovementDto toRecentMovementDto(SparePart part, StockMovement movement, Warehouse warehouse) {
+    private Map<UUID, WorkOrder> workOrdersById(List<StockMovement> movements) {
+        List<UUID> ids = movements.stream()
+                .map(StockMovement::getWorkOrderId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return workOrderRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
+                .collect(Collectors.toMap(WorkOrder::getId, Function.identity()));
+    }
+
+    private Map<UUID, String> recentMovementDepartmentNames(
+            List<StockMovement> movements,
+            Map<UUID, Warehouse> warehouseById,
+            Map<UUID, WorkOrder> workOrderById
+    ) {
+        List<UUID> ids = movements.stream()
+                .map(movement -> {
+                    Warehouse warehouse = warehouseById.get(movement.getWarehouseId());
+                    WorkOrder workOrder = movement.getWorkOrderId() == null ? null : workOrderById.get(movement.getWorkOrderId());
+                    return recentMovementDepartmentId(movement, workOrder, warehouse);
+                })
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return departmentRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
+                .collect(Collectors.toMap(Department::getId, Department::getName));
+    }
+
+    private UUID recentMovementDepartmentId(StockMovement movement, WorkOrder workOrder, Warehouse warehouse) {
+        if (movement.getDepartmentId() != null) {
+            return movement.getDepartmentId();
+        }
+        if (workOrder != null && workOrder.getDepartmentId() != null) {
+            return workOrder.getDepartmentId();
+        }
+        return warehouse == null ? null : warehouse.getDepartmentId();
+    }
+
+    private SparePartRecentMovementDto toRecentMovementDto(
+            SparePart part,
+            StockMovement movement,
+            Warehouse warehouse,
+            WorkOrder workOrder,
+            UUID departmentId,
+            String departmentName
+    ) {
         BigDecimal unitPrice = movement.getUnitPrice() != null
                 ? movement.getUnitPrice()
                 : movement.getUnitCost() == null ? null : BigDecimal.valueOf(movement.getUnitCost());
@@ -573,7 +648,12 @@ public class SparePartService {
                         ? movement.getMovementDate()
                         : movement.getOccurredAt() == null ? null : movement.getOccurredAt().atZone(ZoneId.systemDefault()).toLocalDate(),
                 warehouse == null ? null : warehouse.getName(),
-                movement.getDocumentNumber()
+                movement.getDocumentNumber(),
+                movement.getWorkOrderId(),
+                workOrder == null ? null : workOrder.getNumber(),
+                workOrder == null ? null : workOrder.getTitle(),
+                departmentId,
+                departmentName
         );
     }
 

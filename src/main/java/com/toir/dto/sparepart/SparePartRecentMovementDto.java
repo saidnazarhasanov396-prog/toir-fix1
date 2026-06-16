@@ -15,6 +15,11 @@ public record SparePartRecentMovementDto(
         BigDecimal totalAmount,
         LocalDate movementDate,
         String warehouseName,
-        String documentNumber
+        String documentNumber,
+        UUID workOrderId,
+        String workOrderNumber,
+        String workOrderName,
+        UUID departmentId,
+        String departmentName
 ) {
 }

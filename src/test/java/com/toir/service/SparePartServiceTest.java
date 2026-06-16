@@ -6,6 +6,7 @@ import com.toir.entity.Department;
 import com.toir.entity.Location;
 import com.toir.entity.StockMovement;
 import com.toir.entity.UnitOfMeasurement;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.StockMovementType;
@@ -21,6 +22,7 @@ import com.toir.repository.SupplierRepository;
 import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
@@ -74,6 +76,9 @@ class SparePartServiceTest {
     StockMovementRepository stockMovementRepository;
 
     @Mock
+    WorkOrderRepository workOrderRepository;
+
+    @Mock
     WarehouseRepository warehouseRepository;
 
     @Mock
@@ -105,6 +110,7 @@ class SparePartServiceTest {
                 inventoryTransactionRepository,
                 stockRepository,
                 stockMovementRepository,
+                workOrderRepository,
                 warehouseRepository,
                 departmentRepository,
                 locationRepository,
@@ -515,6 +521,7 @@ class SparePartServiceTest {
         UUID sparePartId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
         SparePart part = sparePart(sparePartId, "SP-DET", "Engine Oil", InventoryItemKind.SPARE_PART);
         part.setSku("OIL-10W40");
         part.setSpecification("10W-40");
@@ -535,13 +542,19 @@ class SparePartServiceTest {
         movement.setTotalAmount(BigDecimal.valueOf(4500000));
         movement.setMovementDate(LocalDate.of(2026, 6, 13));
         movement.setDocumentNumber("RCV-2026-0001");
+        movement.setWorkOrderId(workOrderId);
+        movement.setDepartmentId(departmentId);
+        WorkOrder workOrder = workOrder(workOrderId, "WO-2026-0007", "Pump repair", departmentId);
+        Department department = department(departmentId, "Mechanical Department");
 
         when(repository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(part));
         when(stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId)).thenReturn(List.of(stock));
         when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId))).thenReturn(List.of(warehouse));
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(List.of(departmentId))).thenReturn(List.of(department));
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(stockMovementRepository.findAllBySparePartIdAndIsDeletedFalseOrderByOccurredAtDesc(sparePartId))
                 .thenReturn(List.of(movement));
+        when(workOrderRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of(workOrder));
 
         com.toir.dto.sparepart.SparePartDetailDto result = service.findDetail(sparePartId);
 
@@ -556,6 +569,11 @@ class SparePartServiceTest {
         assertThat(result.recentMovements()).hasSize(1);
         assertThat(result.recentMovements().getFirst().type()).isEqualTo(StockMovementType.RECEIPT);
         assertThat(result.recentMovements().getFirst().warehouseName()).isEqualTo("Central Warehouse");
+        assertThat(result.recentMovements().getFirst().workOrderId()).isEqualTo(workOrderId);
+        assertThat(result.recentMovements().getFirst().workOrderNumber()).isEqualTo("WO-2026-0007");
+        assertThat(result.recentMovements().getFirst().workOrderName()).isEqualTo("Pump repair");
+        assertThat(result.recentMovements().getFirst().departmentId()).isEqualTo(departmentId);
+        assertThat(result.recentMovements().getFirst().departmentName()).isEqualTo("Mechanical Department");
         assertThat(result.recentMovements().getFirst().totalAmount()).isEqualByComparingTo("4500000");
     }
 
@@ -609,6 +627,15 @@ class SparePartServiceTest {
         department.setCode("DEP-" + id.toString().substring(0, 8));
         department.setName(name);
         return department;
+    }
+
+    private WorkOrder workOrder(UUID id, String number, String title, UUID departmentId) {
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(id);
+        workOrder.setNumber(number);
+        workOrder.setTitle(title);
+        workOrder.setDepartmentId(departmentId);
+        return workOrder;
     }
 
     private Location location(UUID id, String name) {
