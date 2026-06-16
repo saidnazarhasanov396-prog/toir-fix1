@@ -234,7 +234,7 @@ SELECT
     NULL,
     'STOCK_MOVEMENT',
     smf.stock_movement_id,
-    MIN(uf.uploaded_by),
+    (ARRAY_AGG(uf.uploaded_by ORDER BY smf.created_at, smf.file_id))[1],
     MIN(smf.created_at),
     false
 FROM stock_movement_files smf
