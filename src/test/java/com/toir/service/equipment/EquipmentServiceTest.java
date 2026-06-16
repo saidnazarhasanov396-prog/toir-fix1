@@ -38,6 +38,7 @@ import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
+import com.toir.enums.MeterType;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
 import com.toir.enums.RequestStatus;
@@ -1278,6 +1279,63 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void createStoresAverageDailyUsageForSelectedLifetimeCounter() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = new EquipmentCreateRequest(
+                null,
+                "Compressor",
+                "INV-DAILY-1",
+                "TN-1",
+                "SN-1",
+                "Model X",
+                null,
+                UUID.randomUUID(),
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "ACME",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                "test",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                MeterType.MILEAGE_KM,
+                null,
+                100_000.0,
+                0.0,
+                10.0,
+                200.0
+        );
+        stubCreateFlow("INV-DAILY-1");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+
+        EquipmentDto created = service.create(request);
+
+        assertThat(created.averageDailyUsage()).isEqualTo(200.0);
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getLifetimeCounterType()).isEqualTo(MeterType.MILEAGE_KM);
+        assertThat(entityCaptor.getValue().getLifetimeLimitValue()).isEqualTo(100_000.0);
+        assertThat(entityCaptor.getValue().getAverageDailyUsage()).isEqualTo(200.0);
+    }
+
+    @Test
     void createWithoutExpectedLifetimeReturnsBadRequest() {
         UUID departmentId = UUID.randomUUID();
         EquipmentCreateRequest request = createRequestWithoutExpectedLifetime("INV-LIFE-MISSING-1", departmentId);
@@ -1898,6 +1956,66 @@ class EquipmentServiceTest {
         verify(repository).save(entityCaptor.capture());
         assertThat(entityCaptor.getValue().getExpectedLifetimeHours()).isEqualTo(12_000L);
         assertThat(entityCaptor.getValue().getAverageOperatingLifeHours()).isEqualTo(22_200L);
+    }
+
+    @Test
+    void updateStoresAverageDailyUsageWithoutChangingCounterSelection() {
+        UUID id = UUID.randomUUID();
+        Equipment existing = equipment("EQ-DAILY-UPDATE");
+        existing.setId(id);
+        existing.setLifetimeCounterType(MeterType.MILEAGE_KM);
+        existing.setLifetimeLimitValue(100_000.0);
+        existing.setAverageDailyUsage(150.0);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+        EquipmentUpdateRequest request = new EquipmentUpdateRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                200.0
+        );
+
+        EquipmentDto updated = service.update(id, request);
+
+        assertThat(updated.averageDailyUsage()).isEqualTo(200.0);
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getLifetimeCounterType()).isEqualTo(MeterType.MILEAGE_KM);
+        assertThat(entityCaptor.getValue().getAverageDailyUsage()).isEqualTo(200.0);
     }
 
     @Test

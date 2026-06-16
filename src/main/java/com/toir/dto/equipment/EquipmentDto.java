@@ -68,7 +68,8 @@ public record EquipmentDto(
         Double lifetimeTargetValue,
         Double lifetimeRemainingValue,
         Double lifetimeConsumedPercent,
-        String lifetimeUnit
+        String lifetimeUnit,
+        Double averageDailyUsage
 ) {
     public EquipmentDto(
             UUID id,
@@ -120,7 +121,7 @@ public record EquipmentDto(
                 expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, operatingDuration,
                 expectedEndDate, remainingLifetime, lifetimeStatus, hasWarranty, warrantyAttachmentId,
                 warrantyStartDate, warrantyEndDate, warrantyAttachment, passportCompleteness,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -168,7 +169,7 @@ public record EquipmentDto(
                 department, location, equipmentType, parent, passport, placement, operationStartDate,
                 expectedLifetimeMonths, expectedLifetimeYears, null, operatingDuration, expectedEndDate, remainingLifetime,
                 lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment, null,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -204,7 +205,7 @@ public record EquipmentDto(
                 category, commissionedAt, null, warrantyUntil, description, averageOperatingLifeHours, department,
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null, null,
                 LifetimeStatus.UNKNOWN, false, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -397,7 +398,8 @@ public record EquipmentDto(
                 lifetimeTargetValue(e),
                 lifetimeRemainingValue(e, lifetimeMeter),
                 lifetimeConsumedPercent(e, lifetimeMeter),
-                lifetimeUnit(e, lifetimeMeter)
+                lifetimeUnit(e, lifetimeMeter),
+                e.getAverageDailyUsage()
         );
     }
 

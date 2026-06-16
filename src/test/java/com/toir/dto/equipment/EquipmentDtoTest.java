@@ -28,11 +28,13 @@ class EquipmentDtoTest {
     void fromIncludesAverageOperatingLifeHours() {
         Equipment equipment = new Equipment();
         equipment.setAverageOperatingLifeHours(10_000L);
+        equipment.setAverageDailyUsage(200.0);
         equipment.setExpectedLifetimeHours(18_000L);
 
         EquipmentDto dto = EquipmentDto.from(equipment);
 
         assertThat(dto.averageOperatingLifeHours()).isEqualTo(10_000L);
+        assertThat(dto.averageDailyUsage()).isEqualTo(200.0);
         assertThat(dto.expectedLifetimeHours()).isEqualTo(18_000L);
     }
 
@@ -106,6 +108,7 @@ class EquipmentDtoTest {
         equipment.setLifetimeMeterId(meterId);
         equipment.setLifetimeLimitValue(10_000.0);
         equipment.setLifetimeBaselineValue(100.0);
+        equipment.setAverageDailyUsage(200.0);
         equipment.setLifetimeWarningPercent(10.0);
 
         EquipmentMeter meter = new EquipmentMeter();
@@ -120,6 +123,7 @@ class EquipmentDtoTest {
         assertThat(dto.lifetimeMeterId()).isEqualTo(meterId);
         assertThat(dto.lifetimeLimitValue()).isEqualTo(10_000.0);
         assertThat(dto.lifetimeBaselineValue()).isEqualTo(100.0);
+        assertThat(dto.averageDailyUsage()).isEqualTo(200.0);
         assertThat(dto.lifetimeWarningPercent()).isEqualTo(10.0);
         assertThat(dto.lifetimeCurrentValue()).isEqualTo(9_500.0);
         assertThat(dto.lifetimeTargetValue()).isEqualTo(10_100.0);
