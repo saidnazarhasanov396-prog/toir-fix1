@@ -25,6 +25,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Year;
 import java.util.Collection;
@@ -245,6 +246,48 @@ class MaintenanceTemplateServiceTest {
         assertThat(updated.sequence()).isEqualTo(2);
         assertThat(updated.name()).isEqualTo("Updated step");
         assertThat(template.getOperations()).hasSize(1);
+    }
+
+    @Test
+    void operationDtoFromDefaultsNullDurationToZero() {
+        MaintenanceOperation operation = new MaintenanceOperation();
+        operation.setId(UUID.randomUUID());
+        operation.setSequence(1);
+        operation.setName("Inspect seal");
+        ReflectionTestUtils.setField(operation, "durationHours", null);
+
+        MaintenanceOperationDto dto = MaintenanceOperationDto.from(operation);
+
+        assertThat(dto.durationHours()).isZero();
+    }
+
+    @Test
+    void findByIdDefaultsNullOperationDurationToZero() {
+        UUID templateId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        MaintenanceTemplate template = template(templateId);
+        template.setEquipmentTypeId(equipmentTypeId);
+
+        MaintenanceOperation operation = new MaintenanceOperation();
+        operation.setId(UUID.randomUUID());
+        operation.setTemplate(template);
+        operation.setSequence(1);
+        operation.setName("Inspect seal");
+        operation.setDurationHours(null);
+        template.getOperations().add(operation);
+
+        EquipmentType equipmentType = new EquipmentType();
+        equipmentType.setId(equipmentTypeId);
+        equipmentType.setName("Pump");
+
+        when(repository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+        when(equipmentTypeRepository.findByIdAndIsDeletedFalse(equipmentTypeId)).thenReturn(Optional.of(equipmentType));
+
+        MaintenanceTemplateDto dto = service.findById(templateId);
+
+        assertThat(dto.operations()).singleElement()
+                .extracting(MaintenanceOperationDto::durationHours)
+                .isEqualTo(0.0);
     }
 
     private MaintenanceTemplateRequest request(String code) {

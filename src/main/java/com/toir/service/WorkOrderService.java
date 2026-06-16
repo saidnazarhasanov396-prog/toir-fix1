@@ -1888,7 +1888,7 @@ public class WorkOrderService {
             task.setTitle(operation.getName());
             task.setDescription(operationDescription(operation));
             task.setStatus(TaskExecutionStatus.TODO);
-            if (operation.getDurationHours() > 0) {
+            if (operation.getDurationHours() != null && operation.getDurationHours() > 0) {
                 task.setPlannedHours(operation.getDurationHours());
             }
             task.setAssignedToId(operation.getSpecialistId());

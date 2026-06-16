@@ -34,8 +34,8 @@ public class MaintenanceOperation extends BaseEntity {
 
     private String description;
 
-    @Column(name = "duration_hours", nullable = false)
-    private double durationHours;
+    @Column(name = "duration_hours")
+    private Double durationHours;
 
     @Column(name = "required_skill")
     private String requiredSkill;
