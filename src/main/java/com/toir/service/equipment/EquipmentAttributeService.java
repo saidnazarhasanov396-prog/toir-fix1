@@ -99,7 +99,17 @@ public class EquipmentAttributeService {
             "averageOperatingLifeHours",
             "average_operating_life_hours",
             "expectedLifetimeHours",
-            "expected_lifetime_hours"
+            "expected_lifetime_hours",
+            "lifetimeCounterType",
+            "lifetime_counter_type",
+            "lifetimeMeterId",
+            "lifetime_meter_id",
+            "lifetimeLimitValue",
+            "lifetime_limit_value",
+            "lifetimeBaselineValue",
+            "lifetime_baseline_value",
+            "lifetimeWarningPercent",
+            "lifetime_warning_percent"
     ).stream().map(EquipmentAttributeService::normalizeReservedKey).collect(Collectors.toUnmodifiableSet());
 
     private final EquipmentAttributeDefinitionRepository definitionRepository;

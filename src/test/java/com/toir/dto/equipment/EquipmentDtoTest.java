@@ -1,11 +1,14 @@
 package com.toir.dto.equipment;
 
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.LifetimeStatus;
+import com.toir.enums.MeterType;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -93,5 +96,36 @@ class EquipmentDtoTest {
         assertThat(dto.remainingLifetime()).isNotBlank();
         assertThat(dto.operatingDuration()).isNotBlank();
         assertThat(dto.lifetimeStatus()).isEqualTo(LifetimeStatus.NORMAL);
+    }
+
+    @Test
+    void fromIncludesMeterLifetimeSnapshot() {
+        UUID meterId = UUID.randomUUID();
+        Equipment equipment = new Equipment();
+        equipment.setLifetimeCounterType(MeterType.CYCLES);
+        equipment.setLifetimeMeterId(meterId);
+        equipment.setLifetimeLimitValue(10_000.0);
+        equipment.setLifetimeBaselineValue(100.0);
+        equipment.setLifetimeWarningPercent(10.0);
+
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setId(meterId);
+        meter.setMeterType(MeterType.CYCLES);
+        meter.setUnit("cycle");
+        meter.setCurrentValue(9_500);
+
+        EquipmentDto dto = EquipmentDto.from(equipment, meter);
+
+        assertThat(dto.lifetimeCounterType()).isEqualTo(MeterType.CYCLES);
+        assertThat(dto.lifetimeMeterId()).isEqualTo(meterId);
+        assertThat(dto.lifetimeLimitValue()).isEqualTo(10_000.0);
+        assertThat(dto.lifetimeBaselineValue()).isEqualTo(100.0);
+        assertThat(dto.lifetimeWarningPercent()).isEqualTo(10.0);
+        assertThat(dto.lifetimeCurrentValue()).isEqualTo(9_500.0);
+        assertThat(dto.lifetimeTargetValue()).isEqualTo(10_100.0);
+        assertThat(dto.lifetimeRemainingValue()).isEqualTo(600.0);
+        assertThat(dto.lifetimeConsumedPercent()).isEqualTo(94.0);
+        assertThat(dto.lifetimeUnit()).isEqualTo("cycle");
+        assertThat(dto.lifetimeStatus()).isEqualTo(LifetimeStatus.EXPIRING_SOON);
     }
 }

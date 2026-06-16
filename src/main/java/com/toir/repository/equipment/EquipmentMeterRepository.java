@@ -57,6 +57,9 @@ public interface EquipmentMeterRepository extends JpaRepository<EquipmentMeter, 
     @Query(value = "SELECT * FROM equipment_meters WHERE equipment_id = :equipmentId AND is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<EquipmentMeter> findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 
+    @Query(value = "SELECT * FROM equipment_meters WHERE equipment_id IN (:equipmentIds) AND is_active = true AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<EquipmentMeter> findAllByEquipmentIdInAndActiveTrueAndIsDeletedFalse(@Param("equipmentIds") Collection<UUID> equipmentIds);
+
     @Query(value = "SELECT * FROM equipment_meters WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<EquipmentMeter> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
 

@@ -60,6 +60,7 @@ import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentDocumentFileRepository;
 import com.toir.repository.equipment.EquipmentDocumentRepository;
+import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
@@ -135,6 +136,9 @@ class EquipmentServiceTest {
     EquipmentAttributeValueRepository attributeValueRepository;
 
     @Mock
+    EquipmentMeterRepository equipmentMeterRepository;
+
+    @Mock
     FileAssetRepository fileAssetRepository;
 
     @Mock
@@ -199,6 +203,8 @@ class EquipmentServiceTest {
     void setUp() {
         lenient().when(departmentRepository.findByIdAndIsDeletedFalse(any()))
                 .thenAnswer(invocation -> Optional.of(department(invocation.getArgument(0))));
+        lenient().when(equipmentMeterRepository.findAllByEquipmentIdInAndActiveTrueAndIsDeletedFalse(anyCollection()))
+                .thenReturn(List.of());
     }
 
     @InjectMocks
