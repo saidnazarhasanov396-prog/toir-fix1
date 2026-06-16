@@ -1034,6 +1034,7 @@ public class EquipmentService {
         entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths());
         entity.setExpectedLifetimeYears(request.expectedLifetimeYears());
         entity.setExpectedLifetimeHours(request.expectedLifetimeHours());
+        entity.setAverageDailyUsage(request.averageDailyUsage());
         applyDynamicLifetimeForCreate(entity, request);
         entity.setAverageOperatingLifeHours(calculateAverageOperatingLifeHours(
                 request.expectedLifetimeYears(),
@@ -1663,6 +1664,9 @@ public class EquipmentService {
         entity.setExpectedLifetimeMonths(expectedLifetimeMonths);
         entity.setExpectedLifetimeYears(expectedLifetimeYears);
         entity.setExpectedLifetimeHours(expectedLifetimeHours);
+        if (request.averageDailyUsage() != null) {
+            entity.setAverageDailyUsage(request.averageDailyUsage());
+        }
         applyDynamicLifetimeForUpdate(entity, request);
         if (hasExpectedLifetimeChange(request)) {
             entity.setAverageOperatingLifeHours(calculateAverageOperatingLifeHours(
