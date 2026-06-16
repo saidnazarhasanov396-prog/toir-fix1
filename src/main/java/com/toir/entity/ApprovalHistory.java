@@ -41,6 +41,9 @@ public class ApprovalHistory extends BaseEntity {
     @Column(name = "changed_by")
     private UUID changedBy;
 
+    @Column(name = "delegated_for_id")
+    private UUID delegatedForId;
+
     @Column(columnDefinition = "text")
     private String comment;
 

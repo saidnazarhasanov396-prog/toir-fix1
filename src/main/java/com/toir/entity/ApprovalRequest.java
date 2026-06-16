@@ -83,6 +83,15 @@ public class ApprovalRequest extends BaseEntity {
     @Column(name = "execution_id")
     private UUID executionId;
 
+    @Column(name = "last_returned_at")
+    private Instant lastReturnedAt;
+
+    @Column(name = "last_returned_by")
+    private UUID lastReturnedBy;
+
+    @Column(name = "last_return_comment", columnDefinition = "text")
+    private String lastReturnComment;
+
     @Column(columnDefinition = "text")
     private String description;
 

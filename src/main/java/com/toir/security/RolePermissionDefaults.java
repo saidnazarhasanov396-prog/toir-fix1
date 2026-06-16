@@ -344,6 +344,26 @@ public final class RolePermissionDefaults {
                 PermissionConstants.APPROVAL_READ,
                 PermissionConstants.APPROVAL_CREATE
         ));
+        defaults.put("FINANCE_MANAGER", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.ACTUAL_COST_READ,
+                PermissionConstants.ACTUAL_COST_CREATE,
+                PermissionConstants.ACTUAL_COST_APPROVE,
+                PermissionConstants.ACTUAL_COST_REJECT,
+                PermissionConstants.BUDGET_READ,
+                PermissionConstants.BUDGET_CREATE,
+                PermissionConstants.BUDGET_UPDATE,
+                PermissionConstants.BUDGET_APPROVE,
+                PermissionConstants.FINANCE_ROUTE_OVERRIDE_READ,
+                PermissionConstants.FINANCE_ROUTE_OVERRIDE_APPLY,
+                PermissionConstants.FINANCE_ROUTE_OVERRIDE_CLEAR,
+                PermissionConstants.ANALYTICS_READ,
+                PermissionConstants.ANALYTICS_EXPORT,
+                PermissionConstants.APPROVAL_READ,
+                PermissionConstants.APPROVAL_APPROVE,
+                PermissionConstants.APPROVAL_REJECT,
+                PermissionConstants.APPROVAL_RETURN
+        ));
         defaults.put("VIEWER", List.of(
                 PermissionConstants.READ_LEGACY,
                 PermissionConstants.EQUIPMENT_READ,

@@ -37,8 +37,46 @@ public record ApprovalRequestDto(
         boolean canApprove,
         boolean canReject,
         boolean canCancel,
-        TargetSummary targetSummary
+        TargetSummary targetSummary,
+        boolean returned,
+        Instant lastReturnedAt,
+        UUID lastReturnedBy,
+        String lastReturnComment
 ) {
+    public ApprovalRequestDto(UUID id,
+                              String documentType,
+                              UUID documentId,
+                              String title,
+                              UUID requesterId,
+                              ApprovalStatus status,
+                              int currentStep,
+                              Instant completedAt,
+                              String description,
+                              Instant createdAt,
+                              List<ApprovalStepDto> steps,
+                              ApprovalTargetType targetType,
+                              UUID targetId,
+                              ApprovalActionType actionType,
+                              String requesterName,
+                              String currentApproverName,
+                              int totalSteps,
+                              Instant expiresAt,
+                              boolean escalated,
+                              boolean overdue,
+                              String targetDisplayName,
+                              String targetUrl,
+                              String resultJson,
+                              String failureReason,
+                              boolean canApprove,
+                              boolean canReject,
+                              boolean canCancel,
+                              TargetSummary targetSummary) {
+        this(id, documentType, documentId, title, requesterId, status, currentStep, completedAt, description,
+                createdAt, steps, targetType, targetId, actionType, requesterName, currentApproverName, totalSteps,
+                expiresAt, escalated, overdue, targetDisplayName, targetUrl, resultJson, failureReason,
+                canApprove, canReject, canCancel, targetSummary, false, null, null, null);
+    }
+
     public ApprovalRequestDto(UUID id,
                               String documentType,
                               UUID documentId,
@@ -52,7 +90,7 @@ public record ApprovalRequestDto(
                               List<ApprovalStepDto> steps) {
         this(id, documentType, documentId, title, requesterId, status, currentStep, completedAt, description,
                 createdAt, steps, null, null, null, null, null, steps == null ? 0 : steps.size(), null, false,
-                false, title, null, null, null, false, false, false, null);
+                false, title, null, null, null, false, false, false, null, false, null, null, null);
     }
 
     public static ApprovalRequestDto from(ApprovalRequest r) {
@@ -88,7 +126,11 @@ public record ApprovalRequestDto(
                 false,
                 false,
                 new TargetSummary(effectiveTargetId, targetTypeName, r.getTitle(), null,
-                        r.getStatus() == null ? null : r.getStatus().name(), targetUrl));
+                        r.getStatus() == null ? null : r.getStatus().name(), targetUrl),
+                r.getLastReturnedAt() != null,
+                r.getLastReturnedAt(),
+                r.getLastReturnedBy(),
+                r.getLastReturnComment());
     }
 
     private static String targetUrl(String targetType, UUID targetId) {

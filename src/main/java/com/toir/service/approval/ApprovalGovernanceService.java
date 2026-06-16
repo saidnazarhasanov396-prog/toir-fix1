@@ -4,6 +4,7 @@ import com.toir.entity.ApprovalHistory;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.entity.EscalationEvent;
+import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.OperationalIssueType;
@@ -93,6 +94,27 @@ public class ApprovalGovernanceService {
                        ApprovalStatus newStatus,
                        UUID changedBy,
                        String comment) {
+        record(request, oldStatus, newStatus, changedBy, comment, request == null ? null : request.getActionType());
+    }
+
+    @Transactional
+    public void record(ApprovalRequest request,
+                       ApprovalStatus oldStatus,
+                       ApprovalStatus newStatus,
+                       UUID changedBy,
+                       String comment,
+                       ApprovalActionType historyActionType) {
+        record(request, oldStatus, newStatus, changedBy, null, comment, historyActionType);
+    }
+
+    @Transactional
+    public void record(ApprovalRequest request,
+                       ApprovalStatus oldStatus,
+                       ApprovalStatus newStatus,
+                       UUID changedBy,
+                       UUID delegatedForId,
+                       String comment,
+                       ApprovalActionType historyActionType) {
         if (request == null || request.getId() == null || newStatus == null) {
             return;
         }
@@ -101,9 +123,10 @@ public class ApprovalGovernanceService {
         history.setOldStatus(oldStatus);
         history.setNewStatus(newStatus);
         history.setChangedBy(changedBy);
+        history.setDelegatedForId(delegatedForId);
         history.setComment(comment);
         history.setChangedAt(Instant.now());
-        history.setActionType(request.getActionType());
+        history.setActionType(historyActionType);
         history.setTargetType(request.getTargetType());
         history.setTargetId(request.getTargetId());
         historyRepository.save(history);

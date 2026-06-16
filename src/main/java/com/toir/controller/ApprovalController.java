@@ -6,6 +6,7 @@ import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.approval.ApprovalStatisticsDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
+import com.toir.dto.approval.ReturnApprovalRequest;
 import com.toir.enums.ApprovalStatus;
 import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
@@ -103,6 +104,13 @@ public class ApprovalController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_REJECT')")
     public ResponseEntity<ApprovalRequestDto> reject(@PathVariable UUID id, @Valid @RequestBody DecisionRequest decision) {
         return decisionResponse(service.reject(id, decision));
+    }
+
+    @PostMapping("/{id}/return")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_RETURN')")
+    public ResponseEntity<ApprovalRequestDto> returnApproval(@PathVariable UUID id,
+                                                             @Valid @RequestBody ReturnApprovalRequest request) {
+        return ResponseEntity.ok(service.returnToStep(id, request));
     }
 
     @PostMapping("/{id}/cancel")
