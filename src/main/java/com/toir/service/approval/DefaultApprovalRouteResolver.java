@@ -15,6 +15,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 @Service
@@ -51,12 +52,27 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
         if (!StringUtils.hasText(routeRole)) {
             return List.of();
         }
-        return userRepository.findAllWithRolesAndIsDeletedFalse().stream()
+        return resolveRole(routeRole)
+                .map(List::of)
+                .orElse(List.of());
+    }
+
+    @Override
+    public Optional<CreateApprovalRequest.StepInput> resolveRole(String approverRole) {
+        if (!StringUtils.hasText(approverRole)) {
+            return Optional.empty();
+        }
+        String routeRole = approverRole.trim();
+        List<User> activeUsers = userRepository.findAllWithRolesAndIsDeletedFalse().stream()
                 .filter(user -> user.getStatus() == null || user.getStatus() == UserStatus.ACTIVE)
+                .toList();
+        return activeUsers.stream()
                 .filter(user -> hasRoleOrPermission(user, routeRole))
                 .findFirst()
-                .map(user -> List.of(new CreateApprovalRequest.StepInput(user.getId(), routeRole)))
-                .orElse(List.of());
+                .or(() -> activeUsers.stream()
+                        .filter(user -> hasRoleOrPermission(user, "SYSTEM_ADMIN") || hasRoleOrPermission(user, "*"))
+                        .findFirst())
+                .map(user -> new CreateApprovalRequest.StepInput(user.getId(), routeRole));
     }
 
     private boolean hasRoleOrPermission(User user, String code) {
