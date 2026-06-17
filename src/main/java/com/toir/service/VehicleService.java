@@ -21,6 +21,7 @@ import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
+import com.toir.enums.MeterType;
 import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.exception.RestException;
 import com.toir.repository.UploadedFileRepository;
@@ -671,6 +672,42 @@ public class VehicleService {
         equipment.setStatus(request.status() != null ? request.status() : EquipmentStatus.ACTIVE);
         equipment.setCategory(EquipmentCategory.VEHICLE);
         equipment.setManufacturer(request.brand());
+        equipment.setResponsibleId(request.assignedDriverId());
+        equipment.setProducedYear(request.manufactureYear());
+        equipment.setAverageDailyUsage(request.averageDailyUsage());
+        applyVehicleLifetime(equipment, request);
+    }
+
+    private void applyVehicleLifetime(Equipment equipment, VehicleRequest request) {
+        MeterType counterType = request.lifetimeCounterType();
+        Double limitValue = request.lifetimeLimitValue();
+        if (counterType == null && limitValue != null) {
+            counterType = MeterType.MILEAGE_KM;
+        }
+        validateVehicleLifetimeConfig(counterType, request.lifetimeMeterId(), limitValue);
+        equipment.setLifetimeCounterType(counterType);
+        equipment.setLifetimeMeterId(request.lifetimeMeterId());
+        equipment.setLifetimeLimitValue(limitValue);
+        equipment.setLifetimeBaselineValue(limitValue == null
+                ? request.lifetimeBaselineValue()
+                : defaultIfNull(request.lifetimeBaselineValue(), 0.0));
+        equipment.setLifetimeWarningPercent(limitValue == null
+                ? request.lifetimeWarningPercent()
+                : defaultIfNull(request.lifetimeWarningPercent(), 10.0));
+    }
+
+    private void validateVehicleLifetimeConfig(MeterType counterType, UUID meterId, Double limitValue) {
+        boolean hasConfig = counterType != null || meterId != null || limitValue != null;
+        if (!hasConfig) {
+            return;
+        }
+        if (counterType == null || limitValue == null || limitValue <= 0) {
+            throw RestException.badRequest("Vehicle lifetime must include counter type and positive limit value");
+        }
+    }
+
+    private static Double defaultIfNull(Double value, double fallback) {
+        return value != null ? value : fallback;
     }
 
     private String nextEquipmentCode() {

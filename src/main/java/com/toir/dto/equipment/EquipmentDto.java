@@ -250,7 +250,7 @@ public record EquipmentDto(
             Double pressureBar,
             String factoryNumber,
             String manufacturerSerial,
-            Double throughput,
+            java.util.List<com.toir.dto.equipmentpassport.ProductivityEntryDto> productivity,
             LocalDate installDate,
             LocalDate lastInspectionDate,
             String notes

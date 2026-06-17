@@ -4,6 +4,7 @@ import com.toir.entity.equipment.EquipmentPassport;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public record EquipmentPassportDto(
@@ -15,7 +16,7 @@ public record EquipmentPassportDto(
         Double powerKw,
         Double voltageV,
         Double pressureBar,
-        Double throughput,
+        List<ProductivityEntryDto> productivity,
         LocalDate installDate,
         LocalDate lastInspectionDate,
         String notes
@@ -24,7 +25,8 @@ public record EquipmentPassportDto(
         return new EquipmentPassportDto(
                 p.getId(), p.getEquipmentId(), p.getPassportNumber(), p.getFactoryNumber(),
                 p.getManufacturerSerial(), p.getPowerKw(), p.getVoltageV(), p.getPressureBar(),
-                p.getThroughput(), p.getInstallDate(), p.getLastInspectionDate(), p.getNotes()
+                p.getProductivity() != null ? p.getProductivity() : java.util.List.of(),
+                p.getInstallDate(), p.getLastInspectionDate(), p.getNotes()
         );
     }
 }

@@ -896,7 +896,8 @@ public class EquipmentService {
     private static EquipmentDto.PassportRef passportRef(EquipmentPassport p) {
         return p == null ? null : new EquipmentDto.PassportRef(
                 p.getPassportNumber(), p.getPowerKw(), p.getVoltageV(), p.getPressureBar(),
-                p.getFactoryNumber(), p.getManufacturerSerial(), p.getThroughput(),
+                p.getFactoryNumber(), p.getManufacturerSerial(),
+                p.getProductivity() != null ? p.getProductivity() : java.util.List.of(),
                 p.getInstallDate(), p.getLastInspectionDate(), p.getNotes());
     }
 

@@ -7,7 +7,10 @@ import com.toir.enums.LifetimeStatus;
 import com.toir.enums.MeterType;
 import org.junit.jupiter.api.Test;
 
+import com.toir.dto.equipmentpassport.ProductivityEntryDto;
+
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,12 +30,14 @@ class EquipmentDtoTest {
     @Test
     void fromIncludesAverageOperatingLifeHours() {
         Equipment equipment = new Equipment();
+        equipment.setProducedYear(2024);
         equipment.setAverageOperatingLifeHours(10_000L);
         equipment.setAverageDailyUsage(200.0);
         equipment.setExpectedLifetimeHours(18_000L);
 
         EquipmentDto dto = EquipmentDto.from(equipment);
 
+        assertThat(dto.producedYear()).isEqualTo(2024);
         assertThat(dto.averageOperatingLifeHours()).isEqualTo(10_000L);
         assertThat(dto.averageDailyUsage()).isEqualTo(200.0);
         assertThat(dto.expectedLifetimeHours()).isEqualTo(18_000L);
@@ -50,7 +55,7 @@ class EquipmentDtoTest {
                 6.0,
                 "FAC-123",
                 "SER-456",
-                120.0,
+                List.of(),
                 installDate,
                 lastInspectionDate,
                 "Some notes"
@@ -62,7 +67,7 @@ class EquipmentDtoTest {
         assertThat(ref.pressureBar()).isEqualTo(6.0);
         assertThat(ref.factoryNumber()).isEqualTo("FAC-123");
         assertThat(ref.manufacturerSerial()).isEqualTo("SER-456");
-        assertThat(ref.throughput()).isEqualTo(120.0);
+        assertThat(ref.productivity()).isEmpty();
         assertThat(ref.installDate()).isEqualTo(installDate);
         assertThat(ref.lastInspectionDate()).isEqualTo(lastInspectionDate);
         assertThat(ref.notes()).isEqualTo("Some notes");
@@ -78,7 +83,7 @@ class EquipmentDtoTest {
         assertThat(ref.passportNumber()).isEqualTo("PP-002");
         assertThat(ref.factoryNumber()).isNull();
         assertThat(ref.manufacturerSerial()).isNull();
-        assertThat(ref.throughput()).isNull();
+        assertThat(ref.productivity()).isNull();
         assertThat(ref.installDate()).isNull();
         assertThat(ref.lastInspectionDate()).isNull();
         assertThat(ref.notes()).isNull();
