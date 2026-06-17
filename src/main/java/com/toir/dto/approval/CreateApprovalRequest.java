@@ -1,6 +1,5 @@
 package com.toir.dto.approval;
 
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -15,7 +14,7 @@ public record CreateApprovalRequest(
         @NotBlank String title,
         @NotNull UUID requesterId,
         String description,
-        @NotEmpty List<StepInput> steps,
+        List<StepInput> steps,
         ApprovalTargetType targetType,
         UUID targetId,
         ApprovalActionType actionType
@@ -30,7 +29,7 @@ public record CreateApprovalRequest(
     }
 
     public record StepInput(
-            @NotNull UUID approverId,
+            UUID approverId,
             String approverRole
     ) {}
 }

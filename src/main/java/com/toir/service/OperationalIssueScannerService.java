@@ -12,6 +12,7 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.ApprovalStatus;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.ContractorWorkStatus;
 import com.toir.enums.DefectStatus;
@@ -661,18 +662,22 @@ public class OperationalIssueScannerService {
     ) {}
 
     private SourceScope approvalScope(ApprovalRequest request) {
-        if ("WorkOrder".equals(request.getDocumentType())) {
-            return workOrderRepository.findByIdAndIsDeletedFalse(request.getDocumentId())
+        ApprovalTargetType targetType = request.getTargetType() == null
+                ? ApprovalTargetType.fromDocumentType(request.getDocumentType())
+                : request.getTargetType();
+        UUID targetId = request.getTargetId() == null ? request.getDocumentId() : request.getTargetId();
+        if (targetType == ApprovalTargetType.WORK_ORDER) {
+            return workOrderRepository.findByIdAndIsDeletedFalse(targetId)
                     .map(workOrder -> new SourceScope(workOrder.getEquipmentId(), workOrder.getDepartmentId()))
                     .orElse(SourceScope.empty());
         }
-        if ("RepairRequest".equals(request.getDocumentType())) {
-            return repairRequestRepository.findByIdAndIsDeletedFalse(request.getDocumentId())
+        if (targetType == ApprovalTargetType.REPAIR_REQUEST) {
+            return repairRequestRepository.findByIdAndIsDeletedFalse(targetId)
                     .map(repair -> new SourceScope(repair.getEquipmentId(), repair.getDepartmentId()))
                     .orElse(SourceScope.empty());
         }
-        if ("MaintenanceBudget".equals(request.getDocumentType())) {
-            return maintenanceBudgetRepository.findByIdAndIsDeletedFalse(request.getDocumentId())
+        if (targetType == ApprovalTargetType.MAINTENANCE_BUDGET || targetType == ApprovalTargetType.BUDGET) {
+            return maintenanceBudgetRepository.findByIdAndIsDeletedFalse(targetId)
                     .map(budget -> new SourceScope(null, budget.getDepartmentId()))
                     .orElse(SourceScope.empty());
         }

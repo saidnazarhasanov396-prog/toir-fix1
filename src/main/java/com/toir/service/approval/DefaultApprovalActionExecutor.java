@@ -30,10 +30,9 @@ public class DefaultApprovalActionExecutor implements ApprovalActionExecutor {
     }
 
     private ApprovalTargetType resolveTargetType(ApprovalRequest request) {
-        ApprovalTargetType documentTargetType = ApprovalTargetType.fromDocumentType(request.getDocumentType());
-        if (documentTargetType != null && documentTargetType != ApprovalTargetType.OTHER) {
-            return documentTargetType;
+        if (request.getTargetType() != null) {
+            return request.getTargetType();
         }
-        return request.getTargetType();
+        return ApprovalTargetType.fromDocumentType(request.getDocumentType());
     }
 }
