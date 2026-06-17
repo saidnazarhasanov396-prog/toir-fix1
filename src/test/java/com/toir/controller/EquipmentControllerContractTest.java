@@ -778,6 +778,8 @@ class EquipmentControllerContractTest {
         EquipmentDto equipment = equipmentDto(id, equipmentTypeId, departmentId, null, null, departmentRef, placement);
         EquipmentDetailDto detail = new EquipmentDetailDto(
                 equipment,
+                0,
+                2,
                 List.of(new EquipmentDetailDto.RepairRequestShortDto(
                         UUID.randomUUID(),
                         "RR-001",
@@ -821,6 +823,7 @@ class EquipmentControllerContractTest {
                 .andExpect(jsonPath("$.equipment.placement.department.id").value(departmentId.toString()))
                 .andExpect(jsonPath("$.repairRequests").isArray())
                 .andExpect(jsonPath("$.repairRequests.length()").value(1))
+                .andExpect(jsonPath("$.repairsCount").value(2))
                 .andExpect(jsonPath("$.defects").isArray())
                 .andExpect(jsonPath("$.defects.length()").value(1))
                 .andExpect(jsonPath("$.workOrders").isArray())

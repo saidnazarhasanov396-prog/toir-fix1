@@ -273,6 +273,9 @@ public class EquipmentService {
         if (workOrderEntities == null) {
             workOrderEntities = List.of();
         }
+        int repairsCount = (int) workOrderEntities.stream()
+                .filter(w -> w.getWorkType() == WorkType.REPAIR)
+                .count();
         List<EquipmentDetailDto.WorkOrderShortDto> workOrders = workOrderEntities.stream()
                 .map(w -> new EquipmentDetailDto.WorkOrderShortDto(
                         w.getId(),
@@ -304,6 +307,7 @@ public class EquipmentService {
         return new EquipmentDetailDto(
                 equipment,
                 repairCount,
+                repairsCount,
                 repairRequests,
                 defects,
                 workOrders,
