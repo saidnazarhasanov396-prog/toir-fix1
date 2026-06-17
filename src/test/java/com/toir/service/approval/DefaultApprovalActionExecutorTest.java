@@ -36,10 +36,9 @@ class DefaultApprovalActionExecutorTest {
     }
 
     @Test
-    void documentTypeWinsWhenLegacyAliasAndTargetTypeDisagree() {
+    void targetTypeIsUsedForRouting() {
         ApprovalRequest request = new ApprovalRequest();
-        request.setDocumentType("WORK_ORDER");
-        request.setDocumentType("PPR_PLAN");
+        request.setTargetType(ApprovalTargetType.PPR_PLAN);
         request.setActionType(ApprovalActionType.REJECT);
         DefaultApprovalActionExecutor executor = new DefaultApprovalActionExecutor(List.of(
                 new WorkOrderApprovalHandler(null),

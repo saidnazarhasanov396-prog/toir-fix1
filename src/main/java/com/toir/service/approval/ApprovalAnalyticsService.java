@@ -3,6 +3,7 @@ package com.toir.service.approval;
 import com.toir.dto.approval.ApprovalAnalyticsDto;
 import com.toir.entity.ApprovalRequest;
 import com.toir.enums.ApprovalStatus;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.repository.ApprovalRequestRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,7 @@ public class ApprovalAnalyticsService {
         if (request.getTargetType() != null) {
             return request.getTargetType().name();
         }
-        return request.getDocumentType() == null ? "UNKNOWN" : request.getDocumentType();
+        ApprovalTargetType targetType = ApprovalTargetType.fromDocumentType(request.getDocumentType());
+        return targetType == null ? "UNKNOWN" : targetType.name();
     }
 }

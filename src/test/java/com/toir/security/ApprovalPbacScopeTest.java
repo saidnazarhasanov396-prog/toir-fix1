@@ -7,15 +7,20 @@ import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalDelegate;
 import com.toir.entity.ApprovalHistory;
 import com.toir.entity.ApprovalStep;
+import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ProcurementRequest;
+import com.toir.entity.users.Role;
+import com.toir.entity.users.User;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.enums.UserStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.ApprovalDelegateRepository;
@@ -62,6 +67,7 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -239,14 +245,14 @@ class ApprovalPbacScopeTest {
     void listByDocumentNormalizesDocumentTypeBeforeQuerying() {
         UUID documentId = UUID.randomUUID();
         ApprovalRequest approval = approval(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), documentId);
-        when(requestRepository.findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse("WORK_ORDER", documentId))
+        when(requestRepository.findAllByTargetTypeAndTargetIdAndIsDeletedFalse("WORK_ORDER", documentId))
                 .thenReturn(List.of(approval));
         when(approvalScopeService.canReadApproval(approval)).thenReturn(true);
 
         var result = service.listByDocument("work-order", documentId);
 
         assertThat(result).hasSize(1);
-        verify(requestRepository).findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse("WORK_ORDER", documentId);
+        verify(requestRepository).findAllByTargetTypeAndTargetIdAndIsDeletedFalse("WORK_ORDER", documentId);
     }
 
     @Test
@@ -260,7 +266,9 @@ class ApprovalPbacScopeTest {
 
         service.create(request);
 
-        verify(approvalScopeService).assertCanCreateApproval(request);
+        verify(approvalScopeService).assertCanCreateApproval(argThat(effective ->
+                effective.targetType() == ApprovalTargetType.WORK_ORDER
+                        && request.documentId().equals(effective.targetId())));
     }
 
     @Test
@@ -285,7 +293,7 @@ class ApprovalPbacScopeTest {
     }
 
     @Test
-    void newFrameworkFieldsCanBeSavedWithoutChangingLegacyDocumentFields() {
+    void targetFieldsUpdateLegacyDocumentAliases() {
         UUID documentId = UUID.randomUUID();
         ApprovalRequest approval = approval(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), documentId);
         approval.setTargetType(ApprovalTargetType.MAINTENANCE_BUDGET);
@@ -298,7 +306,7 @@ class ApprovalPbacScopeTest {
 
         ApprovalRequest saved = requestRepository.save(approval);
 
-        assertThat(saved.getDocumentType()).isEqualTo("WORK_ORDER");
+        assertThat(saved.getDocumentType()).isEqualTo("MAINTENANCE_BUDGET");
         assertThat(saved.getDocumentId()).isEqualTo(documentId);
         assertThat(saved.getTargetType()).isEqualTo(ApprovalTargetType.MAINTENANCE_BUDGET);
         assertThat(saved.getTargetId()).isEqualTo(documentId);
@@ -322,7 +330,9 @@ class ApprovalPbacScopeTest {
 
         service.create(request);
 
-        verify(approvalScopeService).assertCanCreateApproval(request);
+        verify(approvalScopeService).assertCanCreateApproval(argThat(effective ->
+                effective.targetType() == ApprovalTargetType.WORK_ORDER
+                        && documentId.equals(effective.targetId())));
         verify(notificationService).notifyUser(
                 eq(approverId),
                 org.mockito.ArgumentMatchers.contains("Approval requested"),
@@ -331,6 +341,47 @@ class ApprovalPbacScopeTest {
                 eq("ApprovalRequest"),
                 org.mockito.ArgumentMatchers.anyString()
         );
+    }
+
+    @Test
+    void createCanOmitApproverAndResolveRouteFromTemplate() {
+        UUID documentId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        CreateApprovalRequest request = new CreateApprovalRequest(
+                "WORK_ORDER",
+                documentId,
+                "Route resolved approval",
+                requesterId,
+                "needs routing",
+                null
+        );
+        ApprovalTemplate template = new ApprovalTemplate();
+        template.setTargetType(ApprovalTargetType.WORK_ORDER);
+        template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
+        template.setApproverRole("WORK_ORDER_APPROVER");
+        User approver = new User();
+        approver.setId(approverId);
+        approver.setStatus(UserStatus.ACTIVE);
+        Role role = new Role();
+        role.setCode("WORK_ORDER_APPROVER");
+        approver.setPrimaryRole(role);
+        when(templateRepository.findFirstByTargetTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalTargetType.WORK_ORDER))
+                .thenReturn(Optional.of(template));
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(approver));
+        when(requestRepository.save(any())).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        service.create(request);
+
+        org.mockito.ArgumentCaptor<ApprovalRequest> captor = org.mockito.ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository).save(captor.capture());
+        ApprovalRequest saved = captor.getValue();
+        assertThat(saved.getSteps()).hasSize(1);
+        assertThat(saved.getSteps().getFirst().getApproverId()).isEqualTo(approverId);
     }
 
     @Test
@@ -353,6 +404,22 @@ class ApprovalPbacScopeTest {
                 eq("WorkOrder"),
                 eq(approval.getDocumentId().toString())
         );
+    }
+
+    @Test
+    void approveCanOmitApproverIdAndUseCurrentUser() {
+        UUID approvalId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        ApprovalRequest approval = approval(approvalId, UUID.randomUUID(), approverId, UUID.randomUUID());
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(requestRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(approverId);
+
+        service.approve(approvalId, new DecisionRequest(null, "ok"));
+
+        verify(approvalScopeService).assertCanDecideApproval(approval, approval.getSteps().getFirst());
+        assertThat(approval.getSteps().getFirst().getDecidedById()).isEqualTo(approverId);
+        assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.APPROVED);
     }
 
     @Test
