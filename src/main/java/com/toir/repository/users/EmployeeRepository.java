@@ -103,6 +103,70 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
             Pageable pageable
     );
 
+    @Query("""
+    select e
+    from Employee e
+    where e.isDeleted = false
+      and (:departmentId is null or e.departmentId = :departmentId)
+      and (:brigadeId is null or e.brigadeId = :brigadeId)
+      and (:activeOnly is null or e.active = :activeOnly)
+      and exists (
+            select 1
+            from EmployeeWorkRoleAssignment a
+            join a.workRole r
+            where a.employeeId = e.id
+              and a.isDeleted = false
+              and r.isDeleted = false
+              and r.active = true
+              and upper(r.code) = upper(:workRoleCode)
+      )
+      and (
+            :search is null
+            or lower(coalesce(e.personnelNumber, '')) like lower(concat('%', cast(:search as string), '%'))
+            or lower(coalesce(e.position, '')) like lower(concat('%', cast(:search as string), '%'))
+            or lower(coalesce(e.grade, '')) like lower(concat('%', cast(:search as string), '%'))
+            or lower(coalesce(e.phone, '')) like lower(concat('%', cast(:search as string), '%'))
+            or lower(coalesce(e.email, '')) like lower(concat('%', cast(:search as string), '%'))
+            or lower(coalesce(e.firstName, '')) like lower(concat('%', cast(:search as string), '%'))
+            or lower(coalesce(e.lastName, '')) like lower(concat('%', cast(:search as string), '%'))
+            or lower(coalesce(e.middleName, '')) like lower(concat('%', cast(:search as string), '%'))
+            or (
+                :part1 is not null
+                and :part2 is not null
+                and (
+                    (lower(coalesce(e.lastName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                        and lower(coalesce(e.firstName, '')) like lower(concat('%', cast(:part2 as string), '%')))
+                    or
+                    (lower(coalesce(e.firstName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                        and lower(coalesce(e.lastName, '')) like lower(concat('%', cast(:part2 as string), '%')))
+                    or
+                    (lower(coalesce(e.firstName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                        and lower(coalesce(e.middleName, '')) like lower(concat('%', cast(:part2 as string), '%')))
+                    or
+                    (lower(coalesce(e.middleName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                        and lower(coalesce(e.firstName, '')) like lower(concat('%', cast(:part2 as string), '%')))
+                    or
+                    (lower(coalesce(e.lastName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                        and lower(coalesce(e.middleName, '')) like lower(concat('%', cast(:part2 as string), '%')))
+                    or
+                    (lower(coalesce(e.middleName, '')) like lower(concat('%', cast(:part1 as string), '%'))
+                        and lower(coalesce(e.lastName, '')) like lower(concat('%', cast(:part2 as string), '%')))
+                )
+            )
+      )
+    order by e.updatedAt desc
+    """)
+    Page<Employee> searchEmployeesByWorkRole(
+            @Param("search") String search,
+            @Param("part1") String part1,
+            @Param("part2") String part2,
+            @Param("activeOnly") Boolean activeOnly,
+            @Param("departmentId") UUID departmentId,
+            @Param("brigadeId") UUID brigadeId,
+            @Param("workRoleCode") String workRoleCode,
+            Pageable pageable
+    );
+
     @Query(nativeQuery = true, value = """
         select
             count(e.id) as total,

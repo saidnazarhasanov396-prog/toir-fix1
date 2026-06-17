@@ -40,6 +40,8 @@ public class EquipmentManualAttributeService {
             "arrival_date",
             "averageOperatingLifeHours",
             "average_operating_life_hours",
+            "averageDailyUsage",
+            "average_daily_usage",
             "expectedLifetimeHours",
             "expected_lifetime_hours",
             "lifetimeCounterType",

@@ -31,8 +31,50 @@ public record RepairRequestRequest(
         RequestSource source,
         Instant targetCompletionAt,
         @Schema(description = "Optional maintenance template to use as repair context", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
-        UUID templateId
+        UUID templateId,
+        @Schema(description = "Optional maintenance templates to use as repair context", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        List<UUID> templateIds,
+        @Schema(description = "Optional selected template actions for the repair request", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        List<TemplateSelectionRequest> templateSelections
 ) {
+    public RepairRequestRequest(
+            String number,
+            String title,
+            String description,
+            UUID defectId,
+            InlineDefectRequest defect,
+            List<InlineDefectRequest> defects,
+            UUID equipmentId,
+            UUID departmentId,
+            UUID locationId,
+            UUID reporterId,
+            PriorityLevel priority,
+            CriticalityLevel criticality,
+            RequestSource source,
+            Instant targetCompletionAt,
+            UUID templateId
+    ) {
+        this(
+                number,
+                title,
+                description,
+                defectId,
+                defect,
+                defects,
+                equipmentId,
+                departmentId,
+                locationId,
+                reporterId,
+                priority,
+                criticality,
+                source,
+                targetCompletionAt,
+                templateId,
+                null,
+                null
+        );
+    }
+
     public RepairRequestRequest(
             String number,
             String title,
@@ -64,6 +106,8 @@ public record RepairRequestRequest(
                 criticality,
                 source,
                 targetCompletionAt,
+                null,
+                null,
                 null
         );
     }
@@ -97,6 +141,8 @@ public record RepairRequestRequest(
                 criticality,
                 source,
                 targetCompletionAt,
+                null,
+                null,
                 null
         );
     }
@@ -108,5 +154,17 @@ public record RepairRequestRequest(
             String severity,
             String failureReason,
             String rootCause
+    ) {}
+
+    public record TemplateSelectionRequest(
+            @NotNull UUID templateId,
+            List<ActionSelectionRequest> actions
+    ) {}
+
+    public record ActionSelectionRequest(
+            UUID operationId,
+            UUID actionId,
+            UUID specialistId,
+            String customName
     ) {}
 }

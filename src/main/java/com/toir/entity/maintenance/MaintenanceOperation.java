@@ -3,6 +3,8 @@ import com.toir.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.UUID;
+
 @Entity
 @Table(name = "maintenance_operations",
         uniqueConstraints = @UniqueConstraint(columnNames = {"template_id", "sequence"}))
@@ -20,6 +22,9 @@ public class MaintenanceOperation extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "action_id")
     private MaintenanceAction action;
+
+    @Column(name = "specialist_id")
+    private UUID specialistId;
 
     @Column(nullable = false)
     private int sequence;

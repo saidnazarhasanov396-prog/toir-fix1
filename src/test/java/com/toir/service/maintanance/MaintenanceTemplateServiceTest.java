@@ -5,6 +5,7 @@ import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.dto.maintenancetemplate.MaintenanceOperationDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
+import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.maintenance.MaintenanceOperation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.enums.MaintenanceKind;
@@ -12,8 +13,10 @@ import com.toir.exception.RestException;
 import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.service.SparePartService;
 import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -24,6 +27,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 
 import java.time.Year;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -57,8 +63,25 @@ class MaintenanceTemplateServiceTest {
     @Mock
     EquipmentTypeRepository equipmentTypeRepository;
 
+    @Mock
+    UserRepository userRepository;
+
     @InjectMocks
     MaintenanceTemplateService service;
+
+    @BeforeEach
+    void setUpEquipmentTypeValidation() {
+        lenient().when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(any()))
+                .thenAnswer(invocation -> {
+                    Collection<UUID> ids = invocation.getArgument(0);
+                    return ids.stream().map(id -> {
+                        EquipmentType equipmentType = new EquipmentType();
+                        equipmentType.setId(id);
+                        equipmentType.setName("Equipment type");
+                        return equipmentType;
+                    }).toList();
+                });
+    }
 
     @Test
     void createWithoutCodeGeneratesCode() {

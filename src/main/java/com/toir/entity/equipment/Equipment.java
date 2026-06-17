@@ -108,6 +108,9 @@ public class Equipment extends BaseEntity {
     @Column(name = "average_operating_life_hours")
     private Long averageOperatingLifeHours;
 
+    @Column(name = "average_daily_usage")
+    private Double averageDailyUsage;
+
     @Column(name = "operation_start_date")
     private LocalDate operationStartDate;
 

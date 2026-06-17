@@ -135,6 +135,29 @@ class HrControllerContractTest {
     }
 
     @Test
+    void listEmployeesPassesWorkRoleFilterToService() throws Exception {
+        UUID employeeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+
+        Page<EmployeeDto> page = getEmployeeDtos(employeeId, departmentId, null);
+
+        when(securityScope.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
+        when(service.listEmployees(-1, 20, null, true, departmentId, null, "DRIVER"))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/v1/hr/employees")
+                        .param("page", "0")
+                        .param("size", "20")
+                        .param("activeOnly", "true")
+                        .param("departmentId", departmentId.toString())
+                        .param("workRoleCode", "DRIVER"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].departmentId").value(departmentId.toString()));
+
+        verify(service).listEmployees(-1, 20, null, true, departmentId, null, "DRIVER");
+    }
+
+    @Test
     void listEmployeesUsesScopedDepartmentFilter() throws Exception {
         UUID requestedDepartmentId = UUID.randomUUID();
         UUID scopedDepartmentId = UUID.randomUUID();

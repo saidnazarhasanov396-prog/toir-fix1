@@ -3,6 +3,9 @@ package com.toir.controller;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleDocumentDto;
+import com.toir.dto.vehicle.VehicleDrivingSessionResponse;
+import com.toir.dto.vehicle.VehicleDrivingSessionReturnRequest;
+import com.toir.dto.vehicle.VehicleDrivingSessionStartRequest;
 import com.toir.dto.vehicle.VehiclePictureDto;
 import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleStatsResponse;
@@ -16,6 +19,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.VehicleDrivingSessionService;
 import com.toir.service.VehicleService;
 import com.toir.service.VehiclePictureService;
 import com.toir.util.PaginationUtils;
@@ -31,6 +35,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -60,6 +65,7 @@ public class VehicleController {
     private final ScopeAccessService scopeAccessService;
     private final EquipmentRepository equipmentRepository;
     private final VehiclePictureService pictureService;
+    private final VehicleDrivingSessionService drivingSessionService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
@@ -263,6 +269,43 @@ public class VehicleController {
     ) {
         assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
         return ResponseEntity.ok(PaginationUtils.page(pictureService.getPictures(equipmentId, user), page, size));
+    }
+
+    @PostMapping("/{equipmentId}/driving-sessions/start")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    public ResponseEntity<VehicleDrivingSessionResponse> startDrivingSession(
+            @PathVariable UUID equipmentId,
+            @Valid @RequestBody VehicleDrivingSessionStartRequest request,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
+        return ResponseEntity.ok(drivingSessionService.start(equipmentId, request, currentUserId(user)));
+    }
+
+    @PostMapping("/{equipmentId}/driving-sessions/{sessionId}/return")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    public ResponseEntity<VehicleDrivingSessionResponse> returnDrivingSession(
+            @PathVariable UUID equipmentId,
+            @PathVariable UUID sessionId,
+            @Valid @RequestBody VehicleDrivingSessionReturnRequest request,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
+        return ResponseEntity.ok(drivingSessionService.returnVehicle(equipmentId, sessionId, request, currentUserId(user)));
+    }
+
+    @GetMapping("/{equipmentId}/driving-sessions")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Page<VehicleDrivingSessionResponse>> drivingSessionHistory(
+            @PathVariable UUID equipmentId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size
+    ) {
+        assertCanAccessVehicleEquipment(vehicleEquipmentOrThrow(equipmentId));
+        return ResponseEntity.ok(drivingSessionService.history(
+                equipmentId,
+                PageRequest.of(Math.max(0, page), Math.max(1, size))
+        ));
     }
 
     @GetMapping("/pictures/{pictureId}/download")

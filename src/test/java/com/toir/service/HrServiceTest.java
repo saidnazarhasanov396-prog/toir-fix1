@@ -12,6 +12,8 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
+import com.toir.repository.users.EmployeeWorkRoleCodeProjection;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.users.HrService;
 import com.toir.util.AuditBuilderService;
@@ -55,6 +57,9 @@ class HrServiceTest {
 
     @Mock
     ScopeAccessService scopeAccessService;
+
+    @Mock
+    EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
     @InjectMocks
     HrService service;
@@ -153,6 +158,45 @@ class HrServiceTest {
                 true,
                 departmentId,
                 brigadeId,
+                PageRequest.of(0, 20)
+        );
+    }
+
+    @Test
+    void listEmployeesWithWorkRoleFilterUsesWorkRoleRepositoryQueryAndIncludesCodes() {
+        UUID departmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        Employee employee = employee(employeeId, departmentId, null);
+
+        when(employeeRepository.searchEmployeesByWorkRole(
+                null,
+                null,
+                null,
+                true,
+                departmentId,
+                null,
+                "DRIVER",
+                PageRequest.of(0, 20)
+        )).thenReturn(new PageImpl<>(
+                List.of(employee),
+                PageRequest.of(0, 20),
+                1
+        ));
+        when(employeeWorkRoleAssignmentRepository.findActiveWorkRoleCodesByEmployeeIds(List.of(employeeId)))
+                .thenReturn(List.of(workRoleCode(employeeId, "DRIVER")));
+
+        var result = service.listEmployees(0, 20, null, true, departmentId, null, "DRIVER");
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().workRoleCodes()).containsExactly("DRIVER");
+        verify(employeeRepository).searchEmployeesByWorkRole(
+                null,
+                null,
+                null,
+                true,
+                departmentId,
+                null,
+                "DRIVER",
                 PageRequest.of(0, 20)
         );
     }
@@ -423,6 +467,20 @@ class HrServiceTest {
         employee.setActive(true);
         employee.setDeleted(false);
         return employee;
+    }
+
+    private static EmployeeWorkRoleCodeProjection workRoleCode(UUID employeeId, String code) {
+        return new EmployeeWorkRoleCodeProjection() {
+            @Override
+            public UUID getEmployeeId() {
+                return employeeId;
+            }
+
+            @Override
+            public String getCode() {
+                return code;
+            }
+        };
     }
 
     private Department department(UUID departmentId, String name) {
