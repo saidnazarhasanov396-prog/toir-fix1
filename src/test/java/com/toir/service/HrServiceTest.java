@@ -1,19 +1,20 @@
 package com.toir.service;
 
-import com.toir.dto.hr.EmployeeDto;
-import com.toir.dto.hr.EmployeeRequest;
-import com.toir.dto.hr.EmployeeStatsResponse;
+import com.toir.dto.hr.*;
 import com.toir.entity.Department;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.Employee;
+import com.toir.entity.users.EmployeeSpecialisation;
 import com.toir.enums.DepartmentType;
 import com.toir.repository.TimesheetEntryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.repository.users.EmployeeSpecialisationRepository;
 import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
 import com.toir.repository.users.EmployeeWorkRoleCodeProjection;
+import com.toir.repository.users.EmployeeWorkRoleRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.users.HrService;
 import com.toir.util.AuditBuilderService;
@@ -32,6 +33,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
@@ -61,12 +63,20 @@ class HrServiceTest {
     @Mock
     EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
+    @Mock
+    EmployeeWorkRoleRepository employeeWorkRoleRepository;
+
+    @Mock
+    EmployeeSpecialisationRepository employeeSpecialisationRepository;
+
     @InjectMocks
     HrService service;
 
     @BeforeEach
     void setUpScopeAdminBypass() {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        lenient().when(employeeSpecialisationRepository.findByIdAndIsDeletedFalse(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.of(specialisation(invocation.getArgument(0))));
     }
 
     @Test
@@ -352,10 +362,32 @@ class HrServiceTest {
     }
 
     @Test
+    void getEmployeeIncludesSpecialisationNames() {
+        UUID employeeId = UUID.randomUUID();
+        UUID specialisationId = UUID.randomUUID();
+
+        Employee employee = employee(employeeId, null, null);
+        employee.setSpecialisationId(specialisationId);
+
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId))
+                .thenReturn(Optional.of(employee));
+        when(employeeSpecialisationRepository.findAllByIdInAndIsDeletedFalse(List.of(specialisationId)))
+                .thenReturn(List.of(specialisation(specialisationId)));
+
+        EmployeeDto result = service.getEmployee(employeeId);
+
+        assertThat(result.specialisationId()).isEqualTo(specialisationId);
+        assertThat(result.specialisationNameRu()).isEqualTo("Механик");
+        assertThat(result.specialisationNameEn()).isEqualTo("Mechanic");
+        assertThat(result.specialisationNameUz()).isEqualTo("Mexanik");
+    }
+
+    @Test
     void createEmployeeReturnsDepartmentNameAndBrigadeName() {
         UUID employeeId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         UUID brigadeId = UUID.randomUUID();
+        UUID specialisationId = UUID.randomUUID();
 
         EmployeeRequest request = new EmployeeRequest(
                 "EMP-001",
@@ -366,6 +398,7 @@ class HrServiceTest {
                 departmentId,
                 brigadeId,
                 null,
+                specialisationId,
                 LocalDate.of(2025, 1, 10),
                 null,
                 "A",
@@ -396,6 +429,7 @@ class HrServiceTest {
         assertThat(result.departmentName()).isEqualTo("Mechanical");
         assertThat(result.brigadeId()).isEqualTo(brigadeId);
         assertThat(result.brigadeName()).isEqualTo("Repair Brigade A");
+        assertThat(result.specialisationId()).isEqualTo(specialisationId);
 
         verify(employeeRepository).existsByPersonnelNumberAndIsDeletedFalse("EMP-001");
         verify(employeeRepository).save(any(Employee.class));
@@ -406,6 +440,7 @@ class HrServiceTest {
         UUID employeeId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         UUID brigadeId = UUID.randomUUID();
+        UUID specialisationId = UUID.randomUUID();
 
         Employee existing = employee(employeeId, UUID.randomUUID(), null);
 
@@ -418,6 +453,7 @@ class HrServiceTest {
                 departmentId,
                 brigadeId,
                 null,
+                specialisationId,
                 LocalDate.of(2025, 1, 10),
                 null,
                 "A",
@@ -445,9 +481,82 @@ class HrServiceTest {
         assertThat(result.departmentName()).isEqualTo("Mechanical");
         assertThat(result.brigadeId()).isEqualTo(brigadeId);
         assertThat(result.brigadeName()).isEqualTo("Repair Brigade A");
+        assertThat(result.specialisationId()).isEqualTo(specialisationId);
 
         verify(employeeRepository).findByIdAndIsDeletedFalse(employeeId);
         verify(employeeRepository).save(any(Employee.class));
+    }
+
+    @Test
+    void createEmployeeWithInvalidSpecialisationIdFails() {
+        UUID specialisationId = UUID.randomUUID();
+        EmployeeRequest request = new EmployeeRequest(
+                "EMP-404",
+                "Ali",
+                "Valiyev",
+                "Akmalovich",
+                "Engineer",
+                null,
+                null,
+                null,
+                specialisationId,
+                LocalDate.of(2025, 1, 10),
+                null,
+                "A",
+                "+998901112233",
+                "ali@example.com",
+                true
+        );
+
+        when(employeeRepository.existsByPersonnelNumberAndIsDeletedFalse("EMP-404"))
+                .thenReturn(false);
+        when(employeeSpecialisationRepository.findByIdAndIsDeletedFalse(specialisationId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.createEmployee(request))
+                .hasMessageContaining("Employee specialisation not found");
+    }
+
+    @Test
+    void employeeSpecialisationCrudWorks() {
+        UUID specialisationId = UUID.randomUUID();
+        EmployeeSpecialisation existing = specialisation(specialisationId);
+        EmployeeSpecialisation saved = specialisation(specialisationId);
+        saved.setNameRu("Электрик");
+        saved.setNameEn("Electrician");
+        saved.setNameUz("Elektrik");
+        EmployeeSpecialisation requestEntity = specialisation(UUID.randomUUID());
+
+        when(employeeSpecialisationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(existing));
+        when(employeeSpecialisationRepository.findByIdAndIsDeletedFalse(specialisationId))
+                .thenReturn(Optional.of(existing));
+        when(employeeSpecialisationRepository.save(any(EmployeeSpecialisation.class)))
+                .thenAnswer(invocation -> {
+                    EmployeeSpecialisation entity = invocation.getArgument(0);
+                    if (entity.getId() == null) {
+                        entity.setId(requestEntity.getId());
+                    }
+                    return entity;
+                });
+
+        assertThat(service.listEmployeeSpecialisations()).hasSize(1);
+        assertThat(service.getEmployeeSpecialisation(specialisationId).nameEn()).isEqualTo("Mechanic");
+
+        EmployeeSpecialisationDto created = service.createEmployeeSpecialisation(
+                new EmployeeSpecialisationRequest("Электрик", "Electrician", "Elektrik", true)
+        );
+        assertThat(created.nameRu()).isEqualTo("Электрик");
+
+        EmployeeSpecialisationDto updated = service.updateEmployeeSpecialisation(
+                specialisationId,
+                new EmployeeSpecialisationRequest(saved.getNameRu(), saved.getNameEn(), saved.getNameUz(), false)
+        );
+        assertThat(updated.nameEn()).isEqualTo("Electrician");
+        assertThat(updated.active()).isFalse();
+
+        service.deleteEmployeeSpecialisation(specialisationId);
+        assertThat(existing.isDeleted()).isTrue();
     }
 
     private Employee employee(UUID employeeId, UUID departmentId, UUID brigadeId) {
@@ -530,5 +639,16 @@ class HrServiceTest {
                 return withoutEmail;
             }
         };
+    }
+
+    private EmployeeSpecialisation specialisation(UUID id) {
+        EmployeeSpecialisation specialisation = new EmployeeSpecialisation();
+        specialisation.setId(id);
+        specialisation.setNameRu("Механик");
+        specialisation.setNameEn("Mechanic");
+        specialisation.setNameUz("Mexanik");
+        specialisation.setActive(true);
+        specialisation.setDeleted(false);
+        return specialisation;
     }
 }

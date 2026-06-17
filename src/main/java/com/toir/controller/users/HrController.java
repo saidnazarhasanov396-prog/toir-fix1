@@ -67,6 +67,52 @@ public class HrController {
         return ResponseEntity.ok(service.listWorkRoles());
     }
 
+    @GetMapping("/employee-specialisations")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_READ')")
+    public ResponseEntity<List<EmployeeSpecialisationDto>> listEmployeeSpecialisations() {
+        return ResponseEntity.ok(service.listEmployeeSpecialisations());
+    }
+
+    @GetMapping("/employee-specialisations/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_READ')")
+    public ResponseEntity<EmployeeSpecialisationDto> getEmployeeSpecialisation(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.getEmployeeSpecialisation(id));
+    }
+
+    @PostMapping("/employee-specialisations")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_CREATE')")
+    public ResponseEntity<EmployeeSpecialisationDto> createEmployeeSpecialisation(
+            @Valid @RequestBody EmployeeSpecialisationRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createEmployeeSpecialisation(request));
+    }
+
+    @PutMapping("/employee-specialisations/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_UPDATE')")
+    public ResponseEntity<EmployeeSpecialisationDto> updateEmployeeSpecialisation(
+            @PathVariable UUID id,
+            @Valid @RequestBody EmployeeSpecialisationRequest request
+    ) {
+        return ResponseEntity.ok(service.updateEmployeeSpecialisation(id, request));
+    }
+
+    @PatchMapping("/employee-specialisations/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_UPDATE')")
+    public ResponseEntity<EmployeeSpecialisationDto> patchEmployeeSpecialisation(
+            @PathVariable UUID id,
+            @Valid @RequestBody EmployeeSpecialisationRequest request
+    ) {
+        return ResponseEntity.ok(service.updateEmployeeSpecialisation(id, request));
+    }
+
+    @DeleteMapping("/employee-specialisations/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_DELETE')")
+    public ResponseEntity<Void> deleteEmployeeSpecialisation(@PathVariable UUID id) {
+        service.deleteEmployeeSpecialisation(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/employees/stats")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_READ')")
     public ResponseEntity<EmployeeStatsResponse> employeeStats(

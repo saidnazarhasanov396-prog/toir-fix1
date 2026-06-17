@@ -271,19 +271,23 @@ public class OperationalIssueScannerService {
             int risk = riskScore == null ? 0 : riskScore.riskScore();
             NotificationSeverity severity = lifecycleSeverity(item.getStatus(), risk);
             EquipmentRiskLevel riskLevel = toEquipmentRiskLevel(item.getStatus(), risk);
-            issueService.openOrUpdate(
-                    OperationalIssueType.EQUIPMENT_LIFECYCLE,
-                    severity,
-                    riskLevel,
-                    item.getId(),
-                    effectiveDepartment(item),
-                    "EquipmentLifecycle",
-                    item.getId(),
-                    "Equipment lifecycle risk: " + item.getCode(),
-                    lifecycleMessage(item, risk, riskScore),
-                    lifecycleMetadata(item, risk, riskScore)
-            );
-            count++;
+            if (severity == NotificationSeverity.INFO) {
+                issueService.resolveOpen("EquipmentLifecycle", item.getId());
+            } else {
+                issueService.openOrUpdate(
+                        OperationalIssueType.EQUIPMENT_LIFECYCLE,
+                        severity,
+                        riskLevel,
+                        item.getId(),
+                        effectiveDepartment(item),
+                        "EquipmentLifecycle",
+                        item.getId(),
+                        "Equipment lifecycle risk: " + item.getCode(),
+                        lifecycleMessage(item, risk, riskScore),
+                        lifecycleMetadata(item, risk, riskScore)
+                );
+                count++;
+            }
         }
         return count;
     }
@@ -296,7 +300,7 @@ public class OperationalIssueScannerService {
             return NotificationSeverity.CRITICAL;
         }
         if (risk >= LIFECYCLE_RISK_WARNING_THRESHOLD) {
-            return NotificationSeverity.CRITICAL;
+            return NotificationSeverity.WARNING;
         }
         return NotificationSeverity.INFO;
     }

@@ -40,6 +40,13 @@ public class Employee extends BaseEntity {
     @Column(name = "user_id")
     private UUID userId;
 
+    @Column(name = "specialisation_id")
+    private UUID specialisationId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "specialisation_id", insertable = false, updatable = false)
+    private EmployeeSpecialisation specialisation;
+
     @Column(name = "hire_date", nullable = false)
     private LocalDate hireDate;
 
