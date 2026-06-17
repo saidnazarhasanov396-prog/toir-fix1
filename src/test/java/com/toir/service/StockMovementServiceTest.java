@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.stockmovement.StockMovementDto;
+import com.toir.dto.stockmovement.StockMovementDocumentDto;
 import com.toir.dto.stockmovement.StockMovementFileDto;
 import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.stockmovement.StockMovementIssueRequest;
@@ -451,6 +452,86 @@ class StockMovementServiceTest {
     }
 
     @Test
+    void attachDocumentCreatesNamedGroupWithMultipleFiles() {
+        UUID movementId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID frontFileId = UUID.randomUUID();
+        UUID backFileId = UUID.randomUUID();
+        StockMovement movement = movement(movementId, warehouseId, StockMovementType.RECEIPT);
+        MockMultipartFile front = documentFile("invoice-front.pdf");
+        MockMultipartFile back = documentFile("invoice-back.pdf");
+        UploadedFile frontFile = uploadedFile(frontFileId, userId, "invoice-front.pdf", "application/pdf", 100L);
+        UploadedFile backFile = uploadedFile(backFileId, userId, "invoice-back.pdf", "application/pdf", 100L);
+
+        when(repository.findByIdAndIsDeletedFalse(movementId)).thenReturn(Optional.of(movement));
+        when(attachmentGroupService.listGroups(eq("STOCK_MOVEMENT"), eq(movementId), any())).thenReturn(List.of());
+        when(attachmentGroupService.createGroup(
+                eq("Invoice"),
+                any(),
+                eq("STOCK_MOVEMENT"),
+                eq(movementId),
+                eq("RECEIPT_ACT"),
+                eq("INV-2026-001"),
+                eq(List.of(front, back)),
+                any(),
+                any()
+        )).thenReturn(stockMovementAttachmentGroup(
+                movementId,
+                List.of(frontFile, backFile),
+                "Invoice",
+                "RECEIPT_ACT",
+                "INV-2026-001"
+        ));
+
+        StockMovementDocumentDto result = service.attachDocument(
+                movementId,
+                List.of(front, back),
+                " Invoice ",
+                " RECEIPT_ACT ",
+                " INV-2026-001 ",
+                authenticatedUser(userId)
+        );
+
+        assertThat(result.documentName()).isEqualTo("Invoice");
+        assertThat(result.documentType()).isEqualTo("RECEIPT_ACT");
+        assertThat(result.documentNumber()).isEqualTo("INV-2026-001");
+        assertThat(result.files()).extracting(StockMovementFileDto::id)
+                .containsExactly(frontFileId, backFileId);
+    }
+
+    @Test
+    void legacyAttachFilesReturnsNewFilesWhenMovementAlreadyHasMultipleDocumentGroups() {
+        UUID movementId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID existingFileId = UUID.randomUUID();
+        UUID otherDocumentFileId = UUID.randomUUID();
+        UUID addedFileId = UUID.randomUUID();
+        StockMovement movement = movement(movementId, warehouseId, StockMovementType.RECEIPT);
+        MockMultipartFile added = documentFile("added.pdf");
+        UploadedFile existingFile = uploadedFile(existingFileId, userId, "existing.pdf", "application/pdf", 100L);
+        UploadedFile otherDocumentFile = uploadedFile(otherDocumentFileId, userId, "other.pdf", "application/pdf", 100L);
+        UploadedFile addedFile = uploadedFile(addedFileId, userId, "added.pdf", "application/pdf", 100L);
+        AttachmentGroupDto selectedGroup = stockMovementAttachmentGroup(movementId, List.of(existingFile));
+        AttachmentGroupDto otherGroup = stockMovementAttachmentGroup(movementId, List.of(otherDocumentFile));
+
+        when(repository.findByIdAndIsDeletedFalse(movementId)).thenReturn(Optional.of(movement));
+        when(attachmentGroupService.listGroups(eq("STOCK_MOVEMENT"), eq(movementId), any()))
+                .thenReturn(List.of(selectedGroup, otherGroup));
+        when(attachmentGroupService.addFiles(eq(selectedGroup.id()), eq(List.of(added)), any(), any()))
+                .thenReturn(stockMovementAttachmentGroup(movementId, List.of(existingFile, addedFile)));
+
+        List<StockMovementFileDto> result = service.attachFiles(
+                movementId,
+                List.of(added),
+                authenticatedUser(userId)
+        );
+
+        assertThat(result).extracting(StockMovementFileDto::id).containsExactly(addedFileId);
+    }
+
+    @Test
     void attachFilesRejectsTransferMovementBeforeUpload() {
         UUID movementId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
@@ -523,6 +604,23 @@ class StockMovementServiceTest {
                 UUID.randomUUID())))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("/api/v1/work-orders/{workOrderId}/material-usage");
+
+        verifyNoInteractions(stockRepository, repository, sparePartRepository);
+    }
+
+    @Test
+    void receiptWithWorkOrderIdIsBlockedToPreserveReceiptSourceOfTruth() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.create(requestWithWorkOrder(
+                warehouseId,
+                sparePartId,
+                StockMovementType.RECEIPT,
+                1,
+                UUID.randomUUID())))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Work order receipts");
 
         verifyNoInteractions(stockRepository, repository, sparePartRepository);
     }
@@ -790,15 +888,31 @@ class StockMovementServiceTest {
     }
 
     private AttachmentGroupDto stockMovementAttachmentGroup(UUID movementId, List<UploadedFile> files) {
+        return stockMovementAttachmentGroup(
+                movementId,
+                files,
+                "Stock movement documents",
+                null,
+                null
+        );
+    }
+
+    private AttachmentGroupDto stockMovementAttachmentGroup(
+            UUID movementId,
+            List<UploadedFile> files,
+            String title,
+            String documentType,
+            String documentNumber
+    ) {
         UUID groupId = UUID.randomUUID();
         return new AttachmentGroupDto(
                 groupId,
-                "Stock movement documents",
+                title,
                 null,
                 AttachmentTargetType.STOCK_MOVEMENT,
                 movementId,
-                null,
-                null,
+                documentType,
+                documentNumber,
                 files.getFirst().getUploadedBy(),
                 java.time.LocalDateTime.now(),
                 java.util.stream.IntStream.range(0, files.size())
