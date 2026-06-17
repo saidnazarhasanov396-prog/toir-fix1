@@ -27,46 +27,46 @@ public class ApprovableDocumentRepository {
                        doc.type,
                        doc.code,
                        doc.name,
-                       ar.status     AS approval_status,
-                       ar.id         AS approval_id,
+                       ar.status  AS approval_status,
+                       ar.id      AS approval_id,
                        doc.created_at
                 FROM (
-                    SELECT id, 'WORK_ORDER'              AS type, number  AS code, title                         AS name, created_at FROM work_orders            WHERE is_deleted = false
+                    SELECT id, 'WORK_ORDER'             AS type, number AS code, title                      AS name, created_at FROM work_orders            WHERE is_deleted = false
                     UNION ALL
-                    SELECT id, 'REPAIR_REQUEST'          AS type, number  AS code, title                         AS name, created_at FROM repair_requests          WHERE is_deleted = false
+                    SELECT id, 'REPAIR_REQUEST'         AS type, number AS code, title                      AS name, created_at FROM repair_requests         WHERE is_deleted = false
                     UNION ALL
-                    SELECT id, 'PROCUREMENT_REQUEST'     AS type, number  AS code, title                         AS name, created_at FROM procurement_requests     WHERE is_deleted = false
+                    SELECT id, 'PROCUREMENT_REQUEST'    AS type, number AS code, title                      AS name, created_at FROM procurement_requests    WHERE is_deleted = false
                     UNION ALL
-                    SELECT id, 'PPR_PLAN'                AS type, code    AS code, name                          AS name, created_at FROM ppr_plans                WHERE is_deleted = false
+                    SELECT id, 'PPR_PLAN'               AS type, code   AS code, name                       AS name, created_at FROM ppr_plans               WHERE is_deleted = false
                     UNION ALL
-                    SELECT id, 'DEFECT_LIST'             AS type, code    AS code, title                         AS name, created_at FROM defect_lists             WHERE is_deleted = false
+                    SELECT id, 'DEFECT_LIST'            AS type, code   AS code, title                      AS name, created_at FROM defect_lists            WHERE is_deleted = false
                     UNION ALL
-                    SELECT id, 'PLANNED_SHUTDOWN'        AS type, NULL    AS code, name                          AS name, created_at FROM planned_shutdowns        WHERE is_deleted = false
+                    SELECT id, 'PLANNED_SHUTDOWN'       AS type, NULL   AS code, name                       AS name, created_at FROM planned_shutdowns       WHERE is_deleted = false
                     UNION ALL
-                    SELECT id, 'REPAIR_CAMPAIGN'         AS type, code    AS code, name                          AS name, created_at FROM repair_campaigns         WHERE is_deleted = false
+                    SELECT id, 'REPAIR_CAMPAIGN'        AS type, code   AS code, name                       AS name, created_at FROM repair_campaigns        WHERE is_deleted = false
                     UNION ALL
-                    SELECT id, 'ACTUAL_COST'             AS type, NULL    AS code, CONCAT('Amount: ', amount)    AS name, created_at FROM actual_costs             WHERE is_deleted = false
+                    SELECT id, 'ACTUAL_COST'            AS type, NULL   AS code, CONCAT('Amount: ', amount) AS name, created_at FROM actual_costs            WHERE is_deleted = false
                     UNION ALL
-                    SELECT id, 'MAINTENANCE_REGULATION'  AS type, code    AS code, name                          AS name, created_at FROM maintenance_regulations  WHERE is_deleted = false
+                    SELECT id, 'MAINTENANCE_REGULATION' AS type, code   AS code, name                       AS name, created_at FROM maintenance_regulations WHERE is_deleted = false
                 ) doc
                 LEFT JOIN LATERAL (
                     SELECT id, status
                     FROM approval_requests
-                    WHERE COALESCE(target_id, document_id) = doc.id::uuid
+                    WHERE COALESCE(target_id, document_id) = doc.id
                       AND is_deleted = false
                     ORDER BY created_at DESC
                     LIMIT 1
                 ) ar ON true
-                WHERE (:type   IS NULL OR doc.type   = :type)
-                  AND (:status IS NULL OR ar.status  = :status)
-                  AND (:search IS NULL
-                       OR LOWER(COALESCE(doc.code, '')) LIKE :search
-                       OR LOWER(COALESCE(doc.name, '')) LIKE :search)
+                WHERE (CAST(:type   AS VARCHAR) IS NULL OR doc.type  = CAST(:type   AS VARCHAR))
+                  AND (CAST(:status AS VARCHAR) IS NULL OR ar.status = CAST(:status AS VARCHAR))
+                  AND (CAST(:search AS VARCHAR) IS NULL
+                       OR LOWER(COALESCE(doc.code, '')) LIKE CAST(:search AS VARCHAR)
+                       OR LOWER(COALESCE(doc.name, '')) LIKE CAST(:search AS VARCHAR))
                 ORDER BY doc.created_at DESC
                 """;
 
         MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("type", type)
+                .addValue("type",   type)
                 .addValue("status", status)
                 .addValue("search", searchPattern);
 
