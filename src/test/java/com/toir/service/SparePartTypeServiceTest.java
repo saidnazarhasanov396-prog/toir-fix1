@@ -17,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -55,6 +56,8 @@ class SparePartTypeServiceTest {
                 List.of(oil.getId()),
                 InventoryItemKind.SPARE_PART
         )).thenReturn(List.of(typeCount(oil.getId(), 3)));
+        when(sparePartRepository.countStockByTypeIds(any()))
+                .thenReturn(List.of());
 
         List<SparePartTypeDto> result = service.findAll(null, false);
 
@@ -62,6 +65,7 @@ class SparePartTypeServiceTest {
         assertThat(result.getFirst().code()).isEqualTo("OIL");
         assertThat(result.getFirst().defaultUnit()).isEqualTo("LITER");
         assertThat(result.getFirst().sparePartCount()).isEqualTo(3);
+        assertThat(result.getFirst().sparePartStockCount()).isEqualByComparingTo(BigDecimal.ZERO);
         verify(repository).findAllActive(null);
     }
 
@@ -74,10 +78,14 @@ class SparePartTypeServiceTest {
                 List.of(bearing.getId(), oil.getId()),
                 InventoryItemKind.SPARE_PART
         )).thenReturn(List.of(typeCount(oil.getId(), 4)));
+        when(sparePartRepository.countStockByTypeIds(any()))
+                .thenReturn(List.of());
 
         List<SparePartTypeDto> result = service.findAll(null, false);
 
         assertThat(result).extracting(SparePartTypeDto::sparePartCount).containsExactly(0L, 4L);
+        assertThat(result).extracting(SparePartTypeDto::sparePartStockCount)
+                .allMatch(count -> count.compareTo(BigDecimal.ZERO) == 0);
     }
 
     @Test
@@ -89,10 +97,13 @@ class SparePartTypeServiceTest {
                 List.of(typeId),
                 InventoryItemKind.SPARE_PART
         )).thenReturn(List.of(typeCount(typeId, 7)));
+        when(sparePartRepository.countStockByTypeIds(any()))
+                .thenReturn(List.of());
 
         SparePartTypeDto result = service.findById(typeId);
 
         assertThat(result.sparePartCount()).isEqualTo(7);
+        assertThat(result.sparePartStockCount()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
@@ -173,6 +184,11 @@ class SparePartTypeServiceTest {
             @Override
             public long getSparePartCount() {
                 return sparePartCount;
+            }
+
+            @Override
+            public BigDecimal getSparePartStockCount() {
+                return BigDecimal.ZERO;
             }
         };
     }

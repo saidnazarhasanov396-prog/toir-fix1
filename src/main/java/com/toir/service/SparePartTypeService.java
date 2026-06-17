@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -37,15 +38,22 @@ public class SparePartTypeService {
                 ? repository.findAllIncludingInactive(searchPattern)
                 : repository.findAllActive(searchPattern);
         Map<UUID, Long> countsByTypeId = countsByTypeId(types);
+        Map<UUID, BigDecimal> stockCounts = stockCountsByTypeId(types);
         return types.stream()
-                .map(type -> SparePartTypeDto.from(type, countsByTypeId.getOrDefault(type.getId(), 0L)))
+                .map(type -> SparePartTypeDto.from(
+                        type,
+                        countsByTypeId.getOrDefault(type.getId(), 0L),
+                        stockCounts.getOrDefault(type.getId(), BigDecimal.ZERO)
+                ))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public SparePartTypeDto findById(UUID id) {
         SparePartType type = getOrThrow(id);
-        return SparePartTypeDto.from(type, countFor(type));
+        BigDecimal stockCount = stockCountsByTypeId(List.of(type))
+                .getOrDefault(type.getId(), BigDecimal.ZERO);
+        return SparePartTypeDto.from(type, countFor(type), stockCount);
     }
 
     @Transactional
@@ -87,7 +95,9 @@ public class SparePartTypeService {
                 entity,
                 saved
         );
-        return SparePartTypeDto.from(saved, countFor(saved));
+        BigDecimal stockCount = stockCountsByTypeId(List.of(saved))
+                .getOrDefault(saved.getId(), BigDecimal.ZERO);
+        return SparePartTypeDto.from(saved, countFor(saved), stockCount);
     }
 
     @Transactional
@@ -132,6 +142,23 @@ public class SparePartTypeService {
                 .collect(Collectors.toMap(
                         SparePartTypeCountProjection::getTypeId,
                         SparePartTypeCountProjection::getSparePartCount,
+                        (left, right) -> left
+                ));
+    }
+
+    private Map<UUID, BigDecimal> stockCountsByTypeId(List<SparePartType> types) {
+        List<UUID> typeIds = types.stream()
+                .map(SparePartType::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (typeIds.isEmpty()) {
+            return Map.of();
+        }
+        return sparePartRepository.countStockByTypeIds(typeIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        SparePartTypeCountProjection::getTypeId,
+                        SparePartTypeCountProjection::getSparePartStockCount,
                         (left, right) -> left
                 ));
     }

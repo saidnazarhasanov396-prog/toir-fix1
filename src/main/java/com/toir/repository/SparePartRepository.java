@@ -50,6 +50,21 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
     );
 
     @Query(value = """
+            SELECT sp.type_id                    AS typeId,
+                   COALESCE(SUM(wsb.qty_on_hand), 0) AS sparePartStockCount
+            FROM spare_parts sp
+            LEFT JOIN warehouse_stock_balances wsb
+                   ON wsb.spare_part_id = sp.id
+                  AND wsb.is_deleted = false
+            WHERE sp.type_id IN :typeIds
+              AND sp.is_deleted = false
+            GROUP BY sp.type_id
+            """, nativeQuery = true)
+    List<SparePartTypeCountProjection> countStockByTypeIds(
+            @Param("typeIds") Collection<UUID> typeIds
+    );
+
+    @Query(value = """
             SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM LENGTH(:prefix) + 1) AS BIGINT)), 0)
             FROM spare_parts
             WHERE code LIKE CONCAT(:prefix, '%')
