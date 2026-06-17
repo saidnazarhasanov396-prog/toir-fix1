@@ -1,6 +1,7 @@
 package com.toir.repository;
 
 import com.toir.entity.equipment.MeterReading;
+import com.toir.enums.MeterReadingContext;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -47,6 +48,18 @@ public interface MeterReadingRepository extends JpaRepository<MeterReading, UUID
 
     @Query(value = "SELECT * FROM meter_readings WHERE repair_request_id = :repairRequestId AND is_deleted = false ORDER BY read_at DESC, created_at DESC", nativeQuery = true)
     List<MeterReading> findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(@Param("repairRequestId") UUID repairRequestId);
+
+    @Query("""
+            select r
+            from MeterReading r
+            where r.repairRequestId = :repairRequestId
+              and r.readingContext = :readingContext
+              and r.isDeleted = false
+            order by r.readAt desc, r.createdAt desc
+            """)
+    List<MeterReading> findAllByRepairRequestIdAndReadingContextAndIsDeletedFalseOrderByReadAtDesc(
+            @Param("repairRequestId") UUID repairRequestId,
+            @Param("readingContext") MeterReadingContext readingContext);
 
     @Query(value = "SELECT * FROM meter_readings WHERE repair_request_id IN (:repairRequestIds) AND is_deleted = false ORDER BY read_at DESC, created_at DESC", nativeQuery = true)
     List<MeterReading> findAllByRepairRequestIdInAndIsDeletedFalseOrderByReadAtDesc(@Param("repairRequestIds") Collection<UUID> repairRequestIds);
