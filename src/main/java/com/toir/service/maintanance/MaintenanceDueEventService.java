@@ -154,6 +154,36 @@ public class MaintenanceDueEventService {
     }
 
     @Transactional
+    public int cancelOpenByScopeForReset(UUID equipmentId,
+                                         UUID regulationId,
+                                         UUID equipmentMaintenanceRuleId,
+                                         String reason) {
+        if (equipmentId == null || (regulationId == null && equipmentMaintenanceRuleId == null)) {
+            return 0;
+        }
+        List<MaintenanceDueEvent> events = repository.findOpenByScope(
+                equipmentId,
+                regulationId,
+                equipmentMaintenanceRuleId,
+                OPEN_STATUSES
+        );
+        int cancelled = 0;
+        for (MaintenanceDueEvent event : events) {
+            if (event.getStatus() == MaintenanceDueEventStatus.COMPLETED
+                    || event.getStatus() == MaintenanceDueEventStatus.CANCELLED) {
+                continue;
+            }
+            event.setStatus(MaintenanceDueEventStatus.CANCELLED);
+            event.setResolvedAt(Instant.now());
+            event.setResolutionReason(reason);
+            repository.save(event);
+            operationalIssueService.resolveOpen("MaintenanceDueEvent", event.getId());
+            cancelled++;
+        }
+        return cancelled;
+    }
+
+    @Transactional
     public MaintenanceDueEvent completeFromWorkOrder(UUID id, String reason) {
         return completeFromWorkOrder(getOrThrow(id), reason);
     }
