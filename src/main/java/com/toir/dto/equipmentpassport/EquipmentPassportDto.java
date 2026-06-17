@@ -1,6 +1,7 @@
 package com.toir.dto.equipmentpassport;
 
 import com.toir.entity.equipment.EquipmentPassport;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
@@ -16,7 +17,7 @@ public record EquipmentPassportDto(
         Double powerKw,
         Double voltageV,
         Double pressureBar,
-        List<ProductivityEntryDto> productivity,
+        List<@Valid ProductivityEntryDto> productivity,
         LocalDate installDate,
         LocalDate lastInspectionDate,
         String notes
