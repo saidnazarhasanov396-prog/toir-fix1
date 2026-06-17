@@ -37,7 +37,7 @@ public class EquipmentPassportService {
         p.setPowerKw(r.powerKw());
         p.setVoltageV(r.voltageV());
         p.setPressureBar(r.pressureBar());
-        p.setThroughput(r.throughput());
+        p.setProductivity(r.productivity() != null ? r.productivity() : java.util.List.of());
         p.setInstallDate(r.installDate());
         p.setLastInspectionDate(r.lastInspectionDate());
         p.setNotes(r.notes());

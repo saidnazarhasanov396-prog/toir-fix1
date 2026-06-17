@@ -37,7 +37,10 @@ public class EquipmentPassport extends BaseEntity {
     @Column(name = "pressure_bar")
     private Double pressureBar;
 
-    private Double throughput;
+    @Convert(converter = com.toir.persistence.ProductivityEntryListJsonConverter.class)
+    @Column(name = "productivity", columnDefinition = "text")
+    private java.util.List<com.toir.dto.equipmentpassport.ProductivityEntryDto> productivity
+            = new java.util.ArrayList<>();
 
     @Column(name = "install_date")
     private LocalDate installDate;
