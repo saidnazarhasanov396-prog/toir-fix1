@@ -714,6 +714,59 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void findByIdDetailCountsRepairWorkOrdersByWorkType() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-DETAIL-WO-REPAIRS-COUNT");
+        equipment.setId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        stubEnrichment();
+
+        WorkOrder plannedRepair = WorkOrder.builder()
+                .number("WO-REPAIR-001")
+                .title("Planned repair")
+                .equipmentId(equipmentId)
+                .departmentId(UUID.randomUUID())
+                .type(WorkOrderType.PLANNED)
+                .workType(WorkType.REPAIR)
+                .status(WorkOrderStatus.IN_PROGRESS)
+                .build();
+        plannedRepair.setId(UUID.randomUUID());
+
+        WorkOrder capitalRepair = WorkOrder.builder()
+                .number("WO-REPAIR-002")
+                .title("Capital repair")
+                .equipmentId(equipmentId)
+                .departmentId(UUID.randomUUID())
+                .type(WorkOrderType.CAPITAL_REPAIR)
+                .workType(WorkType.REPAIR)
+                .status(WorkOrderStatus.CLOSED)
+                .build();
+        capitalRepair.setId(UUID.randomUUID());
+
+        WorkOrder replacement = WorkOrder.builder()
+                .number("WO-REPLACEMENT-001")
+                .title("Equipment replacement")
+                .equipmentId(equipmentId)
+                .departmentId(UUID.randomUUID())
+                .type(WorkOrderType.PLANNED)
+                .workType(WorkType.REPLACEMENT)
+                .status(WorkOrderStatus.APPROVED)
+                .build();
+        replacement.setId(UUID.randomUUID());
+
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId))
+                .thenReturn(List.of(plannedRepair, capitalRepair, replacement));
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId)).thenReturn(List.of());
+
+        EquipmentDetailDto detail = service.findDetailById(equipmentId);
+
+        assertThat(detail.repairsCount()).isEqualTo(2);
+        assertThat(detail.workOrders()).hasSize(3);
+    }
+
+    @Test
     void findByIdDetailReturnsRelatedDowntimeEvents() {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment("EQ-DETAIL-DT");
