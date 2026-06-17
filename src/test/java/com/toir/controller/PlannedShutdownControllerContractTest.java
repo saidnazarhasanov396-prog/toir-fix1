@@ -36,7 +36,7 @@ class PlannedShutdownControllerContractTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new PlannedShutdownController(service, approvalService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new PlannedShutdownController(service))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

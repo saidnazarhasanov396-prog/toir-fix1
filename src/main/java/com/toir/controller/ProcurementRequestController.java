@@ -1,6 +1,5 @@
 package com.toir.controller;
 
-import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.procurement.ProcurementLineRequest;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
@@ -10,7 +9,6 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
 import com.toir.security.PermissionConstants;
 import com.toir.security.RequiresSensitiveAccess;
-import com.toir.service.ApprovalService;
 import com.toir.service.ProcurementRequestService;
 import com.toir.service.PurchaseOrderService;
 import com.toir.util.PaginationUtils;
@@ -34,7 +32,6 @@ import org.springframework.web.bind.annotation.*;
 public class ProcurementRequestController {
 
     private final ProcurementRequestService service;
-    private final ApprovalService approvalService;
     private final PurchaseOrderService purchaseOrderService;
 
     @GetMapping
@@ -71,21 +68,6 @@ public class ProcurementRequestController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_SUBMIT')")
     public ResponseEntity<ProcurementRequestDto> submit(@PathVariable UUID id) {
         return ResponseEntity.ok(service.submit(id));
-    }
-
-    @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_APPROVE')")
-    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id,
-                                                         @RequestParam(required = false) UUID approverId) {
-        ProcurementRequestDto current = service.validateCanApprove(id);
-        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
-                "PROCUREMENT_REQUEST",
-                id,
-                null,
-                approverId,
-                "PROCUREMENT_APPROVER",
-                "Procurement request approval: " + current.number(),
-                "Approval workflow request for procurement request " + current.number()));
     }
 
     @PostMapping("/{id}/reject")

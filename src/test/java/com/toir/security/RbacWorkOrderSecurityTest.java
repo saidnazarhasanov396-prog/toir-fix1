@@ -177,14 +177,13 @@ class RbacWorkOrderSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.WORK_ORDER_APPROVE)
-    void workOrderApproveCanApproveWorkOrder() throws Exception {
+    void workOrderApproveEndpointIsRemoved() throws Exception {
         UUID workOrderId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();
-        when(workOrderService.findById(workOrderId)).thenReturn(workOrderDto(workOrderId));
 
         mockMvc.perform(post("/api/v1/work-orders/{id}/approve", workOrderId)
                         .param("approverId", approverId.toString()))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -192,7 +191,7 @@ class RbacWorkOrderSecurityTest {
     void workOrderReadCannotApproveWorkOrder() throws Exception {
         mockMvc.perform(post("/api/v1/work-orders/{id}/approve", UUID.randomUUID())
                         .param("approverId", UUID.randomUUID().toString()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test

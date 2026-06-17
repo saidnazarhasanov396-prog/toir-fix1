@@ -1,6 +1,5 @@
 package com.toir.controller;
 
-import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.workorder.WorkOrderCalendarBucketDto;
 import com.toir.dto.workorder.WorkOrderCalendarSummaryResponse;
 import com.toir.dto.workorder.WorkOrderDocumentDto;
@@ -23,7 +22,6 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
-import com.toir.service.ApprovalService;
 import com.toir.service.WorkOrderService;
 import org.springframework.core.MethodParameter;
 import org.junit.jupiter.api.AfterEach;
@@ -56,6 +54,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -79,9 +78,6 @@ class WorkOrderControllerContractTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
-    @Mock
-    ApprovalService approvalService;
-
     private MockMvc mockMvc;
     private UUID currentUserId;
 
@@ -96,7 +92,7 @@ class WorkOrderControllerContractTest {
                 new AuthenticatedUser(currentUserId.toString(), "user", "user@example.com", "User", null, "USER", List.of()),
                 null
         ));
-        mockMvc = MockMvcBuilders.standaloneSetup(new WorkOrderController(service, repository, scopeAccessService, approvalService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new WorkOrderController(service, repository, scopeAccessService))
                 .setCustomArgumentResolvers(new TestCurrentUserResolver(currentUserId))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -415,74 +411,6 @@ class WorkOrderControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.operationsCount").value(2))
                 .andExpect(jsonPath("$.materialsCount").value(4));
-    }
-
-    @Test
-    void approveCreatesApprovalRequest() throws Exception {
-        UUID workOrderId = UUID.randomUUID();
-        UUID approverId = UUID.randomUUID();
-        UUID approvalId = UUID.randomUUID();
-        when(service.validateCanApprove(workOrderId)).thenReturn(workOrderDto(workOrderId, WorkOrderStatus.DRAFT, null, null));
-        when(approvalService.createOrReuseApprovalForDocument(
-                eq("WORK_ORDER"),
-                eq(workOrderId),
-                eq(com.toir.enums.ApprovalActionType.APPROVE),
-                eq(currentUserId),
-                eq(approverId),
-                eq("WORK_ORDER_APPROVER"),
-                any(),
-                any()
-        )).thenReturn(approvalDto(approvalId, "WORK_ORDER", workOrderId));
-
-        mockMvc.perform(post("/api/v1/work-orders/{id}/approve", workOrderId)
-                        .param("approverId", approverId.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(approvalId.toString()))
-                .andExpect(jsonPath("$.documentType").value("WORK_ORDER"))
-                .andExpect(jsonPath("$.documentId").value(workOrderId.toString()));
-
-        verify(service).validateCanApprove(workOrderId);
-        verify(approvalService).createOrReuseApprovalForDocument(
-                eq("WORK_ORDER"),
-                eq(workOrderId),
-                eq(com.toir.enums.ApprovalActionType.APPROVE),
-                eq(currentUserId),
-                eq(approverId),
-                eq("WORK_ORDER_APPROVER"),
-                any(),
-                any()
-        );
-    }
-
-    @Test
-    void approveAlreadyApprovedWorkOrderReturns400() throws Exception {
-        UUID workOrderId = UUID.randomUUID();
-        UUID approverId = UUID.randomUUID();
-        when(repository.findByIdAndIsDeletedFalse(workOrderId))
-                .thenReturn(Optional.of(workOrderEntity(workOrderId, UUID.randomUUID(), WorkOrderStatus.APPROVED)));
-        when(service.validateCanApprove(workOrderId))
-                .thenThrow(RestException.badRequest("Only DRAFT/PLANNED work orders can be approved"));
-
-        mockMvc.perform(post("/api/v1/work-orders/{id}/approve", workOrderId)
-                        .param("approverId", approverId.toString()))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Only DRAFT/PLANNED work orders can be approved"));
-    }
-
-    private ApprovalRequestDto approvalDto(UUID id, String documentType, UUID documentId) {
-        return new ApprovalRequestDto(
-                id,
-                documentType,
-                documentId,
-                "Approval request created",
-                currentUserId,
-                com.toir.enums.ApprovalStatus.PENDING,
-                1,
-                null,
-                "Approval request",
-                Instant.now(),
-                List.of()
-        );
     }
 
     @Test

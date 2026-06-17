@@ -1,10 +1,8 @@
 package com.toir.controller.maintenance;
 
-import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.security.RequiresSensitiveAccess;
-import com.toir.service.ApprovalService;
 import com.toir.service.maintanance.MaintenanceBudgetService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,7 +25,6 @@ import org.springframework.web.bind.annotation.*;
 public class MaintenanceBudgetController {
 
     private final MaintenanceBudgetService service;
-    private final ApprovalService approvalService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_READ')")
@@ -46,21 +43,6 @@ public class MaintenanceBudgetController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_CREATE')")
     public ResponseEntity<MaintenanceBudgetDto> create(@Valid @RequestBody MaintenanceBudgetDto r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
-    }
-
-    @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_APPROVE')")
-    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id,
-            @RequestParam(required = false) UUID approverId) {
-        MaintenanceBudgetDto current = service.validateCanApprove(id);
-        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
-                "MAINTENANCE_BUDGET",
-                id,
-                null,
-                approverId,
-                "BUDGET_APPROVER",
-                "Maintenance budget approval: " + current.year() + "/" + current.month(),
-                "Approval workflow request for maintenance budget " + current.id()));
     }
 
     @PostMapping("/{id}/lines")

@@ -33,7 +33,7 @@ public class WorkOrderApprovalHandler implements ApprovalActionHandler {
                 .map(step -> step.getDecidedById() == null ? step.getApproverId() : step.getDecidedById())
                 .reduce((first, second) -> second)
                 .orElse(null);
-        workOrderService.finalizeApprovalFromApprovalRequest(targetId, approverId);
+        workOrderService.approve(targetId, approverId);
         return "{\"status\":\"APPROVED\"}";
     }
 }

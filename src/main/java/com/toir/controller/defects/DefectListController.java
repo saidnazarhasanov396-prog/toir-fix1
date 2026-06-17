@@ -1,11 +1,9 @@
 package com.toir.controller.defects;
-import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.defectlist.DefectListDto;
 import com.toir.dto.defectlist.DefectListLineDto;
 import com.toir.dto.defectlist.DefectListRequest;
 import com.toir.dto.defectlist.DefectListStatsResponse;
 import com.toir.exception.RestException;
-import com.toir.service.ApprovalService;
 import com.toir.service.defects.DefectListService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -26,7 +24,6 @@ import org.springframework.web.bind.annotation.*;
 public class DefectListController {
 
     private final DefectListService service;
-    private final ApprovalService approvalService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_LIST_READ')")
@@ -63,21 +60,6 @@ public class DefectListController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_LIST_UPDATE')")
     public ResponseEntity<DefectListDto> update(@PathVariable UUID id, @Valid @RequestBody DefectListRequest r) {
         return ResponseEntity.ok(service.update(id, r));
-    }
-
-    @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_LIST_APPROVE')")
-    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id,
-                                                      @RequestParam(required = false) UUID approverId) {
-        DefectListDto current = service.findById(id);
-        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
-                "DEFECT_LIST",
-                id,
-                null,
-                approverId,
-                "DEFECT_LIST_APPROVER",
-                "Defect list approval: " + current.code(),
-                "Approval workflow request for defect list " + current.code()));
     }
 
     @PostMapping("/{id}/reject")

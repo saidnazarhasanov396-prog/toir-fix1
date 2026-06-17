@@ -143,13 +143,11 @@ class RbacProcurementSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.PROCUREMENT_APPROVE)
-    void procurementApproveCanApproveRequest() throws Exception {
+    void procurementApproveEndpointIsRemoved() throws Exception {
         UUID requestId = UUID.randomUUID();
-        when(procurementRequestService.validateCanApprove(requestId)).thenReturn(procurementRequestDto(requestId));
-        when(procurementRequestService.findById(requestId)).thenReturn(procurementRequestDto(requestId));
 
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/approve", requestId))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -207,7 +205,7 @@ class RbacProcurementSecurityTest {
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/submit", requestId))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/approve", requestId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/reject?reason=duplicate", requestId))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/ordered", requestId))
@@ -239,7 +237,7 @@ class RbacProcurementSecurityTest {
                         .content(procurementRequestPayload()))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/approve", requestId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     private ProcurementRequestDto procurementRequestDto(UUID id) {

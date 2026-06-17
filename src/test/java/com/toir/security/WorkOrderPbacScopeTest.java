@@ -1,7 +1,6 @@
 package com.toir.security;
 
 import com.toir.controller.WorkOrderController;
-import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderDto;
@@ -10,10 +9,8 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
-import com.toir.enums.ApprovalStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.WorkOrderRepository;
-import com.toir.service.ApprovalService;
 import com.toir.service.WorkOrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,15 +52,12 @@ class WorkOrderPbacScopeTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
-    @Mock
-    ApprovalService approvalService;
-
     MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new WorkOrderController(service, repository, scopeAccessService, approvalService)
+                        new WorkOrderController(service, repository, scopeAccessService)
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -170,43 +164,6 @@ class WorkOrderPbacScopeTest {
                 .andExpect(status().isForbidden());
 
         verify(service, never()).create(any());
-    }
-
-    @Test
-    void approveChecksDepartmentScopeBeforeMutation() throws Exception {
-        UUID workOrderId = UUID.randomUUID();
-        UUID departmentId = UUID.randomUUID();
-        UUID approverId = UUID.randomUUID();
-        when(repository.findByIdAndIsDeletedFalse(workOrderId))
-                .thenReturn(Optional.of(workOrder(workOrderId, departmentId)));
-        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
-        when(service.validateCanApprove(workOrderId)).thenReturn(dto(workOrderId, departmentId));
-        when(approvalService.createOrReuseApprovalForDocument(
-                eq("WORK_ORDER"),
-                eq(workOrderId),
-                eq(com.toir.enums.ApprovalActionType.APPROVE),
-                eq(approverId),
-                eq(approverId),
-                eq("WORK_ORDER_APPROVER"),
-                any(),
-                any()
-        )).thenReturn(approvalDto(UUID.randomUUID(), workOrderId));
-
-        mockMvc.perform(post("/api/v1/work-orders/{id}/approve", workOrderId)
-                        .param("approverId", approverId.toString()))
-                .andExpect(status().isOk());
-
-        verify(service).validateCanApprove(workOrderId);
-        verify(approvalService).createOrReuseApprovalForDocument(
-                eq("WORK_ORDER"),
-                eq(workOrderId),
-                eq(com.toir.enums.ApprovalActionType.APPROVE),
-                eq(approverId),
-                eq(approverId),
-                eq("WORK_ORDER_APPROVER"),
-                any(),
-                any()
-        );
     }
 
     @Test
@@ -357,22 +314,6 @@ class WorkOrderPbacScopeTest {
                 null,
                 0,
                 0
-        );
-    }
-
-    private ApprovalRequestDto approvalDto(UUID id, UUID workOrderId) {
-        return new ApprovalRequestDto(
-                id,
-                "WORK_ORDER",
-                workOrderId,
-                "Approval request created",
-                UUID.randomUUID(),
-                ApprovalStatus.PENDING,
-                1,
-                null,
-                "Approval request",
-                Instant.now(),
-                List.of()
         );
     }
 

@@ -1,11 +1,9 @@
 package com.toir.controller.repair;
-import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.RestException;
-import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairCampaignService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,7 +24,6 @@ import org.springframework.web.bind.annotation.*;
 public class RepairCampaignController {
 
     private final RepairCampaignService service;
-    private final ApprovalService approvalService;
 
     @GetMapping
     public ResponseEntity<Page<RepairCampaignDto>> list(@RequestParam(required = false) String search, @RequestParam(required = false) Integer year, @RequestParam(required = false) RepairCampaignStatus status , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
@@ -39,20 +36,6 @@ public class RepairCampaignController {
     @PostMapping
     public ResponseEntity<RepairCampaignDto> create(@Valid @RequestBody RepairCampaignRequest r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
-    }
-
-    @PostMapping("/{id}/approve")
-    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id,
-                                                      @RequestParam(required = false) UUID approverId) {
-        RepairCampaignDto current = service.findById(id);
-        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
-                "REPAIR_CAMPAIGN",
-                id,
-                null,
-                approverId,
-                "REPAIR_CAMPAIGN_APPROVER",
-                "Repair campaign approval: " + current.code(),
-                "Approval workflow request for repair campaign " + current.code()));
     }
 
     @PostMapping("/{id}/reject")

@@ -39,7 +39,7 @@ class ActualCostControllerContractTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new ActualCostController(service, approvalService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new ActualCostController(service))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

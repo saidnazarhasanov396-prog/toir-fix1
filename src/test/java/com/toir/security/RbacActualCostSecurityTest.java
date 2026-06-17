@@ -116,16 +116,14 @@ class RbacActualCostSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.ACTUAL_COST_APPROVE)
-    void actualCostApproveCanApproveActualCost() throws Exception {
+    void actualCostApproveEndpointIsRemoved() throws Exception {
         UUID id = UUID.randomUUID();
         UUID reviewerId = UUID.randomUUID();
-        when(actualCostService.review(eq(id), eq(true), eq(reviewerId), eq("Approved")))
-                .thenReturn(actualCostDto(ActualCostStatus.APPROVED));
 
         mockMvc.perform(post("/api/v1/actual-costs/{id}/approve", id)
                         .param("reviewerId", reviewerId.toString())
                         .param("comment", "Approved"))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -152,7 +150,7 @@ class RbacActualCostSecurityTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/actual-costs/{id}/approve", id)
                         .param("reviewerId", reviewerId.toString()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
         mockMvc.perform(post("/api/v1/actual-costs/{id}/reject", id)
                         .param("reviewerId", reviewerId.toString())
                         .param("comment", "Rejected"))

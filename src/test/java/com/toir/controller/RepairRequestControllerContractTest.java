@@ -21,7 +21,6 @@ import com.toir.enums.WorkType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
-import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairRequestService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,9 +59,6 @@ class RepairRequestControllerContractTest {
     RepairRequestService service;
 
     @Mock
-    ApprovalService approvalService;
-
-    @Mock
     RepairRequestRepository repository;
 
     @Mock
@@ -74,7 +70,7 @@ class RepairRequestControllerContractTest {
     void setUp() {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         lenient().when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairRequestController(service, approvalService, repository, scopeAccessService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RepairRequestController(service, repository, scopeAccessService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -318,51 +314,6 @@ class RepairRequestControllerContractTest {
 
         verify(scopeAccessService).enforceDepartmentScope(departmentId);
         verify(service).getStats(scopedDepartmentId, equipmentId, "pump");
-    }
-
-    @Test
-    void approveEndpointCreatesApprovalRequest() throws Exception {
-        UUID requestId = UUID.randomUUID();
-        RepairRequestDto response = dtoWithLinks(requestId);
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
-
-        mockMvc.perform(post("/api/v1/repair-requests/{id}/approve", requestId))
-                .andExpect(status().isOk());
-
-        verify(approvalService).createOrReuseApprovalForDocument(
-                org.mockito.ArgumentMatchers.eq("REPAIR_REQUEST"),
-                org.mockito.ArgumentMatchers.eq(requestId),
-                org.mockito.ArgumentMatchers.isNull(),
-                org.mockito.ArgumentMatchers.isNull(),
-                org.mockito.ArgumentMatchers.eq("REPAIR_REQUEST_APPROVER"),
-                org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString());
-        verify(service).assertMeterReadingsReadyForApproval(requestId);
-        verify(service, never()).approve(requestId);
-    }
-
-    @Test
-    void approveEndpointBlocksWhenRepairRequestMeterReadingsAreMissing() throws Exception {
-        UUID requestId = UUID.randomUUID();
-        RepairRequestDto response = dtoWithLinks(requestId);
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
-        org.mockito.Mockito.doThrow(com.toir.exception.RestException.badRequest(
-                        "Repair request meter readings are required before approve: Odometer"))
-                .when(service).assertMeterReadingsReadyForApproval(requestId);
-
-        mockMvc.perform(post("/api/v1/repair-requests/{id}/approve", requestId))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Repair request meter readings are required before approve: Odometer"));
-
-        verify(approvalService, never()).createOrReuseApprovalForDocument(
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                any()
-        );
     }
 
     @Test

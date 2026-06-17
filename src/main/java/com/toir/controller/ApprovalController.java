@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.approval.ApprovalHistoryDto;
 import com.toir.dto.approval.ApprovalAnalyticsDto;
 import com.toir.dto.approval.ApprovalRequestDto;
+import com.toir.dto.approval.ApprovalStartRequest;
 import com.toir.dto.approval.ApprovalStatisticsDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
@@ -92,6 +93,12 @@ public class ApprovalController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_CREATE')")
     public ResponseEntity<ApprovalRequestDto> create(@Valid @RequestBody CreateApprovalRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
+    }
+
+    @PostMapping("/request")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_CREATE')")
+    public ResponseEntity<ApprovalRequestDto> request(@Valid @RequestBody ApprovalStartRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.requestApproval(request));
     }
 
     @PostMapping("/{id}/approve")

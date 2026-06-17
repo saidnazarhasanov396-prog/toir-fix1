@@ -33,6 +33,7 @@ import com.toir.service.ApprovalService;
 import com.toir.service.FinanceScopeService;
 import com.toir.service.NotificationService;
 import com.toir.service.PprPlanService;
+import com.toir.service.ProcurementRequestService;
 import com.toir.service.WorkOrderService;
 import com.toir.service.approval.DefaultApprovalActionExecutor;
 import com.toir.service.approval.DefaultApprovalRouteResolver;
@@ -44,9 +45,11 @@ import com.toir.service.approval.WorkOrderApprovalHandler;
 import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
+import com.toir.service.repair.RepairRequestService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
 
@@ -77,6 +80,8 @@ class ApprovalPbacScopeTest {
     MaintenanceBudgetRepository maintenanceBudgetRepository;
     WorkOrderService workOrderService;
     PprPlanService pprPlanService;
+    ProcurementRequestService procurementRequestService;
+    RepairRequestService repairRequestService;
     MaintenanceAutomationService maintenanceAutomationService;
     ScopeAccessService scopeAccessService;
     NotificationService notificationService;
@@ -97,6 +102,8 @@ class ApprovalPbacScopeTest {
         maintenanceBudgetRepository = mock(MaintenanceBudgetRepository.class);
         workOrderService = mock(WorkOrderService.class);
         pprPlanService = mock(PprPlanService.class);
+        procurementRequestService = mock(ProcurementRequestService.class);
+        repairRequestService = mock(RepairRequestService.class);
         maintenanceAutomationService = mock(MaintenanceAutomationService.class);
         scopeAccessService = mock(ScopeAccessService.class);
         notificationService = mock(NotificationService.class);
@@ -122,8 +129,19 @@ class ApprovalPbacScopeTest {
                 approvalScopeService,
                 scopeAccessService,
                 notificationService,
-                userRepository
+                userRepository,
+                provider(workOrderService),
+                provider(pprPlanService),
+                provider(procurementRequestService),
+                provider(repairRequestService),
+                provider(maintenanceAutomationService)
         );
+    }
+
+    private static <T> ObjectProvider<T> provider(T bean) {
+        ObjectProvider<T> provider = mock(ObjectProvider.class);
+        when(provider.getObject()).thenReturn(bean);
+        return provider;
     }
 
     @Test
