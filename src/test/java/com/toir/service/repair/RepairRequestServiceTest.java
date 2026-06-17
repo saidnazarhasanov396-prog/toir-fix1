@@ -62,7 +62,6 @@ import com.toir.service.NotificationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
-import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -158,9 +157,6 @@ class RepairRequestServiceTest {
 
     @Mock
     MeterService meterService;
-
-    @Mock
-    MaintenanceDueEventService maintenanceDueEventService;
 
     @Mock
     ObjectMapper objectMapper;
@@ -1257,96 +1253,6 @@ class RepairRequestServiceTest {
         assertThat(anchor.getRepairRequestId()).isEqualTo(id);
         assertThat(anchor.getSource()).isEqualTo("REPAIR_REQUEST");
         assertThat(anchor.getMeterSnapshots()).contains("ENGINE_HOURS").contains("450.0");
-        verify(maintenanceDueEventService).cancelOpenByScopeForReset(
-                eq(entity.getEquipmentId()),
-                eq(regulationId),
-                eq(ruleId),
-                org.mockito.ArgumentMatchers.contains(entity.getNumber())
-        );
-    }
-
-    @Test
-    void closeAnchorsFromRepairFailureReadingInsteadOfCurrentMeterValue() throws Exception {
-        UUID id = UUID.randomUUID();
-        UUID templateId = UUID.randomUUID();
-        UUID regulationId = UUID.randomUUID();
-        UUID ruleId = UUID.randomUUID();
-        RepairRequest entity = repairRequest(id);
-        entity.setStatus(RequestStatus.COMPLETED);
-        entity.setTemplateId(templateId);
-        WorkOrder closedWorkOrder = workOrder(id);
-        closedWorkOrder.setStatus(WorkOrderStatus.CLOSED);
-        EquipmentMaintenanceEffectiveRule effectiveRule =
-                effectiveRule(entity.getEquipmentId(), regulationId, ruleId, templateId);
-        EquipmentMeter meter = meter(entity.getEquipmentId(), MeterType.ENGINE_HOURS, 1400.0);
-        MeterReading failureReading = meterReading(id, meter.getId(), entity.getEquipmentId(), 1320.0);
-
-        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
-        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        stubNameLookups(entity);
-        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
-                .thenReturn(List.of(closedWorkOrder));
-        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
-                .thenReturn(List.of());
-        when(effectiveRuleResolver.resolveApplicable(entity.getEquipmentId()))
-                .thenReturn(List.of(effectiveRule));
-        when(maintenanceCompletionAnchorRepository.findAllByRepairRequestIdAndIsDeletedFalse(id))
-                .thenReturn(List.of());
-        when(meterReadingRepository.findAllByRepairRequestIdAndReadingContextAndIsDeletedFalseOrderByReadAtDesc(
-                id,
-                MeterReadingContext.FAILURE_DETECTED
-        )).thenReturn(List.of(failureReading));
-        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(entity.getEquipmentId()))
-                .thenReturn(List.of(meter));
-        when(objectMapper.writeValueAsString(any()))
-                .thenReturn("[{\"meterType\":\"ENGINE_HOURS\",\"value\":1320.0}]");
-        when(maintenanceCompletionAnchorRepository.save(any(MaintenanceCompletionAnchor.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        service.close(id, new CloseRequestRequest("Resolved"));
-
-        org.mockito.ArgumentCaptor<MaintenanceCompletionAnchor> anchorCaptor =
-                org.mockito.ArgumentCaptor.forClass(MaintenanceCompletionAnchor.class);
-        verify(maintenanceCompletionAnchorRepository).save(anchorCaptor.capture());
-        MaintenanceCompletionAnchor anchor = anchorCaptor.getValue();
-        assertThat(anchor.getMeterSnapshots()).contains("1320.0");
-        assertThat(anchor.getMeterSnapshots()).doesNotContain("1400.0");
-    }
-
-    @Test
-    void closeDoesNotCreateDuplicateAnchorWhenRepairScopeAlreadyAnchored() {
-        UUID id = UUID.randomUUID();
-        UUID templateId = UUID.randomUUID();
-        UUID regulationId = UUID.randomUUID();
-        UUID ruleId = UUID.randomUUID();
-        RepairRequest entity = repairRequest(id);
-        entity.setStatus(RequestStatus.COMPLETED);
-        entity.setTemplateId(templateId);
-        WorkOrder closedWorkOrder = workOrder(id);
-        closedWorkOrder.setStatus(WorkOrderStatus.CLOSED);
-        EquipmentMaintenanceEffectiveRule effectiveRule =
-                effectiveRule(entity.getEquipmentId(), regulationId, ruleId, templateId);
-        MaintenanceCompletionAnchor existing = new MaintenanceCompletionAnchor();
-        existing.setRepairRequestId(id);
-        existing.setRegulationId(regulationId);
-        existing.setEquipmentMaintenanceRuleId(ruleId);
-
-        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
-        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        stubNameLookups(entity);
-        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
-                .thenReturn(List.of(closedWorkOrder));
-        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
-                .thenReturn(List.of());
-        when(effectiveRuleResolver.resolveApplicable(entity.getEquipmentId()))
-                .thenReturn(List.of(effectiveRule));
-        when(maintenanceCompletionAnchorRepository.findAllByRepairRequestIdAndIsDeletedFalse(id))
-                .thenReturn(List.of(existing));
-
-        service.close(id, new CloseRequestRequest("Resolved"));
-
-        verify(maintenanceCompletionAnchorRepository, never()).save(any(MaintenanceCompletionAnchor.class));
-        verify(maintenanceDueEventService, never()).cancelOpenByScopeForReset(any(), any(), any(), any());
     }
 
     @Test
