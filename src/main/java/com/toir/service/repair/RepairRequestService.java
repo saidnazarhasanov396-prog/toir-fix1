@@ -655,7 +655,7 @@ public class RepairRequestService {
     }
 
     @Transactional
-    public RepairRequestDto approve(UUID id) {
+    public RepairRequestDto finalizeApprovalFromApprovalRequest(UUID id) {
         RepairRequest entity = getOrThrow(id);
         assertCanTransition(entity, RequestStatus.APPROVED, REVIEWABLE_STATUSES, "Cannot approve repair request from status ");
         assertRequiredMeterReadings(entity, "approve");
@@ -675,6 +675,17 @@ public class RepairRequestService {
                 save
         );
         return toDtoWithLinks(entity);
+    }
+
+    /**
+     * @deprecated Approval decisions must go through ApprovalService. This wrapper remains for tests and
+     * compatibility with older internal callers; approval handlers should call
+     * {@link #finalizeApprovalFromApprovalRequest(UUID)}.
+     */
+    @Deprecated(forRemoval = false)
+    @Transactional
+    public RepairRequestDto approve(UUID id) {
+        return finalizeApprovalFromApprovalRequest(id);
     }
 
     @Transactional
@@ -737,7 +748,7 @@ public class RepairRequestService {
     }
 
     @Transactional
-    public RepairRequestDto reject(UUID id, String reason) {
+    public RepairRequestDto finalizeRejectionFromApprovalRequest(UUID id, String reason) {
         if (reason == null || reason.isBlank()) {
             throw RestException.badRequest("Rejection reason is required");
         }
@@ -760,6 +771,17 @@ public class RepairRequestService {
                 save
         );
         return toDtoWithLinks(entity);
+    }
+
+    /**
+     * @deprecated Approval decisions must go through ApprovalService. This wrapper remains for tests and
+     * compatibility with older internal callers; approval handlers should call
+     * {@link #finalizeRejectionFromApprovalRequest(UUID, String)}.
+     */
+    @Deprecated(forRemoval = false)
+    @Transactional
+    public RepairRequestDto reject(UUID id, String reason) {
+        return finalizeRejectionFromApprovalRequest(id, reason);
     }
 
     @Transactional

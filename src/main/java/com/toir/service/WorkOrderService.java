@@ -606,7 +606,7 @@ public class WorkOrderService {
     }
 
     @Transactional
-    public WorkOrderDto approve(UUID id, UUID approverId) {
+    public WorkOrderDto finalizeApprovalFromApprovalRequest(UUID id, UUID approverId) {
         WorkOrder entity = getOrThrow(id);
         validateCanApprove(entity);
         entity.setStatus(WorkOrderStatus.APPROVED);
@@ -627,6 +627,17 @@ public class WorkOrderService {
         notifyAssignedPerformer(saved);
 
         return toDto(saved);
+    }
+
+    /**
+     * @deprecated Approval decisions must go through ApprovalService. This wrapper remains for tests and
+     * compatibility with older internal callers; approval handlers should call
+     * {@link #finalizeApprovalFromApprovalRequest(UUID, UUID)}.
+     */
+    @Deprecated(forRemoval = false)
+    @Transactional
+    public WorkOrderDto approve(UUID id, UUID approverId) {
+        return finalizeApprovalFromApprovalRequest(id, approverId);
     }
 
     @Transactional(readOnly = true)

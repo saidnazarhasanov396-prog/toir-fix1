@@ -174,7 +174,7 @@ public class DefectListService {
     }
 
     @Transactional
-    public DefectListDto approve(UUID id, UUID approverId) {
+    public DefectListDto finalizeApprovalFromApprovalRequest(UUID id, UUID approverId) {
         DefectList d = getOrThrow(id);
         assertCanAccessDefectList(d);
         if (d.getStatus() != DefectListStatus.DRAFT) {
@@ -198,6 +198,17 @@ public class DefectListService {
                 save
         );
         return DefectListDto.from(d);
+    }
+
+    /**
+     * @deprecated Approval decisions must go through ApprovalService. This wrapper remains for tests and
+     * compatibility with older internal callers; approval handlers should call
+     * {@link #finalizeApprovalFromApprovalRequest(UUID, UUID)}.
+     */
+    @Deprecated(forRemoval = false)
+    @Transactional
+    public DefectListDto approve(UUID id, UUID approverId) {
+        return finalizeApprovalFromApprovalRequest(id, approverId);
     }
 
     @Transactional

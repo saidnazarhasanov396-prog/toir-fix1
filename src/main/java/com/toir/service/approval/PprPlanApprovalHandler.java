@@ -1,7 +1,6 @@
 package com.toir.service.approval;
 
 import com.toir.entity.ApprovalRequest;
-import com.toir.entity.ApprovalStep;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalTargetType;
@@ -34,7 +33,7 @@ public class PprPlanApprovalHandler implements ApprovalActionHandler {
                 .map(step -> step.getDecidedById() == null ? step.getApproverId() : step.getDecidedById())
                 .reduce((first, second) -> second)
                 .orElse(null);
-        pprPlanService.approve(targetId, approverId);
+        pprPlanService.finalizeApprovalFromApprovalRequest(targetId, approverId);
         return "{\"status\":\"APPROVED\"}";
     }
 }

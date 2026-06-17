@@ -73,6 +73,7 @@ public class MaintenanceBudgetService {
     }
 
     @Transactional
+    @Deprecated(forRemoval = false)
     public MaintenanceBudgetDto approve(UUID id) {
         MaintenanceBudget b = getOrThrow(id);
         assertCanAccessBudget(b);
