@@ -24,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
@@ -57,6 +58,8 @@ class MeterServiceStatsTest {
     AuditBuilderService auditBuilderService;
     @Mock
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+    @Mock
+    ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     @Mock
     MaintenanceAutomationService maintenanceAutomationService;
 
@@ -182,6 +185,7 @@ class MeterServiceStatsTest {
         doThrow(new IllegalStateException("automation failed"))
                 .when(maintenanceAutomationService)
                 .evaluateEquipment(equipmentId, MaintenanceTriggerSource.METER_READING);
+        when(maintenanceAutomationServiceProvider.getIfAvailable()).thenReturn(maintenanceAutomationService);
 
         var result = service.addReading(new MeterReadingRequest(
                 meterId,
