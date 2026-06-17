@@ -52,7 +52,7 @@ public class ApprovableDocumentRepository {
                 LEFT JOIN LATERAL (
                     SELECT id, status
                     FROM approval_requests
-                    WHERE COALESCE(target_id, document_id) = doc.id
+                    WHERE COALESCE(target_id, document_id) = doc.id::uuid
                       AND is_deleted = false
                     ORDER BY created_at DESC
                     LIMIT 1
