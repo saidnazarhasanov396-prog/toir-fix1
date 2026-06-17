@@ -12,7 +12,7 @@ class MaintenanceOperationDurationNullHardeningMigrationContractTest {
     @Test
     void migrationBackfillsNullDurationsAndRestoresNotNullConstraint() throws Exception {
         String sql = Files.readString(Path.of(
-                "src/main/resources/db/migration/V20260616_7__maintenance_operation_duration_null_hardening.sql"
+                "src/main/resources/db/migration/V20260617_3__maintenance_operation_duration_null_hardening.sql"
         )).toLowerCase();
 
         assertThat(sql).contains("update maintenance_operations");
