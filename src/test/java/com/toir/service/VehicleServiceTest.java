@@ -22,6 +22,7 @@ import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
+import com.toir.enums.MeterType;
 import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.enums.VehicleType;
 import com.toir.exception.RestException;
@@ -187,6 +188,56 @@ class VehicleServiceTest {
 
         assertThat(result.equipment().category()).isEqualTo(EquipmentCategory.VEHICLE);
         assertThat(result.vehicleDetails().plateNumber()).isEqualTo("01A123AA");
+    }
+
+    @Test
+    void createVehiclePersistsEquipmentUsageAndLifetimeFields() {
+        VehicleRequest request = withEquipmentUsage(
+                fullRequest("VH-USAGE-001", "Truck Usage", "INV-VH-USAGE-001", "01A155AA", null),
+                MeterType.MILEAGE_KM,
+                300_000.0,
+                10_000.0,
+                15.0,
+                250.0
+        );
+
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-USAGE-001")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A155AA")).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> {
+            VehicleDetails details = invocation.getArgument(0);
+            details.setId(UUID.randomUUID());
+            return details;
+        });
+        when(equipmentService.findById(any(UUID.class))).thenAnswer(invocation -> {
+            UUID id = invocation.getArgument(0);
+            Equipment equipment = equipment(id, "VH-USAGE-001", "Truck Usage", "INV-VH-USAGE-001");
+            equipment.setProducedYear(request.manufactureYear());
+            equipment.setAverageDailyUsage(request.averageDailyUsage());
+            equipment.setLifetimeCounterType(request.lifetimeCounterType());
+            equipment.setLifetimeLimitValue(request.lifetimeLimitValue());
+            equipment.setLifetimeBaselineValue(request.lifetimeBaselineValue());
+            equipment.setLifetimeWarningPercent(request.lifetimeWarningPercent());
+            return EquipmentDto.from(equipment);
+        });
+
+        VehicleDetailDto result = service.create(request);
+
+        ArgumentCaptor<Equipment> equipmentCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(equipmentRepository).save(equipmentCaptor.capture());
+        Equipment saved = equipmentCaptor.getValue();
+        assertThat(saved.getProducedYear()).isEqualTo(2022);
+        assertThat(saved.getAverageDailyUsage()).isEqualTo(250.0);
+        assertThat(saved.getLifetimeCounterType()).isEqualTo(MeterType.MILEAGE_KM);
+        assertThat(saved.getLifetimeLimitValue()).isEqualTo(300_000.0);
+        assertThat(saved.getLifetimeBaselineValue()).isEqualTo(10_000.0);
+        assertThat(saved.getLifetimeWarningPercent()).isEqualTo(15.0);
+        assertThat(result.equipment().averageDailyUsage()).isEqualTo(250.0);
+        assertThat(result.equipment().lifetimeLimitValue()).isEqualTo(300_000.0);
     }
 
     @Test
@@ -1079,6 +1130,12 @@ class VehicleServiceTest {
         UUID completeId = UUID.randomUUID();
         UUID incompleteId = UUID.randomUUID();
         Equipment complete = equipment(completeId, "VH-030", "Truck 030", "INV-VH-030");
+        complete.setProducedYear(2024);
+        complete.setAverageDailyUsage(220.0);
+        complete.setLifetimeCounterType(MeterType.MILEAGE_KM);
+        complete.setLifetimeLimitValue(280_000.0);
+        complete.setLifetimeBaselineValue(10_000.0);
+        complete.setLifetimeWarningPercent(12.0);
         Equipment incomplete = equipment(incompleteId, "VH-031", "Truck 031", "INV-VH-031");
         VehicleDetails completeDetails = details(completeId, "01A030AA", "VIN-030");
         PageRequest pageRequest = PageRequest.of(0, 20);
@@ -1107,6 +1164,12 @@ class VehicleServiceTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().getFirst().equipmentId()).isEqualTo(completeId);
+        assertThat(result.getContent().getFirst().manufactureYear()).isEqualTo(2024);
+        assertThat(result.getContent().getFirst().averageDailyUsage()).isEqualTo(220.0);
+        assertThat(result.getContent().getFirst().lifetimeCounterType()).isEqualTo(MeterType.MILEAGE_KM);
+        assertThat(result.getContent().getFirst().lifetimeLimitValue()).isEqualTo(280_000.0);
+        assertThat(result.getContent().getFirst().lifetimeBaselineValue()).isEqualTo(10_000.0);
+        assertThat(result.getContent().getFirst().lifetimeWarningPercent()).isEqualTo(12.0);
         assertThat(result.getTotalElements()).isEqualTo(2);
     }
 
@@ -1723,6 +1786,57 @@ class VehicleServiceTest {
                 null,
                 null,
                 null
+        );
+    }
+
+    private static VehicleRequest withEquipmentUsage(
+            VehicleRequest request,
+            MeterType lifetimeCounterType,
+            Double lifetimeLimitValue,
+            Double lifetimeBaselineValue,
+            Double lifetimeWarningPercent,
+            Double averageDailyUsage
+    ) {
+        return new VehicleRequest(
+                request.code(),
+                request.name(),
+                request.inventoryNumber(),
+                request.technicalNumber(),
+                request.serialNumber(),
+                request.equipmentTypeId(),
+                request.departmentId(),
+                request.locationId(),
+                request.status(),
+                request.plateNumber(),
+                request.plateType(),
+                request.vin(),
+                request.brand(),
+                request.model(),
+                request.manufactureYear(),
+                request.vehicleType(),
+                request.bodyNumber(),
+                request.chassisNumber(),
+                request.engineNumber(),
+                request.fuelType(),
+                request.fuelTankCapacity(),
+                request.carryingCapacity(),
+                request.seatCount(),
+                request.assignedDriverId(),
+                request.currentOdometerKm(),
+                request.currentEngineHours(),
+                request.registrationCertificateNumber(),
+                request.insurancePolicyNumber(),
+                request.insuranceExpiryDate(),
+                request.technicalInspectionExpiryDate(),
+                request.gpsDeviceId(),
+                request.attributes(),
+                request.manualAttributes(),
+                lifetimeCounterType,
+                null,
+                lifetimeLimitValue,
+                lifetimeBaselineValue,
+                lifetimeWarningPercent,
+                averageDailyUsage
         );
     }
 

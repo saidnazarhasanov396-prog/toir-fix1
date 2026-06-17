@@ -3,10 +3,13 @@ package com.toir.dto.vehicle;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeRequest;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.MeterType;
 import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.enums.VehicleType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -45,7 +48,13 @@ public record VehicleRequest(
         LocalDate technicalInspectionExpiryDate,
         String gpsDeviceId,
         List<EquipmentAttributeValueRequest> attributes,
-        List<EquipmentManualAttributeRequest> manualAttributes
+        List<EquipmentManualAttributeRequest> manualAttributes,
+        MeterType lifetimeCounterType,
+        UUID lifetimeMeterId,
+        @Positive Double lifetimeLimitValue,
+        @PositiveOrZero Double lifetimeBaselineValue,
+        @Positive Double lifetimeWarningPercent,
+        @Positive Double averageDailyUsage
 ) {
     public VehicleRequest(
             String code,
@@ -84,7 +93,7 @@ public record VehicleRequest(
                 bodyNumber, chassisNumber, engineNumber, fuelType, fuelTankCapacity, carryingCapacity,
                 seatCount, assignedDriverId, currentOdometerKm, currentEngineHours,
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
-                technicalInspectionExpiryDate, gpsDeviceId, null, null);
+                technicalInspectionExpiryDate, gpsDeviceId, null, null, null, null, null, null, null, null);
     }
 
     public VehicleRequest(
@@ -126,7 +135,52 @@ public record VehicleRequest(
                 bodyNumber, chassisNumber, engineNumber, fuelType, fuelTankCapacity, carryingCapacity,
                 seatCount, assignedDriverId, currentOdometerKm, currentEngineHours,
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
-                technicalInspectionExpiryDate, gpsDeviceId, attributes, manualAttributes);
+                technicalInspectionExpiryDate, gpsDeviceId, attributes, manualAttributes,
+                null, null, null, null, null, null);
+    }
+
+    public VehicleRequest(
+            String code,
+            @NotBlank String name,
+            @NotBlank String inventoryNumber,
+            String technicalNumber,
+            String serialNumber,
+            @NotNull UUID equipmentTypeId,
+            @NotNull UUID departmentId,
+            UUID locationId,
+            EquipmentStatus status,
+            @NotBlank String plateNumber,
+            VehicleRegistrationPlateType plateType,
+            String vin,
+            String brand,
+            String model,
+            Integer manufactureYear,
+            @NotNull VehicleType vehicleType,
+            String bodyNumber,
+            String chassisNumber,
+            String engineNumber,
+            String fuelType,
+            Double fuelTankCapacity,
+            Double carryingCapacity,
+            Integer seatCount,
+            UUID assignedDriverId,
+            Double currentOdometerKm,
+            Double currentEngineHours,
+            String registrationCertificateNumber,
+            String insurancePolicyNumber,
+            LocalDate insuranceExpiryDate,
+            LocalDate technicalInspectionExpiryDate,
+            String gpsDeviceId,
+            List<EquipmentAttributeValueRequest> attributes,
+            List<EquipmentManualAttributeRequest> manualAttributes
+    ) {
+        this(code, name, inventoryNumber, technicalNumber, serialNumber, equipmentTypeId, departmentId,
+                locationId, status, plateNumber, plateType, vin, brand, model, manufactureYear, vehicleType,
+                bodyNumber, chassisNumber, engineNumber, fuelType, fuelTankCapacity, carryingCapacity,
+                seatCount, assignedDriverId, currentOdometerKm, currentEngineHours,
+                registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
+                technicalInspectionExpiryDate, gpsDeviceId, attributes, manualAttributes,
+                null, null, null, null, null, null);
     }
 
     public static VehicleRequest minimal(String code, String name, String inventoryNumber,
@@ -174,7 +228,13 @@ public record VehicleRequest(
                 technicalInspectionExpiryDate,
                 gpsDeviceId,
                 attributes,
-                manualAttributes
+                manualAttributes,
+                lifetimeCounterType,
+                lifetimeMeterId,
+                lifetimeLimitValue,
+                lifetimeBaselineValue,
+                lifetimeWarningPercent,
+                averageDailyUsage
         );
     }
 }

@@ -3,6 +3,7 @@ package com.toir.dto.vehicle;
 import com.toir.dto.equipment.EquipmentDto;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.MeterType;
 import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.enums.VehicleType;
 
@@ -24,6 +25,12 @@ public record VehicleSummaryDto(
         String model,
         VehicleType vehicleType,
         UUID assignedDriverId,
+        Integer manufactureYear,
+        Double averageDailyUsage,
+        MeterType lifetimeCounterType,
+        Double lifetimeLimitValue,
+        Double lifetimeBaselineValue,
+        Double lifetimeWarningPercent,
         double currentOdometerKm,
         double currentEngineHours,
         LocalDate insuranceExpiryDate,
@@ -45,6 +52,12 @@ public record VehicleSummaryDto(
                 details.getModel(),
                 details.getVehicleType(),
                 details.getAssignedDriverId(),
+                details.getManufactureYear() != null ? details.getManufactureYear() : equipment.producedYear(),
+                equipment.averageDailyUsage(),
+                equipment.lifetimeCounterType(),
+                equipment.lifetimeLimitValue(),
+                equipment.lifetimeBaselineValue(),
+                equipment.lifetimeWarningPercent(),
                 details.getCurrentOdometerKm(),
                 details.getCurrentEngineHours(),
                 details.getInsuranceExpiryDate(),
