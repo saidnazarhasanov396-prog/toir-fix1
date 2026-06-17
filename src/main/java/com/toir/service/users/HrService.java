@@ -2,6 +2,8 @@ package com.toir.service.users;
 
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeRequest;
+import com.toir.dto.hr.EmployeeSpecialisationDto;
+import com.toir.dto.hr.EmployeeSpecialisationRequest;
 import com.toir.dto.hr.TimesheetEntryDto;
 import com.toir.dto.hr.TimesheetEntryRequest;
 import com.toir.dto.hr.EmployeeWorkRoleDto;
@@ -9,6 +11,7 @@ import com.toir.entity.Department;
 import com.toir.entity.TimesheetEntry;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.Employee;
+import com.toir.entity.users.EmployeeSpecialisation;
 import com.toir.entity.users.EmployeeWorkRole;
 import com.toir.entity.users.EmployeeWorkRoleAssignment;
 import com.toir.enums.AuditAction;
@@ -20,6 +23,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.repository.users.EmployeeSpecialisationRepository;
 import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
 import com.toir.repository.users.EmployeeWorkRoleCodeProjection;
 import com.toir.repository.users.EmployeeWorkRoleRepository;
@@ -59,6 +63,7 @@ public class HrService {
     private final ScopeAccessService scopeAccessService;
     private final EmployeeWorkRoleRepository employeeWorkRoleRepository;
     private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
+    private final EmployeeSpecialisationRepository employeeSpecialisationRepository;
 
     @Transactional(readOnly = true)
     public Page<EmployeeDto> listEmployees(
@@ -124,6 +129,40 @@ public class HrService {
                 .stream()
                 .map(EmployeeWorkRoleDto::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<EmployeeSpecialisationDto> listEmployeeSpecialisations() {
+        return employeeSpecialisationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()
+                .stream()
+                .map(EmployeeSpecialisationDto::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public EmployeeSpecialisationDto getEmployeeSpecialisation(UUID id) {
+        return EmployeeSpecialisationDto.from(getEmployeeSpecialisationOrThrow(id));
+    }
+
+    @Transactional
+    public EmployeeSpecialisationDto createEmployeeSpecialisation(EmployeeSpecialisationRequest request) {
+        EmployeeSpecialisation specialisation = new EmployeeSpecialisation();
+        applyEmployeeSpecialisation(specialisation, request);
+        return EmployeeSpecialisationDto.from(employeeSpecialisationRepository.save(specialisation));
+    }
+
+    @Transactional
+    public EmployeeSpecialisationDto updateEmployeeSpecialisation(UUID id, EmployeeSpecialisationRequest request) {
+        EmployeeSpecialisation specialisation = getEmployeeSpecialisationOrThrow(id);
+        applyEmployeeSpecialisation(specialisation, request);
+        return EmployeeSpecialisationDto.from(employeeSpecialisationRepository.save(specialisation));
+    }
+
+    @Transactional
+    public void deleteEmployeeSpecialisation(UUID id) {
+        EmployeeSpecialisation specialisation = getEmployeeSpecialisationOrThrow(id);
+        specialisation.setDeleted(true);
+        employeeSpecialisationRepository.save(specialisation);
     }
 
     @Transactional(readOnly = true)
@@ -328,6 +367,11 @@ public class HrService {
                 .orElseThrow(() -> RestException.notFound("Employee not found: " + id));
     }
 
+    private EmployeeSpecialisation getEmployeeSpecialisationOrThrow(UUID id) {
+        return employeeSpecialisationRepository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Employee specialisation not found: " + id));
+    }
+
     private UUID enforceEmployeeListDepartmentScope(UUID requestedDepartmentId) {
         if (scopeAccessService.isScopeAdmin()) {
             return requestedDepartmentId;
@@ -422,6 +466,7 @@ public class HrService {
     }
 
     private void applyEmployee(Employee e, EmployeeRequest r) {
+        EmployeeSpecialisation specialisation = getEmployeeSpecialisationOrThrow(r.specialisationId());
         e.setPersonnelNumber(r.personnelNumber());
         e.setFirstName(r.firstName());
         e.setLastName(r.lastName());
@@ -430,11 +475,19 @@ public class HrService {
         e.setDepartmentId(r.departmentId());
         e.setBrigadeId(r.brigadeId());
         e.setUserId(r.userId());
+        e.setSpecialisationId(specialisation.getId());
         e.setHireDate(r.hireDate());
         e.setTerminatedDate(r.terminatedDate());
         e.setGrade(r.grade());
         e.setPhone(r.phone());
         e.setEmail(r.email());
+        if (r.active() != null) e.setActive(r.active());
+    }
+
+    private void applyEmployeeSpecialisation(EmployeeSpecialisation e, EmployeeSpecialisationRequest r) {
+        e.setNameRu(r.nameRu());
+        e.setNameEn(r.nameEn());
+        e.setNameUz(r.nameUz());
         if (r.active() != null) e.setActive(r.active());
     }
 
@@ -477,10 +530,15 @@ public class HrService {
                 .toList();
 
         List<UUID> brigadeIds = getBrigadeIds(employees);
+        List<UUID> specialisationIds = employees.stream()
+                .map(Employee::getSpecialisationId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
 
         Map<UUID, String> departmentNameById = departmentIds.isEmpty()
                 ? Map.of()
-                : departmentRepository.findAllByIdInAndIsDeletedFalse(departmentIds)
+                : nullToEmpty(departmentRepository.findAllByIdInAndIsDeletedFalse(departmentIds))
                 .stream()
                 .collect(Collectors.toMap(
                         Department::getId,
@@ -490,7 +548,7 @@ public class HrService {
 
         Map<UUID, String> brigadeNameById = brigadeIds.isEmpty()
                 ? Map.of()
-                : brigadeRepository.findAllByIdInAndIsDeletedFalse(brigadeIds)
+                : nullToEmpty(brigadeRepository.findAllByIdInAndIsDeletedFalse(brigadeIds))
                 .stream()
                 .collect(Collectors.toMap(
                         Brigade::getId,
@@ -500,14 +558,32 @@ public class HrService {
 
         Map<UUID, List<String>> workRoleCodesByEmployee = workRoleCodesByEmployee(employees);
 
+        Map<UUID, EmployeeSpecialisationDto> specialisationById = specialisationIds.isEmpty()
+                ? Map.of()
+                : nullToEmpty(employeeSpecialisationRepository.findAllByIdInAndIsDeletedFalse(specialisationIds))
+                .stream()
+                .map(EmployeeSpecialisationDto::from)
+                .collect(Collectors.toMap(
+                        EmployeeSpecialisationDto::id,
+                        dto -> dto,
+                        (a, b) -> a
+                ));
+
         return employees.stream()
                 .map(employee -> EmployeeDto.from(
                         employee,
                         resolveName(departmentNameById, employee.getDepartmentId()),
                         resolveName(brigadeNameById, employee.getBrigadeId()),
-                        workRoleCodesByEmployee.getOrDefault(employee.getId(), List.of())
+                        resolveSpecialisation(specialisationById, employee.getSpecialisationId()),
+                        employee.getId() == null
+                                ? List.of()
+                                : workRoleCodesByEmployee.getOrDefault(employee.getId(), List.of())
                 ))
                 .toList();
+    }
+
+    private <T> List<T> nullToEmpty(List<T> values) {
+        return values == null ? List.of() : values;
     }
 
     public static  List<UUID> getBrigadeIds(List<Employee> employees){
@@ -524,6 +600,16 @@ public class HrService {
             return null;
         }
         return namesById.get(id);
+    }
+
+    private EmployeeSpecialisationDto resolveSpecialisation(
+            Map<UUID, EmployeeSpecialisationDto> specialisationsById,
+            UUID id
+    ) {
+        if (id == null) {
+            return null;
+        }
+        return specialisationsById.get(id);
     }
 
     private String toSearchPattern(String search) {
@@ -606,6 +692,9 @@ public class HrService {
                 .distinct()
                 .toList();
         if (employeeIds.isEmpty()) {
+            return Map.of();
+        }
+        if (employeeWorkRoleAssignmentRepository == null) {
             return Map.of();
         }
         List<EmployeeWorkRoleCodeProjection> rows = employeeWorkRoleAssignmentRepository

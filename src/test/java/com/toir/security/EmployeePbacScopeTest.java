@@ -2,12 +2,14 @@ package com.toir.security;
 
 import com.toir.dto.hr.EmployeeRequest;
 import com.toir.entity.users.Employee;
+import com.toir.entity.users.EmployeeSpecialisation;
 import com.toir.exception.RestException;
 import com.toir.repository.TimesheetEntryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.repository.users.EmployeeSpecialisationRepository;
 import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
 import com.toir.repository.users.EmployeeWorkRoleRepository;
 import com.toir.service.users.HrService;
@@ -66,12 +68,17 @@ class EmployeePbacScopeTest {
     @Mock
     EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
+    @Mock
+    EmployeeSpecialisationRepository employeeSpecialisationRepository;
+
     @InjectMocks
     HrService service;
 
     @BeforeEach
     void setUp() {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        lenient().when(employeeSpecialisationRepository.findByIdAndIsDeletedFalse(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.of(specialisation(invocation.getArgument(0))));
     }
 
     @Test
@@ -305,6 +312,7 @@ class EmployeePbacScopeTest {
                 departmentId,
                 null,
                 userId,
+                UUID.randomUUID(),
                 LocalDate.of(2025, 1, 10),
                 null,
                 "A",
@@ -312,6 +320,16 @@ class EmployeePbacScopeTest {
                 "ali@example.com",
                 true
         );
+    }
+
+    private EmployeeSpecialisation specialisation(UUID id) {
+        EmployeeSpecialisation specialisation = new EmployeeSpecialisation();
+        specialisation.setId(id);
+        specialisation.setNameRu("Механик");
+        specialisation.setNameEn("Mechanic");
+        specialisation.setNameUz("Mexanik");
+        specialisation.setActive(true);
+        return specialisation;
     }
 
     private EmployeeStatsProjection stats(Long total, Long active, Long terminated, Long withoutEmail) {
