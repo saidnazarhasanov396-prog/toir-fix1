@@ -146,35 +146,6 @@ class MaintenanceDueCalculationServiceTest {
     }
 
     @Test
-    void meterCycleAfterRepairResetStartsFromFailureTimeAnchor() {
-        UUID equipmentId = UUID.randomUUID();
-        MaintenanceRegulation regulation = regulation(equipmentId);
-        regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
-        regulation.setTriggerMeterInterval(500.0);
-
-        EquipmentMeter meter = meter(equipmentId, MeterType.ENGINE_HOURS, 1400.0);
-        MaintenanceCompletionAnchor anchor = anchor(
-                equipmentId,
-                regulation.getId(),
-                Instant.parse("2026-06-17T04:00:00Z"),
-                1320.0
-        );
-
-        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId))
-                .thenReturn(java.util.List.of(meter));
-        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null))
-                .thenReturn(Optional.of(anchor));
-
-        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
-
-        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.NOT_DUE);
-        assertThat(result.meterAnchorValue()).isEqualTo(1320.0);
-        assertThat(result.meterCurrentValue()).isEqualTo(1400.0);
-        assertThat(result.nextMeterDueValue()).isEqualTo(1820.0);
-        assertThat(result.meterRemaining()).isEqualTo(420.0);
-    }
-
-    @Test
     void meterExactThresholdIsDueNotOverdue() {
         UUID equipmentId = UUID.randomUUID();
         MaintenanceRegulation regulation = regulation(equipmentId);

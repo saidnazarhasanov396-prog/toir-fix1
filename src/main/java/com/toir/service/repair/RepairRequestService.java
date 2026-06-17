@@ -58,7 +58,6 @@ import com.toir.service.NotificationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
-import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import com.toir.exception.RestException;
@@ -114,7 +113,6 @@ public class RepairRequestService {
     private final EquipmentMeterRepository equipmentMeterRepository;
     private final MeterReadingRepository meterReadingRepository;
     private final MeterService meterService;
-    private final MaintenanceDueEventService maintenanceDueEventService;
     private final ObjectMapper objectMapper;
 
     private static final Set<RequestStatus> REVIEWABLE_STATUSES = EnumSet.of(
@@ -1296,7 +1294,7 @@ public class RepairRequestService {
                 .map(anchor -> scopeKey(anchor.getRegulationId(), anchor.getEquipmentMaintenanceRuleId()))
                 .collect(Collectors.toSet());
         Instant performedAt = request.getActualCompletionAt() == null ? Instant.now() : request.getActualCompletionAt();
-        String meterSnapshots = toMeterSnapshotsJson(anchorMeterSnapshots(request, performedAt));
+        String meterSnapshots = toMeterSnapshotsJson(currentMeterSnapshots(request.getEquipmentId(), performedAt));
 
         for (EquipmentMaintenanceEffectiveRule scope : scopes) {
             String scopeKey = scopeKey(scope.regulationId(), scope.equipmentMaintenanceRuleId());
@@ -1314,12 +1312,6 @@ public class RepairRequestService {
             anchor.setNote(request.getCloseResult());
             anchor.setMeterSnapshots(meterSnapshots);
             maintenanceCompletionAnchorRepository.save(anchor);
-            maintenanceDueEventService.cancelOpenByScopeForReset(
-                    request.getEquipmentId(),
-                    scope.regulationId(),
-                    scope.equipmentMaintenanceRuleId(),
-                    "Reset from repair request " + request.getNumber()
-            );
         }
     }
 
@@ -1339,49 +1331,6 @@ public class RepairRequestService {
                 .stream()
                 .map(meter -> toMeterSnapshot(meter, performedAt))
                 .toList();
-    }
-
-    private List<CompletionMeterSnapshotRequest> anchorMeterSnapshots(RepairRequest request, Instant performedAt) {
-        List<CompletionMeterSnapshotRequest> failureSnapshots = repairFailureMeterSnapshots(request.getId(), request.getEquipmentId());
-        if (!failureSnapshots.isEmpty()) {
-            return failureSnapshots;
-        }
-        return currentMeterSnapshots(request.getEquipmentId(), performedAt);
-    }
-
-    private List<CompletionMeterSnapshotRequest> repairFailureMeterSnapshots(UUID repairRequestId, UUID equipmentId) {
-        if (repairRequestId == null || equipmentId == null) {
-            return List.of();
-        }
-        List<MeterReading> readings = meterReadingRepository
-                .findAllByRepairRequestIdAndReadingContextAndIsDeletedFalseOrderByReadAtDesc(
-                        repairRequestId,
-                        MeterReadingContext.FAILURE_DETECTED
-                );
-        if (readings == null || readings.isEmpty()) {
-            return List.of();
-        }
-        Map<UUID, EquipmentMeter> metersById = equipmentMeterRepository
-                .findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)
-                .stream()
-                .collect(Collectors.toMap(EquipmentMeter::getId, Function.identity(), (left, ignored) -> left));
-        LinkedHashMap<UUID, CompletionMeterSnapshotRequest> latestByMeter = new LinkedHashMap<>();
-        for (MeterReading reading : readings) {
-            if (reading.getMeterId() == null || latestByMeter.containsKey(reading.getMeterId())) {
-                continue;
-            }
-            EquipmentMeter meter = metersById.get(reading.getMeterId());
-            if (meter == null || !equipmentId.equals(reading.getEquipmentId())) {
-                continue;
-            }
-            latestByMeter.put(reading.getMeterId(), new CompletionMeterSnapshotRequest(
-                    reading.getMeterId(),
-                    meter.getMeterType(),
-                    reading.getValue(),
-                    reading.getReadAt()
-            ));
-        }
-        return List.copyOf(latestByMeter.values());
     }
 
     private CompletionMeterSnapshotRequest toMeterSnapshot(EquipmentMeter meter, Instant performedAt) {
