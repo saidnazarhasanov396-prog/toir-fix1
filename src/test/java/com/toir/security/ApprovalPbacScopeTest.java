@@ -385,6 +385,42 @@ class ApprovalPbacScopeTest {
     }
 
     @Test
+    void createResolvesRoleOnlyStepWhenApproverIdIsOmitted() {
+        UUID documentId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        CreateApprovalRequest request = new CreateApprovalRequest(
+                "WORK_ORDER",
+                documentId,
+                "Role-only approval",
+                requesterId,
+                "needs routing",
+                List.of(new CreateApprovalRequest.StepInput(null, "WORK_ORDER_APPROVER"))
+        );
+        User approver = new User();
+        approver.setId(approverId);
+        approver.setStatus(UserStatus.ACTIVE);
+        Role role = new Role();
+        role.setCode("WORK_ORDER_APPROVER");
+        approver.setPrimaryRole(role);
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(approver));
+        when(requestRepository.save(any())).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        service.create(request);
+
+        org.mockito.ArgumentCaptor<ApprovalRequest> captor = org.mockito.ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository).save(captor.capture());
+        ApprovalRequest saved = captor.getValue();
+        assertThat(saved.getSteps()).hasSize(1);
+        assertThat(saved.getSteps().getFirst().getApproverId()).isEqualTo(approverId);
+        assertThat(saved.getSteps().getFirst().getApproverRole()).isEqualTo("WORK_ORDER_APPROVER");
+    }
+
+    @Test
     void currentPendingApproverCanApprove() {
         UUID approvalId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();

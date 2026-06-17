@@ -38,8 +38,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -819,12 +821,8 @@ public class ApprovalService {
             request.setExpiresAt(Instant.now().plus(slaPolicyService.slaFor(request)));
         }
 
-        List<CreateApprovalRequest.StepInput> effectiveSteps = steps == null
-                ? List.of()
-                : steps.stream()
-                .filter(input -> input != null && input.approverId() != null)
-                .toList();
-        if (effectiveSteps == null || effectiveSteps.isEmpty()) {
+        List<CreateApprovalRequest.StepInput> effectiveSteps = resolveExplicitSteps(steps);
+        if (effectiveSteps.isEmpty()) {
             effectiveSteps = routeResolver.resolveRoute(request);
         }
         if (effectiveSteps == null || effectiveSteps.isEmpty()) {
@@ -862,6 +860,26 @@ public class ApprovalService {
         );
 
         return toDto(saved);
+    }
+
+    private List<CreateApprovalRequest.StepInput> resolveExplicitSteps(List<CreateApprovalRequest.StepInput> steps) {
+        if (steps == null || steps.isEmpty()) {
+            return List.of();
+        }
+        List<CreateApprovalRequest.StepInput> resolved = new ArrayList<>();
+        for (CreateApprovalRequest.StepInput input : steps) {
+            if (input == null) {
+                continue;
+            }
+            if (input.approverId() != null) {
+                resolved.add(input);
+                continue;
+            }
+            routeResolver.resolveRole(input.approverRole()).ifPresent(resolved::add);
+        }
+        return resolved.stream()
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     private void notifyCurrentStep(ApprovalRequest request) {

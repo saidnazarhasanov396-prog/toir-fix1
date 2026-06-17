@@ -47,4 +47,32 @@ class DefaultApprovalRouteResolverTest {
         assertThat(steps.getFirst().approverId()).isEqualTo(userId);
         assertThat(steps.getFirst().approverRole()).isEqualTo("WORK_ORDER_APPROVER");
     }
+
+    @Test
+    void roleBasedTemplateFallsBackToSystemAdminWhenRoleHasNoUser() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository, userRepository);
+        ApprovalTemplate template = new ApprovalTemplate();
+        template.setTargetType(ApprovalTargetType.WORK_ORDER);
+        template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
+        template.setApproverRole("WORK_ORDER_APPROVER");
+        ApprovalRequest request = new ApprovalRequest();
+        request.setTargetType(ApprovalTargetType.WORK_ORDER);
+        User admin = new User();
+        UUID adminId = UUID.randomUUID();
+        admin.setId(adminId);
+        Role role = new Role();
+        role.setCode("SYSTEM_ADMIN");
+        admin.setPrimaryRole(role);
+        when(templateRepository.findFirstByTargetTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalTargetType.WORK_ORDER))
+                .thenReturn(Optional.of(template));
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(admin));
+
+        var steps = resolver.resolveRoute(request);
+
+        assertThat(steps).hasSize(1);
+        assertThat(steps.getFirst().approverId()).isEqualTo(adminId);
+        assertThat(steps.getFirst().approverRole()).isEqualTo("WORK_ORDER_APPROVER");
+    }
 }
