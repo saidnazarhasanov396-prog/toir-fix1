@@ -138,6 +138,7 @@ class VehicleServiceDriverAssignmentTest {
         var result = service.update(equipmentId, request(departmentId, driverId, equipment.getEquipmentTypeId()));
 
         assertThat(result.vehicleDetails().assignedDriverId()).isEqualTo(driverId);
+        assertThat(equipment.getResponsibleId()).isEqualTo(driverId);
         verify(vehicleDetailsRepository).save(details);
     }
 

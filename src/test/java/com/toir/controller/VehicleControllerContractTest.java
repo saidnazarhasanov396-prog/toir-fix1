@@ -27,6 +27,7 @@ import com.toir.service.VehiclePictureService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.MethodParameter;
@@ -49,6 +50,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -241,6 +243,73 @@ class VehicleControllerContractTest {
                 .andExpect(status().isBadRequest());
 
         verify(service, never()).create(any());
+    }
+
+    @Test
+    void createVehicleAcceptsEquipmentUsageAndLifetimeFields() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(service.create(any())).thenReturn(new VehicleDetailDto(
+                null,
+                new VehicleDetailDto.Details(
+                        UUID.randomUUID(),
+                        "01A155AA",
+                        null,
+                        null,
+                        "MAN",
+                        "TGS",
+                        2022,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        0,
+                        0,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of()
+                )
+        ));
+
+        mockMvc.perform(post("/api/v1/vehicles")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "Truck Usage",
+                                  "inventoryNumber": "INV-VH-USAGE-001",
+                                  "equipmentTypeId": "%s",
+                                  "departmentId": "%s",
+                                  "plateNumber": "01A155AA",
+                                  "brand": "MAN",
+                                  "model": "TGS",
+                                  "manufactureYear": 2022,
+                                  "vehicleType": "TRUCK",
+                                  "lifetimeCounterType": "MILEAGE_KM",
+                                  "lifetimeLimitValue": 300000,
+                                  "lifetimeBaselineValue": 10000,
+                                  "lifetimeWarningPercent": 15,
+                                  "averageDailyUsage": 250
+                                }
+                                """.formatted(equipmentTypeId, departmentId)))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<com.toir.dto.vehicle.VehicleRequest> captor =
+                ArgumentCaptor.forClass(com.toir.dto.vehicle.VehicleRequest.class);
+        verify(service).create(captor.capture());
+        assertThat(captor.getValue().lifetimeCounterType()).isEqualTo(com.toir.enums.MeterType.MILEAGE_KM);
+        assertThat(captor.getValue().lifetimeLimitValue()).isEqualTo(300_000.0);
+        assertThat(captor.getValue().lifetimeBaselineValue()).isEqualTo(10_000.0);
+        assertThat(captor.getValue().lifetimeWarningPercent()).isEqualTo(15.0);
+        assertThat(captor.getValue().averageDailyUsage()).isEqualTo(250.0);
     }
 
     @Test
