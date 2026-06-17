@@ -609,6 +609,23 @@ class StockMovementServiceTest {
     }
 
     @Test
+    void receiptWithWorkOrderIdIsBlockedToPreserveReceiptSourceOfTruth() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.create(requestWithWorkOrder(
+                warehouseId,
+                sparePartId,
+                StockMovementType.RECEIPT,
+                1,
+                UUID.randomUUID())))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Work order receipts");
+
+        verifyNoInteractions(stockRepository, repository, sparePartRepository);
+    }
+
+    @Test
     void manualStockMovementRequiresReasonOrSourceDocument() {
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();

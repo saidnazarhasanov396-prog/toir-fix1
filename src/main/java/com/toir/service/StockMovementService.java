@@ -118,7 +118,7 @@ public class StockMovementService {
     public StockMovementDto create(StockMovementRequest request) {
         validatePositiveQuantity(request.quantity());
         assertGenericMovementTypeIsSupported(request.type());
-        assertWorkOrderIssueUsesMaterialUsageEndpoint(request);
+        assertWorkOrderMovementUsesDomainEndpoint(request);
         assertCanAccessWarehouseId(request.warehouseId());
         assertMovementHasReasonOrSource(request);
 
@@ -534,10 +534,17 @@ public class StockMovementService {
         }
     }
 
-    private void assertWorkOrderIssueUsesMaterialUsageEndpoint(StockMovementRequest request) {
-        if (request.type() == StockMovementType.ISSUE && request.workOrderId() != null) {
+    private void assertWorkOrderMovementUsesDomainEndpoint(StockMovementRequest request) {
+        if (request.workOrderId() == null) {
+            return;
+        }
+        if (request.type() == StockMovementType.ISSUE) {
             throw RestException.badRequest(
                     "Work order material issues must be recorded through /api/v1/work-orders/{workOrderId}/material-usage");
+        }
+        if (request.type() == StockMovementType.RECEIPT) {
+            throw RestException.badRequest(
+                    "Work order receipts are not valid stock receipt sources; use procurement, purchase receipt, or a manual receipt document");
         }
     }
 
