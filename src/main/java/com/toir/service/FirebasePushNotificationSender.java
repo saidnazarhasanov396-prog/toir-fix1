@@ -9,6 +9,7 @@ import com.toir.entity.UserFcmToken;
 import com.toir.repository.UserFcmTokenRepository;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,39 +26,65 @@ public class FirebasePushNotificationSender {
 
     public void sendToUser(NotificationDto notification) {
         FirebaseMessaging firebaseMessaging = firebaseMessagingProvider.getIfAvailable();
-        if (firebaseMessaging == null || notification == null || notification.recipientId() == null) {
+        if (notification == null) {
+            log.warn("Firebase push skipped because notification payload is null");
+            return;
+        }
+        if (notification.recipientId() == null) {
+            log.warn("Firebase push skipped for notification {} because recipientId is null", notification.id());
+            return;
+        }
+        if (firebaseMessaging == null) {
+            log.info("Firebase push skipped for notification {} recipient {} because FirebaseMessaging is not configured",
+                    notification.id(), notification.recipientId());
             return;
         }
 
         Map<String, String> data = payload(notification);
-        tokenRepository.findAllByUserIdAndActiveTrueAndIsDeletedFalseOrderByLastSeenAtDesc(notification.recipientId())
-                .forEach(token -> sendToToken(firebaseMessaging, token, data));
+        List<UserFcmToken> tokens = tokenRepository
+                .findAllByUserIdAndActiveTrueAndIsDeletedFalseOrderByLastSeenAtDesc(notification.recipientId());
+        if (tokens.isEmpty()) {
+            log.info("Firebase push skipped for notification {} recipient {} because no active FCM tokens were found",
+                    notification.id(), notification.recipientId());
+            return;
+        }
+
+        log.info("Firebase push sending notification {} to recipient {} using {} active FCM token(s)",
+                notification.id(), notification.recipientId(), tokens.size());
+        tokens.forEach(token -> sendToToken(firebaseMessaging, token, notification, data));
     }
 
-    private void sendToToken(FirebaseMessaging firebaseMessaging, UserFcmToken token, Map<String, String> data) {
+    private void sendToToken(FirebaseMessaging firebaseMessaging,
+                             UserFcmToken token,
+                             NotificationDto notification,
+                             Map<String, String> data) {
         try {
             Message message = Message.builder()
                     .setToken(token.getToken())
                     .putAllData(data)
                     .build();
-            firebaseMessaging.send(message);
+            String messageId = firebaseMessaging.send(message);
+            log.info("Firebase push sent notification {} to recipient {} token id {} messageId={}",
+                    notification.id(), notification.recipientId(), token.getId(), messageId);
         } catch (FirebaseMessagingException ex) {
-            handleFirebaseFailure(token, ex);
+            handleFirebaseFailure(token, notification, ex);
         } catch (RuntimeException ex) {
-            log.warn("Unexpected Firebase push failure for token id {}: {}", token.getId(), ex.getMessage());
+            log.warn("Unexpected Firebase push failure for notification {} recipient {} token id {}: {}",
+                    notification.id(), notification.recipientId(), token.getId(), ex.getMessage());
         }
     }
 
-    private void handleFirebaseFailure(UserFcmToken token, FirebaseMessagingException ex) {
+    private void handleFirebaseFailure(UserFcmToken token, NotificationDto notification, FirebaseMessagingException ex) {
         MessagingErrorCode errorCode = ex.getMessagingErrorCode();
         if (errorCode == MessagingErrorCode.UNREGISTERED || errorCode == MessagingErrorCode.INVALID_ARGUMENT) {
             token.setActive(false);
             tokenRepository.save(token);
-            log.info("Deactivated invalid Firebase token id {} after FCM error {}", token.getId(), errorCode);
+            log.info("Firebase push failed permanently for notification {} recipient {} token id {}; deactivated token after FCM error {}: {}",
+                    notification.id(), notification.recipientId(), token.getId(), errorCode, ex.getMessage());
             return;
         }
-        log.warn("Temporary Firebase push failure for token id {} with FCM error {}: {}",
-                token.getId(), errorCode, ex.getMessage());
+        log.warn("Temporary Firebase push failure for notification {} recipient {} token id {} with FCM error {}: {}",
+                notification.id(), notification.recipientId(), token.getId(), errorCode, ex.getMessage());
     }
 
     private Map<String, String> payload(NotificationDto notification) {
