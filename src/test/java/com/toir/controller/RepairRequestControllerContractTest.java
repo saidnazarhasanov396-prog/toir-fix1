@@ -337,32 +337,8 @@ class RepairRequestControllerContractTest {
                 org.mockito.ArgumentMatchers.eq("REPAIR_REQUEST_APPROVER"),
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString());
-        verify(service).assertMeterReadingsReadyForApproval(requestId);
+        verify(service, never()).assertMeterReadingsReadyForApproval(requestId);
         verify(service, never()).approve(requestId);
-    }
-
-    @Test
-    void approveEndpointBlocksWhenRepairRequestMeterReadingsAreMissing() throws Exception {
-        UUID requestId = UUID.randomUUID();
-        RepairRequestDto response = dtoWithLinks(requestId);
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entityFromDto(response)));
-        org.mockito.Mockito.doThrow(com.toir.exception.RestException.badRequest(
-                        "Repair request meter readings are required before approve: Odometer"))
-                .when(service).assertMeterReadingsReadyForApproval(requestId);
-
-        mockMvc.perform(post("/api/v1/repair-requests/{id}/approve", requestId))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Repair request meter readings are required before approve: Odometer"));
-
-        verify(approvalService, never()).createOrReuseApprovalForDocument(
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                any()
-        );
     }
 
     @Test
@@ -377,7 +353,7 @@ class RepairRequestControllerContractTest {
                 "Odometer",
                 "km",
                 9_000.0,
-                true,
+                false,
                 true,
                 10_000.0,
                 Instant.parse("2026-06-15T06:30:00Z")
@@ -387,7 +363,7 @@ class RepairRequestControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].meterId").value(meterId.toString()))
                 .andExpect(jsonPath("$[0].meterType").value("MILEAGE_KM"))
-                .andExpect(jsonPath("$[0].required").value(true))
+                .andExpect(jsonPath("$[0].required").value(false))
                 .andExpect(jsonPath("$[0].provided").value(true))
                 .andExpect(jsonPath("$[0].latestValue").value(10_000.0));
     }

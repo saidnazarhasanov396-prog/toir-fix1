@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.attachment.AttachmentGroupDto;
+import com.toir.dto.meter.MeterReadingRequest;
 import com.toir.dto.workorder.*;
 import com.toir.dto.triad.TriadLinkMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -11,6 +12,7 @@ import com.toir.entity.UploadedFile;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.defects.DefectList;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.maintenance.MaintenanceOperation;
@@ -56,6 +58,9 @@ import com.toir.enums.DefectListStatus;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
 import com.toir.enums.MaintenanceTriggerSource;
+import com.toir.enums.MeterReadingContext;
+import com.toir.enums.MeterSource;
+import com.toir.enums.MeterType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
@@ -72,6 +77,7 @@ import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
+import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
@@ -132,10 +138,16 @@ public class WorkOrderService {
 
     public record TemplateTaskSyncResult(int operationsCount, int createdCount) {
     }
+
+    private record ResolvedCompletionMeterSnapshot(CompletionMeterSnapshotRequest snapshot, EquipmentMeter meter) {
+    }
+
     private static final ZoneId CALENDAR_ZONE = ZoneId.of("Asia/Tashkent");
 
     private final WorkOrderRepository repository;
     private final EquipmentRepository equipmentRepository;
+    private final EquipmentMeterRepository equipmentMeterRepository;
+    private final MeterService meterService;
     private final EquipmentNodeRepository equipmentNodeRepository;
     private final LocationRepository locationRepository;
     private final DepartmentRepository departmentRepository;
@@ -690,6 +702,8 @@ public class WorkOrderService {
             entity.setSummary(request.summary());
         }
         validateCompleteRequestForReplacement(entity, request);
+        List<ResolvedCompletionMeterSnapshot> completionMeterSnapshots =
+                resolveCompletionMeterSnapshots(entity, request);
         issueCompletionMaterials(entity, request);
         entity.setStatus(WorkOrderStatus.COMPLETED);
         entity.setCompletedAt(Instant.now());
@@ -706,6 +720,7 @@ public class WorkOrderService {
         WorkOrder saved = repository.save(entity);
         createMaintenanceCompletionAnchor(saved, request, dueEvent);
         completeLinkedMaintenanceDueEvent(dueEvent);
+        persistCompletionMeterReadings(saved, completionMeterSnapshots, request);
         syncLinkedOnComplete(saved);
         if (!isReplacementWorkOrder(saved)) {
             equipmentStatusLifecycleService.recordWorkOrderReturn(
@@ -868,6 +883,91 @@ public class WorkOrderService {
         anchor.setSource("WORK_ORDER");
         anchor.setNote(request.summary());
         maintenanceCompletionAnchorRepository.save(anchor);
+    }
+
+    private List<ResolvedCompletionMeterSnapshot> resolveCompletionMeterSnapshots(WorkOrder workOrder,
+                                                                                  CompleteWorkOrderRequest request) {
+        List<CompletionMeterSnapshotRequest> snapshots = request.meterSnapshots();
+        if (snapshots == null || snapshots.isEmpty()) {
+            return List.of();
+        }
+        List<ResolvedCompletionMeterSnapshot> resolved = new ArrayList<>(snapshots.size());
+        for (CompletionMeterSnapshotRequest snapshot : snapshots) {
+            if (snapshot == null) {
+                throw RestException.badRequest("Meter snapshot is required");
+            }
+            if (snapshot.value() == null) {
+                throw RestException.badRequest("Meter snapshot value is required");
+            }
+            if (snapshot.value() < 0) {
+                throw RestException.badRequest("Meter snapshot value must be non-negative");
+            }
+            resolved.add(new ResolvedCompletionMeterSnapshot(snapshot, resolveCompletionSnapshotMeter(workOrder, snapshot)));
+        }
+        return List.copyOf(resolved);
+    }
+
+    private EquipmentMeter resolveCompletionSnapshotMeter(WorkOrder workOrder,
+                                                          CompletionMeterSnapshotRequest snapshot) {
+        if (snapshot.meterId() != null) {
+            EquipmentMeter meter = equipmentMeterRepository.findByIdAndIsDeletedFalse(snapshot.meterId())
+                    .orElseThrow(() -> RestException.badRequest("Active meter not found: " + snapshot.meterId()));
+            assertCompletionSnapshotMeterMatchesWorkOrder(workOrder, snapshot, meter);
+            return meter;
+        }
+        if (snapshot.meterType() == null) {
+            throw RestException.badRequest("Meter snapshot meterId or meterType is required");
+        }
+        return equipmentMeterRepository
+                .findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(workOrder.getEquipmentId())
+                .stream()
+                .filter(meter -> meter.getMeterType() == snapshot.meterType())
+                .findFirst()
+                .orElseThrow(() -> RestException.badRequest(
+                        "Active meter not found for work order equipment and meter type " + snapshot.meterType()));
+    }
+
+    private void assertCompletionSnapshotMeterMatchesWorkOrder(WorkOrder workOrder,
+                                                               CompletionMeterSnapshotRequest snapshot,
+                                                               EquipmentMeter meter) {
+        if (!Objects.equals(meter.getEquipmentId(), workOrder.getEquipmentId())) {
+            throw RestException.badRequest("Meter " + meter.getId() + " does not belong to work order equipment");
+        }
+        if (!meter.isActive()) {
+            throw RestException.badRequest("Meter " + meter.getId() + " is not active");
+        }
+        MeterType snapshotMeterType = snapshot.meterType();
+        if (snapshotMeterType != null && meter.getMeterType() != snapshotMeterType) {
+            throw RestException.badRequest("Meter snapshot type does not match meter " + meter.getId());
+        }
+    }
+
+    private void persistCompletionMeterReadings(WorkOrder workOrder,
+                                                List<ResolvedCompletionMeterSnapshot> snapshots,
+                                                CompleteWorkOrderRequest request) {
+        if (snapshots == null || snapshots.isEmpty()) {
+            return;
+        }
+        Instant fallbackReadAt = request.performedAt() == null ? workOrder.getCompletedAt() : request.performedAt();
+        for (ResolvedCompletionMeterSnapshot resolved : snapshots) {
+            CompletionMeterSnapshotRequest snapshot = resolved.snapshot();
+            EquipmentMeter meter = resolved.meter();
+            meterService.addReading(
+                    new MeterReadingRequest(
+                            meter.getId(),
+                            snapshot.value(),
+                            snapshot.readAt() == null ? fallbackReadAt : snapshot.readAt(),
+                            MeterSource.MANUAL,
+                            null,
+                            null,
+                            "Work order completed: " + workOrder.getNumber()
+                    ),
+                    MeterReadingContext.WORK_COMPLETED,
+                    workOrder.getRepairRequestId(),
+                    workOrder.getId(),
+                    workOrder.getDefectId()
+            );
+        }
     }
 
     private Optional<MaintenanceCompletionAnchor> findExistingMaintenanceCompletionAnchor(WorkOrder workOrder,

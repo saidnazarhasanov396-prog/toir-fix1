@@ -104,6 +104,9 @@ class MaintenanceRegulationServiceTest {
     @Mock
     SecurityAccessService securityAccessService;
 
+    @Mock
+    MaintenanceMeterBaselineService meterBaselineService;
+
     @InjectMocks
     MaintenanceRegulationService service;
 
@@ -417,6 +420,31 @@ class MaintenanceRegulationServiceTest {
         ArgumentCaptor<MaintenanceRegulation> captor = ArgumentCaptor.forClass(MaintenanceRegulation.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getCode()).isEqualTo(expectedCode);
+    }
+
+    @Test
+    void createActiveMeterTriggeredRegulationSeedsInitialMeterBaseline() {
+        int year = Year.now().getValue();
+        String codePrefix = "MR-" + year + "-";
+        String expectedCode = "MR-" + year + "-0001";
+        UUID regulationId = UUID.randomUUID();
+
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(repository.save(any(MaintenanceRegulation.class))).thenAnswer(invocation -> {
+            MaintenanceRegulation regulation = invocation.getArgument(0);
+            regulation.setId(regulationId);
+            return regulation;
+        });
+
+        service.create(request(null));
+
+        verify(meterBaselineService).seedForRegulation(argThat(regulation ->
+                regulationId.equals(regulation.getId())
+                        && regulation.isActive()
+                        && regulation.getTriggerMeterType() == MeterType.CUSTOM
+                        && regulation.getTriggerMeterInterval().equals(10.0)
+        ));
     }
 
     @Test

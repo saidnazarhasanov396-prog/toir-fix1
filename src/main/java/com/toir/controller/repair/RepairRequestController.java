@@ -119,7 +119,6 @@ public class RepairRequestController {
                                                       @RequestParam(required = false) UUID approverId) {
         RepairRequest repairRequest = requestOrThrow(id);
         assertCanMutateRequest(repairRequest);
-        service.assertMeterReadingsReadyForApproval(id);
         return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
                 "REPAIR_REQUEST",
                 id,
