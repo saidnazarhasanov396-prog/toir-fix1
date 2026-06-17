@@ -84,7 +84,7 @@ public class ApprovalService {
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> listByDocument(String documentType, UUID documentId) {
-        return requestRepository.findAllByDocumentTypeAndDocumentIdAndIsDeletedFalse(normalizeDocumentType(documentType), documentId).stream()
+        return requestRepository.findAllByTargetTypeAndTargetIdAndIsDeletedFalse(normalizeDocumentType(documentType), documentId).stream()
                 .filter(approvalScopeService::canReadApproval)
                 .map(this::toDto).toList();
     }
@@ -109,8 +109,8 @@ public class ApprovalService {
 
         return requestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(request -> normalizedDocumentType == null
-                        || normalizedDocumentType.equals(request.getDocumentType()))
-                .filter(request -> documentId == null || documentId.equals(request.getDocumentId()))
+                        || normalizedDocumentType.equals(effectiveTargetTypeName(request)))
+                .filter(request -> documentId == null || documentId.equals(effectiveTargetId(request)))
                 .filter(request -> requesterId == null || requesterId.equals(request.getRequesterId()))
                 .filter(request -> status == null || status == request.getStatus())
                 .filter(request -> normalizedSearch == null || matchesSearch(request, normalizedSearch))
@@ -171,23 +171,23 @@ public class ApprovalService {
 
     @Transactional
     public ApprovalRequestDto create(CreateApprovalRequest r) {
-        String normalizedDocumentType = effectiveDocumentType(r);
-        UUID documentId = effectiveDocumentId(r);
+        ApprovalTargetType targetType = effectiveTargetType(r);
+        UUID targetId = effectiveTargetId(r);
         CreateApprovalRequest effectiveRequest = new CreateApprovalRequest(
-                normalizedDocumentType,
-                documentId,
+                targetType.name(),
+                targetId,
                 r.title(),
                 r.requesterId(),
                 r.description(),
                 r.steps(),
-                r.targetType(),
-                r.targetId(),
+                targetType,
+                targetId,
                 r.actionType()
         );
         approvalScopeService.assertCanCreateApproval(effectiveRequest);
         return createNewApproval(
-                normalizedDocumentType,
-                documentId,
+                targetType,
+                targetId,
                 r.title(),
                 r.requesterId(),
                 r.description(),
@@ -196,23 +196,23 @@ public class ApprovalService {
         );
     }
 
-    private String effectiveDocumentType(CreateApprovalRequest request) {
-        String normalizedDocumentType = normalizeDocumentType(request.documentType());
-        if (StringUtils.hasText(normalizedDocumentType)) {
-            return normalizedDocumentType;
-        }
+    private ApprovalTargetType effectiveTargetType(CreateApprovalRequest request) {
         if (request.targetType() != null) {
-            return request.targetType().name();
+            return request.targetType();
         }
-        return ApprovalTargetType.OTHER.name();
+        ApprovalTargetType targetType = ApprovalTargetType.fromDocumentType(request.documentType());
+        if (targetType != null) {
+            return targetType;
+        }
+        return ApprovalTargetType.OTHER;
     }
 
-    private UUID effectiveDocumentId(CreateApprovalRequest request) {
-        if (request.documentId() != null) {
-            return request.documentId();
-        }
+    private UUID effectiveTargetId(CreateApprovalRequest request) {
         if (request.targetId() != null) {
             return request.targetId();
+        }
+        if (request.documentId() != null) {
+            return request.documentId();
         }
         return UUID.randomUUID();
     }
@@ -412,7 +412,8 @@ public class ApprovalService {
                                                                 String title,
                                                                 String description,
                                                                 boolean validateScope) {
-        String normalizedType = normalizeDocumentType(documentType);
+        ApprovalTargetType targetType = ApprovalTargetType.fromDocumentType(documentType);
+        String normalizedType = targetType == null ? "" : targetType.name();
         if (!INTEGRATED_DOCUMENT_TYPES.contains(normalizedType)) {
             throw RestException.badRequest("Unsupported approval-integrated document type: " + normalizedType);
         }
@@ -443,7 +444,7 @@ public class ApprovalService {
         return findPendingApproval(normalizedType, documentId, effectiveActionType)
                 .map(this::toDtoAfterReuse)
                 .orElseGet(() -> createNewApproval(
-                        normalizedType,
+                        targetType,
                         documentId,
                         StringUtils.hasText(title) ? title : normalizedType + " approval",
                         effectiveRequesterId,
@@ -498,6 +499,7 @@ public class ApprovalService {
     @Transactional
     public ApprovalRequestDto returnToStep(UUID requestId, ReturnApprovalRequest returnRequest) {
         ApprovalRequest request = getOrThrow(requestId);
+        UUID actorId = effectiveDecisionActor(returnRequest == null ? null : returnRequest.approverId());
         expireIfNeeded(request);
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
@@ -510,7 +512,7 @@ public class ApprovalService {
         }
 
         ApprovalStep current = currentStepOrThrow(request);
-        UUID delegatedForId = assertCanActOnCurrentStep(request, current, returnRequest.approverId());
+        UUID delegatedForId = assertCanActOnCurrentStep(request, current, actorId);
         int currentStep = request.getCurrentStep();
         int returnToStep = returnRequest.returnToStep();
         if (returnToStep >= currentStep) {
@@ -529,7 +531,7 @@ public class ApprovalService {
         request.setCurrentStep(returnToStep);
         request.setStatus(ApprovalStatus.PENDING);
         request.setLastReturnedAt(returnedAt);
-        request.setLastReturnedBy(returnRequest.approverId());
+        request.setLastReturnedBy(actorId);
         request.setLastReturnComment(returnRequest.comment());
         request.getSteps().stream()
                 .filter(step -> step.getStepNumber() >= returnToStep)
@@ -546,7 +548,7 @@ public class ApprovalService {
                 saved,
                 ApprovalStatus.PENDING,
                 ApprovalStatus.PENDING,
-                returnRequest.approverId(),
+                actorId,
                 delegatedForId,
                 "Returned from step " + currentStep + " to step " + returnToStep + ": " + returnRequest.comment(),
                 ApprovalActionType.RETURNED_TO_STEP
@@ -575,8 +577,7 @@ public class ApprovalService {
         }
         request.setStatus(ApprovalStatus.CANCELLED);
         request.setCompletedAt(Instant.now());
-        if (request.getTargetType() == ApprovalTargetType.MAINTENANCE_DUE_EVENT
-                || "MAINTENANCE_DUE_EVENT".equals(normalizeDocumentType(request.getDocumentType()))) {
+        if (effectiveTargetType(request) == ApprovalTargetType.MAINTENANCE_DUE_EVENT) {
             request.setResultJson(executeOnce(request));
             request.setFailureReason(null);
         }
@@ -601,14 +602,15 @@ public class ApprovalService {
 
     private ApprovalRequestDto applyDecision(UUID requestId, DecisionRequest decision, ApprovalDecision outcome) {
         ApprovalRequest request = getOrThrow(requestId);
+        UUID actorId = effectiveDecisionActor(decision);
         expireIfNeeded(request);
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
         }
         ApprovalStep current = currentStepOrThrow(request);
-        boolean delegateApprover = assertCanActOnCurrentStep(request, current, decision.approverId()) != null;
+        boolean delegateApprover = assertCanActOnCurrentStep(request, current, actorId) != null;
         current.setDecision(outcome);
-        current.setDecidedById(decision.approverId());
+        current.setDecidedById(actorId);
         current.setDelegatedForId(delegateApprover ? current.getApproverId() : null);
         current.setDecidedAt(Instant.now());
         current.setComment(decision.comment());
@@ -637,7 +639,7 @@ public class ApprovalService {
 
         ApprovalRequest saved = requestRepository.save(request);
         if (isTerminal) {
-            governanceService.record(saved, oldStatus, saved.getStatus(), decision.approverId(), decision.comment());
+            governanceService.record(saved, oldStatus, saved.getStatus(), actorId, decision.comment());
         }
         if (isTerminal) {
             notifyFinalDecision(saved, outcome);
@@ -657,6 +659,26 @@ public class ApprovalService {
 
 
         return toDto(request);
+    }
+
+    private UUID effectiveDecisionActor(DecisionRequest decision) {
+        return effectiveDecisionActor(decision == null ? null : decision.approverId());
+    }
+
+    private UUID effectiveDecisionActor(UUID requestedActorId) {
+        UUID actorId = requestedActorId;
+        if (actorId != null) {
+            return actorId;
+        }
+        actorId = scopeAccessService.currentUserIdOrNull();
+        if (actorId != null) {
+            return actorId;
+        }
+        java.util.Optional<UUID> employeeId = scopeAccessService.currentEmployeeId();
+        if (employeeId != null && employeeId.isPresent()) {
+            return employeeId.get();
+        }
+        throw RestException.badRequest("approverId is required when no authenticated user is available");
     }
 
     private ApprovalStep currentStepOrThrow(ApprovalRequest request) {
@@ -684,8 +706,7 @@ public class ApprovalService {
             return;
         }
         ApprovalActionType originalActionType = request.getActionType();
-        boolean isMaintenanceDueEvent = request.getTargetType() == ApprovalTargetType.MAINTENANCE_DUE_EVENT
-                || "MAINTENANCE_DUE_EVENT".equals(normalizeDocumentType(request.getDocumentType()));
+        boolean isMaintenanceDueEvent = effectiveTargetType(request) == ApprovalTargetType.MAINTENANCE_DUE_EVENT;
         boolean preserveActionType = isMaintenanceDueEvent
                 && (originalActionType == ApprovalActionType.CREATE_TASK
                 || originalActionType == ApprovalActionType.CREATE_WORK_ORDER);
@@ -746,38 +767,38 @@ public class ApprovalService {
                 .orElse(false);
     }
 
-    private ApprovalRequestDto createNewApproval(String normalizedDocumentType,
-                                                 UUID documentId,
+    private ApprovalRequestDto createNewApproval(ApprovalTargetType targetType,
+                                                 UUID targetId,
                                                  String title,
                                                  UUID requesterId,
                                                  String description,
                                                  List<CreateApprovalRequest.StepInput> steps) {
-        return createNewApproval(normalizedDocumentType, documentId, title, requesterId, description, steps, null, false);
+        return createNewApproval(targetType, targetId, title, requesterId, description, steps, null, false);
     }
 
-    private ApprovalRequestDto createNewApproval(String normalizedDocumentType,
-                                                 UUID documentId,
+    private ApprovalRequestDto createNewApproval(ApprovalTargetType targetType,
+                                                 UUID targetId,
                                                  String title,
                                                  UUID requesterId,
                                                  String description,
                                                  List<CreateApprovalRequest.StepInput> steps,
                                                  ApprovalActionType actionType) {
-        return createNewApproval(normalizedDocumentType, documentId, title, requesterId, description, steps, actionType, false);
+        return createNewApproval(targetType, targetId, title, requesterId, description, steps, actionType, false);
     }
 
-    private ApprovalRequestDto createNewApproval(String normalizedDocumentType,
-                                                 UUID documentId,
+    private ApprovalRequestDto createNewApproval(ApprovalTargetType targetType,
+                                                 UUID targetId,
                                                  String title,
                                                  UUID requesterId,
                                                  String description,
                                                  List<CreateApprovalRequest.StepInput> steps,
                                                  ApprovalActionType actionType,
                                                  boolean flushBeforeSideEffects) {
-        if (!StringUtils.hasText(normalizedDocumentType)) {
-            throw RestException.badRequest("documentType is required");
+        if (targetType == null) {
+            throw RestException.badRequest("targetType is required");
         }
-        if (documentId == null) {
-            throw RestException.badRequest("documentId is required");
+        if (targetId == null) {
+            throw RestException.badRequest("targetId is required");
         }
         if (requesterId == null) {
             throw RestException.badRequest("requesterId is required");
@@ -786,8 +807,8 @@ public class ApprovalService {
             throw RestException.badRequest("title is required");
         }
         ApprovalRequest request = new ApprovalRequest();
-        request.setDocumentType(normalizedDocumentType);
-        request.setDocumentId(documentId);
+        request.setTargetType(targetType);
+        request.setTargetId(targetId);
         request.setTitle(title.trim());
         request.setRequesterId(requesterId);
         request.setDescription(description);
@@ -798,7 +819,11 @@ public class ApprovalService {
             request.setExpiresAt(Instant.now().plus(slaPolicyService.slaFor(request)));
         }
 
-        List<CreateApprovalRequest.StepInput> effectiveSteps = steps;
+        List<CreateApprovalRequest.StepInput> effectiveSteps = steps == null
+                ? List.of()
+                : steps.stream()
+                .filter(input -> input != null && input.approverId() != null)
+                .toList();
         if (effectiveSteps == null || effectiveSteps.isEmpty()) {
             effectiveSteps = routeResolver.resolveRoute(request);
         }
@@ -866,8 +891,8 @@ public class ApprovalService {
                 "Approval " + decisionText + ": " + request.getTitle(),
                 "Approval request " + request.getTitle() + " was " + decisionText + ".",
                 request.getStatus() == ApprovalStatus.APPROVED ? NotificationSeverity.INFO : NotificationSeverity.WARNING,
-                notificationEntityType(request.getDocumentType()),
-                request.getDocumentId() == null ? null : request.getDocumentId().toString()
+                notificationEntityType(effectiveTargetType(request)),
+                effectiveTargetId(request) == null ? null : effectiveTargetId(request).toString()
         );
     }
 
@@ -878,8 +903,8 @@ public class ApprovalService {
                 "Approval returned: " + request.getTitle(),
                 message,
                 NotificationSeverity.WARNING,
-                notificationEntityType(request.getDocumentType()),
-                request.getDocumentId() == null ? null : request.getDocumentId().toString()
+                notificationEntityType(effectiveTargetType(request)),
+                effectiveTargetId(request) == null ? null : effectiveTargetId(request).toString()
         );
         request.getSteps().stream()
                 .filter(step -> step.getStepNumber() == returnToStep)
@@ -894,20 +919,23 @@ public class ApprovalService {
                 ));
     }
 
-    private String notificationEntityType(String documentType) {
-        return switch (normalizeDocumentType(documentType)) {
-            case "WORK_ORDER" -> "WorkOrder";
-            case "PPR_PLAN" -> "PprPlan";
-            case "PROCUREMENT_REQUEST" -> "ProcurementRequest";
-            case "MAINTENANCE_BUDGET" -> "MaintenanceBudget";
-            case "MAINTENANCE_DUE_EVENT" -> "MaintenanceDueEvent";
-            case "REPAIR_REQUEST" -> "RepairRequest";
-            case "MAINTENANCE_REGULATION" -> "MaintenanceRegulation";
-            case "REGULATION_CHANGE_PROPOSAL" -> "RegulationChangeProposal";
-            case "ACTUAL_COST" -> "ActualCost";
-            case "DEFECT_LIST" -> "DefectList";
-            case "PLANNED_SHUTDOWN" -> "PlannedShutdown";
-            case "REPAIR_CAMPAIGN" -> "RepairCampaign";
+    private String notificationEntityType(ApprovalTargetType targetType) {
+        if (targetType == null) {
+            return "ApprovalRequest";
+        }
+        return switch (targetType) {
+            case WORK_ORDER -> "WorkOrder";
+            case PPR_PLAN -> "PprPlan";
+            case PROCUREMENT_REQUEST, PROCUREMENT -> "ProcurementRequest";
+            case MAINTENANCE_BUDGET, BUDGET -> "MaintenanceBudget";
+            case MAINTENANCE_DUE_EVENT -> "MaintenanceDueEvent";
+            case REPAIR_REQUEST -> "RepairRequest";
+            case MAINTENANCE_REGULATION -> "MaintenanceRegulation";
+            case REGULATION_CHANGE_PROPOSAL -> "RegulationChangeProposal";
+            case ACTUAL_COST -> "ActualCost";
+            case DEFECT_LIST -> "DefectList";
+            case PLANNED_SHUTDOWN -> "PlannedShutdown";
+            case REPAIR_CAMPAIGN -> "RepairCampaign";
             default -> "ApprovalRequest";
         };
     }
@@ -922,8 +950,27 @@ public class ApprovalService {
                 .toUpperCase(Locale.ROOT);
     }
 
+    private ApprovalTargetType effectiveTargetType(ApprovalRequest request) {
+        if (request.getTargetType() != null) {
+            return request.getTargetType();
+        }
+        return ApprovalTargetType.fromDocumentType(request.getDocumentType());
+    }
+
+    private String effectiveTargetTypeName(ApprovalRequest request) {
+        ApprovalTargetType targetType = effectiveTargetType(request);
+        if (targetType != null) {
+            return targetType.name();
+        }
+        return normalizeDocumentType(request.getDocumentType());
+    }
+
+    private UUID effectiveTargetId(ApprovalRequest request) {
+        return request.getTargetId() == null ? request.getDocumentId() : request.getTargetId();
+    }
+
     private boolean matchesSearch(ApprovalRequest request, String search) {
-        return containsIgnoreCase(request.getDocumentType(), search)
+        return containsIgnoreCase(effectiveTargetTypeName(request), search)
                 || containsIgnoreCase(request.getTitle(), search)
                 || containsIgnoreCase(request.getDescription(), search)
                 || containsIgnoreCase(request.getStatus().name(), search)
@@ -955,10 +1002,8 @@ public class ApprovalService {
                 .filter(step -> step.getStepNumber() == request.getCurrentStep())
                 .findFirst()
                 .orElse(null);
-        String targetTypeName = request.getTargetType() == null
-                ? request.getDocumentType()
-                : request.getTargetType().name();
-        UUID targetId = request.getTargetId() == null ? request.getDocumentId() : request.getTargetId();
+        String targetTypeName = effectiveTargetTypeName(request);
+        UUID targetId = effectiveTargetId(request);
         String targetUrl = targetUrl(targetTypeName, targetId);
         boolean canDecide = request.getStatus() == ApprovalStatus.PENDING
                 && currentStep != null
@@ -980,8 +1025,8 @@ public class ApprovalService {
                 request.getDescription(),
                 request.getCreatedAt(),
                 steps,
-                request.getTargetType(),
-                request.getTargetId(),
+                effectiveTargetType(request),
+                targetId,
                 request.getActionType(),
                 userName(request.getRequesterId()),
                 currentStep == null ? null : userName(currentStep.getApproverId()),

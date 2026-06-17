@@ -11,6 +11,7 @@ import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalStatus;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
@@ -22,10 +23,8 @@ import com.toir.security.ScopeAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashSet;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -53,7 +52,7 @@ public class ApprovalScopeService {
         }
         return isRequester(approval)
                 || isCurrentPendingApprover(approval)
-                || canAccessLinkedDocumentScope(approval.getDocumentType(), approval.getDocumentId());
+                || canAccessLinkedDocumentScope(effectiveTargetType(approval), effectiveTargetId(approval));
     }
 
     public void assertCanReadApproval(ApprovalRequest approval) {
@@ -69,8 +68,12 @@ public class ApprovalScopeService {
         if (request == null || !matchesCurrentPrincipal(request.requesterId())) {
             throw forbidden();
         }
-        if (hasLinkedDocumentScopeResolver(request.documentType())
-                && !canAccessLinkedDocumentScope(request.documentType(), request.documentId())) {
+        ApprovalTargetType targetType = request.targetType() == null
+                ? ApprovalTargetType.fromDocumentType(request.documentType())
+                : request.targetType();
+        UUID targetId = request.targetId() == null ? request.documentId() : request.targetId();
+        if (hasLinkedDocumentScopeResolver(targetType)
+                && !canAccessLinkedDocumentScope(targetType, targetId)) {
             throw forbidden();
         }
     }
@@ -95,7 +98,7 @@ public class ApprovalScopeService {
         }
         if (scopeAccessService.isScopeAdmin()
                 || isRequester(approval)
-                || canAccessLinkedDocumentScope(approval.getDocumentType(), approval.getDocumentId())) {
+                || canAccessLinkedDocumentScope(effectiveTargetType(approval), effectiveTargetId(approval))) {
             return;
         }
         throw forbidden();
@@ -105,7 +108,7 @@ public class ApprovalScopeService {
         if (approval == null) {
             return Optional.empty();
         }
-        return resolveApprovalDocumentDepartment(approval.getDocumentType(), approval.getDocumentId());
+        return resolveApprovalDocumentDepartment(effectiveTargetType(approval), effectiveTargetId(approval));
     }
 
     private boolean isRequester(ApprovalRequest approval) {
@@ -142,22 +145,21 @@ public class ApprovalScopeService {
         return ids;
     }
 
-    private boolean canAccessLinkedDocumentScope(String documentType, UUID documentId) {
-        if (documentId == null) {
+    private boolean canAccessLinkedDocumentScope(ApprovalTargetType targetType, UUID targetId) {
+        if (targetId == null) {
             return false;
         }
-        String type = normalizeDocumentType(documentType);
-        if ("ACTUAL_COST".equals(type)) {
-            return actualCostRepository.findByIdAndIsDeletedFalse(documentId)
+        if (targetType == ApprovalTargetType.ACTUAL_COST) {
+            return actualCostRepository.findByIdAndIsDeletedFalse(targetId)
                     .map(this::canReadActualCost)
                     .orElse(false);
         }
-        if (isProcurementDocument(documentType)) {
-            return procurementRequestRepository.findByIdAndIsDeletedFalse(documentId)
+        if (isProcurementDocument(targetType)) {
+            return procurementRequestRepository.findByIdAndIsDeletedFalse(targetId)
                     .map(this::canAccessProcurementRequest)
                     .orElse(false);
         }
-        return resolveApprovalDocumentDepartment(documentType, documentId)
+        return resolveApprovalDocumentDepartment(targetType, targetId)
                 .map(scopeAccessService::canAccessDepartment)
                 .orElse(false);
     }
@@ -171,23 +173,23 @@ public class ApprovalScopeService {
         }
     }
 
-    private Optional<UUID> resolveApprovalDocumentDepartment(String documentType, UUID documentId) {
-        if (documentId == null) {
+    private Optional<UUID> resolveApprovalDocumentDepartment(ApprovalTargetType targetType, UUID targetId) {
+        if (targetType == null || targetId == null) {
             return Optional.empty();
         }
-        return switch (normalizeDocumentType(documentType)) {
-            case "PPR", "PPR_PLAN" -> pprPlanRepository.findByIdAndIsDeletedFalse(documentId)
+        return switch (targetType) {
+            case PPR_PLAN -> pprPlanRepository.findByIdAndIsDeletedFalse(targetId)
                     .map(PprPlan::getDepartmentId);
-            case "PPR_TASK" -> pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(documentId)
+            case PPR_TASK -> pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(targetId)
                     .map(PprTask::getPlan)
                     .map(PprPlan::getDepartmentId);
-            case "REPAIR_REQUEST" -> repairRequestRepository.findByIdAndIsDeletedFalse(documentId)
+            case REPAIR_REQUEST -> repairRequestRepository.findByIdAndIsDeletedFalse(targetId)
                     .map(RepairRequest::getDepartmentId);
-            case "WORK_ORDER" -> workOrderRepository.findByIdAndIsDeletedFalse(documentId)
+            case WORK_ORDER -> workOrderRepository.findByIdAndIsDeletedFalse(targetId)
                     .map(WorkOrder::getDepartmentId);
-            case "PROCUREMENT", "PROCUREMENT_REQUEST" -> procurementRequestRepository.findByIdAndIsDeletedFalse(documentId)
+            case PROCUREMENT, PROCUREMENT_REQUEST -> procurementRequestRepository.findByIdAndIsDeletedFalse(targetId)
                     .map(ProcurementRequest::getDepartmentId);
-            case "BUDGET", "MAINTENANCE_BUDGET" -> maintenanceBudgetRepository.findByIdAndIsDeletedFalse(documentId)
+            case BUDGET, MAINTENANCE_BUDGET -> maintenanceBudgetRepository.findByIdAndIsDeletedFalse(targetId)
                     .map(MaintenanceBudget::getDepartmentId);
             default -> Optional.empty();
         };
@@ -200,29 +202,36 @@ public class ApprovalScopeService {
         return request.getWarehouseId() != null && scopeAccessService.canAccessWarehouse(request.getWarehouseId());
     }
 
-    private boolean isProcurementDocument(String documentType) {
-        return switch (normalizeDocumentType(documentType)) {
-            case "PROCUREMENT", "PROCUREMENT_REQUEST" -> true;
-            default -> false;
-        };
-    }
-
-    private boolean hasLinkedDocumentScopeResolver(String documentType) {
-        return switch (normalizeDocumentType(documentType)) {
-            case "PPR", "PPR_PLAN", "PPR_TASK", "REPAIR_REQUEST", "WORK_ORDER",
-                 "PROCUREMENT", "PROCUREMENT_REQUEST", "BUDGET", "MAINTENANCE_BUDGET", "ACTUAL_COST" -> true;
-            default -> false;
-        };
-    }
-
-    private String normalizeDocumentType(String documentType) {
-        if (!StringUtils.hasText(documentType)) {
-            return "";
+    private boolean isProcurementDocument(ApprovalTargetType targetType) {
+        if (targetType == null) {
+            return false;
         }
-        return documentType.trim()
-                .replace('-', '_')
-                .replace(' ', '_')
-                .toUpperCase(Locale.ROOT);
+        return switch (targetType) {
+            case PROCUREMENT, PROCUREMENT_REQUEST -> true;
+            default -> false;
+        };
+    }
+
+    private boolean hasLinkedDocumentScopeResolver(ApprovalTargetType targetType) {
+        if (targetType == null) {
+            return false;
+        }
+        return switch (targetType) {
+            case PPR_PLAN, PPR_TASK, REPAIR_REQUEST, WORK_ORDER,
+                 PROCUREMENT, PROCUREMENT_REQUEST, BUDGET, MAINTENANCE_BUDGET, ACTUAL_COST -> true;
+            default -> false;
+        };
+    }
+
+    private ApprovalTargetType effectiveTargetType(ApprovalRequest approval) {
+        if (approval.getTargetType() != null) {
+            return approval.getTargetType();
+        }
+        return ApprovalTargetType.fromDocumentType(approval.getDocumentType());
+    }
+
+    private UUID effectiveTargetId(ApprovalRequest approval) {
+        return approval.getTargetId() == null ? approval.getDocumentId() : approval.getTargetId();
     }
 
     private AccessDeniedException forbidden() {

@@ -13,7 +13,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "approval_requests", indexes = {
-        @Index(name = "idx_approval_doc", columnList = "document_type,document_id")
+        @Index(name = "idx_approval_doc", columnList = "document_type,document_id"),
+        @Index(name = "idx_approval_target", columnList = "target_type,target_id")
 })
 @Getter
 @Setter
@@ -100,29 +101,25 @@ public class ApprovalRequest extends BaseEntity {
     private List<ApprovalStep> steps = new ArrayList<>();
 
     public void setDocumentType(String documentType) {
-        this.documentType = documentType;
-        if (this.targetType == null) {
-            this.targetType = ApprovalTargetType.fromDocumentType(documentType);
-        }
+        this.targetType = ApprovalTargetType.fromDocumentType(documentType);
+        this.documentType = this.targetType == null ? documentType : this.targetType.name();
     }
 
     public void setDocumentId(UUID documentId) {
+        this.targetId = documentId;
         this.documentId = documentId;
-        if (this.targetId == null) {
-            this.targetId = documentId;
-        }
     }
 
     public void setTargetType(ApprovalTargetType targetType) {
         this.targetType = targetType;
-        if (this.documentType == null && targetType != null) {
+        if (targetType != null) {
             this.documentType = targetType.name();
         }
     }
 
     public void setTargetId(UUID targetId) {
         this.targetId = targetId;
-        if (this.documentId == null) {
+        if (targetId != null) {
             this.documentId = targetId;
         }
     }
@@ -139,7 +136,13 @@ public class ApprovalRequest extends BaseEntity {
         if (documentType == null && targetType != null) {
             documentType = targetType.name();
         }
+        if (targetType != null) {
+            documentType = targetType.name();
+        }
         if (documentId == null) {
+            documentId = targetId;
+        }
+        if (targetId != null) {
             documentId = targetId;
         }
     }
