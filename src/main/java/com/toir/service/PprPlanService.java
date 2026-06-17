@@ -272,13 +272,23 @@ public class PprPlanService {
         );
     }
 
-    public PprPlanDto approve(UUID planId, UUID approverId) {
+    public PprPlanDto finalizeApprovalFromApprovalRequest(UUID planId, UUID approverId) {
         PprPlan plan = getPlan(planId);
         validateCanApprove(plan);
         plan.setStatus(PlanStatus.APPROVED);
         plan.setApprovedById(approverId);
         PprPlan saved = planRepository.saveAndFlush(plan);
         return toDto(reloadPlan(saved.getId()));
+    }
+
+    /**
+     * @deprecated Approval decisions must go through ApprovalService. This wrapper remains for tests and
+     * compatibility with older internal callers; approval handlers should call
+     * {@link #finalizeApprovalFromApprovalRequest(UUID, UUID)}.
+     */
+    @Deprecated(forRemoval = false)
+    public PprPlanDto approve(UUID planId, UUID approverId) {
+        return finalizeApprovalFromApprovalRequest(planId, approverId);
     }
 
     public PprPlanDto validateCanApprove(UUID planId) {

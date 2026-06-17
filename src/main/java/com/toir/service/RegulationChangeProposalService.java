@@ -100,7 +100,8 @@ public class RegulationChangeProposalService {
     }
 
     @Transactional
-    public RegulationChangeProposalDto approve(UUID id, RegulationChangeProposalReviewRequest request) {
+    public RegulationChangeProposalDto finalizeApprovalFromApprovalRequest(UUID id,
+                                                                           RegulationChangeProposalReviewRequest request) {
         RegulationChangeProposal proposal = getOrThrow(id);
         if (proposal.getStatus() != RegulationChangeProposalStatus.SUBMITTED) {
             throw RestException.badRequest("Only SUBMITTED proposals can be approved");
@@ -127,8 +128,20 @@ public class RegulationChangeProposalService {
         return RegulationChangeProposalDto.from(saved);
     }
 
+    /**
+     * @deprecated Approval decisions must go through ApprovalService. This wrapper remains for tests and
+     * compatibility with older internal callers; approval handlers should call
+     * {@link #finalizeApprovalFromApprovalRequest(UUID, RegulationChangeProposalReviewRequest)}.
+     */
+    @Deprecated(forRemoval = false)
     @Transactional
-    public RegulationChangeProposalDto reject(UUID id, RegulationChangeProposalReviewRequest request) {
+    public RegulationChangeProposalDto approve(UUID id, RegulationChangeProposalReviewRequest request) {
+        return finalizeApprovalFromApprovalRequest(id, request);
+    }
+
+    @Transactional
+    public RegulationChangeProposalDto finalizeRejectionFromApprovalRequest(UUID id,
+                                                                            RegulationChangeProposalReviewRequest request) {
         RegulationChangeProposal proposal = getOrThrow(id);
         if (proposal.getStatus() != RegulationChangeProposalStatus.SUBMITTED) {
             throw RestException.badRequest("Only SUBMITTED proposals can be rejected");
@@ -150,6 +163,17 @@ public class RegulationChangeProposalService {
                 saved
         );
         return RegulationChangeProposalDto.from(saved);
+    }
+
+    /**
+     * @deprecated Approval decisions must go through ApprovalService. This wrapper remains for tests and
+     * compatibility with older internal callers; approval handlers should call
+     * {@link #finalizeRejectionFromApprovalRequest(UUID, RegulationChangeProposalReviewRequest)}.
+     */
+    @Deprecated(forRemoval = false)
+    @Transactional
+    public RegulationChangeProposalDto reject(UUID id, RegulationChangeProposalReviewRequest request) {
+        return finalizeRejectionFromApprovalRequest(id, request);
     }
 
     // Tasdiqlangan taklif asosida regulationni yangilaydi

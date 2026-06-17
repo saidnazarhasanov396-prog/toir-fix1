@@ -35,7 +35,7 @@ class DefectListControllerContractTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new DefectListController(service, approvalService))
+                .standaloneSetup(new DefectListController(service))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

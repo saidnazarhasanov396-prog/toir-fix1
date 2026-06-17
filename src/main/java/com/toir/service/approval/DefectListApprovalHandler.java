@@ -29,7 +29,7 @@ public class DefectListApprovalHandler implements ApprovalActionHandler {
         if (request.getActionType() == ApprovalActionType.REJECT) {
             return "{\"status\":\"REJECTED\"}";
         }
-        defectListService.approve(targetId(request), terminalActor(request));
+        defectListService.finalizeApprovalFromApprovalRequest(targetId(request), terminalActor(request));
         return "{\"status\":\"APPROVED\"}";
     }
 

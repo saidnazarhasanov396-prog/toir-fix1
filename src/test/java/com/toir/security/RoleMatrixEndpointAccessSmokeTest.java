@@ -6,7 +6,6 @@ import com.toir.controller.ProcurementRequestController;
 import com.toir.controller.SparePartController;
 import com.toir.controller.WarehouseController;
 import com.toir.controller.maintenance.MaintenanceBudgetController;
-import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.dto.pprplanning.PprPlanDto;
@@ -18,7 +17,6 @@ import com.toir.dto.warehouse.WarehouseDto;
 import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
-import com.toir.enums.ActualCostStatus;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PprTaskStatus;
@@ -51,7 +49,6 @@ import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -185,7 +182,7 @@ class RoleMatrixEndpointAccessSmokeTest {
                 .andExpect(status().isOk());
         mockMvc.perform(post("/api/v1/ppr-plans/{id}/approve", planId)
                         .param("approverId", UUID.randomUUID().toString()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -222,7 +219,7 @@ class RoleMatrixEndpointAccessSmokeTest {
         mockMvc.perform(get("/api/v1/spare-parts?page=0&size=1"))
                 .andExpect(status().isOk());
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/approve", sparePartId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -266,7 +263,7 @@ class RoleMatrixEndpointAccessSmokeTest {
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/cancel", requestId))
                 .andExpect(status().isOk());
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/approve", requestId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/reject", requestId)
                         .param("reason", "duplicate"))
                 .andExpect(status().isForbidden());
@@ -297,7 +294,7 @@ class RoleMatrixEndpointAccessSmokeTest {
                 .andExpect(status().isOk());
         mockMvc.perform(post("/api/v1/actual-costs/{id}/approve", costId)
                         .param("reviewerId", UUID.randomUUID().toString()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -333,11 +330,6 @@ class RoleMatrixEndpointAccessSmokeTest {
         UUID actualCostId = UUID.randomUUID();
         when(warehouseService.findAll(null, null, null, null, null)).thenReturn(List.of());
         when(warehouseService.create(any(WarehouseRequest.class))).thenReturn(warehouseDto(warehouseId));
-        when(procurementRequestService.validateCanApprove(requestId)).thenReturn(procurementRequestDto(requestId));
-        when(procurementRequestService.findById(requestId)).thenReturn(procurementRequestDto(requestId));
-        when(actualCostService.review(eq(actualCostId), eq(true), any(UUID.class), eq("Approved")))
-                .thenReturn(actualCostDto(ActualCostStatus.APPROVED));
-
         mockMvc.perform(get("/api/v1/warehouses?page=0&size=1"))
                 .andExpect(status().isOk());
         mockMvc.perform(post("/api/v1/warehouses")
@@ -345,11 +337,11 @@ class RoleMatrixEndpointAccessSmokeTest {
                         .content(warehousePayload()))
                 .andExpect(status().isCreated());
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/approve", requestId))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound());
         mockMvc.perform(post("/api/v1/actual-costs/{id}/approve", actualCostId)
                         .param("reviewerId", UUID.randomUUID().toString())
                         .param("comment", "Approved"))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound());
     }
 
     private static PprPlanDto planDto(UUID planId) {
@@ -486,24 +478,6 @@ class RoleMatrixEndpointAccessSmokeTest {
                 null,
                 null,
                 List.of()
-        );
-    }
-
-    private static ActualCostDto actualCostDto(ActualCostStatus status) {
-        return new ActualCostDto(
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                null,
-                null,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                status,
-                null,
-                null,
-                null,
-                100.0,
-                Instant.now(),
-                "Test actual cost"
         );
     }
 

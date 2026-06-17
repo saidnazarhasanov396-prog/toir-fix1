@@ -1,11 +1,9 @@
 package com.toir.controller;
 
-import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.regulationchangeproposal.RegulationChangeProposalDto;
 import com.toir.dto.regulationchangeproposal.RegulationChangeProposalRequest;
 import com.toir.dto.regulationchangeproposal.RegulationChangeProposalReviewRequest;
 import com.toir.exception.RestException;
-import com.toir.service.ApprovalService;
 import com.toir.service.RegulationChangeProposalService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -28,11 +26,10 @@ public class RegulationChangeProposalController {
             "hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_READ')";
     private static final String MUTATE_AUTH =
             "hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_MANAGE')";
-    private static final String APPROVE_AUTH =
+    private static final String REVIEW_AUTH =
             "hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_APPROVE')";
 
     private final RegulationChangeProposalService service;
-    private final ApprovalService approvalService;
 
     @GetMapping
     @PreAuthorize(READ_AUTH)
@@ -62,27 +59,8 @@ public class RegulationChangeProposalController {
         return ResponseEntity.ok(service.submit(id));
     }
 
-    @PostMapping("/{id}/approve")
-    @PreAuthorize(APPROVE_AUTH)
-    public ResponseEntity<ApprovalRequestDto> approve(
-            @PathVariable UUID id,
-            @RequestParam(required = false) UUID approverId,
-            @RequestBody(required = false) RegulationChangeProposalReviewRequest request
-    ) {
-        RegulationChangeProposalDto current = service.get(id);
-        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
-                "REGULATION_CHANGE_PROPOSAL",
-                id,
-                null,
-                approverId,
-                "REGULATION_CHANGE_PROPOSAL_APPROVER",
-                "Regulation change proposal approval: " + current.title(),
-                request == null ? "Approval workflow request for regulation change proposal " + current.title()
-                        : request.reviewComment()));
-    }
-
     @PostMapping("/{id}/reject")
-    @PreAuthorize(APPROVE_AUTH)
+    @PreAuthorize(REVIEW_AUTH)
     public ResponseEntity<RegulationChangeProposalDto> reject(
             @PathVariable UUID id,
             @RequestBody(required = false) RegulationChangeProposalReviewRequest request

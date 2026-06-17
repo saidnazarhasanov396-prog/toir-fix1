@@ -3,6 +3,7 @@ package com.toir.service;
 import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.approval.ApprovalStepDto;
 import com.toir.dto.approval.ApprovalHistoryDto;
+import com.toir.dto.approval.ApprovalStartRequest;
 import com.toir.dto.approval.ApprovalStatisticsDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
@@ -22,12 +23,15 @@ import com.toir.repository.ApprovalDelegateRepository;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.approval.ApprovalActionExecutor;
 import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalRouteResolver;
 import com.toir.service.approval.ApprovalSlaPolicyService;
+import com.toir.service.repair.RepairRequestService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
@@ -71,6 +75,11 @@ public class ApprovalService {
     private final ScopeAccessService scopeAccessService;
     private final NotificationService notificationService;
     private final UserRepository userRepository;
+    private final ObjectProvider<WorkOrderService> workOrderServiceProvider;
+    private final ObjectProvider<PprPlanService> pprPlanServiceProvider;
+    private final ObjectProvider<ProcurementRequestService> procurementRequestServiceProvider;
+    private final ObjectProvider<RepairRequestService> repairRequestServiceProvider;
+    private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
 
 
     @Transactional(readOnly = true)
@@ -171,6 +180,128 @@ public class ApprovalService {
                 r.description(),
                 r.steps()
         );
+    }
+
+    @Transactional
+    public ApprovalRequestDto requestApproval(ApprovalStartRequest request) {
+        return requestApproval(request, null, null);
+    }
+
+    @Transactional
+    public ApprovalRequestDto requestApproval(ApprovalStartRequest request,
+                                              UUID legacyApproverId,
+                                              String legacyApproverRole) {
+        if (request == null) {
+            throw RestException.badRequest("Approval request body is required");
+        }
+        if (request.targetType() == null) {
+            throw RestException.badRequest("targetType is required");
+        }
+        if (request.targetId() == null) {
+            throw RestException.badRequest("targetId is required");
+        }
+        ApprovalActionType effectiveActionType = request.actionType() == null
+                ? ApprovalActionType.APPROVE
+                : request.actionType();
+        String normalizedType = normalizeDocumentType(request.targetType().name());
+        if (!INTEGRATED_DOCUMENT_TYPES.contains(normalizedType)) {
+            throw RestException.badRequest("Unsupported approval target type: " + normalizedType);
+        }
+
+        UUID requesterId = scopeAccessService.currentUserIdOrNull();
+        if (requesterId == null) {
+            throw RestException.badRequest("Authenticated requester is required to create approval request");
+        }
+
+        if (request.targetType() == ApprovalTargetType.MAINTENANCE_DUE_EVENT) {
+            return maintenanceAutomationServiceProvider.getObject()
+                    .approveDueEvent(request.targetId(), requesterId, effectiveActionType);
+        }
+
+        TargetMetadata target = loadTargetMetadataOrThrow(request.targetType(), request.targetId());
+        validateStartPreconditions(request.targetType(), request.targetId());
+        approvalScopeService.assertCanCreateApproval(new CreateApprovalRequest(
+                normalizedType,
+                request.targetId(),
+                target.title(),
+                requesterId,
+                request.comment(),
+                legacyApproverId == null
+                        ? List.of()
+                        : List.of(new CreateApprovalRequest.StepInput(legacyApproverId, legacyApproverRole))
+        ));
+
+        return createOrReuseApprovalForDocument(
+                normalizedType,
+                request.targetId(),
+                effectiveActionType,
+                requesterId,
+                legacyApproverId,
+                legacyApproverRole,
+                target.title(),
+                StringUtils.hasText(request.comment()) ? request.comment().trim() : target.description(),
+                false
+        );
+    }
+
+    private TargetMetadata loadTargetMetadataOrThrow(ApprovalTargetType targetType, UUID targetId) {
+        String sql = targetMetadataSql(targetType);
+        if (!StringUtils.hasText(sql)) {
+            throw RestException.badRequest("Unsupported approval target type: " + targetType);
+        }
+        TargetMetadata metadata = jdbcTemplate.query(
+                sql,
+                ps -> ps.setObject(1, targetId),
+                rs -> {
+                    if (!rs.next()) {
+                        return null;
+                    }
+                    String code = rs.getString("code");
+                    String title = rs.getString("title");
+                    String display = StringUtils.hasText(code)
+                            ? targetType.name() + " approval: " + code
+                            : targetType.name() + " approval";
+                    return new TargetMetadata(
+                            StringUtils.hasText(title) ? display + " - " + title : display,
+                            "Approval request for " + targetType.name().toLowerCase(Locale.ROOT).replace('_', ' ')
+                                    + (StringUtils.hasText(code) ? " " + code : ""));
+                }
+        );
+        if (metadata == null) {
+            throw RestException.notFound("Approval target not found: " + targetType + " " + targetId);
+        }
+        return metadata;
+    }
+
+    private String targetMetadataSql(ApprovalTargetType targetType) {
+        return switch (targetType) {
+            case WORK_ORDER -> "select number as code, title as title from work_orders where id = ? and is_deleted = false";
+            case PPR_PLAN -> "select code as code, name as title from ppr_plans where id = ? and is_deleted = false";
+            case PROCUREMENT_REQUEST, PROCUREMENT -> "select number as code, title as title from procurement_requests where id = ? and is_deleted = false";
+            case MAINTENANCE_BUDGET, BUDGET -> "select code as code, name as title from maintenance_budgets where id = ? and is_deleted = false";
+            case REPAIR_REQUEST -> "select number as code, title as title from repair_requests where id = ? and is_deleted = false";
+            case MAINTENANCE_REGULATION -> "select code as code, name as title from maintenance_regulations where id = ? and is_deleted = false";
+            case REGULATION_CHANGE_PROPOSAL -> "select code as code, title as title from regulation_change_proposals where id = ? and is_deleted = false";
+            case ACTUAL_COST -> "select null as code, concat('Actual cost ', amount) as title from actual_costs where id = ? and is_deleted = false";
+            case DEFECT_LIST -> "select code as code, title as title from defect_lists where id = ? and is_deleted = false";
+            case PLANNED_SHUTDOWN -> "select null as code, name as title from planned_shutdowns where id = ? and is_deleted = false";
+            case REPAIR_CAMPAIGN -> "select code as code, name as title from repair_campaigns where id = ? and is_deleted = false";
+            default -> null;
+        };
+    }
+
+    private void validateStartPreconditions(ApprovalTargetType targetType, UUID targetId) {
+        switch (targetType) {
+            case WORK_ORDER -> workOrderServiceProvider.getObject().validateCanApprove(targetId);
+            case PPR_PLAN -> pprPlanServiceProvider.getObject().validateCanApprove(targetId);
+            case PROCUREMENT_REQUEST, PROCUREMENT -> procurementRequestServiceProvider.getObject().validateCanApprove(targetId);
+            case REPAIR_REQUEST -> repairRequestServiceProvider.getObject().assertMeterReadingsReadyForApproval(targetId);
+            default -> {
+            }
+        }
+    }
+
+    private record TargetMetadata(String title, String description) {
     }
 
     @Transactional

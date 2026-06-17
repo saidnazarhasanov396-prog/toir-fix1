@@ -37,7 +37,7 @@ class RepairCampaignControllerContractTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, approvalService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

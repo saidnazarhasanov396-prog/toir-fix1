@@ -55,7 +55,7 @@ class MaintenanceRegulationControllerContractTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new MaintenanceRegulationController(service, impactService, approvalService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new MaintenanceRegulationController(service, impactService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

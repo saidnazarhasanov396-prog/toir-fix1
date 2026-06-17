@@ -187,14 +187,13 @@ class RbacDefectListSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.DEFECT_LIST_APPROVE)
-    void defectListApproveCanApproveDefectList() throws Exception {
+    void defectListApproveEndpointIsRemoved() throws Exception {
         UUID listId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();
-        when(defectListService.findById(listId)).thenReturn(defectListDto(listId));
 
         mockMvc.perform(post("/api/v1/defect-lists/{id}/approve", listId)
                         .param("approverId", approverId.toString()))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -202,7 +201,7 @@ class RbacDefectListSecurityTest {
     void defectListReadCannotApproveDefectList() throws Exception {
         mockMvc.perform(post("/api/v1/defect-lists/{id}/approve", UUID.randomUUID())
                         .param("approverId", UUID.randomUUID().toString()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test

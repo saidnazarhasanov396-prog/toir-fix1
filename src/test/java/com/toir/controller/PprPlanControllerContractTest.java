@@ -1,6 +1,5 @@
 package com.toir.controller;
 
-import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.pprplanning.PprTaskDto;
 import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.dto.pprplanning.PprPlanRequest;
@@ -21,7 +20,6 @@ import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.security.ScopeAccessService;
 
-import com.toir.service.ApprovalService;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
 import org.springframework.core.MethodParameter;
@@ -46,7 +44,6 @@ import org.springframework.web.method.support.ModelAndViewContainer;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Year;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -82,9 +79,6 @@ class PprPlanControllerContractTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
-    @Mock
-    ApprovalService approvalService;
-
     private MockMvc mockMvc;
     private UUID currentUserId;
 
@@ -97,7 +91,7 @@ class PprPlanControllerContractTest {
                 new AuthenticatedUser(currentUserId.toString(), "user", "user@example.com", "User", null, "USER", List.of()),
                 null
         ));
-        mockMvc = MockMvcBuilders.standaloneSetup(new PprPlanController(service, generatorService, planRepository, taskRepository, scopeAccessService, approvalService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new PprPlanController(service, generatorService, planRepository, taskRepository, scopeAccessService))
                 .setCustomArgumentResolvers(new TestCurrentUserResolver(currentUserId))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -452,49 +446,6 @@ class PprPlanControllerContractTest {
     }
 
     @Test
-    void approvePlanCreatesApprovalRequest() throws Exception {
-        UUID planId = UUID.randomUUID();
-        UUID departmentId = UUID.randomUUID();
-        UUID approverId = UUID.randomUUID();
-        UUID approvalId = UUID.randomUUID();
-        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, departmentId)));
-        when(service.validateCanApprove(planId)).thenReturn(new PprPlanDto(
-                planId,
-                "PPR-2026-0001",
-                "May plan",
-                PlanStatus.DRAFT,
-                departmentId,
-                "Mechanical",
-                currentUserId,
-                null,
-                null,
-                List.of(),
-                LocalDate.of(2026, 5, 1),
-                LocalDate.of(2026, 5, 31)
-        ));
-        when(approvalService.createOrReuseApprovalForDocument(
-                eq("PPR_PLAN"),
-                eq(planId),
-                eq(com.toir.enums.ApprovalActionType.APPROVE),
-                eq(currentUserId),
-                eq(approverId),
-                eq("PPR_PLAN_APPROVER"),
-                any(),
-                any()
-        )).thenReturn(approvalDto(approvalId, "PPR_PLAN", planId));
-
-        mockMvc.perform(post("/api/v1/ppr-plans/{id}/approve", planId)
-                        .param("approverId", approverId.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(approvalId.toString()))
-                .andExpect(jsonPath("$.documentType").value("PPR_PLAN"))
-                .andExpect(jsonPath("$.documentId").value(planId.toString()));
-
-        verify(service).validateCanApprove(planId);
-        verify(service, never()).approve(planId, approverId);
-    }
-
-    @Test
     void createPlanDefaultsMissingDepartmentForNormalScopedUser() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
@@ -780,22 +731,6 @@ class PprPlanControllerContractTest {
         plan.setDepartmentId(departmentId);
         plan.setCreatedById(UUID.randomUUID());
         return plan;
-    }
-
-    private ApprovalRequestDto approvalDto(UUID id, String documentType, UUID documentId) {
-        return new ApprovalRequestDto(
-                id,
-                documentType,
-                documentId,
-                "Approval request created",
-                currentUserId,
-                com.toir.enums.ApprovalStatus.PENDING,
-                1,
-                null,
-                "Approval request",
-                Instant.now(),
-                List.of()
-        );
     }
 
     private PprTaskDto taskDto(

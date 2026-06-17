@@ -28,10 +28,12 @@ public class RepairRequestApprovalHandler implements ApprovalActionHandler {
     public String execute(ApprovalRequest request) {
         UUID targetId = targetId(request);
         if (request.getActionType() == ApprovalActionType.REJECT) {
-            repairRequestService.reject(targetId, terminalComment(request, "Rejected by approval workflow"));
+            repairRequestService.finalizeRejectionFromApprovalRequest(
+                    targetId,
+                    terminalComment(request, "Rejected by approval workflow"));
             return "{\"status\":\"REJECTED\"}";
         }
-        repairRequestService.approve(targetId);
+        repairRequestService.finalizeApprovalFromApprovalRequest(targetId);
         return "{\"status\":\"APPROVED\"}";
     }
 

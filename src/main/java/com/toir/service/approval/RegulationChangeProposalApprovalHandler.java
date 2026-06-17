@@ -30,10 +30,10 @@ public class RegulationChangeProposalApprovalHandler implements ApprovalActionHa
         RegulationChangeProposalReviewRequest review =
                 new RegulationChangeProposalReviewRequest(terminalComment(request));
         if (request.getActionType() == ApprovalActionType.REJECT) {
-            proposalService.reject(targetId(request), review);
+            proposalService.finalizeRejectionFromApprovalRequest(targetId(request), review);
             return "{\"status\":\"REJECTED\"}";
         }
-        proposalService.approve(targetId(request), review);
+        proposalService.finalizeApprovalFromApprovalRequest(targetId(request), review);
         return "{\"status\":\"APPROVED\"}";
     }
 

@@ -99,7 +99,7 @@ public class RepairCampaignService {
     }
 
     @Transactional
-    public RepairCampaignDto approve(UUID id) {
+    public RepairCampaignDto finalizeApprovalFromApprovalRequest(UUID id) {
         RepairCampaign c = getOrThrow(id);
         if (c.getStatus() != RepairCampaignStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT campaigns can be approved");
@@ -118,6 +118,17 @@ public class RepairCampaignService {
                 saved
         );
         return toDto(saved);
+    }
+
+    /**
+     * @deprecated Approval decisions must go through ApprovalService. This wrapper remains for tests and
+     * compatibility with older internal callers; approval handlers should call
+     * {@link #finalizeApprovalFromApprovalRequest(UUID)}.
+     */
+    @Deprecated(forRemoval = false)
+    @Transactional
+    public RepairCampaignDto approve(UUID id) {
+        return finalizeApprovalFromApprovalRequest(id);
     }
 
     @Transactional

@@ -236,6 +236,11 @@ public class MaintenanceAutomationService {
 
     @Transactional
     public ApprovalRequestDto approveDueEvent(UUID eventId, UUID userId) {
+        return approveDueEvent(eventId, userId, null);
+    }
+
+    @Transactional
+    public ApprovalRequestDto approveDueEvent(UUID eventId, UUID userId, ApprovalActionType requestedActionType) {
         MaintenanceDueEvent event = eventService.getOrThrow(eventId);
         eventService.assertCanAccessEvent(event);
         if (isBlocked(event)) {
@@ -251,7 +256,7 @@ public class MaintenanceAutomationService {
         Equipment equipment = equipment(event);
         event.setStatus(MaintenanceDueEventStatus.AWAITING_APPROVAL);
         eventRepository.save(event);
-        return createOrReuseApprovalRequest(event, rule, equipment, userId);
+        return createOrReuseApprovalRequest(event, rule, equipment, userId, requestedActionType);
     }
 
     @Transactional
@@ -750,7 +755,18 @@ public class MaintenanceAutomationService {
                                                             EquipmentMaintenanceEffectiveRule rule,
                                                             Equipment equipment,
                                                             UUID requesterId) {
-        ApprovalActionType actionType = approvalResultAction(rule) == ApprovalResultAction.CREATE_WORK_ORDER
+        return createOrReuseApprovalRequest(event, rule, equipment, requesterId, null);
+    }
+
+    private ApprovalRequestDto createOrReuseApprovalRequest(MaintenanceDueEvent event,
+                                                            EquipmentMaintenanceEffectiveRule rule,
+                                                            Equipment equipment,
+                                                            UUID requesterId,
+                                                            ApprovalActionType requestedActionType) {
+        ApprovalActionType actionType = requestedActionType == ApprovalActionType.CREATE_WORK_ORDER
+                || requestedActionType == ApprovalActionType.CREATE_TASK
+                ? requestedActionType
+                : approvalResultAction(rule) == ApprovalResultAction.CREATE_WORK_ORDER
                 ? ApprovalActionType.CREATE_WORK_ORDER
                 : ApprovalActionType.CREATE_TASK;
         UUID effectiveRequesterId = requesterId == null ? effectiveUserId(null) : requesterId;

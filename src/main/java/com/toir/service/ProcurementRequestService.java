@@ -171,6 +171,7 @@ public class ProcurementRequestService {
     }
 
     @Transactional
+    @Deprecated(forRemoval = false)
     public ProcurementRequestDto approve(UUID id) {
         ProcurementRequest p = load(id);
         assertCanMutate(p);
@@ -203,6 +204,7 @@ public class ProcurementRequestService {
     }
 
     @Transactional
+    @Deprecated(forRemoval = false)
     public ProcurementRequestDto reject(UUID id, String reason) {
         ProcurementRequest p = load(id);
         assertCanMutate(p);

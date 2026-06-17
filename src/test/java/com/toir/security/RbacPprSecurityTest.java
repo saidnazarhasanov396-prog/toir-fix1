@@ -202,14 +202,13 @@ class RbacPprSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.PPR_PLAN_APPROVE)
-    void pprPlanApproveCanApprovePlan() throws Exception {
+    void pprPlanApproveEndpointIsRemoved() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();
-        when(pprPlanService.approve(planId, approverId)).thenReturn(planDto(planId));
 
         mockMvc.perform(post("/api/v1/ppr-plans/{id}/approve", planId)
                         .param("approverId", approverId.toString()))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound());
     }
 
     @Test

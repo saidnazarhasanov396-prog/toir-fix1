@@ -194,11 +194,11 @@ class RbacRepairRequestSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.REPAIR_REQUEST_APPROVE)
-    void repairRequestApproveCanUseExplicitApproveButCannotUseGenericStatusOverride() throws Exception {
+    void repairRequestApproveEndpointIsRemovedAndCannotUseGenericStatusOverride() throws Exception {
         UUID requestId = UUID.randomUUID();
 
         mockMvc.perform(post("/api/v1/repair-requests/{id}/approve", requestId))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound());
         mockMvc.perform(post("/api/v1/repair-requests/{id}/status", requestId)
                         .param("status", "APPROVED")
                         .param("reason", "manual correction"))

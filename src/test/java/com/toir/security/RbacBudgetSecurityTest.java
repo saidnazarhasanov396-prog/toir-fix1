@@ -164,13 +164,11 @@ class RbacBudgetSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.BUDGET_APPROVE)
-    void budgetApproveCanApproveBudget() throws Exception {
+    void budgetApproveEndpointIsRemoved() throws Exception {
         UUID budgetId = UUID.randomUUID();
-        when(budgetService.validateCanApprove(budgetId)).thenReturn(budgetDto(budgetId));
-        when(budgetService.findById(budgetId)).thenReturn(budgetDto(budgetId));
 
         mockMvc.perform(post("/api/v1/budgets/{id}/approve", budgetId))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -195,7 +193,7 @@ class RbacBudgetSecurityTest {
                         .content(budgetPayload()))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/budgets/{id}/approve", budgetId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
         mockMvc.perform(post("/api/v1/budgets/{id}/lines", budgetId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(budgetLinePayload()))

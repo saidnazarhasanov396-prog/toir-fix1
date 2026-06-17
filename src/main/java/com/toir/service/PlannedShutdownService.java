@@ -58,7 +58,7 @@ public class PlannedShutdownService {
     }
 
     @Transactional
-    public PlannedShutdownDto approve(UUID id) {
+    public PlannedShutdownDto finalizeApprovalFromApprovalRequest(UUID id) {
         PlannedShutdown s = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Planned shutdown not found: " + id));
         s.setStatus(PlanStatus.APPROVED);
@@ -76,5 +76,16 @@ public class PlannedShutdownService {
         );
 
         return PlannedShutdownDto.from(s);
+    }
+
+    /**
+     * @deprecated Approval decisions must go through ApprovalService. This wrapper remains for tests and
+     * compatibility with older internal callers; approval handlers should call
+     * {@link #finalizeApprovalFromApprovalRequest(UUID)}.
+     */
+    @Deprecated(forRemoval = false)
+    @Transactional
+    public PlannedShutdownDto approve(UUID id) {
+        return finalizeApprovalFromApprovalRequest(id);
     }
 }

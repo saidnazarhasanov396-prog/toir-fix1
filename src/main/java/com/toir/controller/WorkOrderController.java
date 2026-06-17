@@ -8,10 +8,8 @@ import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderPerformerOptionDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderStatsResponse;
-import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.entity.maintenance.WorkOrder;
-import com.toir.enums.ApprovalActionType;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
@@ -19,7 +17,6 @@ import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.security.ScopeAccessService;
-import com.toir.service.ApprovalService;
 import com.toir.service.WorkOrderService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -58,7 +55,6 @@ public class WorkOrderController {
     private final WorkOrderService service;
     private final WorkOrderRepository repository;
     private final ScopeAccessService scopeAccessService;
-    private final ApprovalService approvalService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_READ')")
@@ -257,25 +253,6 @@ public class WorkOrderController {
         UUID creatorId = currentUserId();
         WorkOrderDto created = creatorId == null ? service.create(request) : service.create(request, creatorId);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
-    }
-
-    @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_APPROVE')")
-    public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id, @RequestParam UUID approverId) {
-        WorkOrder workOrder = workOrderOrThrow(id);
-        assertCanAccessWorkOrder(workOrder);
-        service.validateCanApprove(id);
-        UUID requesterId = currentUserId();
-        return ResponseEntity.ok(approvalService.createOrReuseApprovalForDocument(
-                "WORK_ORDER",
-                id,
-                ApprovalActionType.APPROVE,
-                requesterId == null ? approverId : requesterId,
-                approverId,
-                "WORK_ORDER_APPROVER",
-                "Work order approval: " + workOrder.getNumber(),
-                "Approval request for work order " + workOrder.getNumber()
-        ));
     }
 
     @PostMapping("/{id}/start")
