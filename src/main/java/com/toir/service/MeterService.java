@@ -23,6 +23,7 @@ import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,7 +50,7 @@ public class MeterService {
     private final UserRepository userRepository;
     private final AuditBuilderService auditBuilderService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
-    private final MaintenanceAutomationService maintenanceAutomationService;
+    private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listByEquipment(UUID equipmentId) {
@@ -228,16 +229,19 @@ public class MeterService {
                 savedMeter
         );
 
-        try {
-            maintenanceAutomationService.evaluateEquipment(meter.getEquipmentId(), MaintenanceTriggerSource.METER_READING);
-        } catch (RuntimeException ex) {
-            log.warn(
-                    "maintenance_automation_after_meter_reading_failed equipmentId={} meterId={} readingId={}",
-                    meter.getEquipmentId(),
-                    meter.getId(),
-                    saved.getId(),
-                    ex
-            );
+        MaintenanceAutomationService automationService = maintenanceAutomationServiceProvider.getIfAvailable();
+        if (automationService != null) {
+            try {
+                automationService.evaluateEquipment(meter.getEquipmentId(), MaintenanceTriggerSource.METER_READING);
+            } catch (RuntimeException ex) {
+                log.warn(
+                        "maintenance_automation_after_meter_reading_failed equipmentId={} meterId={} readingId={}",
+                        meter.getEquipmentId(),
+                        meter.getId(),
+                        saved.getId(),
+                        ex
+                );
+            }
         }
 
         return enrichReading(saved);
