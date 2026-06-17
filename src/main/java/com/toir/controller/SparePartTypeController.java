@@ -40,11 +40,9 @@ public class SparePartTypeController {
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "false") boolean includeInactive,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) Integer pageSize
+            @RequestParam(defaultValue = "20") int size
     ) {
-        int effectiveSize = pageSize != null ? pageSize : size;
-        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search, includeInactive), page, effectiveSize));
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search, includeInactive), page, size));
     }
 
     @GetMapping("/{id}")
