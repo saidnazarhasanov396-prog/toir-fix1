@@ -10,9 +10,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
 
@@ -21,7 +21,7 @@ import org.springframework.util.StringUtils;
 public class FirebaseConfig {
 
     @Bean
-    @ConditionalOnProperty(prefix = "app.firebase", name = "enabled", havingValue = "true")
+    @Conditional(FirebaseCredentialsCondition.class)
     public FirebaseApp firebaseApp(FirebaseProperties properties) throws IOException {
         if (!FirebaseApp.getApps().isEmpty()) {
             return FirebaseApp.getInstance();
@@ -40,7 +40,7 @@ public class FirebaseConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "app.firebase", name = "enabled", havingValue = "true")
+    @Conditional(FirebaseCredentialsCondition.class)
     public FirebaseMessaging firebaseMessaging(FirebaseApp firebaseApp) {
         return FirebaseMessaging.getInstance(firebaseApp);
     }
