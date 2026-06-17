@@ -565,6 +565,70 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void findByIdDetailIncludesAttachmentGroupDocuments() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID frontFileId = UUID.randomUUID();
+        UUID backFileId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-DETAIL-DOC-GROUP");
+        equipment.setId(equipmentId);
+        UploadedFile front = uploadedFile(frontFileId, currentUserId, "passport-front.pdf");
+        UploadedFile back = uploadedFile(backFileId, currentUserId, "passport-back.pdf");
+
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        stubEnrichment();
+        when(scopeAccessService.currentUser()).thenReturn(Optional.of(authenticatedUser(currentUserId)));
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId)).thenReturn(List.of());
+        when(attachmentGroupService.listGroups(eq("EQUIPMENT"), eq(equipmentId), any()))
+                .thenReturn(List.of(equipmentAttachmentGroup(
+                        documentId,
+                        equipmentId,
+                        List.of(front, back),
+                        "Technical Passport",
+                        "PASSPORT",
+                        "PAS-2026-001"
+                )));
+
+        EquipmentDetailDto detail = service.findDetailById(equipmentId);
+
+        assertThat(detail.documents()).hasSize(1);
+        assertThat(detail.documents().getFirst().id()).isEqualTo(documentId);
+        assertThat(detail.documents().getFirst().documentName()).isEqualTo("Technical Passport");
+        assertThat(detail.documents().getFirst().files()).extracting(EquipmentDocumentDto.FileRef::id)
+                .containsExactly(frontFileId, backFileId);
+    }
+
+    @Test
+    void getDocumentRejectsAttachmentGroupFromDifferentEquipment() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID otherEquipmentId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UploadedFile file = uploadedFile(UUID.randomUUID(), userId, "passport.pdf");
+        Equipment equipment = equipment("EQ-DOC-OWNERSHIP");
+        equipment.setId(equipmentId);
+
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(attachmentGroupService.getGroup(eq(documentId), any()))
+                .thenReturn(equipmentAttachmentGroup(
+                        documentId,
+                        otherEquipmentId,
+                        List.of(file),
+                        "Other Passport",
+                        "PASSPORT",
+                        null
+                ));
+
+        assertThatThrownBy(() -> service.getDocument(equipmentId, documentId, authenticatedUser(userId)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Equipment document not found");
+    }
+
+    @Test
     void findByIdDetailCountsCompletedAndClosedRepairRequests() {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment("EQ-DETAIL-REPAIR-COUNT");

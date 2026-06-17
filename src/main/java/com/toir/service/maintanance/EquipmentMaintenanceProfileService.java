@@ -52,6 +52,7 @@ public class EquipmentMaintenanceProfileService {
     private final EquipmentAttributeDefinitionRepository attributeDefinitionRepository;
     private final EquipmentAttributeValueRepository attributeValueRepository;
     private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
+    private final MaintenanceMeterBaselineService meterBaselineService;
 
     @Transactional(readOnly = true)
     public EquipmentMaintenanceProfileDto getProfile(UUID equipmentId) {
@@ -116,7 +117,9 @@ public class EquipmentMaintenanceProfileService {
         rule.setEquipmentId(equipment.getId());
         rule.setCode(generateCode());
         apply(rule, request);
-        return EquipmentMaintenanceRuleDto.from(ruleRepository.save(rule));
+        EquipmentMaintenanceRule saved = ruleRepository.save(rule);
+        meterBaselineService.seedForEquipmentRule(saved);
+        return EquipmentMaintenanceRuleDto.from(saved);
     }
 
     @Transactional
@@ -129,7 +132,9 @@ public class EquipmentMaintenanceProfileService {
             throw RestException.badRequest("Equipment maintenance rule belongs to another equipment");
         }
         apply(rule, request);
-        return EquipmentMaintenanceRuleDto.from(ruleRepository.save(rule));
+        EquipmentMaintenanceRule saved = ruleRepository.save(rule);
+        meterBaselineService.seedForEquipmentRule(saved);
+        return EquipmentMaintenanceRuleDto.from(saved);
     }
 
     @Transactional

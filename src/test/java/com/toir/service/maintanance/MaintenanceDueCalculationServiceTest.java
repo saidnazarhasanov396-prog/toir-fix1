@@ -175,6 +175,62 @@ class MaintenanceDueCalculationServiceTest {
     }
 
     @Test
+    void initialMeterBaselineAtFourThousandGivesNextDueAtNineteenThousand() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setTriggerMeterType(MeterType.MILEAGE_KM);
+        regulation.setTriggerMeterInterval(15_000.0);
+        EquipmentMeter meter = meter(equipmentId, MeterType.MILEAGE_KM, 4_000.0);
+        MaintenanceCompletionAnchor anchor = meterAnchor(
+                equipmentId,
+                regulation.getId(),
+                Instant.parse("2026-06-17T00:00:00Z"),
+                MeterType.MILEAGE_KM,
+                4_000.0
+        );
+
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId))
+                .thenReturn(java.util.List.of(meter));
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null))
+                .thenReturn(Optional.of(anchor));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.NOT_DUE);
+        assertThat(result.meterAnchorValue()).isEqualTo(4_000.0);
+        assertThat(result.nextMeterDueValue()).isEqualTo(19_000.0);
+        assertThat(result.meterRemaining()).isEqualTo(15_000.0);
+    }
+
+    @Test
+    void oilChangeCompletionAtEightThousandGivesNextDueAtTwentyThreeThousand() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setTriggerMeterType(MeterType.MILEAGE_KM);
+        regulation.setTriggerMeterInterval(15_000.0);
+        EquipmentMeter meter = meter(equipmentId, MeterType.MILEAGE_KM, 8_000.0);
+        MaintenanceCompletionAnchor anchor = meterAnchor(
+                equipmentId,
+                regulation.getId(),
+                Instant.parse("2026-06-17T08:45:00Z"),
+                MeterType.MILEAGE_KM,
+                8_000.0
+        );
+
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId))
+                .thenReturn(java.util.List.of(meter));
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null))
+                .thenReturn(Optional.of(anchor));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.NOT_DUE);
+        assertThat(result.meterAnchorValue()).isEqualTo(8_000.0);
+        assertThat(result.nextMeterDueValue()).isEqualTo(23_000.0);
+        assertThat(result.meterRemaining()).isEqualTo(15_000.0);
+    }
+
+    @Test
     void meterExactThresholdIsDueNotOverdue() {
         UUID equipmentId = UUID.randomUUID();
         MaintenanceRegulation regulation = regulation(equipmentId);
@@ -709,14 +765,22 @@ class MaintenanceDueCalculationServiceTest {
                                                UUID regulationId,
                                                Instant performedAt,
                                                double meterValue) {
+        return meterAnchor(equipmentId, regulationId, performedAt, MeterType.ENGINE_HOURS, meterValue);
+    }
+
+    private MaintenanceCompletionAnchor meterAnchor(UUID equipmentId,
+                                                    UUID regulationId,
+                                                    Instant performedAt,
+                                                    MeterType meterType,
+                                                    double meterValue) {
         MaintenanceCompletionAnchor anchor = new MaintenanceCompletionAnchor();
         anchor.setEquipmentId(equipmentId);
         anchor.setRegulationId(regulationId);
         anchor.setPerformedAt(performedAt);
         anchor.setRecalculationPolicy(MaintenanceRecalculationPolicy.FROM_ACTUAL_COMPLETION);
         anchor.setMeterSnapshots("""
-                [{"meterType":"ENGINE_HOURS","value":%s}]
-                """.formatted(meterValue));
+                [{"meterType":"%s","value":%s}]
+                """.formatted(meterType.name(), meterValue));
         return anchor;
     }
 }

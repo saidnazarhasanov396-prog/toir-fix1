@@ -658,7 +658,6 @@ public class RepairRequestService {
     public RepairRequestDto finalizeApprovalFromApprovalRequest(UUID id) {
         RepairRequest entity = getOrThrow(id);
         assertCanTransition(entity, RequestStatus.APPROVED, REVIEWABLE_STATUSES, "Cannot approve repair request from status ");
-        assertRequiredMeterReadings(entity, "approve");
 
         captureReaction(entity, RequestStatus.APPROVED);
         entity.setStatus(RequestStatus.APPROVED);
@@ -700,7 +699,6 @@ public class RepairRequestService {
                 Set.of(RequestStatus.APPROVED),
                 "Cannot assign repair request from status "
         );
-        assertRequiredMeterReadings(entity, "assign");
         validateAssignee(assigneeId);
 
         captureReaction(entity, RequestStatus.ASSIGNED);
@@ -902,7 +900,7 @@ public class RepairRequestService {
                             meter.getName(),
                             meter.getUnit(),
                             meter.getCurrentValue(),
-                            true,
+                            false,
                             latest != null,
                             latest == null ? null : latest.getValue(),
                             latest == null ? null : latest.getReadAt()
@@ -949,24 +947,7 @@ public class RepairRequestService {
 
     @Transactional(readOnly = true)
     public void assertMeterReadingsReadyForApproval(UUID id) {
-        assertRequiredMeterReadings(getOrThrow(id), "approve");
-    }
-
-    private void assertRequiredMeterReadings(RepairRequest entity, String action) {
-        List<EquipmentMeter> requiredMeters = activeMeters(entity.getEquipmentId());
-        if (requiredMeters.isEmpty()) {
-            return;
-        }
-        Set<UUID> providedMeterIds = latestRepairReadingsByMeter(entity.getId()).keySet();
-        List<String> missingNames = requiredMeters.stream()
-                .filter(meter -> !providedMeterIds.contains(meter.getId()))
-                .map(this::meterLabel)
-                .toList();
-        if (!missingNames.isEmpty()) {
-            throw RestException.badRequest(
-                    "Repair request meter readings are required before " + action + ": "
-                            + String.join(", ", missingNames));
-        }
+        getOrThrow(id);
     }
 
     private List<EquipmentMeter> activeMeters(UUID equipmentId) {
@@ -990,13 +971,6 @@ public class RepairRequestService {
                         reading -> reading,
                         (first, ignored) -> first
                 ));
-    }
-
-    private String meterLabel(EquipmentMeter meter) {
-        if (meter.getName() != null && !meter.getName().isBlank()) {
-            return meter.getName();
-        }
-        return meter.getMeterType() == null ? String.valueOf(meter.getId()) : meter.getMeterType().name();
     }
 
     private void captureReaction(RepairRequest entity, RequestStatus nextStatus) {

@@ -6,6 +6,7 @@ import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.FileAssetRepository;
+import com.toir.service.file_management.FileValidator;
 import com.toir.service.file_management.LocalFileResourceResolver;
 import com.toir.util.AuditBuilderService;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,16 +28,19 @@ public class FileAssetService {
     private final FileAssetRepository repository;
     private final AuditBuilderService auditBuilderService;
     private final LocalFileResourceResolver localFileResourceResolver;
+    private final FileValidator fileValidator;
     private final Path storageRoot;
 
     public FileAssetService(FileAssetRepository repository,
                             AuditBuilderService auditBuilderService,
                             LocalFileResourceResolver localFileResourceResolver,
+                            FileValidator fileValidator,
                             @Value("${app.files.storage-path:uploads}") String storagePath) {
         this.repository = repository;
         this.auditBuilderService = auditBuilderService;
         this.localFileResourceResolver = localFileResourceResolver;
-        this.storageRoot = Paths.get(storagePath).toAbsolutePath();
+        this.fileValidator = fileValidator;
+        this.storageRoot = Paths.get(storagePath).toAbsolutePath().normalize();
         try {
             Files.createDirectories(this.storageRoot);
         } catch (IOException e) {
@@ -55,8 +59,12 @@ public class FileAssetService {
         if (file == null || file.isEmpty()) {
             throw RestException.badRequest("File is required");
         }
-        String storedName = UUID.randomUUID() + "_" + file.getOriginalFilename();
-        Path target = storageRoot.resolve(storedName);
+        FileValidator.ValidatedFile validated = fileValidator.validate(file);
+        String storedName = UUID.randomUUID() + "." + validated.extension();
+        Path target = storageRoot.resolve(storedName).normalize();
+        if (!target.startsWith(storageRoot)) {
+            throw RestException.badRequest("Invalid file path");
+        }
         try {
             file.transferTo(target.toFile());
         } catch (IOException e) {
@@ -64,9 +72,9 @@ public class FileAssetService {
         }
         FileAsset asset = new FileAsset();
         asset.setFileName(storedName);
-        asset.setOriginalName(file.getOriginalFilename());
-        asset.setMimeType(file.getContentType() != null ? file.getContentType() : "application/octet-stream");
-        asset.setSizeBytes(file.getSize());
+        asset.setOriginalName(validated.originalName());
+        asset.setMimeType(validated.contentType());
+        asset.setSizeBytes(validated.size());
         asset.setStoragePath(target.toString());
         asset.setEntityType(entityType);
         asset.setEntityId(entityId);
