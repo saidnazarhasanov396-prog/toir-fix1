@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
@@ -18,12 +19,14 @@ import org.springframework.util.StringUtils;
 
 @Configuration
 @EnableConfigurationProperties(FirebaseProperties.class)
+@Slf4j
 public class FirebaseConfig {
 
     @Bean
     @Conditional(FirebaseCredentialsCondition.class)
     public FirebaseApp firebaseApp(FirebaseProperties properties) throws IOException {
         if (!FirebaseApp.getApps().isEmpty()) {
+            log.info("FirebaseApp already exists; reusing default Firebase application");
             return FirebaseApp.getInstance();
         }
         GoogleCredentials credentials;
@@ -36,13 +39,17 @@ public class FirebaseConfig {
         if (StringUtils.hasText(properties.getProjectId())) {
             builder.setProjectId(properties.getProjectId());
         }
-        return FirebaseApp.initializeApp(builder.build());
+        FirebaseApp app = FirebaseApp.initializeApp(builder.build());
+        log.info("FirebaseApp created for projectIdPresent={}", StringUtils.hasText(properties.getProjectId()));
+        return app;
     }
 
     @Bean
     @Conditional(FirebaseCredentialsCondition.class)
     public FirebaseMessaging firebaseMessaging(FirebaseApp firebaseApp) {
-        return FirebaseMessaging.getInstance(firebaseApp);
+        FirebaseMessaging messaging = FirebaseMessaging.getInstance(firebaseApp);
+        log.info("FirebaseMessaging bean created for FirebaseApp {}", firebaseApp.getName());
+        return messaging;
     }
 
     private InputStream serviceAccountStream(FirebaseProperties properties) throws IOException {

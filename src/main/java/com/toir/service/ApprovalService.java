@@ -171,15 +171,50 @@ public class ApprovalService {
 
     @Transactional
     public ApprovalRequestDto create(CreateApprovalRequest r) {
-        approvalScopeService.assertCanCreateApproval(r);
-        return createNewApproval(
-                normalizeDocumentType(r.documentType()),
-                r.documentId(),
+        String normalizedDocumentType = effectiveDocumentType(r);
+        UUID documentId = effectiveDocumentId(r);
+        CreateApprovalRequest effectiveRequest = new CreateApprovalRequest(
+                normalizedDocumentType,
+                documentId,
                 r.title(),
                 r.requesterId(),
                 r.description(),
-                r.steps()
+                r.steps(),
+                r.targetType(),
+                r.targetId(),
+                r.actionType()
         );
+        approvalScopeService.assertCanCreateApproval(effectiveRequest);
+        return createNewApproval(
+                normalizedDocumentType,
+                documentId,
+                r.title(),
+                r.requesterId(),
+                r.description(),
+                r.steps(),
+                r.actionType()
+        );
+    }
+
+    private String effectiveDocumentType(CreateApprovalRequest request) {
+        String normalizedDocumentType = normalizeDocumentType(request.documentType());
+        if (StringUtils.hasText(normalizedDocumentType)) {
+            return normalizedDocumentType;
+        }
+        if (request.targetType() != null) {
+            return request.targetType().name();
+        }
+        return ApprovalTargetType.OTHER.name();
+    }
+
+    private UUID effectiveDocumentId(CreateApprovalRequest request) {
+        if (request.documentId() != null) {
+            return request.documentId();
+        }
+        if (request.targetId() != null) {
+            return request.targetId();
+        }
+        return UUID.randomUUID();
     }
 
     @Transactional
