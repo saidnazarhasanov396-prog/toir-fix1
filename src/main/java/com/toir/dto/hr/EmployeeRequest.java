@@ -16,6 +16,7 @@ public record EmployeeRequest(
         UUID departmentId,
         UUID brigadeId,
         UUID userId,
+        @NotNull UUID specialisationId,
         @NotNull LocalDate hireDate,
         LocalDate terminatedDate,
         String grade,
@@ -24,6 +25,43 @@ public record EmployeeRequest(
         Boolean active,
         List<String> workRoleCodes
 ) {
+    public EmployeeRequest(
+            String personnelNumber,
+            String firstName,
+            String lastName,
+            String middleName,
+            String position,
+            UUID departmentId,
+            UUID brigadeId,
+            UUID userId,
+            UUID specialisationId,
+            LocalDate hireDate,
+            LocalDate terminatedDate,
+            String grade,
+            String phone,
+            String email,
+            Boolean active
+    ) {
+        this(
+                personnelNumber,
+                firstName,
+                lastName,
+                middleName,
+                position,
+                departmentId,
+                brigadeId,
+                userId,
+                specialisationId,
+                hireDate,
+                terminatedDate,
+                grade,
+                phone,
+                email,
+                active,
+                null
+        );
+    }
+
     public EmployeeRequest(
             String personnelNumber,
             String firstName,
@@ -49,6 +87,7 @@ public record EmployeeRequest(
                 departmentId,
                 brigadeId,
                 userId,
+                null,
                 hireDate,
                 terminatedDate,
                 grade,

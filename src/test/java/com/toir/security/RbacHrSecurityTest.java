@@ -331,10 +331,11 @@ class RbacHrSecurityTest {
                   "firstName": "Ali",
                   "lastName": "Valiyev",
                   "position": "Engineer",
+                  "specialisationId": "%s",
                   "hireDate": "2025-01-10",
                   "active": true
                 }
-                """;
+                """.formatted(UUID.randomUUID());
     }
 
     private static String timesheetPayload() {

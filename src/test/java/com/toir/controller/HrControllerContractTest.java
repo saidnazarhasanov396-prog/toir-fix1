@@ -3,6 +3,8 @@ package com.toir.controller;
 import com.toir.controller.users.HrController;
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeStatsResponse;
+import com.toir.dto.hr.EmployeeSpecialisationDto;
+import com.toir.dto.hr.EmployeeSpecialisationRequest;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.security.SecurityScope;
 import com.toir.service.users.HrService;
@@ -14,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -23,7 +26,13 @@ import java.util.UUID;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -87,6 +96,10 @@ class HrControllerContractTest {
                 brigadeId,
                 "Repair Brigade A",
                 null,
+                UUID.fromString("20000000-0000-0000-0000-000000050001"),
+                "Механик",
+                "Mechanic",
+                "Mexanik",
                 LocalDate.of(2025, 1, 10),
                 null,
                 "A",
@@ -103,9 +116,73 @@ class HrControllerContractTest {
                 .andExpect(jsonPath("$.departmentId").value(departmentId.toString()))
                 .andExpect(jsonPath("$.departmentName").value("Mechanical"))
                 .andExpect(jsonPath("$.brigadeId").value(brigadeId.toString()))
-                .andExpect(jsonPath("$.brigadeName").value("Repair Brigade A"));
+                .andExpect(jsonPath("$.brigadeName").value("Repair Brigade A"))
+                .andExpect(jsonPath("$.specialisationId").value("20000000-0000-0000-0000-000000050001"))
+                .andExpect(jsonPath("$.specialisationNameRu").value("Механик"))
+                .andExpect(jsonPath("$.specialisationNameEn").value("Mechanic"))
+                .andExpect(jsonPath("$.specialisationNameUz").value("Mexanik"));
 
         verify(service).getEmployee(employeeId);
+    }
+
+    @Test
+    void employeeSpecialisationCrudRoutesDelegateToService() throws Exception {
+        UUID id = UUID.randomUUID();
+        EmployeeSpecialisationDto dto = new EmployeeSpecialisationDto(
+                id,
+                "Механик",
+                "Mechanic",
+                "Mexanik",
+                true
+        );
+
+        when(service.listEmployeeSpecialisations()).thenReturn(List.of(dto));
+        when(service.getEmployeeSpecialisation(id)).thenReturn(dto);
+        when(service.createEmployeeSpecialisation(any(EmployeeSpecialisationRequest.class))).thenReturn(dto);
+        when(service.updateEmployeeSpecialisation(eq(id), any(EmployeeSpecialisationRequest.class))).thenReturn(dto);
+
+        String payload = """
+                {
+                  "nameRu": "Механик",
+                  "nameEn": "Mechanic",
+                  "nameUz": "Mexanik",
+                  "active": true
+                }
+                """;
+
+        mockMvc.perform(get("/api/v1/hr/employee-specialisations"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(id.toString()))
+                .andExpect(jsonPath("$[0].nameRu").value("Механик"))
+                .andExpect(jsonPath("$[0].nameEn").value("Mechanic"))
+                .andExpect(jsonPath("$[0].nameUz").value("Mexanik"));
+
+        mockMvc.perform(get("/api/v1/hr/employee-specialisations/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()));
+
+        mockMvc.perform(post("/api/v1/hr/employee-specialisations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(id.toString()));
+
+        mockMvc.perform(put("/api/v1/hr/employee-specialisations/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()));
+
+        mockMvc.perform(patch("/api/v1/hr/employee-specialisations/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()));
+
+        mockMvc.perform(delete("/api/v1/hr/employee-specialisations/{id}", id))
+                .andExpect(status().isNoContent());
+
+        verify(service).deleteEmployeeSpecialisation(id);
     }
 
     @Test
