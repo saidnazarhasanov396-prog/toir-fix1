@@ -882,7 +882,7 @@ class RepairRequestServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().meterId()).isEqualTo(odometer.getId());
         assertThat(result.getFirst().meterType()).isEqualTo(MeterType.MILEAGE_KM);
-        assertThat(result.getFirst().required()).isTrue();
+        assertThat(result.getFirst().required()).isFalse();
         assertThat(result.getFirst().provided()).isTrue();
         assertThat(result.getFirst().latestValue()).isEqualTo(10_000.0);
     }
@@ -978,46 +978,48 @@ class RepairRequestServiceTest {
     }
 
     @Test
-    void approveBlocksWhenActiveMeterHasNoRepairRequestReading() {
+    void approveDoesNotRequireActiveMeterReading() {
         UUID id = UUID.randomUUID();
         RepairRequest entity = repairRequest(id);
         entity.setStatus(RequestStatus.OPEN);
         EquipmentMeter meter = meter(entity.getEquipmentId(), MeterType.MILEAGE_KM, 9_000.0);
         meter.setName("Odometer");
 
-        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
-        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(entity.getEquipmentId()))
+        stubFindSaveAndDtoLookups(id, entity);
+        lenient().when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(entity.getEquipmentId()))
                 .thenReturn(List.of(meter));
-        when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(id))
+        lenient().when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(id))
                 .thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.approve(id))
-                .hasMessageContaining("Repair request meter readings are required before approve")
-                .hasMessageContaining("Odometer");
+        RepairRequestDto result = service.approve(id);
 
-        verify(repository, never()).save(any());
+        assertThat(result.status()).isEqualTo(RequestStatus.APPROVED);
+        verify(repository).save(entity);
     }
 
     @Test
-    void assignBlocksWhenActiveMeterHasNoRepairRequestReading() {
+    void assignDoesNotRequireActiveMeterReading() {
         UUID id = UUID.randomUUID();
         UUID assigneeId = UUID.randomUUID();
         RepairRequest entity = repairRequest(id);
         entity.setStatus(RequestStatus.APPROVED);
         EquipmentMeter meter = meter(entity.getEquipmentId(), MeterType.ENGINE_HOURS, 100.0);
+        User assignee = new User();
+        assignee.setId(assigneeId);
+        assignee.setStatus(UserStatus.ACTIVE);
 
-        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
-        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(entity.getEquipmentId()))
+        stubFindSaveAndDtoLookups(id, entity);
+        lenient().when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(entity.getEquipmentId()))
                 .thenReturn(List.of(meter));
-        when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(id))
+        lenient().when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(id))
                 .thenReturn(List.of());
+        when(userRepository.findByIdAndIsDeletedFalse(assigneeId)).thenReturn(Optional.of(assignee));
 
-        assertThatThrownBy(() -> service.assign(id, assigneeId))
-                .hasMessageContaining("Repair request meter readings are required before assign")
-                .hasMessageContaining("Engine hours");
+        RepairRequestDto result = service.assign(id, assigneeId);
 
-        verify(userRepository, never()).findByIdAndIsDeletedFalse(assigneeId);
-        verify(repository, never()).save(any());
+        assertThat(result.status()).isEqualTo(RequestStatus.ASSIGNED);
+        assertThat(result.assignedToId()).isEqualTo(assigneeId);
+        verify(repository).save(entity);
     }
 
     @Test

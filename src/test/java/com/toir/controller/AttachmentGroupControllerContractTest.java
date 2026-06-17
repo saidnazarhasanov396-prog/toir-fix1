@@ -30,6 +30,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -69,7 +70,17 @@ class AttachmentGroupControllerContractTest {
         UUID groupId = UUID.randomUUID();
         UUID firstFileId = UUID.randomUUID();
         UUID secondFileId = UUID.randomUUID();
-        when(service.createGroup(eq("Passport"), eq("Driver passport"), eq("EQUIPMENT"), eq(targetId), any(), eq(List.of("front", "back")), any()))
+        when(service.createGroup(
+                eq("Passport"),
+                eq("Driver passport"),
+                eq("EQUIPMENT"),
+                eq(targetId),
+                eq(null),
+                eq(null),
+                any(),
+                eq(List.of("front", "back")),
+                any()
+        ))
                 .thenReturn(group(groupId, targetId, firstFileId, secondFileId));
 
         mockMvc.perform(multipart("/api/v1/attachments/groups")
@@ -89,11 +100,34 @@ class AttachmentGroupControllerContractTest {
     }
 
     @Test
+    void createGroupRejectsTargetWhenUserOnlyHasUnrelatedStockPermission() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        SecurityContextHolder.getContext().setAuthentication(
+                new TestingAuthenticationToken(
+                        new AuthenticatedUser(userId.toString(), "stock", "stock@example.com", "Stock User", null, "USER", List.of()),
+                        null,
+                        List.of(new SimpleGrantedAuthority("STOCK_RECEIVE"))
+                )
+        );
+
+        mockMvc.perform(multipart("/api/v1/attachments/groups")
+                        .file(new MockMultipartFile("files", "front.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .param("title", "Passport")
+                        .param("targetType", "EQUIPMENT")
+                        .param("targetId", targetId.toString()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
     void addFilesToExistingGroupUsesGroupEndpoint() throws Exception {
         UUID targetId = UUID.randomUUID();
         UUID groupId = UUID.randomUUID();
         UUID firstFileId = UUID.randomUUID();
         UUID secondFileId = UUID.randomUUID();
+        when(service.getGroup(eq(groupId), any())).thenReturn(group(groupId, targetId, firstFileId, secondFileId));
         when(service.addFiles(eq(groupId), any(), eq(List.of("back")), any()))
                 .thenReturn(group(groupId, targetId, firstFileId, secondFileId));
 

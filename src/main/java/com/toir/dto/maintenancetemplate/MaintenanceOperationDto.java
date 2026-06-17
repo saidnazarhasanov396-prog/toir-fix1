@@ -62,9 +62,13 @@ public record MaintenanceOperationDto(
                 o.getSpecialistId(),
                 null,
                 o.getSequence(), o.getName(), o.getDescription(),
-                o.getDurationHours(), o.getRequiredSkill(), o.getSafetyNotes(),
+                durationHoursOrZero(o.getDurationHours()), o.getRequiredSkill(), o.getSafetyNotes(),
                 o.getToolsRequired(), o.getSparePartsRequired(), o.getConsumablesRequired(),
                 o.getControlParameter(), o.getControlUnit(), o.getControlMin(), o.getControlMax(),
                 o.getInstructionUrl());
+    }
+
+    public static double durationHoursOrZero(Double durationHours) {
+        return durationHours == null ? 0 : durationHours;
     }
 }

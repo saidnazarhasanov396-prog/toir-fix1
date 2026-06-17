@@ -421,7 +421,7 @@ public class MaintenanceTemplateService {
                 operation.getSequence(),
                 operation.getName(),
                 operation.getDescription(),
-                operation.getDurationHours(),
+                MaintenanceOperationDto.durationHoursOrZero(operation.getDurationHours()),
                 operation.getRequiredSkill(),
                 operation.getSafetyNotes(),
                 operation.getToolsRequired(),

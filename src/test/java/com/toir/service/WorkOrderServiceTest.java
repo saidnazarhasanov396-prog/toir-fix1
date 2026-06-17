@@ -1,8 +1,10 @@
 package com.toir.service;
 
 import com.toir.dto.attachment.AttachmentGroupDto;
+import com.toir.dto.meter.MeterReadingRequest;
 import com.toir.dto.workorder.CloseWorkOrderRequest;
 import com.toir.dto.workorder.CompleteWorkOrderRequest;
+import com.toir.dto.workorder.CompletionMeterSnapshotRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,6 +22,7 @@ import com.toir.entity.UploadedFile;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.defects.DefectList;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
 import com.toir.entity.maintenance.MaintenanceAction;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
@@ -43,6 +46,8 @@ import com.toir.enums.FileCategory;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.MaintenanceTriggerSource;
+import com.toir.enums.MeterReadingContext;
+import com.toir.enums.MeterSource;
 import com.toir.enums.MeterType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.PlanStatus;
@@ -78,6 +83,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
+import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
@@ -128,6 +134,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
@@ -148,6 +155,12 @@ class WorkOrderServiceTest {
 
     @Mock
     EquipmentRepository equipmentRepository;
+
+    @Mock
+    EquipmentMeterRepository equipmentMeterRepository;
+
+    @Mock
+    MeterService meterService;
 
     @Mock
     EquipmentNodeRepository equipmentNodeRepository;
@@ -2804,6 +2817,91 @@ class WorkOrderServiceTest {
         assertThat(anchorCaptor.getValue().getRegulationId()).isEqualTo(regulationId);
         assertThat(anchorCaptor.getValue().getMaintenanceDueEventId()).isNull();
         verifyNoInteractions(maintenanceDueEventService, maintenanceAutomationServiceProvider);
+    }
+
+    @Test
+    void completeWithMeterSnapshotPersistsWorkCompletedMeterReading() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        UUID meterId = UUID.randomUUID();
+        Instant readAt = Instant.parse("2026-06-17T08:30:00Z");
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setRepairRequestId(repairRequestId);
+        workOrder.setDefectId(defectId);
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setId(meterId);
+        meter.setEquipmentId(workOrder.getEquipmentId());
+        meter.setMeterType(MeterType.MILEAGE_KM);
+        meter.setName("Odometer");
+        meter.setUnit("km");
+        meter.setCurrentValue(4_000.0);
+        meter.setActive(true);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(equipmentMeterRepository.findByIdAndIsDeletedFalse(meterId)).thenReturn(Optional.of(meter));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubLifecycleDtoLookups(workOrder);
+
+        service.complete(workOrderId, new CompleteWorkOrderRequest(
+                "done",
+                "summary",
+                null,
+                null,
+                null,
+                Instant.parse("2026-06-17T08:45:00Z"),
+                null,
+                null,
+                List.of(new CompletionMeterSnapshotRequest(meterId, MeterType.MILEAGE_KM, 8_000.0, readAt))
+        ));
+
+        verify(meterService).addReading(
+                argThat((MeterReadingRequest request) ->
+                        meterId.equals(request.meterId())
+                                && request.value().equals(8_000.0)
+                                && readAt.equals(request.readAt())
+                                && request.source() == MeterSource.MANUAL
+                                && request.note().contains("Work order completed")),
+                eq(MeterReadingContext.WORK_COMPLETED),
+                eq(repairRequestId),
+                eq(workOrderId),
+                eq(defectId)
+        );
+    }
+
+    @Test
+    void completeRejectsMeterSnapshotForAnotherEquipmentBeforeSavingCompletedStatus() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID meterId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setId(meterId);
+        meter.setEquipmentId(UUID.randomUUID());
+        meter.setMeterType(MeterType.MILEAGE_KM);
+        meter.setName("Odometer");
+        meter.setUnit("km");
+        meter.setActive(true);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(equipmentMeterRepository.findByIdAndIsDeletedFalse(meterId)).thenReturn(Optional.of(meter));
+
+        assertThatThrownBy(() -> service.complete(workOrderId, new CompleteWorkOrderRequest(
+                "done",
+                "summary",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(new CompletionMeterSnapshotRequest(meterId, MeterType.MILEAGE_KM, 8_000.0, null))
+        )))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("does not belong to work order equipment");
+
+        assertThat(workOrder.getStatus()).isEqualTo(WorkOrderStatus.IN_PROGRESS);
+        verify(repository, never()).save(any(WorkOrder.class));
+        verifyNoInteractions(meterService);
     }
 
     @Test
