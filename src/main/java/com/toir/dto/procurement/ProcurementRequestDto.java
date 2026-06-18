@@ -1,11 +1,13 @@
 package com.toir.dto.procurement;
 
+import com.toir.entity.SparePart;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.enums.ProcurementRequestStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public record ProcurementRequestDto(
@@ -28,7 +30,7 @@ public record ProcurementRequestDto(
         String rejectionReason,
         List<ProcurementRequestLineDto> lines
 ) {
-    public static ProcurementRequestDto from(ProcurementRequest r) {
+    public static ProcurementRequestDto from(ProcurementRequest r, Map<UUID, SparePart> sparePartsById) {
         return new ProcurementRequestDto(
                 r.getId(),
                 r.getNumber(),
@@ -47,7 +49,12 @@ public record ProcurementRequestDto(
                 r.getOrderedAt(),
                 r.getReceivedAt(),
                 r.getRejectionReason(),
-                r.getLines() == null ? List.of() : r.getLines().stream().map(ProcurementRequestLineDto::from).toList()
+                r.getLines() == null ? List.of() : r.getLines().stream()
+                        .map(line -> ProcurementRequestLineDto.from(
+                                line,
+                                sparePartsById == null ? null : sparePartsById.get(line.getSparePartId())
+                        ))
+                        .toList()
         );
     }
 }

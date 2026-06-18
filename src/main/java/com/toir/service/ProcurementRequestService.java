@@ -43,6 +43,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -63,36 +65,44 @@ public class ProcurementRequestService {
     private final ToirStockService toirStockService;
 
     @Transactional(readOnly = true)
-    public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId, String search) {
+    public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId, String search,
+                                               Double minAmount, Double maxAmount) {
         String normalizedSearch = (search != null && !search.isBlank()) ? search.trim() : null;
 
         if (scopeAccessService.isScopeAdmin()) {
-            return repo.search(
+            List<ProcurementRequest> requests = repo.search(
                     normalizedSearch,
                     status != null ? status.name() : null,
-                    departmentId
-            ).stream().map(ProcurementRequestDto::from).toList();
+                    departmentId,
+                    minAmount,
+                    maxAmount
+            );
+            Map<UUID, SparePart> sparePartsById = sparePartsByIdFor(requests);
+            return requests.stream().map(r -> ProcurementRequestDto.from(r, sparePartsById)).toList();
         }
 
         UUID scopedDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
         if (status == null && scopedDepartmentId == null) {
             throw forbidden();
         }
-        return repo.search(
+        List<ProcurementRequest> requests = repo.search(
                         normalizedSearch,
                         status != null ? status.name() : null,
-                        scopedDepartmentId
+                        scopedDepartmentId,
+                        minAmount,
+                        maxAmount
                 ).stream()
                 .filter(this::canRead)
-                .map(ProcurementRequestDto::from)
                 .toList();
+        Map<UUID, SparePart> sparePartsById = sparePartsByIdFor(requests);
+        return requests.stream().map(r -> ProcurementRequestDto.from(r, sparePartsById)).toList();
     }
 
     @Transactional(readOnly = true)
     public ProcurementRequestDto findById(UUID id) {
         ProcurementRequest procurement = load(id);
         assertCanRead(procurement);
-        return ProcurementRequestDto.from(procurement);
+        return ProcurementRequestDto.from(procurement, sparePartsByIdFor(procurement));
     }
 
     @Transactional
@@ -125,7 +135,7 @@ public class ProcurementRequestService {
                 saved
         );
 
-        return ProcurementRequestDto.from(saved);
+        return ProcurementRequestDto.from(saved, sparePartsByIdFor(saved));
     }
 
     @Transactional
@@ -150,7 +160,7 @@ public class ProcurementRequestService {
         );
 
 
-        return ProcurementRequestDto.from(p);
+        return ProcurementRequestDto.from(p, sparePartsByIdFor(p));
     }
 
     @Transactional
@@ -177,7 +187,7 @@ public class ProcurementRequestService {
                 saved
         );
 
-        return ProcurementRequestDto.from(p);
+        return ProcurementRequestDto.from(p, sparePartsByIdFor(p));
     }
 
     @Transactional
@@ -200,7 +210,7 @@ public class ProcurementRequestService {
                 p,
                 saved
         );
-        return ProcurementRequestDto.from(p);
+        return ProcurementRequestDto.from(p, sparePartsByIdFor(p));
     }
 
     @Transactional(readOnly = true)
@@ -210,7 +220,7 @@ public class ProcurementRequestService {
         if (p.getStatus() != ProcurementRequestStatus.SUBMITTED) {
             throw RestException.badRequest("Only SUBMITTED can be approved");
         }
-        return ProcurementRequestDto.from(p);
+        return ProcurementRequestDto.from(p, sparePartsByIdFor(p));
     }
 
     @Transactional
@@ -235,7 +245,7 @@ public class ProcurementRequestService {
                 p,
                 saved
         );
-        return ProcurementRequestDto.from(p);
+        return ProcurementRequestDto.from(p, sparePartsByIdFor(p));
     }
 
     @Transactional
@@ -257,7 +267,7 @@ public class ProcurementRequestService {
                 p,
                 saved
         );
-        return ProcurementRequestDto.from(p);
+        return ProcurementRequestDto.from(p, sparePartsByIdFor(p));
     }
 
     @Transactional
@@ -289,7 +299,7 @@ public class ProcurementRequestService {
                 p,
                 saved
         );
-        return new ProcurementReceiptResponse(ProcurementRequestDto.from(saved), movementIds);
+        return new ProcurementReceiptResponse(ProcurementRequestDto.from(saved, sparePartsByIdFor(saved)), movementIds);
     }
 
     private List<ProcurementRequestLine> validateReceivable(ProcurementRequest request) {
@@ -587,7 +597,7 @@ public class ProcurementRequestService {
                 p,
                 saved
         );
-        return ProcurementRequestDto.from(p);
+        return ProcurementRequestDto.from(p, sparePartsByIdFor(p));
     }
 
     /** Сгенерировать заявку(и) на закупку из low-stock позиций (по складу). */
@@ -651,9 +661,35 @@ public class ProcurementRequestService {
                     saved
             );
 
-            result.add(ProcurementRequestDto.from(saved));
+            result.add(ProcurementRequestDto.from(saved, sparePartsByIdFor(saved)));
         }
         return result;
+    }
+
+    private Map<UUID, SparePart> sparePartsByIdFor(ProcurementRequest request) {
+        if (request == null || request.getLines() == null || request.getLines().isEmpty()) {
+            return Map.of();
+        }
+        Set<UUID> ids = request.getLines().stream()
+                .map(ProcurementRequestLine::getSparePartId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) return Map.of();
+        return sparePartRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
+                .collect(Collectors.toMap(SparePart::getId, sp -> sp));
+    }
+
+    private Map<UUID, SparePart> sparePartsByIdFor(List<ProcurementRequest> requests) {
+        if (requests == null || requests.isEmpty()) return Map.of();
+        Set<UUID> ids = requests.stream()
+                .filter(r -> r.getLines() != null)
+                .flatMap(r -> r.getLines().stream())
+                .map(ProcurementRequestLine::getSparePartId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) return Map.of();
+        return sparePartRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
+                .collect(Collectors.toMap(SparePart::getId, sp -> sp));
     }
 
     private ProcurementRequestLine buildLine(ProcurementRequest p, ProcurementLineRequest r) {

@@ -42,9 +42,11 @@ public class ProcurementRequestController {
             @RequestParam(required = false) ProcurementRequestStatus status,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) Double minAmount,
+            @RequestParam(required = false) Double maxAmount,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findAll(status, departmentId, search), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(status, departmentId, search, minAmount, maxAmount), page, size));
     }
 
     @GetMapping("/{id}")
