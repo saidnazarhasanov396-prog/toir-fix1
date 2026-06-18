@@ -34,6 +34,18 @@ public class EquipmentUsageSession extends BaseEntity {
     @Column(name = "returned_at")
     private Instant returnedAt;
 
+    @Column(name = "usage_limit_minutes")
+    private Integer usageLimitMinutes;
+
+    @Column(name = "due_at")
+    private Instant dueAt;
+
+    @Column(name = "assignment_actor_user_id")
+    private UUID assignmentActorUserId;
+
+    @Column(name = "overdue_notified_at")
+    private Instant overdueNotifiedAt;
+
     @Column(name = "meter_id")
     private UUID meterId;
 

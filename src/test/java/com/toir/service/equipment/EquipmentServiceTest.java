@@ -27,6 +27,7 @@ import com.toir.entity.equipment.EquipmentDocument;
 import com.toir.entity.equipment.EquipmentLocationHistory;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.Employee;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.DefectStatus;
@@ -71,6 +72,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
@@ -203,6 +205,9 @@ class EquipmentServiceTest {
 
     @Mock
     UserRepository userRepository;
+
+    @Mock
+    EmployeeRepository employeeRepository;
 
     @Mock
     ScopeAccessService scopeAccessService;
@@ -1363,6 +1368,54 @@ class EquipmentServiceTest {
         verify(repository).save(entityCaptor.capture());
         assertThat(entityCaptor.getValue().getDepartmentId()).isEqualTo(departmentId);
         verifyNoInteractions(warehouseEquipmentItemService);
+    }
+
+    @Test
+    void createAllowsMissingResponsiblePerson() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequest(null, "INV-RESP-OPTIONAL", departmentId, null);
+        stubCreateFlow("INV-RESP-OPTIONAL");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+
+        service.create(request);
+
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getResponsibleId()).isNull();
+        verifyNoInteractions(employeeRepository);
+    }
+
+    @Test
+    void createRejectsInactiveResponsiblePerson() {
+        UUID departmentId = UUID.randomUUID();
+        UUID responsibleId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequestWithResponsibleId(responsibleId, "INV-RESP-INACTIVE", departmentId);
+        when(repository.existsByInventoryNumberAndIsDeletedFalse("INV-RESP-INACTIVE")).thenReturn(false);
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+        when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId))
+                .thenReturn(Optional.of(employee(responsibleId, false)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Responsible employee is not active");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateRejectsUnknownResponsiblePerson() {
+        Equipment existing = equipment("EQ-RESP-UPDATE");
+        UUID responsibleId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(existing.getId())).thenReturn(Optional.of(existing));
+        when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.update(existing.getId(), updateRequestWithResponsibleId(responsibleId)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Responsible employee not found");
+
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -3097,6 +3150,42 @@ class EquipmentServiceTest {
         );
     }
 
+    private EquipmentCreateRequest createRequestWithResponsibleId(UUID responsibleId, String inventoryNumber, UUID departmentId) {
+        return new EquipmentCreateRequest(
+                null,
+                "Compressor",
+                inventoryNumber,
+                "TN-1",
+                "SN-1",
+                "Model X",
+                UUID.randomUUID(),
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                responsibleId,
+                "ACME",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                "test",
+                null,
+                null,
+                null,
+                10_000L,
+                null,
+                null,
+                null
+        );
+    }
+
     private EquipmentCreateRequest createRequestWithManualAttributes(List<EquipmentManualAttributeRequest> manualAttributes) {
         return new EquipmentCreateRequest(
                 null,
@@ -3223,6 +3312,16 @@ class EquipmentServiceTest {
         return department;
     }
 
+    private Employee employee(UUID id, boolean active) {
+        Employee employee = new Employee();
+        employee.setId(id);
+        employee.setPersonnelNumber("EMP-RESP-001");
+        employee.setFirstName("Responsible");
+        employee.setLastName("Person");
+        employee.setActive(active);
+        return employee;
+    }
+
     private FileAsset fileAsset(
             UUID id,
             String fileName,
@@ -3342,6 +3441,29 @@ class EquipmentServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    private EquipmentUpdateRequest updateRequestWithResponsibleId(UUID responsibleId) {
+        return new EquipmentUpdateRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                responsibleId,
                 null,
                 null,
                 null,

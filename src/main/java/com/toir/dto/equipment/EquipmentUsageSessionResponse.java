@@ -17,6 +17,10 @@ public record EquipmentUsageSessionResponse(
         Instant startedAt,
         Instant returnedAt,
         Long durationMinutes,
+        Integer usageLimitMinutes,
+        Instant dueAt,
+        Long overdueMinutes,
+        Boolean overdue,
         UUID meterId,
         Double startMeterValue,
         Double endMeterValue,
@@ -32,7 +36,62 @@ public record EquipmentUsageSessionResponse(
         UUID returnedBy,
         String note
 ) {
+    public EquipmentUsageSessionResponse(
+            UUID id,
+            UUID equipmentId,
+            UUID operatorEmployeeId,
+            String operatorName,
+            UUID departmentId,
+            Instant startedAt,
+            Instant returnedAt,
+            Long durationMinutes,
+            UUID meterId,
+            Double startMeterValue,
+            Double endMeterValue,
+            Double meterDelta,
+            Double startOdometerKm,
+            Double endOdometerKm,
+            Double odometerDeltaKm,
+            Double startEngineHours,
+            Double endEngineHours,
+            Double engineHoursDelta,
+            EquipmentUsageSessionStatus status,
+            UUID issuedBy,
+            UUID returnedBy,
+            String note
+    ) {
+        this(
+                id,
+                equipmentId,
+                operatorEmployeeId,
+                operatorName,
+                departmentId,
+                startedAt,
+                returnedAt,
+                durationMinutes,
+                null,
+                null,
+                0L,
+                false,
+                meterId,
+                startMeterValue,
+                endMeterValue,
+                meterDelta,
+                startOdometerKm,
+                endOdometerKm,
+                odometerDeltaKm,
+                startEngineHours,
+                endEngineHours,
+                engineHoursDelta,
+                status,
+                issuedBy,
+                returnedBy,
+                note
+        );
+    }
+
     public static EquipmentUsageSessionResponse from(EquipmentUsageSession session, Employee operator) {
+        Long overdueMinutes = overdueMinutes(session);
         return new EquipmentUsageSessionResponse(
                 session.getId(),
                 session.getEquipmentId(),
@@ -42,6 +101,10 @@ public record EquipmentUsageSessionResponse(
                 session.getStartedAt(),
                 session.getReturnedAt(),
                 durationMinutes(session.getStartedAt(), session.getReturnedAt()),
+                session.getUsageLimitMinutes(),
+                session.getDueAt(),
+                overdueMinutes,
+                overdueMinutes > 0,
                 session.getMeterId(),
                 session.getStartMeterValue(),
                 session.getEndMeterValue(),
@@ -79,6 +142,17 @@ public record EquipmentUsageSessionResponse(
             return null;
         }
         return Duration.between(startedAt, returnedAt).toMinutes();
+    }
+
+    private static Long overdueMinutes(EquipmentUsageSession session) {
+        if (session == null || session.getDueAt() == null) {
+            return 0L;
+        }
+        Instant end = session.getReturnedAt() != null ? session.getReturnedAt() : Instant.now();
+        if (!end.isAfter(session.getDueAt())) {
+            return 0L;
+        }
+        return Duration.between(session.getDueAt(), end).toMinutes();
     }
 
     private static Double delta(Double start, Double end) {

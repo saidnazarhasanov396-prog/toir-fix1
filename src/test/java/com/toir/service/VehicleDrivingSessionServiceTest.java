@@ -19,11 +19,13 @@ import com.toir.repository.VehicleDrivingSessionRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -57,6 +59,8 @@ class VehicleDrivingSessionServiceTest {
     MeterService meterService;
     @Mock
     EquipmentUsageSessionService equipmentUsageSessionService;
+    @Mock
+    EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
     @InjectMocks
     VehicleDrivingSessionService service;
@@ -141,6 +145,32 @@ class VehicleDrivingSessionServiceTest {
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("assigned driver");
 
+        verify(sessionRepository, never()).save(any());
+    }
+
+    @Test
+    void startRejectsEmployeeWithoutDriverWorkRoleWhenRoleRequirementEnabled() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID driverId = UUID.randomUUID();
+        Equipment equipment = vehicle(equipmentId, EquipmentStatus.ACTIVE);
+        VehicleDetails details = details(equipmentId, driverId);
+        Employee driver = employee(driverId, equipment.getDepartmentId(), true);
+
+        ReflectionTestUtils.setField(service, "driverRoleRequired", true);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(employeeRepository.findByIdAndIsDeletedFalse(driverId)).thenReturn(Optional.of(driver));
+        when(employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(driverId, "DRIVER")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.start(
+                equipmentId,
+                new VehicleDrivingSessionStartRequest(driverId, Instant.parse("2026-06-16T06:00:00Z"), null, null, "dispatch"),
+                UUID.randomUUID()
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("DRIVER");
+
+        verify(equipmentUsageSessionService, never()).start(any(), any(), any());
         verify(sessionRepository, never()).save(any());
     }
 

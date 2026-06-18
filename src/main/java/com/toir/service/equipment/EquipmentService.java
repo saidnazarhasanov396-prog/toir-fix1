@@ -23,6 +23,7 @@ import com.toir.entity.equipment.EquipmentPassport;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.Employee;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.AuditAction;
@@ -61,6 +62,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
@@ -119,6 +121,7 @@ public class EquipmentService {
     private final EquipmentDocumentRepository equipmentDocumentRepository;
     private final EquipmentDocumentFileRepository equipmentDocumentFileRepository;
     private final AttachmentGroupService attachmentGroupService;
+    private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
     private final ScopeAccessService scopeAccessService;
     private static final int MAX_EQUIPMENT_DOCUMENT_FILES = 25;
@@ -513,6 +516,7 @@ public class EquipmentService {
         validateParent(null, request.parentId());
         validateWarrantyDateRange(request.warrantyStartDate(), request.warrantyEndDate());
         validateWarrantyAttachment(request.hasWarranty(), request.warrantyAttachmentId());
+        validateResponsibleEmployee(request.responsibleId());
         Equipment entity = new Equipment();
         entity.setCode(nextCode());
         apply(entity, request);
@@ -568,6 +572,7 @@ public class EquipmentService {
         validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
         validateWarrantyDateRangeForUpdate(entity, request);
         validateWarrantyAttachmentForUpdate(request);
+        validateResponsibleEmployee(request.responsibleId());
 
         applyForUpdate(entity, request);
         if (location != null) {
@@ -1670,6 +1675,17 @@ public class EquipmentService {
         }
         departmentRepository.findByIdAndIsDeletedFalse(departmentId)
                 .orElseThrow(() -> RestException.notFound("Department not found: " + departmentId));
+    }
+
+    private void validateResponsibleEmployee(UUID responsibleId) {
+        if (responsibleId == null) {
+            return;
+        }
+        Employee employee = employeeRepository.findByIdAndIsDeletedFalse(responsibleId)
+                .orElseThrow(() -> RestException.badRequest("Responsible employee not found: " + responsibleId));
+        if (!employee.isActive()) {
+            throw RestException.badRequest("Responsible employee is not active: " + responsibleId);
+        }
     }
 
     private void validateWarehouseExists(UUID warehouseId) {

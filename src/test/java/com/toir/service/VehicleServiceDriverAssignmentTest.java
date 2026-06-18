@@ -13,6 +13,8 @@ import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.VehicleDocumentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
+import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
 import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.equipment.EquipmentAttributeService;
@@ -25,8 +27,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -64,6 +68,8 @@ class VehicleServiceDriverAssignmentTest {
     AttachmentGroupService attachmentGroupService;
     @Mock
     EmployeeRepository employeeRepository;
+    @Mock
+    EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
     @InjectMocks
     VehicleService service;
@@ -113,6 +119,73 @@ class VehicleServiceDriverAssignmentTest {
         verify(vehicleDetailsRepository).save(details);
     }
 
+    @Test
+    void updateStoresAssignedDriverUsageLimitAndAssignmentActor() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID driverId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Equipment equipment = vehicle(equipmentId, departmentId);
+        VehicleDetails details = details(equipmentId);
+        Employee driver = employee(driverId, departmentId, true);
+
+        when(securityScope.currentUser()).thenReturn(authenticatedUser(actorId));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(employeeRepository.findByIdAndIsDeletedFalse(driverId)).thenReturn(Optional.of(driver));
+        when(vehicleDetailsRepository.existsAssignedDriverOnAnotherVehicle(driverId, equipmentId)).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDocumentRepository.findAllByEquipmentId(equipmentId)).thenReturn(java.util.List.of());
+
+        var result = service.update(equipmentId, request(departmentId, driverId, equipment.getEquipmentTypeId(), 240));
+
+        assertThat(result.vehicleDetails().assignedDriverId()).isEqualTo(driverId);
+        assertThat(result.vehicleDetails().assignedDriverUsageLimitMinutes()).isEqualTo(240);
+        assertThat(details.getAssignedDriverUsageLimitMinutes()).isEqualTo(240);
+        assertThat(details.getAssignedDriverAssignedBy()).isEqualTo(actorId);
+        assertThat(details.getAssignedDriverAssignedAt()).isNotNull();
+    }
+
+    @Test
+    void updateRejectsUsageLimitWithoutAssignedDriver() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = vehicle(equipmentId, departmentId);
+        VehicleDetails details = details(equipmentId);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+
+        assertThatThrownBy(() -> service.update(equipmentId, request(departmentId, null, equipment.getEquipmentTypeId(), 120)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("assignedDriverId");
+
+        verify(vehicleDetailsRepository, never()).save(any());
+    }
+
+    @Test
+    void updateRejectsEmployeeWithoutDriverWorkRoleWhenRoleRequirementEnabled() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID driverId = UUID.randomUUID();
+        Equipment equipment = vehicle(equipmentId, departmentId);
+        VehicleDetails details = details(equipmentId);
+        Employee driver = employee(driverId, departmentId, true);
+
+        ReflectionTestUtils.setField(service, "driverRoleRequired", true);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(employeeRepository.findByIdAndIsDeletedFalse(driverId)).thenReturn(Optional.of(driver));
+        when(employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(driverId, "DRIVER")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.update(equipmentId, request(departmentId, driverId, equipment.getEquipmentTypeId())))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("DRIVER");
+
+        verify(vehicleDetailsRepository, never()).save(any());
+    }
+
     private static Equipment vehicle(UUID equipmentId, UUID departmentId) {
         Equipment equipment = new Equipment();
         equipment.setId(equipmentId);
@@ -151,6 +224,10 @@ class VehicleServiceDriverAssignmentTest {
     }
 
     private static VehicleRequest request(UUID departmentId, UUID driverId, UUID equipmentTypeId) {
+        return request(departmentId, driverId, equipmentTypeId, null);
+    }
+
+    private static VehicleRequest request(UUID departmentId, UUID driverId, UUID equipmentTypeId, Integer assignedDriverUsageLimitMinutes) {
         return new VehicleRequest(
                 null,
                 "Truck",
@@ -176,6 +253,7 @@ class VehicleServiceDriverAssignmentTest {
                 null,
                 2,
                 driverId,
+                assignedDriverUsageLimitMinutes,
                 10_000.0,
                 400.0,
                 null,
@@ -186,5 +264,9 @@ class VehicleServiceDriverAssignmentTest {
                 null,
                 null
         );
+    }
+
+    private static AuthenticatedUser authenticatedUser(UUID userId) {
+        return new AuthenticatedUser(userId.toString(), "user", "user@example.com", "User", null, "USER", List.of());
     }
 }

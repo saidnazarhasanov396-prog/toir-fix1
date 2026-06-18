@@ -19,6 +19,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -81,6 +82,15 @@ public class VehicleDetails extends BaseEntity {
 
     @Column(name = "assigned_driver_id")
     private UUID assignedDriverId;
+
+    @Column(name = "assigned_driver_usage_limit_minutes")
+    private Integer assignedDriverUsageLimitMinutes;
+
+    @Column(name = "assigned_driver_assigned_by")
+    private UUID assignedDriverAssignedBy;
+
+    @Column(name = "assigned_driver_assigned_at")
+    private Instant assignedDriverAssignedAt;
 
     @Column(name = "current_odometer_km", nullable = false)
     private double currentOdometerKm;
