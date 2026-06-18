@@ -49,44 +49,9 @@ deploy:
     - chmod og= $SSH_PRIVATE_KEY
     - apk update && apk add openssh-client
     - |
-      APP_FIREBASE_EFFECTIVE_ENABLED="${APP_FIREBASE_ENABLED:-true}"
-      APP_FIREBASE_EFFECTIVE_PROJECT_ID="${APP_FIREBASE_PROJECT_ID:-toir-51480}"
-      APP_FIREBASE_EFFECTIVE_SERVICE_ACCOUNT_BASE64="${APP_FIREBASE_SERVICE_ACCOUNT_BASE64:-}"
-      FIREBASE_CREDENTIALS_PRESENT=false
-      if [ -n "${APP_FIREBASE_SERVICE_ACCOUNT_BASE64:-}" ] || [ -n "${APP_FIREBASE_SERVICE_ACCOUNT_JSON:-}" ] || [ -n "${APP_FIREBASE_SERVICE_ACCOUNT_FILE:-}" ]; then
-        FIREBASE_CREDENTIALS_PRESENT=true
-      fi
-      if [ -z "$APP_FIREBASE_EFFECTIVE_SERVICE_ACCOUNT_BASE64" ] && [ -n "${APP_FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
-        APP_FIREBASE_EFFECTIVE_SERVICE_ACCOUNT_BASE64="$(printf '%s' "$APP_FIREBASE_SERVICE_ACCOUNT_JSON" | base64 | tr -d '\n')"
-      fi
-      if [ -z "$APP_FIREBASE_EFFECTIVE_SERVICE_ACCOUNT_BASE64" ] && [ -n "${APP_FIREBASE_SERVICE_ACCOUNT_FILE:-}" ]; then
-        if [ ! -r "$APP_FIREBASE_SERVICE_ACCOUNT_FILE" ]; then
-          echo "APP_FIREBASE_SERVICE_ACCOUNT_FILE is not readable in the GitLab runner"
-          exit 1
-        fi
-        APP_FIREBASE_EFFECTIVE_SERVICE_ACCOUNT_BASE64="$(base64 < "$APP_FIREBASE_SERVICE_ACCOUNT_FILE" | tr -d '\n')"
-      fi
-      if [ -z "${APP_FIREBASE_ENABLED:-}" ] && [ "$FIREBASE_CREDENTIALS_PRESENT" = "true" ]; then
-        APP_FIREBASE_EFFECTIVE_ENABLED=true
-      fi
-      if [ "${APP_FIREBASE_EFFECTIVE_ENABLED}" = "true" ]; then
-        if [ -z "${APP_FIREBASE_EFFECTIVE_PROJECT_ID:-}" ]; then
-          echo "Missing APP_FIREBASE_PROJECT_ID while APP_FIREBASE_ENABLED=true"
-          exit 1
-        fi
-        if [ "$FIREBASE_CREDENTIALS_PRESENT" != "true" ]; then
-          echo "Missing Firebase credentials: set APP_FIREBASE_SERVICE_ACCOUNT_BASE64, APP_FIREBASE_SERVICE_ACCOUNT_JSON, or APP_FIREBASE_SERVICE_ACCOUNT_FILE"
-          exit 1
-        fi
-      fi
-    - |
       cat > toir-backend.env <<EOF
       SPRING_PROFILES_ACTIVE=prod
-      APP_FIREBASE_ENABLED=${APP_FIREBASE_EFFECTIVE_ENABLED}
-      APP_FIREBASE_PROJECT_ID=${APP_FIREBASE_EFFECTIVE_PROJECT_ID}
-      APP_FIREBASE_SERVICE_ACCOUNT_BASE64=${APP_FIREBASE_EFFECTIVE_SERVICE_ACCOUNT_BASE64}
-      APP_FIREBASE_SERVICE_ACCOUNT_JSON=
-      APP_FIREBASE_SERVICE_ACCOUNT_FILE=
+      APP_FIREBASE_ENABLED=false
       EOF
     - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password ${CI_REGISTRY_PASSWORD}"
     - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker pull ${CI_REGISTRY_IMAGE}:latest"
