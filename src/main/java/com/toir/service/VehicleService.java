@@ -33,7 +33,6 @@ import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.VehicleStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
-import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentAttributeService;
@@ -76,7 +75,6 @@ public class VehicleService {
     private final VehicleDocumentRepository vehicleDocumentRepository;
     private final AttachmentGroupService attachmentGroupService;
     private final EmployeeRepository employeeRepository;
-    private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, VehicleRegistrationPlateType plateType,
@@ -868,9 +866,8 @@ public class VehicleService {
         if (!driver.isActive()) {
             throw RestException.badRequest("Assigned driver employee is not active: " + assignedDriverId);
         }
-        if (!employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(assignedDriverId, "DRIVER")) {
-            throw RestException.badRequest("Assigned employee must have DRIVER work role");
-        }
+        // DRIVER work role is no longer required — any active employee in the same
+        // department can be assigned as the responsible person for the vehicle.
         if (!Objects.equals(driver.getDepartmentId(), vehicleDepartmentId)) {
             throw RestException.badRequest("Assigned driver must be in the same department as the vehicle");
         }

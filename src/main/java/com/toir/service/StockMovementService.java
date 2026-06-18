@@ -164,6 +164,8 @@ public class StockMovementService {
                 }
                 stock.setQuantity(stock.getQuantity() - request.quantity());
             }
+            case EQUIPMENT_IN -> throw RestException.badRequest(
+                    "Equipment receipts must be recorded through procurement receipt");
         }
         if (stock.getQuantity() < 0 || stock.getReservedQty() < 0 || stock.getAvailable() < 0) {
             throw RestException.badRequest("Stock quantities cannot be negative");
@@ -537,6 +539,9 @@ public class StockMovementService {
         if (type == StockMovementType.RESERVATION || type == StockMovementType.RELEASE) {
             throw RestException.badRequest("Stock reservations must be recorded through /api/v1/reservations");
         }
+        if (type == StockMovementType.EQUIPMENT_IN) {
+            throw RestException.badRequest("Equipment receipts must be recorded through procurement receipt");
+        }
     }
 
     private void assertWorkOrderMovementUsesDomainEndpoint(StockMovementRequest request) {
@@ -631,6 +636,9 @@ public class StockMovementService {
             }
             case RESERVATION, RELEASE -> {
                 // Reservation state is owned by ReservationService.
+            }
+            case EQUIPMENT_IN -> {
+                // Equipment receipts do not affect spare-part core stock balances.
             }
         }
     }

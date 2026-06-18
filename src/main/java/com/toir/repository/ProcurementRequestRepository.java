@@ -63,6 +63,9 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
             WHERE is_deleted = false
             AND (cast(:status as varchar) IS NULL OR status = cast(:status as varchar))
             AND (cast(:departmentId as varchar) IS NULL OR department_id = cast(:departmentId as uuid))
+            AND (cast(:type as varchar) IS NULL OR type = cast(:type as varchar))
+            AND (cast(:sourceDefectId as varchar) IS NULL OR source_defect_id = cast(:sourceDefectId as uuid))
+            AND (cast(:sourcePprTaskId as varchar) IS NULL OR source_ppr_task_id = cast(:sourcePprTaskId as uuid))
             AND (
                 nullif(trim(cast(:search as varchar)), '') IS NULL
                 OR lower(coalesce(number, '')) LIKE lower(concat('%', cast(:search as varchar), '%'))
@@ -73,5 +76,8 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
     List<ProcurementRequest> search(
             @Param("search") String search,
             @Param("status") String status,
-            @Param("departmentId") UUID departmentId);
+            @Param("departmentId") UUID departmentId,
+            @Param("type") String type,
+            @Param("sourceDefectId") UUID sourceDefectId,
+            @Param("sourcePprTaskId") UUID sourcePprTaskId);
 }

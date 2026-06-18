@@ -30,6 +30,8 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, UU
                 sm.spare_part_id AS "sparePartId",
                 sp.name AS "sparePartName",
                 sp.type AS "sparePartType",
+                sm.equipment_type_id AS "equipmentTypeId",
+                et.name AS "equipmentTypeName",
                 sm.work_order_id AS "workOrderId",
                 wo.number AS "workOrderNumber",
                 wo.title AS "workOrderName",
@@ -70,6 +72,9 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, UU
             LEFT JOIN spare_parts sp
                 ON sp.id = sm.spare_part_id
                 AND sp.is_deleted = false
+            LEFT JOIN equipment_types et
+                ON et.id = sm.equipment_type_id
+                AND et.is_deleted = false
             LEFT JOIN work_orders wo
                 ON wo.id = sm.work_order_id
                 AND wo.is_deleted = false

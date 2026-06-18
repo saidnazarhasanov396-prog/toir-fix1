@@ -1,6 +1,7 @@
 package com.toir.security;
 
 import com.toir.controller.ProcurementRequestController;
+import com.toir.dto.procurement.ProcurementReceiptResponse;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.service.ApprovalService;
@@ -180,6 +181,27 @@ class RbacProcurementSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = PermissionConstants.PROCUREMENT_RECEIVE)
+    void procurementReceivePermissionCanUseReceiveAlias() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        when(procurementRequestService.receiveStock(eq(requestId), any()))
+                .thenReturn(new ProcurementReceiptResponse(
+                        procurementRequestDto(requestId),
+                        List.of(),
+                        List.of()
+                ));
+
+        mockMvc.perform(post("/api/v1/procurement-requests/{id}/receive", requestId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "lines": []
+                                }
+                                """))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @WithMockUser(authorities = PermissionConstants.PROCUREMENT_CANCEL)
     void procurementCancelCanCancelRequest() throws Exception {
         UUID requestId = UUID.randomUUID();
@@ -211,6 +233,10 @@ class RbacProcurementSecurityTest {
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/ordered", requestId))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/received", requestId))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/procurement-requests/{id}/receive", requestId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lines\":[]}"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/procurement-requests/{id}/cancel", requestId))
                 .andExpect(status().isForbidden());

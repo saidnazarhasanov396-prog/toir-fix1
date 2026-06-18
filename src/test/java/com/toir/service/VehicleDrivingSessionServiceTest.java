@@ -19,7 +19,6 @@ import com.toir.repository.VehicleDrivingSessionRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.users.EmployeeRepository;
-import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -53,8 +52,6 @@ class VehicleDrivingSessionServiceTest {
     @Mock
     EmployeeRepository employeeRepository;
     @Mock
-    EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
-    @Mock
     EquipmentMeterRepository equipmentMeterRepository;
     @Mock
     MeterService meterService;
@@ -77,8 +74,6 @@ class VehicleDrivingSessionServiceTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
         when(employeeRepository.findByIdAndIsDeletedFalse(driverId)).thenReturn(Optional.of(driver));
-        when(employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(driverId, "DRIVER"))
-                .thenReturn(true);
         lenient().when(sessionRepository.save(any(VehicleDrivingSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(equipmentUsageSessionService.start(
                 eq(equipmentId),
@@ -137,8 +132,6 @@ class VehicleDrivingSessionServiceTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
         when(employeeRepository.findByIdAndIsDeletedFalse(otherDriverId)).thenReturn(Optional.of(driver));
-        when(employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(otherDriverId, "DRIVER"))
-                .thenReturn(true);
 
         assertThatThrownBy(() -> service.start(
                 equipmentId,

@@ -18,6 +18,10 @@ public interface StockMovementListRow {
 
     String getSparePartType();
 
+    UUID getEquipmentTypeId();
+
+    String getEquipmentTypeName();
+
     UUID getWorkOrderId();
 
     String getWorkOrderNumber();

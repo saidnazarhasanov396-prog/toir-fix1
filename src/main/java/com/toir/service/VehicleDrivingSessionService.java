@@ -14,7 +14,6 @@ import com.toir.exception.RestException;
 import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.users.EmployeeRepository;
-import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -38,7 +37,6 @@ public class VehicleDrivingSessionService {
     private final EquipmentRepository equipmentRepository;
     private final VehicleDetailsRepository vehicleDetailsRepository;
     private final EmployeeRepository employeeRepository;
-    private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
     private final EquipmentUsageSessionService equipmentUsageSessionService;
 
     @Transactional
@@ -131,9 +129,7 @@ public class VehicleDrivingSessionService {
         if (!driver.isActive()) {
             throw RestException.badRequest("Driver employee is not active: " + driverEmployeeId);
         }
-        if (!employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(driverEmployeeId, "DRIVER")) {
-            throw RestException.badRequest("Employee must have DRIVER work role");
-        }
+        // DRIVER work role is no longer required — any active employee in the same department may be assigned.
         if (vehicleDepartmentId == null || !Objects.equals(driver.getDepartmentId(), vehicleDepartmentId)) {
             throw RestException.badRequest("Driver must be in the same department as the vehicle");
         }

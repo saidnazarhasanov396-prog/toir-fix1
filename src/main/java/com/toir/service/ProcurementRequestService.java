@@ -7,29 +7,46 @@ import com.toir.dto.procurement.ProcurementReceiptResponse;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.dto.warehouse.StockReceiptCommand;
+import com.toir.entity.Department;
+import com.toir.entity.PprTask;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
+import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.warehouse.Warehouse;
+import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.EquipmentCategory;
+import com.toir.enums.EquipmentLocationType;
+import com.toir.enums.EquipmentStatus;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
@@ -43,6 +60,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -52,6 +71,12 @@ public class ProcurementRequestService {
 
     private final ProcurementRequestRepository repo;
     private final SparePartRepository sparePartRepository;
+    private final EquipmentTypeRepository equipmentTypeRepository;
+    private final EquipmentRepository equipmentRepository;
+    private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
+    private final DefectRepository defectRepository;
+    private final PprTaskRepository pprTaskRepository;
+    private final DepartmentRepository departmentRepository;
     private final WarehouseStockRepository stockRepository;
     private final StockMovementRepository stockMovementRepository;
     private final AuditBuilderService auditBuilderService;
@@ -64,35 +89,51 @@ public class ProcurementRequestService {
 
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId, String search) {
+        return findAll(status, departmentId, search, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status,
+                                               UUID departmentId,
+                                               String search,
+                                               ProcurementRequestType type,
+                                               UUID sourceDefectId,
+                                               UUID sourcePprTaskId) {
         String normalizedSearch = (search != null && !search.isBlank()) ? search.trim() : null;
+        String typeFilter = type == null ? null : type.name();
 
         if (scopeAccessService.isScopeAdmin()) {
-            return repo.search(
+            return toDtos(repo.search(
                     normalizedSearch,
                     status != null ? status.name() : null,
-                    departmentId
-            ).stream().map(ProcurementRequestDto::from).toList();
+                    departmentId,
+                    typeFilter,
+                    sourceDefectId,
+                    sourcePprTaskId
+            ));
         }
 
         UUID scopedDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
         if (status == null && scopedDepartmentId == null) {
             throw forbidden();
         }
-        return repo.search(
+        return toDtos(repo.search(
                         normalizedSearch,
                         status != null ? status.name() : null,
-                        scopedDepartmentId
+                        scopedDepartmentId,
+                        typeFilter,
+                        sourceDefectId,
+                        sourcePprTaskId
                 ).stream()
                 .filter(this::canRead)
-                .map(ProcurementRequestDto::from)
-                .toList();
+                .toList());
     }
 
     @Transactional(readOnly = true)
     public ProcurementRequestDto findById(UUID id) {
         ProcurementRequest procurement = load(id);
         assertCanRead(procurement);
-        return ProcurementRequestDto.from(procurement);
+        return toDto(procurement);
     }
 
     @Transactional
@@ -105,6 +146,8 @@ public class ProcurementRequestService {
         p.setDepartmentId(r.departmentId());
         p.setWarehouseId(r.warehouseId());
         p.setRequiredBy(r.requiredBy());
+        p.setType(normalizeType(r.type()));
+        applySourceTrace(p, r.sourceDefectId(), r.sourcePprTaskId());
         p.setStatus(ProcurementRequestStatus.DRAFT);
         p.setSource("MANUAL");
         if (r.lines() != null) {
@@ -117,7 +160,7 @@ public class ProcurementRequestService {
 
         auditBuilderService.log(
                 "procurement_request",
-                saved.getId().toString(),
+                auditEntityId(saved),
                 AuditAction.CREATE,
                 AuditModule.PROCUREMENT_REQUEST,
                 "Заявка на закупку создана",
@@ -125,7 +168,7 @@ public class ProcurementRequestService {
                 saved
         );
 
-        return ProcurementRequestDto.from(saved);
+        return toDto(saved);
     }
 
     @Transactional
@@ -141,7 +184,7 @@ public class ProcurementRequestService {
         ProcurementRequest saved = repo.save(p);
         auditBuilderService.log(
                 "procurement_request",
-                saved.getId().toString(),
+                auditEntityId(saved),
                 AuditAction.UPDATE,
                 AuditModule.PROCUREMENT_REQUEST,
                 "Заявка на закупку обновлена",
@@ -150,7 +193,7 @@ public class ProcurementRequestService {
         );
 
 
-        return ProcurementRequestDto.from(p);
+        return toDto(saved);
     }
 
     @Transactional
@@ -169,7 +212,7 @@ public class ProcurementRequestService {
         ProcurementRequest saved = repo.save(p);
         auditBuilderService.log(
                 "procurement_request",
-                saved.getId().toString(),
+                auditEntityId(saved),
                 AuditAction.UPDATE,
                 AuditModule.PROCUREMENT_REQUEST,
                 "Заявка на закупку обновлена",
@@ -177,7 +220,7 @@ public class ProcurementRequestService {
                 saved
         );
 
-        return ProcurementRequestDto.from(p);
+        return toDto(saved);
     }
 
     @Transactional
@@ -193,14 +236,14 @@ public class ProcurementRequestService {
         ProcurementRequest saved = repo.save(p);
         auditBuilderService.log(
                 "procurement_request",
-                saved.getId().toString(),
+                auditEntityId(saved),
                 AuditAction.UPDATE,
                 AuditModule.PROCUREMENT_REQUEST,
                 "Заявка на закупку обновлена",
                 p,
                 saved
         );
-        return ProcurementRequestDto.from(p);
+        return toDto(saved);
     }
 
     @Transactional(readOnly = true)
@@ -210,7 +253,7 @@ public class ProcurementRequestService {
         if (p.getStatus() != ProcurementRequestStatus.SUBMITTED) {
             throw RestException.badRequest("Only SUBMITTED can be approved");
         }
-        return ProcurementRequestDto.from(p);
+        return toDto(p);
     }
 
     @Transactional
@@ -228,14 +271,14 @@ public class ProcurementRequestService {
         ProcurementRequest saved = repo.save(p);
         auditBuilderService.log(
                 "procurement_request",
-                saved.getId().toString(),
+                auditEntityId(saved),
                 AuditAction.UPDATE,
                 AuditModule.PROCUREMENT_REQUEST,
                 "Заявка на закупку обновлена",
                 p,
                 saved
         );
-        return ProcurementRequestDto.from(p);
+        return toDto(saved);
     }
 
     @Transactional
@@ -250,14 +293,14 @@ public class ProcurementRequestService {
         ProcurementRequest saved = repo.save(p);
         auditBuilderService.log(
                 "procurement_request",
-                saved.getId().toString(),
+                auditEntityId(saved),
                 AuditAction.UPDATE,
                 AuditModule.PROCUREMENT_REQUEST,
                 "Заявка на закупку обновлена",
                 p,
                 saved
         );
-        return ProcurementRequestDto.from(p);
+        return toDto(saved);
     }
 
     @Transactional
@@ -277,19 +320,23 @@ public class ProcurementRequestService {
         }
         List<ProcurementRequestLine> activeLines = validateReceivable(p);
         List<ReceiptLine> receiptLines = resolveReceiptLines(activeLines, normalizedRequest.lines());
-        List<UUID> movementIds = applyReceiptToStock(p, receiptLines, normalizedRequest);
+        ReceiptResult receiptResult = applyReceiptToStock(p, receiptLines, normalizedRequest);
         recalculateReceiptStatus(p, activeLines);
         ProcurementRequest saved = repo.save(p);
         auditBuilderService.log(
                 "procurement_request",
-                saved.getId().toString(),
+                auditEntityId(saved),
                 AuditAction.UPDATE,
                 AuditModule.PROCUREMENT_REQUEST,
                 "Заявка на закупку обновлена",
                 p,
                 saved
         );
-        return new ProcurementReceiptResponse(ProcurementRequestDto.from(saved), movementIds);
+        return new ProcurementReceiptResponse(
+                toDto(saved),
+                receiptResult.stockMovementIds(),
+                receiptResult.equipmentIds()
+        );
     }
 
     private List<ProcurementRequestLine> validateReceivable(ProcurementRequest request) {
@@ -372,9 +419,18 @@ public class ProcurementRequestService {
         return receiptLines;
     }
 
-    private List<UUID> applyReceiptToStock(ProcurementRequest request,
-                                           List<ReceiptLine> receiptLines,
-                                           ProcurementReceiptRequest receiptRequest) {
+    private ReceiptResult applyReceiptToStock(ProcurementRequest request,
+                                              List<ReceiptLine> receiptLines,
+                                              ProcurementReceiptRequest receiptRequest) {
+        if (requestType(request) == ProcurementRequestType.EQUIPMENT) {
+            return applyEquipmentReceipt(request, receiptLines, receiptRequest);
+        }
+        return applySparePartReceipt(request, receiptLines, receiptRequest);
+    }
+
+    private ReceiptResult applySparePartReceipt(ProcurementRequest request,
+                                                List<ReceiptLine> receiptLines,
+                                                ProcurementReceiptRequest receiptRequest) {
         UUID warehouseId = request.getWarehouseId();
         List<UUID> movementIds = new ArrayList<>();
         for (ReceiptLine receiptLine : receiptLines) {
@@ -394,7 +450,45 @@ public class ProcurementRequestService {
             syncProcurementReceiptActualCost(request, line, quantity, movement);
             lowStockRecommendationService.evaluateStockSafely(stock);
         }
-        return movementIds;
+        return new ReceiptResult(movementIds, List.of());
+    }
+
+    private ReceiptResult applyEquipmentReceipt(ProcurementRequest request,
+                                                List<ReceiptLine> receiptLines,
+                                                ProcurementReceiptRequest receiptRequest) {
+        List<UUID> movementIds = new ArrayList<>();
+        List<UUID> equipmentIds = new ArrayList<>();
+        for (ReceiptLine receiptLine : receiptLines) {
+            ProcurementRequestLine line = receiptLine.line();
+            double quantity = receiptLine.quantity();
+            int units = wholeEquipmentQuantity(quantity, "Receipt line quantity");
+            StockMovement movement = stockMovementRepository.save(equipmentReceiptMovement(
+                    request,
+                    line,
+                    quantity,
+                    receiptRequest
+            ));
+            if (movement.getId() != null) {
+                movementIds.add(movement.getId());
+            }
+            int firstOrdinal = (int) Math.round(line.getReceivedQuantity()) + 1;
+            for (int index = 0; index < units; index++) {
+                Equipment equipment = equipmentRepository.save(equipmentForReceipt(
+                        request,
+                        line,
+                        movement,
+                        receiptRequest.receiptDate(),
+                        firstOrdinal + index
+                ));
+                if (equipment.getId() != null) {
+                    equipmentIds.add(equipment.getId());
+                    warehouseEquipmentItemRepository.save(warehouseEquipmentItem(request, equipment));
+                }
+            }
+            line.setReceivedQuantity(line.getReceivedQuantity() + quantity);
+            line.setRemainingQuantity(Math.max(0, line.getQuantity() - line.getReceivedQuantity()));
+        }
+        return new ReceiptResult(movementIds, equipmentIds);
     }
 
     private Optional<WarehouseStock> findStockForReceipt(UUID warehouseId, UUID sparePartId) {
@@ -420,14 +514,30 @@ public class ProcurementRequestService {
     }
 
     private void validateReceiptLineBasics(ProcurementRequestLine line) {
-        if (line.getSparePartId() == null) {
-            throw RestException.badRequest("Procurement line sparePartId is required before receipt");
-        }
         if (line.getQuantity() <= 0) {
             throw RestException.badRequest("Procurement line quantity must be greater than 0 before receipt");
         }
         if (line.getReceivedQuantity() < -QUANTITY_EPSILON || line.getRemainingQuantity() < -QUANTITY_EPSILON) {
             throw RestException.badRequest("Procurement line received and remaining quantities cannot be negative");
+        }
+        ProcurementRequestType type = requestType(line.getRequest());
+        if (type == ProcurementRequestType.EQUIPMENT) {
+            if (line.getEquipmentTypeId() == null) {
+                throw RestException.badRequest("Procurement line equipmentTypeId is required before receipt");
+            }
+            if (line.getSparePartId() != null) {
+                throw RestException.badRequest("EQUIPMENT procurement line must use equipmentTypeId only");
+            }
+            wholeEquipmentQuantity(line.getQuantity(), "Procurement line quantity");
+            wholeEquipmentQuantity(line.getReceivedQuantity(), "Procurement line received quantity");
+            wholeEquipmentQuantity(line.getRemainingQuantity(), "Procurement line remaining quantity");
+            return;
+        }
+        if (line.getSparePartId() == null) {
+            throw RestException.badRequest("Procurement line sparePartId is required before receipt");
+        }
+        if (line.getEquipmentTypeId() != null) {
+            throw RestException.badRequest("SPARE_PART procurement line must use sparePartId only");
         }
     }
 
@@ -516,6 +626,65 @@ public class ProcurementRequestService {
         return movement;
     }
 
+    private StockMovement equipmentReceiptMovement(ProcurementRequest request,
+                                                   ProcurementRequestLine line,
+                                                   double quantity,
+                                                   ProcurementReceiptRequest receiptRequest) {
+        StockMovement movement = new StockMovement();
+        movement.setWarehouseId(request.getWarehouseId());
+        movement.setSparePartId(null);
+        movement.setEquipmentTypeId(line.getEquipmentTypeId());
+        movement.setType(StockMovementType.EQUIPMENT_IN);
+        movement.setQuantity(quantity);
+        movement.setUnit(line.getUnit());
+        movement.setUnitCost(line.getUnitPrice());
+        movement.setUnitPrice(unitPrice(line));
+        movement.setTotalAmount(totalAmount(quantity, line.getUnitPrice()));
+        movement.setDocumentNumber(firstNonBlank(receiptRequest.documentNumber(), request.getNumber()));
+        movement.setMovementDate(receiptRequest.receiptDate() == null
+                ? LocalDate.now(ZoneOffset.UTC)
+                : receiptRequest.receiptDate());
+        movement.setResponsiblePersonId(receiptRequest.responsiblePersonId());
+        movement.setSourceType(StockMovementSourceType.PROCUREMENT_REQUEST);
+        movement.setSourceId(request.getId());
+        movement.setSourceLineId(line.getId());
+        movement.setNotes(procurementReceiptNotes(request, receiptRequest.comment()));
+        movement.setComment(trimToNull(receiptRequest.comment()));
+        return movement;
+    }
+
+    private Equipment equipmentForReceipt(ProcurementRequest request,
+                                          ProcurementRequestLine line,
+                                          StockMovement movement,
+                                          LocalDate receiptDate,
+                                          int ordinal) {
+        String inventoryNumber = uniqueInventoryNumber(request, line, ordinal);
+        Equipment equipment = new Equipment();
+        equipment.setCode(inventoryNumber);
+        equipment.setName(firstNonBlank(line.getEquipmentTypeName(), "Equipment " + inventoryNumber));
+        equipment.setInventoryNumber(inventoryNumber);
+        equipment.setEquipmentTypeId(line.getEquipmentTypeId());
+        equipment.setResponsibleDepartmentId(request.getDepartmentId());
+        equipment.setCurrentLocationType(EquipmentLocationType.WAREHOUSE);
+        equipment.setCurrentWarehouseId(request.getWarehouseId());
+        equipment.setStatus(EquipmentStatus.STANDBY);
+        equipment.setCategory(EquipmentCategory.PRODUCTION_EQUIPMENT);
+        equipment.setArrivalDate(receiptDate == null ? LocalDate.now(ZoneOffset.UTC) : receiptDate);
+        equipment.setProcurementRequestId(request.getId());
+        equipment.setProcurementRequestLineId(line.getId());
+        equipment.setProcurementStockMovementId(movement.getId());
+        return equipment;
+    }
+
+    private WarehouseEquipmentItem warehouseEquipmentItem(ProcurementRequest request, Equipment equipment) {
+        WarehouseEquipmentItem item = new WarehouseEquipmentItem();
+        item.setWarehouseId(request.getWarehouseId());
+        item.setEquipmentId(equipment.getId());
+        item.setStatus(WarehouseEquipmentStatus.AVAILABLE);
+        item.setActive(true);
+        return item;
+    }
+
     private void postProcurementCoreStockReceipt(ProcurementRequest request, StockMovement movement, double quantity) {
         toirStockService.postReceipt(new StockReceiptCommand(
                 movement.getWarehouseId(),
@@ -569,6 +738,9 @@ public class ProcurementRequestService {
     private record ReceiptLine(ProcurementRequestLine line, double quantity) {
     }
 
+    private record ReceiptResult(List<UUID> stockMovementIds, List<UUID> equipmentIds) {
+    }
+
     @Transactional
     public ProcurementRequestDto cancel(UUID id) {
         ProcurementRequest p = load(id);
@@ -580,14 +752,14 @@ public class ProcurementRequestService {
         ProcurementRequest saved = repo.save(p);
         auditBuilderService.log(
                 "procurement_request",
-                saved.getId().toString(),
+                auditEntityId(saved),
                 AuditAction.UPDATE,
                 AuditModule.PROCUREMENT_REQUEST,
                 "Заявка на закупку обновлена",
                 p,
                 saved
         );
-        return ProcurementRequestDto.from(p);
+        return toDto(saved);
     }
 
     /** Сгенерировать заявку(и) на закупку из low-stock позиций (по складу). */
@@ -613,6 +785,7 @@ public class ProcurementRequestService {
                 pr.setTitle("Auto low-stock replenishment");
                 pr.setDescription("Автозаявка: пополнение запасов ниже минимального уровня");
                 pr.setWarehouseId(wh);
+                pr.setType(ProcurementRequestType.SPARE_PART);
                 pr.setStatus(ProcurementRequestStatus.DRAFT);
                 pr.setSource("AUTO");
                 pr.setRequiredBy(LocalDate.now(ZoneOffset.UTC).plusDays(14));
@@ -643,7 +816,7 @@ public class ProcurementRequestService {
 
             auditBuilderService.log(
                     "procurement_request",
-                    saved.getId().toString(),
+                    auditEntityId(saved),
                     AuditAction.CREATE,
                     AuditModule.PROCUREMENT_REQUEST,
                     "Заявка на закупку создана",
@@ -651,12 +824,28 @@ public class ProcurementRequestService {
                     saved
             );
 
-            result.add(ProcurementRequestDto.from(saved));
+            result.add(toDto(saved));
         }
         return result;
     }
 
     private ProcurementRequestLine buildLine(ProcurementRequest p, ProcurementLineRequest r) {
+        if (r == null) {
+            throw RestException.badRequest("Procurement line is required");
+        }
+        return requestType(p) == ProcurementRequestType.EQUIPMENT
+                ? buildEquipmentLine(p, r)
+                : buildSparePartLine(p, r);
+    }
+
+    private ProcurementRequestLine buildSparePartLine(ProcurementRequest p, ProcurementLineRequest r) {
+        validateLineQuantity(r.quantity());
+        if (r.sparePartId() == null) {
+            throw RestException.badRequest("sparePartId is required for SPARE_PART procurement line");
+        }
+        if (r.equipmentTypeId() != null) {
+            throw RestException.badRequest("SPARE_PART procurement line must use sparePartId only; equipmentTypeId is not allowed");
+        }
         SparePart sp = sparePartRepository.findByIdAndIsDeletedFalse(r.sparePartId())
                 .orElseThrow(() -> RestException.notFound("Spare part not found: " + r.sparePartId()));
         ProcurementRequestLine line = new ProcurementRequestLine();
@@ -665,11 +854,218 @@ public class ProcurementRequestService {
         line.setQuantity(r.quantity());
         line.setReceivedQuantity(0);
         line.setRemainingQuantity(r.quantity());
-        line.setUnit(r.unit() != null ? r.unit() : sp.getUnit());
+        line.setUnit(firstNonBlank(r.unit(), sp.getUnit()));
         line.setUnitPrice(r.unitPrice());
-        line.setEstimatedCost(r.unitPrice() != null ? r.unitPrice() * r.quantity() : 0.0);
+        line.setEstimatedCost(estimatedCost(r.quantity(), r.unitPrice()));
         line.setNotes(r.notes());
         return line;
+    }
+
+    private ProcurementRequestLine buildEquipmentLine(ProcurementRequest p, ProcurementLineRequest r) {
+        validateLineQuantity(r.quantity());
+        wholeEquipmentQuantity(r.quantity(), "Equipment procurement quantity");
+        if (r.equipmentTypeId() == null) {
+            throw RestException.badRequest("equipmentTypeId is required for EQUIPMENT procurement line");
+        }
+        if (r.sparePartId() != null) {
+            throw RestException.badRequest("EQUIPMENT procurement line must use equipmentTypeId only; sparePartId is not allowed");
+        }
+        EquipmentType equipmentType = equipmentTypeRepository.findByIdAndIsDeletedFalse(r.equipmentTypeId())
+                .orElseThrow(() -> RestException.notFound("Equipment type not found: " + r.equipmentTypeId()));
+        ProcurementRequestLine line = new ProcurementRequestLine();
+        line.setRequest(p);
+        line.setEquipmentTypeId(equipmentType.getId());
+        line.setEquipmentTypeName(firstNonBlank(equipmentType.getName(), equipmentType.getCode()));
+        line.setQuantity(r.quantity());
+        line.setReceivedQuantity(0);
+        line.setRemainingQuantity(r.quantity());
+        line.setUnit(firstNonBlank(r.unit(), "PCS"));
+        line.setUnitPrice(r.unitPrice());
+        line.setEstimatedCost(estimatedCost(r.quantity(), r.unitPrice()));
+        line.setNotes(r.notes());
+        return line;
+    }
+
+    private ProcurementRequestType normalizeType(ProcurementRequestType type) {
+        return type == null ? ProcurementRequestType.SPARE_PART : type;
+    }
+
+    private ProcurementRequestType requestType(ProcurementRequest request) {
+        return request == null || request.getType() == null
+                ? ProcurementRequestType.SPARE_PART
+                : request.getType();
+    }
+
+    private void applySourceTrace(ProcurementRequest request, UUID sourceDefectId, UUID sourcePprTaskId) {
+        if (sourceDefectId == null) {
+            request.setSourceDefectId(null);
+            request.setSourceDefectTitle(null);
+        } else {
+            Defect defect = defectRepository.findByIdAndIsDeletedFalse(sourceDefectId)
+                    .orElseThrow(() -> RestException.notFound("Defect not found: " + sourceDefectId));
+            assertSourceEquipmentReadable(defect.getEquipmentId(), "Defect");
+            request.setSourceDefectId(defect.getId());
+            request.setSourceDefectTitle(defect.getTitle());
+        }
+
+        if (sourcePprTaskId == null) {
+            request.setSourcePprTaskId(null);
+            request.setSourcePprTaskTitle(null);
+            return;
+        }
+        PprTask task = pprTaskRepository.findByIdAndIsDeletedFalse(sourcePprTaskId)
+                .orElseThrow(() -> RestException.notFound("PPR task not found: " + sourcePprTaskId));
+        assertSourceEquipmentReadable(task.getEquipmentId(), "PPR task");
+        request.setSourcePprTaskId(task.getId());
+        request.setSourcePprTaskTitle(task.getTitle());
+    }
+
+    private void assertSourceEquipmentReadable(UUID equipmentId, String sourceName) {
+        if (scopeAccessService.isScopeAdmin() || equipmentId == null) {
+            return;
+        }
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound(sourceName + " equipment not found: " + equipmentId));
+        if (!scopeAccessService.canAccessEquipmentScope(equipment.getResponsibleDepartmentId(), equipment.getDepartmentId())) {
+            throw forbidden();
+        }
+    }
+
+    private void validateLineQuantity(double quantity) {
+        if (quantity <= 0) {
+            throw RestException.badRequest("Procurement line quantity must be greater than 0");
+        }
+    }
+
+    private int wholeEquipmentQuantity(double quantity, String label) {
+        double rounded = Math.rint(quantity);
+        if (Math.abs(quantity - rounded) > QUANTITY_EPSILON) {
+            throw RestException.badRequest(label + " must be a whole number for EQUIPMENT procurement");
+        }
+        if (rounded > Integer.MAX_VALUE) {
+            throw RestException.badRequest(label + " is too large");
+        }
+        return (int) rounded;
+    }
+
+    private double estimatedCost(double quantity, Double unitPrice) {
+        return unitPrice == null ? 0.0 : unitPrice * quantity;
+    }
+
+    private String uniqueInventoryNumber(ProcurementRequest request,
+                                         ProcurementRequestLine line,
+                                         int ordinal) {
+        String prefix = sanitizeInventoryToken(firstNonBlank(request.getNumber(), "PR"))
+                + "-" + shortLineId(line);
+        String base = "%s-%04d".formatted(prefix, ordinal);
+        String candidate = base;
+        int suffix = 2;
+        while (equipmentIdentifierExists(candidate)) {
+            candidate = base + "-" + suffix++;
+        }
+        return candidate;
+    }
+
+    private boolean equipmentIdentifierExists(String identifier) {
+        return equipmentRepository.existsByInventoryNumberAndIsDeletedFalse(identifier)
+                || equipmentRepository.existsByCodeAndIsDeletedFalse(identifier);
+    }
+
+    private String shortLineId(ProcurementRequestLine line) {
+        UUID source = line.getId() != null ? line.getId() : line.getEquipmentTypeId();
+        if (source == null) {
+            return "LINE";
+        }
+        return source.toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
+    }
+
+    private String sanitizeInventoryToken(String value) {
+        return value.replaceAll("[^A-Za-z0-9_-]", "-");
+    }
+
+    private ProcurementRequestDto toDto(ProcurementRequest procurement) {
+        List<ProcurementRequestDto> result = toDtos(List.of(procurement));
+        return result.get(0);
+    }
+
+    private List<ProcurementRequestDto> toDtos(List<ProcurementRequest> procurements) {
+        if (procurements == null || procurements.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> departmentIds = procurements.stream()
+                .map(ProcurementRequest::getDepartmentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<UUID> warehouseIds = procurements.stream()
+                .map(ProcurementRequest::getWarehouseId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<UUID> sparePartIds = procurements.stream()
+                .filter(Objects::nonNull)
+                .flatMap(request -> request.getLines() == null ? java.util.stream.Stream.empty() : request.getLines().stream())
+                .map(ProcurementRequestLine::getSparePartId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<UUID, String> departmentNames = departmentNamesById(departmentIds);
+        Map<UUID, String> warehouseNames = warehouseNamesById(warehouseIds);
+        Map<UUID, String> sparePartNames = sparePartNamesById(sparePartIds);
+
+        return procurements.stream()
+                .map(request -> ProcurementRequestDto.from(
+                        request,
+                        nameById(departmentNames, request.getDepartmentId()),
+                        nameById(warehouseNames, request.getWarehouseId()),
+                        sparePartNames
+                ))
+                .toList();
+    }
+
+    private String nameById(Map<UUID, String> namesById, UUID id) {
+        return id == null ? null : namesById.get(id);
+    }
+
+    private String auditEntityId(ProcurementRequest request) {
+        return request.getId() == null ? request.getNumber() : request.getId().toString();
+    }
+
+    private Map<UUID, String> departmentNamesById(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<Department> departments = departmentRepository.findAllByIdInAndIsDeletedFalse(ids);
+        if (departments == null) {
+            return Map.of();
+        }
+        return departments.stream()
+                .filter(department -> department.getId() != null)
+                .collect(Collectors.toMap(Department::getId, Department::getName, (first, ignored) -> first));
+    }
+
+    private Map<UUID, String> warehouseNamesById(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<Warehouse> warehouses = warehouseRepository.findAllByIdInAndIsDeletedFalse(ids);
+        if (warehouses == null) {
+            return Map.of();
+        }
+        return warehouses.stream()
+                .filter(warehouse -> warehouse.getId() != null)
+                .collect(Collectors.toMap(Warehouse::getId, Warehouse::getName, (first, ignored) -> first));
+    }
+
+    private Map<UUID, String> sparePartNamesById(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<SparePart> spareParts = sparePartRepository.findAllByIdInAndIsDeletedFalse(ids);
+        if (spareParts == null) {
+            return Map.of();
+        }
+        return spareParts.stream()
+                .filter(sparePart -> sparePart.getId() != null)
+                .collect(Collectors.toMap(SparePart::getId, SparePart::getName, (first, ignored) -> first));
     }
 
     private void recalcTotal(ProcurementRequest p) {

@@ -164,6 +164,18 @@ class StockMovementServiceTest {
     }
 
     @Test
+    void directEquipmentInMovementIsRejectedToKeepProcurementAsSourceOfTruth() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.EQUIPMENT_IN, 1)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Equipment receipts must be recorded through procurement receipt");
+
+        verifyNoInteractions(stockRepository, repository, sparePartRepository);
+    }
+
+    @Test
     void adjustmentFailsWhenAdjustedQuantityIsLessThanReserved() {
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
@@ -766,6 +778,16 @@ class StockMovementServiceTest {
             @Override
             public String getSparePartType() {
                 return SparePartType.BEARING.name();
+            }
+
+            @Override
+            public UUID getEquipmentTypeId() {
+                return null;
+            }
+
+            @Override
+            public String getEquipmentTypeName() {
+                return null;
             }
 
             @Override

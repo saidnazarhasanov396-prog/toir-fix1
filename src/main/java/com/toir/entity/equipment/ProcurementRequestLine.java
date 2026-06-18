@@ -20,8 +20,14 @@ public class ProcurementRequestLine extends BaseEntity {
     @JoinColumn(name = "request_id", nullable = false)
     private ProcurementRequest request;
 
-    @Column(name = "spare_part_id", nullable = false)
+    @Column(name = "spare_part_id")
     private UUID sparePartId;
+
+    @Column(name = "equipment_type_id")
+    private UUID equipmentTypeId;
+
+    @Column(name = "equipment_type_name")
+    private String equipmentTypeName;
 
     @Column(name = "quantity", nullable = false)
     private double quantity;

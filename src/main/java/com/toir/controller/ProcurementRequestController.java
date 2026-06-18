@@ -8,6 +8,7 @@ import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.dto.purchaseorder.ProcurementRequestPurchaseOrderRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderDto;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.enums.ProcurementRequestType;
 import com.toir.exception.RestException;
 import com.toir.security.PermissionConstants;
 import com.toir.security.RequiresSensitiveAccess;
@@ -42,9 +43,16 @@ public class ProcurementRequestController {
             @RequestParam(required = false) ProcurementRequestStatus status,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) ProcurementRequestType type,
+            @RequestParam(required = false) UUID sourceDefectId,
+            @RequestParam(required = false) UUID sourcePprTaskId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findAll(status, departmentId, search), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(
+                service.findAll(status, departmentId, search, type, sourceDefectId, sourcePprTaskId),
+                page,
+                size
+        ));
     }
 
     @GetMapping("/{id}")
@@ -93,6 +101,15 @@ public class ProcurementRequestController {
     @PostMapping("/{id}/stock-receipt")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_RECEIVE')")
     public ResponseEntity<ProcurementReceiptResponse> receiveStock(
+            @PathVariable UUID id,
+            @Valid @RequestBody(required = false) ProcurementReceiptRequest request
+    ) {
+        return ResponseEntity.ok(service.receiveStock(id, request));
+    }
+
+    @PostMapping("/{id}/receive")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_RECEIVE')")
+    public ResponseEntity<ProcurementReceiptResponse> receive(
             @PathVariable UUID id,
             @Valid @RequestBody(required = false) ProcurementReceiptRequest request
     ) {

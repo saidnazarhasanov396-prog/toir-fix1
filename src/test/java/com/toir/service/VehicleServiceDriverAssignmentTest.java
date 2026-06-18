@@ -13,7 +13,6 @@ import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.VehicleDocumentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.users.EmployeeRepository;
-import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
 import com.toir.security.SecurityScope;
 import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.equipment.EquipmentAttributeService;
@@ -65,8 +64,6 @@ class VehicleServiceDriverAssignmentTest {
     AttachmentGroupService attachmentGroupService;
     @Mock
     EmployeeRepository employeeRepository;
-    @Mock
-    EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
     @InjectMocks
     VehicleService service;
@@ -84,8 +81,6 @@ class VehicleServiceDriverAssignmentTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
         when(employeeRepository.findByIdAndIsDeletedFalse(driverId)).thenReturn(Optional.of(driver));
-        when(employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(driverId, "DRIVER"))
-                .thenReturn(true);
 
         assertThatThrownBy(() -> service.update(equipmentId, request(vehicleDepartmentId, driverId, equipment.getEquipmentTypeId())))
                 .isInstanceOf(RestException.class)
@@ -95,29 +90,7 @@ class VehicleServiceDriverAssignmentTest {
     }
 
     @Test
-    void updateRejectsEmployeeWithoutDriverWorkRole() {
-        UUID equipmentId = UUID.randomUUID();
-        UUID departmentId = UUID.randomUUID();
-        UUID employeeId = UUID.randomUUID();
-        Equipment equipment = vehicle(equipmentId, departmentId);
-        VehicleDetails details = details(equipmentId);
-        Employee employee = employee(employeeId, departmentId, true);
-
-        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
-        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
-        when(employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(employeeId, "DRIVER"))
-                .thenReturn(false);
-
-        assertThatThrownBy(() -> service.update(equipmentId, request(departmentId, employeeId, equipment.getEquipmentTypeId())))
-                .isInstanceOf(RestException.class)
-                .hasMessageContaining("DRIVER");
-
-        verify(vehicleDetailsRepository, never()).save(any());
-    }
-
-    @Test
-    void updateAcceptsActiveDriverInSameDepartment() {
+    void updateAcceptsActiveEmployeeInSameDepartment() {
         UUID equipmentId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         UUID driverId = UUID.randomUUID();
@@ -128,8 +101,6 @@ class VehicleServiceDriverAssignmentTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
         when(employeeRepository.findByIdAndIsDeletedFalse(driverId)).thenReturn(Optional.of(driver));
-        when(employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(driverId, "DRIVER"))
-                .thenReturn(true);
         when(vehicleDetailsRepository.existsAssignedDriverOnAnotherVehicle(driverId, equipmentId)).thenReturn(false);
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));

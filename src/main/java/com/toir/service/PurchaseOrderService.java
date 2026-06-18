@@ -21,6 +21,7 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.InventoryTransactionType;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.PurchaseOrderStatus;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
@@ -143,6 +144,9 @@ public class PurchaseOrderService {
                 .orElseThrow(() -> RestException.notFound("Procurement request not found: " + procurementRequestId));
         if (procurement.getStatus() != ProcurementRequestStatus.APPROVED) {
             throw RestException.badRequest("Procurement request must be approved before creating a purchase order");
+        }
+        if (procurement.getType() == ProcurementRequestType.EQUIPMENT) {
+            throw RestException.badRequest("Equipment procurement requests must be received through procurement receipt");
         }
         if (procurement.getWarehouseId() == null) {
             throw RestException.badRequest("Procurement request warehouseId is required");

@@ -1,27 +1,44 @@
 package com.toir.service;
 
+import com.toir.dto.procurement.ProcurementLineRequest;
 import com.toir.dto.procurement.ProcurementReceiptLineRequest;
 import com.toir.dto.procurement.ProcurementReceiptRequest;
 import com.toir.dto.procurement.ProcurementReceiptResponse;
+import com.toir.dto.procurement.ProcurementRequestRequest;
+import com.toir.entity.PprTask;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
+import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.ProcurementRequest;
+import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.EquipmentLocationType;
+import com.toir.enums.EquipmentStatus;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
@@ -52,6 +69,24 @@ class ProcurementRequestServiceTest {
 
     @Mock
     SparePartRepository sparePartRepository;
+
+    @Mock
+    EquipmentTypeRepository equipmentTypeRepository;
+
+    @Mock
+    EquipmentRepository equipmentRepository;
+
+    @Mock
+    WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
+
+    @Mock
+    DefectRepository defectRepository;
+
+    @Mock
+    PprTaskRepository pprTaskRepository;
+
+    @Mock
+    DepartmentRepository departmentRepository;
 
     @Mock
     WarehouseStockRepository stockRepository;
@@ -87,6 +122,12 @@ class ProcurementRequestServiceTest {
         service = new ProcurementRequestService(
                 repository,
                 sparePartRepository,
+                equipmentTypeRepository,
+                equipmentRepository,
+                warehouseEquipmentItemRepository,
+                defectRepository,
+                pprTaskRepository,
+                departmentRepository,
                 stockRepository,
                 stockMovementRepository,
                 auditBuilderService,
@@ -97,6 +138,91 @@ class ProcurementRequestServiceTest {
                 costCategoryRepository,
                 toirStockService
         );
+    }
+
+    @Test
+    void creatingEquipmentRequestDenormalizesSourceAndEquipmentType() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID departmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID defectId = UUID.randomUUID();
+        UUID pprTaskId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        Defect defect = defect(defectId, "Pump bearing destroyed");
+        PprTask pprTask = pprTask(pprTaskId, "Quarterly pump overhaul");
+        EquipmentType equipmentType = equipmentType(equipmentTypeId, "CNS centrifugal pump");
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(pprTaskRepository.findByIdAndIsDeletedFalse(pprTaskId)).thenReturn(Optional.of(pprTask));
+        when(equipmentTypeRepository.findByIdAndIsDeletedFalse(equipmentTypeId)).thenReturn(Optional.of(equipmentType));
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.create(new ProcurementRequestRequest(
+                "Equipment procurement",
+                "Procure replacement pump",
+                departmentId,
+                warehouseId,
+                LocalDate.of(2026, 7, 15),
+                List.of(new ProcurementLineRequest(null, 2, "PCS", 5_000_000.0, "CNS pump", equipmentTypeId)),
+                ProcurementRequestType.EQUIPMENT,
+                defectId,
+                pprTaskId
+        ));
+
+        assertThat(result.type()).isEqualTo(ProcurementRequestType.EQUIPMENT);
+        assertThat(result.sourceDefectId()).isEqualTo(defectId);
+        assertThat(result.sourceDefectTitle()).isEqualTo("Pump bearing destroyed");
+        assertThat(result.sourcePprTaskId()).isEqualTo(pprTaskId);
+        assertThat(result.sourcePprTaskTitle()).isEqualTo("Quarterly pump overhaul");
+        assertThat(result.lines()).hasSize(1);
+        assertThat(result.lines().getFirst().equipmentTypeId()).isEqualTo(equipmentTypeId);
+        assertThat(result.lines().getFirst().equipmentTypeName()).isEqualTo("CNS centrifugal pump");
+        assertThat(result.lines().getFirst().sparePartId()).isNull();
+        assertThat(result.totalEstimatedCost()).isEqualTo(10_000_000.0);
+    }
+
+    @Test
+    void creatingEquipmentRequestRejectsMixedLineItems() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.create(new ProcurementRequestRequest(
+                "Invalid mixed procurement",
+                null,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                LocalDate.of(2026, 7, 15),
+                List.of(new ProcurementLineRequest(sparePartId, 1, "PCS", null, null, equipmentTypeId)),
+                ProcurementRequestType.EQUIPMENT,
+                null,
+                null
+        )))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("equipmentTypeId");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void creatingEquipmentRequestRejectsFractionalQuantity() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID equipmentTypeId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.create(new ProcurementRequestRequest(
+                "Invalid quantity",
+                null,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                LocalDate.of(2026, 7, 15),
+                List.of(new ProcurementLineRequest(null, 1.5, "PCS", null, null, equipmentTypeId)),
+                ProcurementRequestType.EQUIPMENT,
+                null,
+                null
+        )))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("whole number");
+
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -222,6 +348,77 @@ class ProcurementRequestServiceTest {
         assertThat(line.getReceivedQuantity()).isEqualTo(4);
         assertThat(line.getRemainingQuantity()).isEqualTo(6);
         assertThat(stock.getQuantity()).isEqualTo(10);
+    }
+
+    @Test
+    void receivingEquipmentCreatesMovementEquipmentRecordsAndWarehouseItems() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        ProcurementRequestLine line = equipmentLine(equipmentTypeId, "CNS pump", 2, 5_000_000.0);
+        ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED, List.of(line));
+        request.setType(ProcurementRequestType.EQUIPMENT);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProcurementReceiptResponse result = service.receiveStock(requestId, new ProcurementReceiptRequest(
+                List.of(new ProcurementReceiptLineRequest(line.getId(), 2)),
+                LocalDate.of(2026, 6, 18),
+                "ACT-EQ-1",
+                null,
+                "equipment receipt"
+        ));
+
+        assertThat(result.procurementRequest().status()).isEqualTo(ProcurementRequestStatus.RECEIVED);
+        assertThat(result.createdStockMovementIds()).hasSize(1);
+        assertThat(result.createdEquipmentIds()).hasSize(2);
+        assertThat(line.getReceivedQuantity()).isEqualTo(2);
+        assertThat(line.getRemainingQuantity()).isZero();
+
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(stockMovementRepository).save(movementCaptor.capture());
+        StockMovement movement = movementCaptor.getValue();
+        assertThat(movement.getType()).isEqualTo(StockMovementType.EQUIPMENT_IN);
+        assertThat(movement.getSparePartId()).isNull();
+        assertThat(movement.getEquipmentTypeId()).isEqualTo(equipmentTypeId);
+        assertThat(movement.getSourceLineId()).isEqualTo(line.getId());
+
+        ArgumentCaptor<Equipment> equipmentCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(equipmentRepository, org.mockito.Mockito.times(2)).save(equipmentCaptor.capture());
+        assertThat(equipmentCaptor.getAllValues())
+                .allSatisfy(equipment -> {
+                    assertThat(equipment.getEquipmentTypeId()).isEqualTo(equipmentTypeId);
+                    assertThat(equipment.getStatus()).isEqualTo(EquipmentStatus.STANDBY);
+                    assertThat(equipment.getCurrentLocationType()).isEqualTo(EquipmentLocationType.WAREHOUSE);
+                    assertThat(equipment.getCurrentWarehouseId()).isEqualTo(warehouseId);
+                    assertThat(equipment.getProcurementRequestId()).isEqualTo(requestId);
+                    assertThat(equipment.getProcurementRequestLineId()).isEqualTo(line.getId());
+                    assertThat(equipment.getProcurementStockMovementId()).isEqualTo(movement.getId());
+                });
+
+        ArgumentCaptor<WarehouseEquipmentItem> itemCaptor = ArgumentCaptor.forClass(WarehouseEquipmentItem.class);
+        verify(warehouseEquipmentItemRepository, org.mockito.Mockito.times(2)).save(itemCaptor.capture());
+        assertThat(itemCaptor.getAllValues())
+                .allSatisfy(item -> {
+                    assertThat(item.getWarehouseId()).isEqualTo(warehouseId);
+                    assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.AVAILABLE);
+                    assertThat(item.isActive()).isTrue();
+                });
+        verify(stockRepository, never()).save(any());
+        verify(toirStockService, never()).postReceipt(any());
     }
 
     @Test
@@ -490,6 +687,23 @@ class ProcurementRequestServiceTest {
         return line;
     }
 
+    private ProcurementRequestLine equipmentLine(UUID equipmentTypeId,
+                                                 String equipmentTypeName,
+                                                 double quantity,
+                                                 Double unitPrice) {
+        ProcurementRequestLine line = new ProcurementRequestLine();
+        line.setId(UUID.randomUUID());
+        line.setEquipmentTypeId(equipmentTypeId);
+        line.setEquipmentTypeName(equipmentTypeName);
+        line.setQuantity(quantity);
+        line.setReceivedQuantity(0);
+        line.setRemainingQuantity(quantity);
+        line.setUnit("PCS");
+        line.setUnitPrice(unitPrice);
+        line.setEstimatedCost(unitPrice == null ? 0 : unitPrice * quantity);
+        return line;
+    }
+
     private WarehouseStock stock(UUID warehouseId, UUID sparePartId, double quantity) {
         WarehouseStock stock = new WarehouseStock();
         stock.setId(UUID.randomUUID());
@@ -508,5 +722,32 @@ class ProcurementRequestServiceTest {
         sparePart.setName("Bearing");
         sparePart.setUnit("pcs");
         return sparePart;
+    }
+
+    private EquipmentType equipmentType(UUID id, String name) {
+        EquipmentType equipmentType = new EquipmentType();
+        equipmentType.setId(id);
+        equipmentType.setCode("ET-1");
+        equipmentType.setName(name);
+        equipmentType.setCategory("PRODUCTION_EQUIPMENT");
+        return equipmentType;
+    }
+
+    private Defect defect(UUID id, String title) {
+        Defect defect = new Defect();
+        defect.setId(id);
+        defect.setCode("DF-1");
+        defect.setTitle(title);
+        defect.setDescription(title);
+        defect.setEquipmentId(UUID.randomUUID());
+        return defect;
+    }
+
+    private PprTask pprTask(UUID id, String title) {
+        PprTask task = new PprTask();
+        task.setId(id);
+        task.setCode("PPR-TASK-1");
+        task.setTitle(title);
+        return task;
     }
 }
