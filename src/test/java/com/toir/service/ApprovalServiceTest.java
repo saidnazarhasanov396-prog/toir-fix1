@@ -28,6 +28,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -147,6 +150,39 @@ class ApprovalServiceTest {
         assertThat(step.getApproverId()).isNull();
         assertThat(step.getApproverRole()).isEqualTo(approverRole);
         assertThat(result.canApprove()).isFalse();
+    }
+
+    @Test
+    void roleOnlyStepAcceptsRolePrefixedSecurityAuthority() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = pendingRoleOnlyApproval(approvalId, UUID.randomUUID(), "USTA");
+        User actor = new User();
+        actor.setId(actorId);
+        actor.setStatus(UserStatus.ACTIVE);
+
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(userRepository.findByIdAndIsDeletedFalse(actorId)).thenReturn(Optional.of(actor));
+        when(requestRepository.save(any(ApprovalRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                actorId.toString(),
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_USTA"))
+        ));
+
+        try {
+            ApprovalRequestDto beforeDecision = service.findById(approvalId);
+            assertThat(beforeDecision.canApprove()).isTrue();
+            assertThat(beforeDecision.canReject()).isTrue();
+
+            service.approve(approvalId, new com.toir.dto.approval.DecisionRequest(actorId, "ok"));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(approval.getSteps().getFirst().getDecidedById()).isEqualTo(actorId);
     }
 
     @Test
