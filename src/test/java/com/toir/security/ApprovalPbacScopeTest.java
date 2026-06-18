@@ -129,7 +129,7 @@ class ApprovalPbacScopeTest {
                 )),
                 governanceService,
                 slaPolicyService,
-                new DefaultApprovalRouteResolver(templateRepository, userRepository),
+                new DefaultApprovalRouteResolver(templateRepository),
                 jdbcTemplate,
                 auditBuilderService,
                 approvalScopeService,
@@ -360,15 +360,8 @@ class ApprovalPbacScopeTest {
         template.setTargetType(ApprovalTargetType.WORK_ORDER);
         template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
         template.setApproverRole("WORK_ORDER_APPROVER");
-        User approver = new User();
-        approver.setId(approverId);
-        approver.setStatus(UserStatus.ACTIVE);
-        Role role = new Role();
-        role.setCode("WORK_ORDER_APPROVER");
-        approver.setPrimaryRole(role);
         when(templateRepository.findFirstByTargetTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalTargetType.WORK_ORDER))
                 .thenReturn(Optional.of(template));
-        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(approver));
         when(requestRepository.save(any())).thenAnswer(invocation -> {
             ApprovalRequest saved = invocation.getArgument(0);
             saved.setId(UUID.randomUUID());
@@ -381,7 +374,8 @@ class ApprovalPbacScopeTest {
         verify(requestRepository).save(captor.capture());
         ApprovalRequest saved = captor.getValue();
         assertThat(saved.getSteps()).hasSize(1);
-        assertThat(saved.getSteps().getFirst().getApproverId()).isEqualTo(approverId);
+        assertThat(saved.getSteps().getFirst().getApproverId()).isNull();
+        assertThat(saved.getSteps().getFirst().getApproverRole()).isEqualTo("WORK_ORDER_APPROVER");
     }
 
     @Test
@@ -665,6 +659,56 @@ class ApprovalPbacScopeTest {
                 .assertCanDecideApproval(approval, approval.getSteps().getFirst());
         assertThatThrownBy(() -> scope(scopeAccessService(requesterId, Optional.empty(), false))
                 .assertCanDecideApproval(approval, approval.getSteps().getFirst()))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void roleBasedCurrentPendingApproverCanReadAndDecideByRole() {
+        UUID requesterId = UUID.randomUUID();
+        UUID roleUserId = UUID.randomUUID();
+        ApprovalRequest approval = roleBasedApproval(UUID.randomUUID(), requesterId, "WORK_ORDER_APPROVER", UUID.randomUUID());
+        ScopeAccessService scopeAccessService = scopeAccessService(roleUserId, Optional.empty(), false);
+        UserRepository userRepository = mock(UserRepository.class);
+        when(userRepository.findByIdAndIsDeletedFalse(roleUserId))
+                .thenReturn(Optional.of(activeUser(roleUserId, "WORK_ORDER_APPROVER")));
+
+        ApprovalScopeService scope = scope(scopeAccessService, mock(WorkOrderRepository.class), userRepository);
+
+        assertThat(scope.canReadApproval(approval)).isTrue();
+        scope.assertCanDecideApproval(approval, approval.getSteps().getFirst());
+    }
+
+    @Test
+    void roleBasedCurrentPendingApproverRejectsUserWithoutRole() {
+        UUID requesterId = UUID.randomUUID();
+        UUID unrelatedUserId = UUID.randomUUID();
+        ApprovalRequest approval = roleBasedApproval(UUID.randomUUID(), requesterId, "WORK_ORDER_APPROVER", UUID.randomUUID());
+        ScopeAccessService scopeAccessService = scopeAccessService(unrelatedUserId, Optional.empty(), false);
+        UserRepository userRepository = mock(UserRepository.class);
+        when(userRepository.findByIdAndIsDeletedFalse(unrelatedUserId))
+                .thenReturn(Optional.of(activeUser(unrelatedUserId, "OTHER_ROLE")));
+
+        ApprovalScopeService scope = scope(scopeAccessService, mock(WorkOrderRepository.class), userRepository);
+
+        assertThat(scope.canReadApproval(approval)).isFalse();
+        assertThatThrownBy(() -> scope.assertCanDecideApproval(approval, approval.getSteps().getFirst()))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void roleBasedScopeAdminWithoutRoleCanReadButCannotDecide() {
+        UUID requesterId = UUID.randomUUID();
+        UUID adminUserId = UUID.randomUUID();
+        ApprovalRequest approval = roleBasedApproval(UUID.randomUUID(), requesterId, "WORK_ORDER_APPROVER", UUID.randomUUID());
+        ScopeAccessService scopeAccessService = scopeAccessService(adminUserId, Optional.empty(), true);
+        UserRepository userRepository = mock(UserRepository.class);
+        when(userRepository.findByIdAndIsDeletedFalse(adminUserId))
+                .thenReturn(Optional.of(activeUser(adminUserId, "OTHER_ROLE")));
+
+        ApprovalScopeService scope = scope(scopeAccessService, mock(WorkOrderRepository.class), userRepository);
+
+        assertThat(scope.canReadApproval(approval)).isTrue();
+        assertThatThrownBy(() -> scope.assertCanDecideApproval(approval, approval.getSteps().getFirst()))
                 .isInstanceOf(AccessDeniedException.class);
     }
 
@@ -1109,6 +1153,24 @@ class ApprovalPbacScopeTest {
         return approval;
     }
 
+    private ApprovalRequest roleBasedApproval(UUID id, UUID requesterId, String approverRole, UUID documentId) {
+        ApprovalRequest approval = approval(id, requesterId, UUID.randomUUID(), documentId);
+        ApprovalStep step = approval.getSteps().getFirst();
+        step.setApproverId(null);
+        step.setApproverRole(approverRole);
+        return approval;
+    }
+
+    private User activeUser(UUID userId, String roleCode) {
+        Role role = new Role();
+        role.setCode(roleCode);
+        User user = new User();
+        user.setId(userId);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setPrimaryRole(role);
+        return user;
+    }
+
     private CreateApprovalRequest createRequest(UUID requesterId, UUID approverId, UUID documentId) {
         return new CreateApprovalRequest(
                 "WORK_ORDER",
@@ -1133,6 +1195,12 @@ class ApprovalPbacScopeTest {
     }
 
     private ApprovalScopeService scope(ScopeAccessService scopeAccessService, WorkOrderRepository workOrderRepository) {
+        return scope(scopeAccessService, workOrderRepository, mock(UserRepository.class));
+    }
+
+    private ApprovalScopeService scope(ScopeAccessService scopeAccessService,
+                                       WorkOrderRepository workOrderRepository,
+                                       UserRepository userRepository) {
         return new ApprovalScopeService(
                 scopeAccessService,
                 mock(PprPlanRepository.class),
@@ -1142,7 +1210,8 @@ class ApprovalPbacScopeTest {
                 mock(ProcurementRequestRepository.class),
                 mock(MaintenanceBudgetRepository.class),
                 mock(ActualCostRepository.class),
-                mock(FinanceScopeService.class)
+                mock(FinanceScopeService.class),
+                userRepository
         );
     }
 

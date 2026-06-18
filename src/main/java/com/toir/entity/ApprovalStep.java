@@ -24,7 +24,7 @@ public class ApprovalStep extends BaseEntity {
     @Column(name = "step_number", nullable = false)
     private int stepNumber;
 
-    @Column(name = "approver_id", nullable = false)
+    @Column(name = "approver_id")
     private UUID approverId;
 
     @Column(name = "decided_by_id")
