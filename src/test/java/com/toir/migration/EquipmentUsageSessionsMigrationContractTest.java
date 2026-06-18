@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EquipmentUsageSessionsMigrationContractTest {
 
     private static final Path MIGRATION = Path.of(
-            "src/main/resources/db/migration/V20260618_3__equipment_usage_sessions.sql");
+            "src/main/resources/db/migration/V20260618_4__equipment_usage_sessions.sql");
 
     @Test
     void migrationCreatesGenericEquipmentUsageSessionsWithOpenSessionGuards() throws Exception {
