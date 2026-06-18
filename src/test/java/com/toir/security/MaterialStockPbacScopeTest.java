@@ -59,8 +59,8 @@ class MaterialStockPbacScopeTest {
         lowStockRecommendationService = mock(LowStockRecommendationService.class);
         stockMovementService = new StockMovementService(
                 movementRepository,
-                stockRepository,
                 mock(ProcurementRequestRepository.class),
+                stockRepository,
                 sparePartRepository,
                 auditBuilderService,
                 warehouseRepository,

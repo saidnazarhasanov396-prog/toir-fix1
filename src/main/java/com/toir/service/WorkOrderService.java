@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.attachment.AttachmentGroupDto;
+import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.meter.MeterReadingRequest;
 import com.toir.dto.workorder.*;
 import com.toir.dto.triad.TriadLinkMapper;
@@ -34,6 +35,7 @@ import com.toir.entity.users.User;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.MaintenanceRecalculationPolicy;
+import com.toir.enums.PlacementTargetType;
 import com.toir.repository.CompletionActRepository;
 import com.toir.repository.CertificationTypeRepository;
 import com.toir.repository.FileAssetRepository;
@@ -92,6 +94,7 @@ import com.toir.repository.users.UserCertificationRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.attachment.AttachmentGroupService;
+import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
@@ -169,6 +172,7 @@ public class WorkOrderService {
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
+    private final EquipmentService equipmentService;
     private final SafetyPermitRepository safetyPermitRepository;
     private final CompletionActRepository completionActRepository;
     private final FileAssetRepository fileAssetRepository;
@@ -718,13 +722,8 @@ public class WorkOrderService {
         issueCompletionMaterials(entity, request);
         entity.setStatus(WorkOrderStatus.COMPLETED);
         entity.setCompletedAt(Instant.now());
-        updateReplacementEquipmentStatus(entity, WarehouseEquipmentStatus.INSTALLED);
         if (isReplacementWorkOrder(entity)) {
-            assignReplacementEquipmentToWorkOrderDepartment(entity);
-            warehouseEquipmentItemService.transferEquipmentToWarehouse(
-                    entity.getEquipmentId(),
-                    request.oldEquipmentReturnWarehouseId(),
-                    WarehouseEquipmentStatus.OUT_OF_SERVICE);
+            completeReplacementPlacement(entity, request);
         }
         completeLinkedPprTask(entity);
 
@@ -1916,6 +1915,31 @@ public class WorkOrderService {
                         workOrder.getReplacementEquipmentId())
                 .orElseThrow(
                         () -> RestException.badRequest("Replacement equipment item not found in selected warehouse"));
+    }
+
+    private void completeReplacementPlacement(WorkOrder workOrder, CompleteWorkOrderRequest request) {
+        equipmentService.updatePlacement(
+                workOrder.getReplacementEquipmentId(),
+                new EquipmentPlacementRequest(
+                        PlacementTargetType.DEPARTMENT,
+                        null,
+                        workOrder.getDepartmentId(),
+                        null,
+                        null,
+                        "Replacement work order completed: " + workOrder.getNumber()
+                )
+        );
+        equipmentService.updatePlacement(
+                workOrder.getEquipmentId(),
+                new EquipmentPlacementRequest(
+                        PlacementTargetType.WAREHOUSE,
+                        request.oldEquipmentReturnWarehouseId(),
+                        null,
+                        WarehouseEquipmentStatus.OUT_OF_SERVICE,
+                        null,
+                        "Replaced by work order: " + workOrder.getNumber()
+                )
+        );
     }
 
     private void validateTypeRequiredRelations(WorkOrderRequest request) {

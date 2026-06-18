@@ -1,43 +1,51 @@
-package com.toir.dto.vehicle;
+package com.toir.dto.equipment;
 
-import com.toir.dto.equipment.EquipmentUsageSessionResponse;
-import com.toir.entity.equipment.VehicleDrivingSession;
+import com.toir.entity.equipment.EquipmentUsageSession;
 import com.toir.entity.users.Employee;
 import com.toir.enums.EquipmentUsageSessionStatus;
-import com.toir.enums.VehicleDrivingSessionStatus;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
-public record VehicleDrivingSessionResponse(
+public record EquipmentUsageSessionResponse(
         UUID id,
         UUID equipmentId,
-        UUID driverEmployeeId,
-        String driverName,
+        UUID operatorEmployeeId,
+        String operatorName,
+        UUID departmentId,
         Instant startedAt,
         Instant returnedAt,
         Long durationMinutes,
+        UUID meterId,
+        Double startMeterValue,
+        Double endMeterValue,
+        Double meterDelta,
         Double startOdometerKm,
         Double endOdometerKm,
         Double odometerDeltaKm,
         Double startEngineHours,
         Double endEngineHours,
         Double engineHoursDelta,
-        VehicleDrivingSessionStatus status,
+        EquipmentUsageSessionStatus status,
         UUID issuedBy,
         UUID returnedBy,
         String note
 ) {
-    public static VehicleDrivingSessionResponse from(VehicleDrivingSession session, Employee driver) {
-        return new VehicleDrivingSessionResponse(
+    public static EquipmentUsageSessionResponse from(EquipmentUsageSession session, Employee operator) {
+        return new EquipmentUsageSessionResponse(
                 session.getId(),
                 session.getEquipmentId(),
-                session.getDriverEmployeeId(),
-                driverName(driver),
+                session.getOperatorEmployeeId(),
+                employeeName(operator),
+                session.getDepartmentId(),
                 session.getStartedAt(),
                 session.getReturnedAt(),
                 durationMinutes(session.getStartedAt(), session.getReturnedAt()),
+                session.getMeterId(),
+                session.getStartMeterValue(),
+                session.getEndMeterValue(),
+                delta(session.getStartMeterValue(), session.getEndMeterValue()),
                 session.getStartOdometerKm(),
                 session.getEndOdometerKm(),
                 delta(session.getStartOdometerKm(), session.getEndOdometerKm()),
@@ -51,38 +59,14 @@ public record VehicleDrivingSessionResponse(
         );
     }
 
-    public static VehicleDrivingSessionResponse from(EquipmentUsageSessionResponse session) {
-        return new VehicleDrivingSessionResponse(
-                session.id(),
-                session.equipmentId(),
-                session.operatorEmployeeId(),
-                session.operatorName(),
-                session.startedAt(),
-                session.returnedAt(),
-                session.durationMinutes(),
-                session.startOdometerKm(),
-                session.endOdometerKm(),
-                session.odometerDeltaKm(),
-                session.startEngineHours(),
-                session.endEngineHours(),
-                session.engineHoursDelta(),
-                session.status() == EquipmentUsageSessionStatus.OPEN
-                        ? VehicleDrivingSessionStatus.OPEN
-                        : VehicleDrivingSessionStatus.RETURNED,
-                session.issuedBy(),
-                session.returnedBy(),
-                session.note()
-        );
-    }
-
-    private static String driverName(Employee driver) {
-        if (driver == null) {
+    private static String employeeName(Employee employee) {
+        if (employee == null) {
             return null;
         }
         return String.join(" ",
-                safe(driver.getLastName()),
-                safe(driver.getFirstName()),
-                safe(driver.getMiddleName())
+                safe(employee.getLastName()),
+                safe(employee.getFirstName()),
+                safe(employee.getMiddleName())
         ).trim().replaceAll("\\s+", " ");
     }
 

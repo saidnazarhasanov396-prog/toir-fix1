@@ -31,6 +31,7 @@ import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.EquipmentUsageSessionStatus;
 import com.toir.enums.FileCategory;
 import com.toir.enums.MeterType;
 import com.toir.enums.PlacementType;
@@ -42,6 +43,7 @@ import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.DowntimeEventRepository;
+import com.toir.repository.EquipmentUsageSessionRepository;
 import com.toir.repository.FileAssetRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.LocationRepository;
@@ -71,6 +73,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -99,6 +102,7 @@ public class EquipmentService {
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
+    private final EquipmentUsageSessionRepository equipmentUsageSessionRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final DefectRepository defectRepository;
     private final WorkOrderRepository workOrderRepository;
@@ -316,6 +320,14 @@ public class EquipmentService {
                 equipmentManualAttributeService == null ? List.of() : equipmentManualAttributeService.list(id),
                 equipmentDocuments(id)
         );
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EquipmentLocationHistoryResponse> locationHistory(UUID id, Pageable pageable) {
+        getOrThrow(id);
+        return equipmentLocationHistoryRepository
+                .findAllByEquipmentIdAndIsDeletedFalseOrderByChangedAtDesc(id, pageable)
+                .map(history -> EquipmentLocationHistoryResponse.from(history, nextLocationChangeAt(history)));
     }
 
     private static final Set<String> ALLOWED_EQUIPMENT_DOCUMENT_CONTENT_TYPES = Set.of(
@@ -559,6 +571,7 @@ public class EquipmentService {
 
         applyForUpdate(entity, request);
         if (location != null) {
+            assertNoOpenUsageSession(entity.getId());
             syncWarehouseInventoryForUpdate(entity, location);
             applyLocation(entity, location);
         }
@@ -595,6 +608,7 @@ public class EquipmentService {
     public EquipmentDto updatePlacement(UUID id, EquipmentPlacementRequest request) {
         Equipment equipment = getOrThrow(id);
         EquipmentLocationRequest target = resolvePlacementLocation(request);
+        assertNoOpenUsageSession(equipment.getId());
         validateLocationReferences(target);
         assertCanAccessLocationBeforePersistence(target);
         LocationSnapshot from = snapshotLocation(equipment);
@@ -617,6 +631,15 @@ public class EquipmentService {
         writeLocationHistory(saved, from, to, request.note());
         auditLocationChange(saved, from, to, to);
         return enrich(List.of(saved)).getFirst();
+    }
+
+    private void assertNoOpenUsageSession(UUID equipmentId) {
+        if (equipmentUsageSessionRepository.existsByEquipmentIdAndStatusAndIsDeletedFalse(
+                equipmentId,
+                EquipmentUsageSessionStatus.OPEN
+        )) {
+            throw RestException.conflict("Equipment has an open usage session and cannot be transferred");
+        }
     }
 
     @Transactional
@@ -1351,6 +1374,19 @@ public class EquipmentService {
                 .note(note)
                 .build();
         equipmentLocationHistoryRepository.save(history);
+    }
+
+    private Instant nextLocationChangeAt(EquipmentLocationHistory history) {
+        if (history == null || history.getChangedAt() == null) {
+            return null;
+        }
+        return equipmentLocationHistoryRepository
+                .findFirstByEquipmentIdAndIsDeletedFalseAndChangedAtAfterOrderByChangedAtAsc(
+                        history.getEquipmentId(),
+                        history.getChangedAt()
+                )
+                .map(EquipmentLocationHistory::getChangedAt)
+                .orElse(null);
     }
 
     private void auditLocationChange(Equipment equipment, LocationSnapshot from, LocationSnapshot to, Object newSnapshot) {

@@ -22,6 +22,7 @@ import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.InventoryTransactionType;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.PurchaseOrderStatus;
+import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
@@ -39,6 +40,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Collection;
@@ -190,7 +192,9 @@ public class PurchaseOrderService {
             receiveLine(order, line, lineRequest.receivedQuantity(), receiptDate, request.documentNumber(), responsible);
         }
         recalcReceiptStatus(order, receiptDate);
-        return toDto(purchaseOrderRepository.save(order));
+        PurchaseOrder saved = purchaseOrderRepository.save(order);
+        syncLinkedProcurementReceiptStatus(saved);
+        return toDto(saved);
     }
 
     @Transactional(readOnly = true)
@@ -282,6 +286,9 @@ public class PurchaseOrderService {
         movement.setResponsiblePersonId(responsible.getId());
         movement.setSupplierName(supplierService.load(order.getSupplierId()).getName());
         movement.setDocumentNumber(trimToNull(documentNumber) == null ? order.getNumber() : trimToNull(documentNumber));
+        movement.setSourceType(StockMovementSourceType.PURCHASE_ORDER);
+        movement.setSourceId(order.getId());
+        movement.setSourceLineId(line.getId());
         movement.setNotes("Purchase order receipt: " + order.getNumber());
         return movement;
     }
@@ -314,6 +321,74 @@ public class PurchaseOrderService {
             order.setStatus(PurchaseOrderStatus.PARTIALLY_RECEIVED);
         } else {
             order.setStatus(PurchaseOrderStatus.SENT);
+        }
+    }
+
+    private void syncLinkedProcurementReceiptStatus(PurchaseOrder order) {
+        if (order.getProcurementRequestId() == null) {
+            return;
+        }
+        ProcurementRequest procurement = procurementRequestRepository
+                .findByIdAndIsDeletedFalseForUpdate(order.getProcurementRequestId())
+                .orElseThrow(() -> RestException.notFound("Procurement request not found: " + order.getProcurementRequestId()));
+        List<PurchaseOrder> linkedOrders = purchaseOrderRepository
+                .findAllByProcurementRequestIdAndIsDeletedFalse(order.getProcurementRequestId());
+        if (linkedOrders.isEmpty()) {
+            linkedOrders = List.of(order);
+        }
+        syncProcurementLineProgress(procurement, linkedOrders);
+        recalcLinkedProcurementReceiptStatus(procurement);
+        procurementRequestRepository.save(procurement);
+    }
+
+    private void syncProcurementLineProgress(ProcurementRequest procurement, List<PurchaseOrder> linkedOrders) {
+        Map<UUID, BigDecimal> receivedBySparePart = linkedOrders.stream()
+                .flatMap(linkedOrder -> linkedOrder.getLines().stream())
+                .filter(line -> !line.isDeleted())
+                .filter(line -> line.getSparePartId() != null)
+                .collect(Collectors.groupingBy(
+                        PurchaseOrderLine::getSparePartId,
+                        HashMap::new,
+                        Collectors.mapping(
+                                line -> line.getReceivedQuantity() == null ? BigDecimal.ZERO : line.getReceivedQuantity(),
+                                Collectors.reducing(BigDecimal.ZERO, BigDecimal::add)
+                        )
+                ));
+
+        procurement.getLines().stream()
+                .filter(line -> !line.isDeleted())
+                .forEach(line -> {
+                    BigDecimal available = receivedBySparePart.getOrDefault(line.getSparePartId(), BigDecimal.ZERO);
+                    double allocated = Math.min(line.getQuantity(), available.doubleValue());
+                    receivedBySparePart.put(
+                            line.getSparePartId(),
+                            available.subtract(BigDecimal.valueOf(allocated)).max(BigDecimal.ZERO)
+                    );
+                    double received = Math.min(line.getQuantity(), Math.max(line.getReceivedQuantity(), allocated));
+                    line.setReceivedQuantity(received);
+                    line.setRemainingQuantity(Math.max(0, line.getQuantity() - received));
+                });
+    }
+
+    private void recalcLinkedProcurementReceiptStatus(ProcurementRequest procurement) {
+        List<ProcurementRequestLine> lines = procurement.getLines().stream()
+                .filter(line -> !line.isDeleted())
+                .toList();
+        if (lines.isEmpty()) {
+            return;
+        }
+        boolean anyReceived = lines.stream().anyMatch(line -> line.getReceivedQuantity() > 0);
+        boolean allReceived = lines.stream().allMatch(line -> line.getRemainingQuantity() <= 0);
+        if (allReceived) {
+            procurement.setStatus(ProcurementRequestStatus.RECEIVED);
+            procurement.setReceivedAt(Instant.now());
+        } else if (anyReceived) {
+            procurement.setStatus(ProcurementRequestStatus.PARTIALLY_RECEIVED);
+            procurement.setReceivedAt(null);
+        } else if (procurement.getStatus() == ProcurementRequestStatus.PARTIALLY_RECEIVED
+                || procurement.getStatus() == ProcurementRequestStatus.RECEIVED) {
+            procurement.setStatus(ProcurementRequestStatus.ORDERED);
+            procurement.setReceivedAt(null);
         }
     }
 
