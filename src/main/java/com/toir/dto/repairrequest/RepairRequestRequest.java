@@ -165,6 +165,7 @@ public record RepairRequestRequest(
             UUID operationId,
             UUID actionId,
             UUID specialistId,
+            UUID specialisationId,
             String customName
     ) {}
 }

@@ -20,6 +20,7 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.repair.RepairRequestTemplate;
 import com.toir.entity.repair.RepairRequestTemplateAction;
+import com.toir.entity.users.EmployeeSpecialisation;
 import com.toir.entity.users.User;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.TriadLinkMapper;
@@ -47,6 +48,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.repair.RepairRequestTemplateActionRepository;
 import com.toir.repository.repair.RepairRequestTemplateRepository;
+import com.toir.repository.users.EmployeeSpecialisationRepository;
 import com.toir.repository.users.UserRepository;
 
 import com.toir.enums.AuditAction;
@@ -116,6 +118,7 @@ public class RepairRequestService {
     private final MeterService meterService;
     private final MaintenanceDueEventService maintenanceDueEventService;
     private final ObjectMapper objectMapper;
+    private final EmployeeSpecialisationRepository employeeSpecialisationRepository;
 
     private static final Set<RequestStatus> REVIEWABLE_STATUSES = EnumSet.of(
             RequestStatus.OPEN,
@@ -452,6 +455,7 @@ public class RepairRequestService {
                 operation == null ? null : operation.getId(),
                 actionId,
                 specialistId,
+                request.specialisationId(),
                 sequence,
                 customName,
                 nameSnapshot,
@@ -471,6 +475,7 @@ public class RepairRequestService {
                 operation.getId(),
                 action == null ? null : action.getId(),
                 operation.getSpecialistId(),
+                null,
                 sequence,
                 null,
                 nameSnapshot,
@@ -500,6 +505,7 @@ public class RepairRequestService {
                 actionRow.setOperationId(action.operationId());
                 actionRow.setActionId(action.actionId());
                 actionRow.setSpecialistId(action.specialistId());
+                actionRow.setSpecialisationId(action.specialisationId());
                 actionRow.setSequence(actionSequence++);
                 actionRow.setCustomName(action.customName());
                 actionRow.setNameSnapshot(action.nameSnapshot());
@@ -1239,9 +1245,25 @@ public class RepairRequestService {
                 ? Map.of()
                 : userRepository.findAllByIdInAndIsDeletedFalse(specialistIds).stream()
                 .collect(Collectors.toMap(User::getId, User::getFullName, (left, ignored) -> left));
+        Set<UUID> specialisationIds = rows.stream()
+                .map(RepairRequestTemplateAction::getSpecialisationId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, EmployeeSpecialisation> specialisationsById = specialisationIds.isEmpty()
+                ? Map.of()
+                : employeeSpecialisationRepository.findAllByIdInAndIsDeletedFalse(specialisationIds)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                EmployeeSpecialisation::getId,
+                                s -> s,
+                                (left, ignored) -> left
+                        ));
         return rows.stream()
                 .map(row -> {
                     MaintenanceTemplate template = templatesById.get(row.getTemplateId());
+                    EmployeeSpecialisation spec = row.getSpecialisationId() == null
+                            ? null
+                            : specialisationsById.get(row.getSpecialisationId());
                     return new RepairRequestActionReferenceDto(
                             row.getTemplateId(),
                             template == null ? null : template.getCode(),
@@ -1250,6 +1272,10 @@ public class RepairRequestService {
                             row.getActionId(),
                             row.getSpecialistId(),
                             row.getSpecialistId() == null ? null : specialistNames.get(row.getSpecialistId()),
+                            row.getSpecialisationId(),
+                            spec == null ? null : spec.getNameRu(),
+                            spec == null ? null : spec.getNameEn(),
+                            spec == null ? null : spec.getNameUz(),
                             row.getSequence(),
                             row.getNameSnapshot(),
                             row.getDurationHours(),
@@ -1460,6 +1486,7 @@ public class RepairRequestService {
             UUID operationId,
             UUID actionId,
             UUID specialistId,
+            UUID specialisationId,
             int sequence,
             String customName,
             String nameSnapshot,
