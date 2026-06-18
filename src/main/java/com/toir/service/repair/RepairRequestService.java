@@ -951,7 +951,13 @@ public class RepairRequestService {
 
     @Transactional(readOnly = true)
     public void assertMeterReadingsReadyForApproval(UUID id) {
-        getOrThrow(id);
+        RepairRequest entity = getOrThrow(id);
+        assertCanTransition(
+                entity,
+                RequestStatus.APPROVED,
+                REVIEWABLE_STATUSES,
+                "Cannot start approval for repair request from status "
+        );
     }
 
     private List<EquipmentMeter> activeMeters(UUID equipmentId) {
