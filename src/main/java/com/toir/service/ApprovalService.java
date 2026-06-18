@@ -35,6 +35,9 @@ import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -697,16 +700,16 @@ public class ApprovalService {
         if (current.getApproverId() != null) {
             boolean designatedApprover = current.getApproverId().equals(actorId);
             boolean delegateApprover = isActiveDelegate(current.getApproverId(), actorId);
-            if (designatedApprover) {
+            if (designatedApprover && canActorActOnStep(current, actorId)) {
                 approvalScopeService.assertCanDecideApproval(request, current);
                 return null;
             }
-            if (!delegateApprover || !matchesCurrentPrincipal(actorId)) {
+            if (!delegateApprover || !canActorActOnStep(current, actorId)) {
                 throw RestException.forbidden("Only designated approver can act on this step");
             }
             return current.getApproverId();
         }
-        if (canActorApproveRoleStep(actorId, current.getApproverRole())) {
+        if (canActorActOnStep(current, actorId)) {
             approvalScopeService.assertCanDecideApproval(request, current);
             return null;
         }
@@ -803,21 +806,34 @@ public class ApprovalService {
         if (step == null) {
             return false;
         }
-        if (step.getApproverId() != null) {
-            return matchesCurrentPrincipal(step.getApproverId())
-                    || isActiveDelegate(step.getApproverId(), scopeAccessService.currentUserIdOrNull());
+        UUID actorId = scopeAccessService.currentUserIdOrNull();
+        if (actorId == null) {
+            actorId = scopeAccessService.currentEmployeeId().orElse(null);
         }
-        return isActiveUserWithRole(scopeAccessService.currentUserIdOrNull(), step.getApproverRole());
+        return canActorActOnStep(step, actorId);
+    }
+
+    private boolean canActorActOnStep(ApprovalStep step, UUID actorId) {
+        if (step == null || actorId == null) {
+            return false;
+        }
+        if (step.getApproverId() != null) {
+            if (step.getApproverId().equals(actorId)) {
+                return true;
+            }
+            return matchesAuthenticatedPrincipal(actorId)
+                    && isActiveDelegate(step.getApproverId(), actorId);
+        }
+        return canActorApproveRoleStep(actorId, step.getApproverRole());
     }
 
     private boolean isActiveUserWithRole(UUID userId, String roleCode) {
         if (userId == null || !StringUtils.hasText(roleCode)) {
             return false;
         }
-        String normalizedRole = roleCode.trim();
         return userRepository.findByIdAndIsDeletedFalse(userId)
                 .filter(this::isActiveUser)
-                .filter(user -> hasRole(user, normalizedRole))
+                .filter(user -> hasRole(user, roleCode) || currentAuthenticationHasRole(roleCode))
                 .isPresent();
     }
 
@@ -825,14 +841,13 @@ public class ApprovalService {
         if (!StringUtils.hasText(roleCode)) {
             return List.of();
         }
-        String normalizedRole = roleCode.trim();
         List<User> users = userRepository.findAllWithRolesAndIsDeletedFalse();
         if (users == null || users.isEmpty()) {
             return List.of();
         }
         return users.stream()
                 .filter(this::isActiveUser)
-                .filter(user -> hasRole(user, normalizedRole))
+                .filter(user -> hasRole(user, roleCode))
                 .toList();
     }
 
@@ -841,10 +856,37 @@ public class ApprovalService {
     }
 
     private boolean hasRole(User user, String roleCode) {
+        String expectedRole = normalizeRole(roleCode);
+        if (expectedRole == null) {
+            return false;
+        }
         return roleStream(user)
                 .map(Role::getCode)
+                .map(this::normalizeRole)
                 .filter(Objects::nonNull)
-                .anyMatch(roleCode::equals);
+                .anyMatch(expectedRole::equals);
+    }
+
+    private boolean currentAuthenticationHasRole(String roleCode) {
+        String expectedRole = normalizeRole(roleCode);
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (expectedRole == null || authentication == null || !authentication.isAuthenticated()
+                || authentication.getAuthorities() == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .map(this::normalizeRole)
+                .filter(Objects::nonNull)
+                .anyMatch(expectedRole::equals);
+    }
+
+    private String normalizeRole(String roleCode) {
+        if (!StringUtils.hasText(roleCode)) {
+            return null;
+        }
+        String normalized = roleCode.trim().toUpperCase(Locale.ROOT);
+        return normalized.startsWith("ROLE_") ? normalized.substring("ROLE_".length()) : normalized;
     }
 
     private Stream<Role> roleStream(User user) {
@@ -908,9 +950,9 @@ public class ApprovalService {
             request.setExpiresAt(Instant.now().plus(slaPolicyService.slaFor(request)));
         }
 
-        List<CreateApprovalRequest.StepInput> effectiveSteps = normalizeStepInputs(steps, true);
+        List<CreateApprovalRequest.StepInput> effectiveSteps = normalizeStepInputs(steps);
         if (effectiveSteps.isEmpty()) {
-            effectiveSteps = normalizeStepInputs(routeResolver.resolveRoute(request), false);
+            effectiveSteps = normalizeStepInputs(routeResolver.resolveRoute(request));
         }
         if (effectiveSteps.isEmpty()) {
             throw RestException.badRequest("At least one approval step is required");
@@ -949,10 +991,7 @@ public class ApprovalService {
         return toDto(saved);
     }
 
-    private List<CreateApprovalRequest.StepInput> normalizeStepInputs(
-            List<CreateApprovalRequest.StepInput> steps,
-            boolean resolveRoleOnlySteps
-    ) {
+    private List<CreateApprovalRequest.StepInput> normalizeStepInputs(List<CreateApprovalRequest.StepInput> steps) {
         if (steps == null || steps.isEmpty()) {
             return List.of();
         }
@@ -971,14 +1010,7 @@ public class ApprovalService {
             if (!StringUtils.hasText(approverRole)) {
                 continue;
             }
-            UUID resolvedApproverId = resolveRoleOnlySteps
-                    ? activeUsersWithRole(approverRole).stream()
-                    .map(User::getId)
-                    .filter(Objects::nonNull)
-                    .findFirst()
-                    .orElse(null)
-                    : null;
-            normalized.add(new CreateApprovalRequest.StepInput(resolvedApproverId, approverRole));
+            normalized.add(new CreateApprovalRequest.StepInput(null, approverRole));
         }
         return normalized;
     }

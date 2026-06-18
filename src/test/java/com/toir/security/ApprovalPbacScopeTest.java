@@ -379,28 +379,35 @@ class ApprovalPbacScopeTest {
     }
 
     @Test
-    void createResolvesRoleOnlyStepWhenApproverIdIsOmitted() {
+    void roleOnlyApprovalWithTwoMatchingUsersStaysUnassignedAndSecondUserCanApprove() {
         UUID documentId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
-        UUID approverId = UUID.randomUUID();
+        UUID firstApproverId = UUID.randomUUID();
+        UUID secondApproverId = UUID.randomUUID();
         CreateApprovalRequest request = new CreateApprovalRequest(
                 "WORK_ORDER",
                 documentId,
                 "Role-only approval",
                 requesterId,
                 "needs routing",
-                List.of(new CreateApprovalRequest.StepInput(null, "WORK_ORDER_APPROVER"))
+                List.of(new CreateApprovalRequest.StepInput(null, "USTA"))
         );
-        User approver = new User();
-        approver.setId(approverId);
-        approver.setStatus(UserStatus.ACTIVE);
         Role role = new Role();
-        role.setCode("WORK_ORDER_APPROVER");
-        approver.setPrimaryRole(role);
-        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(approver));
+        role.setCode("USTA");
+        User firstApprover = new User();
+        firstApprover.setId(firstApproverId);
+        firstApprover.setStatus(UserStatus.ACTIVE);
+        firstApprover.setPrimaryRole(role);
+        User secondApprover = new User();
+        secondApprover.setId(secondApproverId);
+        secondApprover.setStatus(UserStatus.ACTIVE);
+        secondApprover.setPrimaryRole(role);
+        when(userRepository.findByIdAndIsDeletedFalse(secondApproverId)).thenReturn(Optional.of(secondApprover));
         when(requestRepository.save(any())).thenAnswer(invocation -> {
             ApprovalRequest saved = invocation.getArgument(0);
-            saved.setId(UUID.randomUUID());
+            if (saved.getId() == null) {
+                saved.setId(UUID.randomUUID());
+            }
             return saved;
         });
 
@@ -410,8 +417,17 @@ class ApprovalPbacScopeTest {
         verify(requestRepository).save(captor.capture());
         ApprovalRequest saved = captor.getValue();
         assertThat(saved.getSteps()).hasSize(1);
-        assertThat(saved.getSteps().getFirst().getApproverId()).isEqualTo(approverId);
-        assertThat(saved.getSteps().getFirst().getApproverRole()).isEqualTo("WORK_ORDER_APPROVER");
+        assertThat(saved.getSteps().getFirst().getApproverId()).isNull();
+        assertThat(saved.getSteps().getFirst().getApproverRole()).isEqualTo("USTA");
+
+        when(requestRepository.findByIdAndIsDeletedFalse(saved.getId())).thenReturn(Optional.of(saved));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(secondApproverId);
+
+        service.approve(saved.getId(), new DecisionRequest(secondApproverId, "second USTA approved"));
+
+        assertThat(saved.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(saved.getSteps().getFirst().getDecidedById()).isEqualTo(secondApproverId);
+        assertThat(saved.getSteps().getFirst().getApproverId()).isNull();
     }
 
     @Test
