@@ -5,6 +5,7 @@ public enum ProcurementRequestStatus {
     SUBMITTED,
     APPROVED,
     ORDERED,
+    PARTIALLY_RECEIVED,
     RECEIVED,
     CANCELLED,
     REJECTED

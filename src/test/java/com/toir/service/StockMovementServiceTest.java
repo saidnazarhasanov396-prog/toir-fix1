@@ -22,6 +22,7 @@ import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.StockMovementFileRepository;
+import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementListRow;
 import com.toir.repository.StockMovementRepository;
@@ -71,6 +72,9 @@ class StockMovementServiceTest {
 
     @Mock
     WarehouseStockRepository stockRepository;
+
+    @Mock
+    ProcurementRequestRepository procurementRequestRepository;
 
     @Mock
     SparePartRepository sparePartRepository;
@@ -300,6 +304,31 @@ class StockMovementServiceTest {
         assertThat(stockCommand.referenceId()).isEqualTo(result.id());
         assertThat(stockCommand.referenceDocNo()).isEqualTo("PRX-2026-0001");
         assertThat(stockCommand.idempotencyKey()).isEqualTo("stock-movement-receipt:" + result.id());
+    }
+
+    @Test
+    void genericReceiptWithProcurementDocumentNumberIsRejected() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        StockMovementRequest request = new StockMovementRequest(
+                warehouseId,
+                sparePartId,
+                null,
+                StockMovementType.RECEIPT,
+                5,
+                null,
+                "PR-2026-00005",
+                null,
+                "selected procurement receipt"
+        );
+
+        when(procurementRequestRepository.existsOpenReceivableByNumber("PR-2026-00005")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Use procurement receipt endpoint");
+
+        verifyNoInteractions(stockRepository, repository, sparePartRepository);
     }
 
     @Test
