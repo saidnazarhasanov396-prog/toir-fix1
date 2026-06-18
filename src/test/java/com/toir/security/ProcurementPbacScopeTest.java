@@ -264,7 +264,7 @@ class ProcurementPbacScopeTest {
         UUID departmentId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
         ProcurementRequest procurement = request(id, departmentId, warehouseId, ProcurementRequestStatus.ORDERED);
-        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(procurement));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(Optional.of(procurement));
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId))
                 .thenReturn(Optional.of(warehouse(warehouseId, UUID.randomUUID(), null)));

@@ -13,6 +13,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.service.equipment.EquipmentPictureService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.EquipmentUsageSessionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -70,6 +71,9 @@ class RbacEquipmentSecurityTest {
 
     @MockBean
     EquipmentPictureService equipmentPictureService;
+
+    @MockBean
+    EquipmentUsageSessionService equipmentUsageSessionService;
 
     @MockBean
     ScopeAccessService scopeAccessService;
