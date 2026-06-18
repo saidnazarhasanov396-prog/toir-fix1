@@ -209,7 +209,7 @@ class RoleMatrixEndpointAccessSmokeTest {
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
         when(warehouseService.findAll(null, null, null, null, null)).thenReturn(List.of(warehouseDto(warehouseId)));
-        when(warehouseService.findStocks(warehouseId)).thenReturn(List.of());
+        when(warehouseService.findStocks(warehouseId, null)).thenReturn(List.of());
         when(sparePartService.findAll(1, 0, null, "", null)).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/v1/warehouses?page=0&size=1"))
