@@ -107,10 +107,10 @@ class ProcurementPbacScopeTest {
         ProcurementRequest first = request(UUID.randomUUID(), UUID.randomUUID(), null, ProcurementRequestStatus.DRAFT);
         ProcurementRequest second = request(UUID.randomUUID(), UUID.randomUUID(), null, ProcurementRequestStatus.SUBMITTED);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+        when(repository.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenReturn(List.of(first, second));
 
-        var result = service.findAll(null, null, null);
+        var result = service.findAll(null, null, null, null, null);
 
         assertThat(result).extracting(dto -> dto.id()).containsExactly(first.getId(), second.getId());
     }
@@ -123,13 +123,14 @@ class ProcurementPbacScopeTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
         when(scopeAccessService.canAccessDepartment(currentDepartmentId)).thenReturn(true);
-        when(repository.search(isNull(), isNull(), any(), isNull(), isNull(), isNull())).thenReturn(List.of(allowed));
+        when(repository.search(isNull(), isNull(), any(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of(allowed));
 
-        var result = service.findAll(null, requestedDepartmentId, null);
+        var result = service.findAll(null, requestedDepartmentId, null, null, null);
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().departmentId()).isEqualTo(currentDepartmentId);
-        verify(repository).search(null, null, currentDepartmentId, null, null, null);
+        verify(repository).search(null, null, currentDepartmentId, null, null, null, null, null);
     }
 
     @Test
@@ -137,10 +138,10 @@ class ProcurementPbacScopeTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
 
-        assertThatThrownBy(() -> service.findAll(null, null, null))
+        assertThatThrownBy(() -> service.findAll(null, null, null, null, null))
                 .isInstanceOf(AccessDeniedException.class);
 
-        verify(repository, never()).search(any(), any(), any(), any(), any(), any());
+        verify(repository, never()).search(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

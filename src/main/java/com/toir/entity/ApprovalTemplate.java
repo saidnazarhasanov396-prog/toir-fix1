@@ -1,15 +1,23 @@
 package com.toir.entity;
 
 import com.toir.enums.ApprovalRoutePolicy;
+import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.NotificationSeverity;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "approval_templates")
@@ -26,6 +34,10 @@ public class ApprovalTemplate extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "target_type", nullable = false)
     private ApprovalTargetType targetType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "action_type", nullable = false)
+    private ApprovalActionType actionType = ApprovalActionType.APPROVE;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "route_policy", nullable = false)
@@ -49,4 +61,8 @@ public class ApprovalTemplate extends BaseEntity {
 
     @Column(nullable = false)
     private boolean active = true;
+
+    @OneToMany(mappedBy = "template", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("stepOrder ASC")
+    private List<ApprovalTemplateStep> steps = new ArrayList<>();
 }

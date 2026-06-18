@@ -83,7 +83,7 @@ class RbacProcurementSecurityTest {
     @WithMockUser(authorities = PermissionConstants.PROCUREMENT_READ)
     void procurementReadCanReadListAndDetail() throws Exception {
         UUID requestId = UUID.randomUUID();
-        when(procurementRequestService.findAll(null, null,null))
+        when(procurementRequestService.findAll(null, null, null, null, null))
                 .thenReturn(List.of(procurementRequestDto(requestId)));
         when(procurementRequestService.findById(requestId))
                 .thenReturn(procurementRequestDto(requestId));
@@ -97,7 +97,7 @@ class RbacProcurementSecurityTest {
     @Test
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void systemAdminCanReadProcurementRequests() throws Exception {
-        when(procurementRequestService.findAll(null, null,null)).thenReturn(List.of());
+        when(procurementRequestService.findAll(null, null, null, null, null)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/procurement-requests?page=0&size=1"))
                 .andExpect(status().isOk());
@@ -106,7 +106,7 @@ class RbacProcurementSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.WILDCARD)
     void wildcardCanReadProcurementRequests() throws Exception {
-        when(procurementRequestService.findAll(null, null,null)).thenReturn(List.of());
+        when(procurementRequestService.findAll(null, null, null, null, null)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/procurement-requests?page=0&size=1"))
                 .andExpect(status().isOk());

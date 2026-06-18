@@ -140,6 +140,13 @@ public class HrService {
     }
 
     @Transactional(readOnly = true)
+    public List<EmployeeDto> listEmployeesBySpecialisation(UUID specialisationId) {
+        List<Employee> employees = employeeRepository
+                .findAllBySpecialisationIdAndIsDeletedFalseAndActiveTrue(specialisationId);
+        return toDtos(employees);
+    }
+
+    @Transactional(readOnly = true)
     public EmployeeSpecialisationDto getEmployeeSpecialisation(UUID id) {
         return EmployeeSpecialisationDto.from(getEmployeeSpecialisationOrThrow(id));
     }

@@ -19,7 +19,6 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -141,9 +140,7 @@ public class ParetoService {
     }
 
     private long eventDurationMinutes(DowntimeEvent event) {
-        if (event.getDurationMinutes() != null) return event.getDurationMinutes();
-        if (event.getEndAt() != null) return Duration.between(event.getStartAt(), event.getEndAt()).toMinutes();
-        return 0L;
+        return IndustrialKpiAggregations.downtimeMinutes(event);
     }
 
     private List<ParetoItem> pareto(Map<String, Double> raw) {

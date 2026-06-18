@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EquipmentProcurementRequestMigrationContractTest {
 
     private static final Path MIGRATION = Path.of(
-            "src/main/resources/db/migration/V20260618_5__equipment_procurement_requests.sql");
+            "src/main/resources/db/migration/V20260618_8__equipment_procurement_requests.sql");
 
     @Test
     void migrationAddsProcurementRequestTypeAndSourceTraceFields() throws Exception {

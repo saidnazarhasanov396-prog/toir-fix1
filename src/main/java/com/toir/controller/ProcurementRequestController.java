@@ -46,10 +46,12 @@ public class ProcurementRequestController {
             @RequestParam(required = false) ProcurementRequestType type,
             @RequestParam(required = false) UUID sourceDefectId,
             @RequestParam(required = false) UUID sourcePprTaskId,
+            @RequestParam(required = false) Double minAmount,
+            @RequestParam(required = false) Double maxAmount,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(
-                service.findAll(status, departmentId, search, type, sourceDefectId, sourcePprTaskId),
+                service.findAll(status, departmentId, search, type, sourceDefectId, sourcePprTaskId, minAmount, maxAmount),
                 page,
                 size
         ));

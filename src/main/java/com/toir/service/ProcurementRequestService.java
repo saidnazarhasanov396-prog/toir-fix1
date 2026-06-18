@@ -60,7 +60,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.*;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -89,7 +88,16 @@ public class ProcurementRequestService {
 
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId, String search) {
-        return findAll(status, departmentId, search, null, null, null);
+        return findAll(status, departmentId, search, null, null, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status,
+                                               UUID departmentId,
+                                               String search,
+                                               Double minAmount,
+                                               Double maxAmount) {
+        return findAll(status, departmentId, search, null, null, null, minAmount, maxAmount);
     }
 
     @Transactional(readOnly = true)
@@ -99,6 +107,18 @@ public class ProcurementRequestService {
                                                ProcurementRequestType type,
                                                UUID sourceDefectId,
                                                UUID sourcePprTaskId) {
+        return findAll(status, departmentId, search, type, sourceDefectId, sourcePprTaskId, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status,
+                                               UUID departmentId,
+                                               String search,
+                                               ProcurementRequestType type,
+                                               UUID sourceDefectId,
+                                               UUID sourcePprTaskId,
+                                               Double minAmount,
+                                               Double maxAmount) {
         String normalizedSearch = (search != null && !search.isBlank()) ? search.trim() : null;
         String typeFilter = type == null ? null : type.name();
 
@@ -109,7 +129,9 @@ public class ProcurementRequestService {
                     departmentId,
                     typeFilter,
                     sourceDefectId,
-                    sourcePprTaskId
+                    sourcePprTaskId,
+                    minAmount,
+                    maxAmount
             ));
         }
 
@@ -123,7 +145,9 @@ public class ProcurementRequestService {
                         scopedDepartmentId,
                         typeFilter,
                         sourceDefectId,
-                        sourcePprTaskId
+                        sourcePprTaskId,
+                        minAmount,
+                        maxAmount
                 ).stream()
                 .filter(this::canRead)
                 .toList());
@@ -829,6 +853,36 @@ public class ProcurementRequestService {
         return result;
     }
 
+    private Map<UUID, SparePart> sparePartsByIdFor(ProcurementRequest request) {
+        if (request == null || request.getLines() == null || request.getLines().isEmpty()) {
+            return Map.of();
+        }
+        Set<UUID> ids = request.getLines().stream()
+                .map(ProcurementRequestLine::getSparePartId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) return Map.of();
+        List<SparePart> spareParts = sparePartRepository.findAllByIdInAndIsDeletedFalse(ids);
+        if (spareParts == null) return Map.of();
+        return spareParts.stream()
+                .collect(Collectors.toMap(SparePart::getId, sp -> sp));
+    }
+
+    private Map<UUID, SparePart> sparePartsByIdFor(List<ProcurementRequest> requests) {
+        if (requests == null || requests.isEmpty()) return Map.of();
+        Set<UUID> ids = requests.stream()
+                .filter(r -> r.getLines() != null)
+                .flatMap(r -> r.getLines().stream())
+                .map(ProcurementRequestLine::getSparePartId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) return Map.of();
+        List<SparePart> spareParts = sparePartRepository.findAllByIdInAndIsDeletedFalse(ids);
+        if (spareParts == null) return Map.of();
+        return spareParts.stream()
+                .collect(Collectors.toMap(SparePart::getId, sp -> sp));
+    }
+
     private ProcurementRequestLine buildLine(ProcurementRequest p, ProcurementLineRequest r) {
         if (r == null) {
             throw RestException.badRequest("Procurement line is required");
@@ -1000,23 +1054,17 @@ public class ProcurementRequestService {
                 .map(ProcurementRequest::getWarehouseId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Set<UUID> sparePartIds = procurements.stream()
-                .filter(Objects::nonNull)
-                .flatMap(request -> request.getLines() == null ? java.util.stream.Stream.empty() : request.getLines().stream())
-                .map(ProcurementRequestLine::getSparePartId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
 
         Map<UUID, String> departmentNames = departmentNamesById(departmentIds);
         Map<UUID, String> warehouseNames = warehouseNamesById(warehouseIds);
-        Map<UUID, String> sparePartNames = sparePartNamesById(sparePartIds);
+        Map<UUID, SparePart> sparePartsById = sparePartsByIdFor(procurements);
 
         return procurements.stream()
                 .map(request -> ProcurementRequestDto.from(
                         request,
                         nameById(departmentNames, request.getDepartmentId()),
                         nameById(warehouseNames, request.getWarehouseId()),
-                        sparePartNames
+                        sparePartsById
                 ))
                 .toList();
     }
