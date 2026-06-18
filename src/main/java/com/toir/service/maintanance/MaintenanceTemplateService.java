@@ -18,6 +18,8 @@ import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateStatsProjection;
+import com.toir.entity.users.Employee;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.SparePartService;
 import com.toir.util.AuditBuilderService;
@@ -46,6 +48,7 @@ public class MaintenanceTemplateService {
     private final MaintenanceActionRepository actionRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
     private final UserRepository userRepository;
+    private final EmployeeRepository employeeRepository;
     private final SparePartService sparePartService;
     private final AuditBuilderService auditBuilderService;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
@@ -158,9 +161,10 @@ public class MaintenanceTemplateService {
         }
         try {
             MaintenanceOperation saved = operationRepository.save(op);
-            return operationDto(saved, saved.getSpecialistId() == null
-                    ? Map.of()
-                    : specialistNames(Set.of(saved.getSpecialistId())));
+            Set<UUID> singleId = saved.getSpecialistId() == null ? Set.of() : Set.of(saved.getSpecialistId());
+            return operationDto(saved,
+                    saved.getSpecialistId() == null ? Map.of() : specialistNames(singleId),
+                    specialisationByUserId(singleId));
         } catch (DataIntegrityViolationException ex) {
             if (isOperationSequenceConflict(ex)) {
                 throw RestException.badRequest(DUPLICATE_OPERATION_SEQUENCE_MESSAGE);
@@ -371,9 +375,10 @@ public class MaintenanceTemplateService {
         String equipmentTypeName = equipmentTypeRepository.findByIdAndIsDeletedFalse(t.getEquipmentTypeId())
                 .map(EquipmentType::getName)
                 .orElse(null);
-        return templateDto(t, equipmentTypeName, specialistNames(t.getOperations().stream()
+        Set<UUID> specialistIds = t.getOperations().stream()
                 .map(MaintenanceOperation::getSpecialistId)
-                .collect(Collectors.toSet())));
+                .collect(Collectors.toSet());
+        return templateDto(t, equipmentTypeName, specialistNames(specialistIds), specialisationByUserId(specialistIds));
     }
 
     private List<MaintenanceTemplateDto> toDtoList(List<MaintenanceTemplate> templates) {
@@ -385,11 +390,11 @@ public class MaintenanceTemplateService {
         Map<UUID, String> eqTypeNames = equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(eqTypeIds).stream()
                 .collect(Collectors.toMap(EquipmentType::getId, EquipmentType::getName));
         return templates.stream()
-                .map(t -> templateDto(t, eqTypeNames.getOrDefault(t.getEquipmentTypeId(), null), Map.of()))
+                .map(t -> templateDto(t, eqTypeNames.getOrDefault(t.getEquipmentTypeId(), null), Map.of(), Map.of()))
                 .toList();
     }
 
-    private MaintenanceTemplateDto templateDto(MaintenanceTemplate t, String equipmentTypeName, Map<UUID, String> specialistNames) {
+    private MaintenanceTemplateDto templateDto(MaintenanceTemplate t, String equipmentTypeName, Map<UUID, String> specialistNames, Map<UUID, String> specialisationMap) {
         List<UUID> equipmentTypeIds = t.getEquipmentTypeIds() == null || t.getEquipmentTypeIds().isEmpty()
                 ? (t.getEquipmentTypeId() == null ? List.of() : List.of(t.getEquipmentTypeId()))
                 : List.copyOf(t.getEquipmentTypeIds());
@@ -405,12 +410,12 @@ public class MaintenanceTemplateService {
                 t.getNormativeLaborHours(),
                 t.isActive(),
                 t.getOperations().stream()
-                        .map(operation -> operationDto(operation, specialistNames))
+                        .map(operation -> operationDto(operation, specialistNames, specialisationMap))
                         .toList()
         );
     }
 
-    private MaintenanceOperationDto operationDto(MaintenanceOperation operation, Map<UUID, String> specialistNames) {
+    private MaintenanceOperationDto operationDto(MaintenanceOperation operation, Map<UUID, String> specialistNames, Map<UUID, String> specialisationMap) {
         return new MaintenanceOperationDto(
                 operation.getId(),
                 operation.getAction() != null ? operation.getAction().getId() : null,
@@ -418,6 +423,7 @@ public class MaintenanceTemplateService {
                 operation.getAction() != null ? operation.getAction().getName() : null,
                 operation.getSpecialistId(),
                 operation.getSpecialistId() == null ? null : specialistNames.get(operation.getSpecialistId()),
+                operation.getSpecialistId() == null ? null : specialisationMap.get(operation.getSpecialistId()),
                 operation.getSequence(),
                 operation.getName(),
                 operation.getDescription(),
@@ -444,5 +450,15 @@ public class MaintenanceTemplateService {
         }
         return userRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
                 .collect(Collectors.toMap(User::getId, User::getFullName));
+    }
+
+    private Map<UUID, String> specialisationByUserId(Set<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) return Map.of();
+        Set<UUID> ids = userIds.stream().filter(Objects::nonNull).collect(Collectors.toSet());
+        if (ids.isEmpty()) return Map.of();
+        return employeeRepository.findAllByUserIdInAndIsDeletedFalse(ids).stream()
+                .filter(e -> e.getSpecialisation() != null)
+                .collect(Collectors.toMap(Employee::getUserId,
+                        e -> e.getSpecialisation().getNameRu()));
     }
 }
