@@ -2,8 +2,8 @@ package com.toir.service.approval;
 
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalTemplate;
-import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.repository.ApprovalTemplateRepository;
 import org.junit.jupiter.api.Test;
@@ -17,36 +17,35 @@ import static org.mockito.Mockito.when;
 class DefaultApprovalRouteResolverTest {
 
     @Test
-    void roleBasedTemplateKeepsRoleOnlyStepUnassigned() {
+    void usesExactlyTheConfiguredApproverRole() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
         DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository);
         ApprovalTemplate template = new ApprovalTemplate();
         template.setTargetType(ApprovalTargetType.WORK_ORDER);
         template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
-        template.setApproverRole("WORK_ORDER_APPROVER");
+        template.setApproverRole("USTA");
         ApprovalRequest request = new ApprovalRequest();
         request.setTargetType(ApprovalTargetType.WORK_ORDER);
         when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
                 ApprovalTargetType.WORK_ORDER,
                 ApprovalActionType.APPROVE
-        ))
-                .thenReturn(Optional.of(template));
+        )).thenReturn(Optional.of(template));
 
         var steps = resolver.resolveRoute(request);
 
         assertThat(steps).hasSize(1);
         assertThat(steps.getFirst().approverId()).isNull();
-        assertThat(steps.getFirst().approverRole()).isEqualTo("WORK_ORDER_APPROVER");
+        assertThat(steps.getFirst().approverRole()).isEqualTo("USTA");
     }
 
     @Test
-    void fallsBackToLegacyTargetTemplateWhenActionSpecificRuleDoesNotExist() {
+    void fallsBackToLegacyTargetTemplateButKeepsItsConfiguredRole() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
         DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository);
         ApprovalTemplate template = new ApprovalTemplate();
         template.setTargetType(ApprovalTargetType.WORK_ORDER);
         template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
-        template.setApproverRole("WORK_ORDER_APPROVER");
+        template.setApproverRole("USTA");
         ApprovalRequest request = new ApprovalRequest();
         request.setTargetType(ApprovalTargetType.WORK_ORDER);
         request.setActionType(ApprovalActionType.UPDATE);
@@ -62,7 +61,23 @@ class DefaultApprovalRouteResolverTest {
 
         assertThat(steps).hasSize(1);
         assertThat(steps.getFirst().approverId()).isNull();
-        assertThat(steps.getFirst().approverRole()).isEqualTo("WORK_ORDER_APPROVER");
+        assertThat(steps.getFirst().approverRole()).isEqualTo("USTA");
     }
 
+    @Test
+    void routePolicyDoesNotGenerateAnApproverRole() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository);
+        ApprovalTemplate template = new ApprovalTemplate();
+        template.setTargetType(ApprovalTargetType.WORK_ORDER);
+        template.setRoutePolicy(ApprovalRoutePolicy.DEPARTMENT_HEAD);
+        ApprovalRequest request = new ApprovalRequest();
+        request.setTargetType(ApprovalTargetType.WORK_ORDER);
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE
+        )).thenReturn(Optional.of(template));
+
+        assertThat(resolver.resolveRoute(request)).isEmpty();
+    }
 }

@@ -72,7 +72,7 @@ class ApprovalRuleServiceTest {
     }
 
     @Test
-    void legacyRoleOnlyTemplateRemainsAOneStepRule() {
+    void configuredRoleOnlyTemplateRemainsAOneStepRule() {
         ApprovalTemplate template = template(
                 "REPAIR_REQUEST_APPROVAL",
                 "Repair Request",
@@ -80,14 +80,31 @@ class ApprovalRuleServiceTest {
                 ApprovalActionType.APPROVE
         );
         template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
-        template.setApproverRole("REPAIR_REQUEST_APPROVER");
+        template.setApproverRole("USTA");
         when(templateRepository.findAllRules()).thenReturn(List.of(template));
 
         var rule = service.listRules().getFirst();
 
         assertThat(rule.stepsCount()).isOne();
         assertThat(rule.steps().getFirst().approverId()).isNull();
-        assertThat(rule.steps().getFirst().approverRole()).isEqualTo("REPAIR_REQUEST_APPROVER");
+        assertThat(rule.steps().getFirst().approverRole()).isEqualTo("USTA");
+    }
+
+    @Test
+    void routePolicyDoesNotInventRuleSteps() {
+        ApprovalTemplate template = template(
+                "WORK_ORDER_APPROVAL",
+                "Work Order",
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE
+        );
+        template.setRoutePolicy(ApprovalRoutePolicy.SYSTEM_ADMIN);
+        when(templateRepository.findAllRules()).thenReturn(List.of(template));
+
+        var rule = service.listRules().getFirst();
+
+        assertThat(rule.stepsCount()).isZero();
+        assertThat(rule.steps()).isEmpty();
     }
 
     private ApprovalTemplate template(
