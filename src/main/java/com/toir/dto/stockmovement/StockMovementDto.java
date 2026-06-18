@@ -2,6 +2,7 @@ package com.toir.dto.stockmovement;
 
 import com.toir.entity.StockMovement;
 import com.toir.enums.SparePartType;
+import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
 import com.toir.repository.StockMovementListRow;
 
@@ -27,6 +28,9 @@ public record StockMovementDto(
         BigDecimal unitPrice,
         BigDecimal totalAmount,
         String documentNumber,
+        StockMovementSourceType sourceType,
+        UUID sourceId,
+        UUID sourceLineId,
         UUID createdById,
         String createdByFullName,
         UUID responsiblePersonId,
@@ -73,7 +77,7 @@ public record StockMovementDto(
     ) {
         this(id, warehouseId, warehouseName, sparePartId, sparePartName, sparePartType, workOrderId,
                 workOrderNumber, workOrderName, type, quantity, unit, unitCost, unitPrice, totalAmount,
-                documentNumber, createdById, createdByFullName, responsiblePersonId, responsiblePersonName,
+                documentNumber, null, null, null, createdById, createdByFullName, responsiblePersonId, responsiblePersonName,
                 takenById, takenByName, departmentId, supplierName, movementDate, occurredAt, notes, comment, 0);
     }
 
@@ -98,7 +102,7 @@ public record StockMovementDto(
         this(id, warehouseId, warehouseName, sparePartId, sparePartName, null, workOrderId,
                 workOrderNumber, workOrderName, type, quantity, null, unitCost,
                 unitPriceFromLegacy(unitCost), totalAmount(quantity, unitPriceFromLegacy(unitCost), null),
-                documentNumber, createdById, createdByFullName, null, null, null, null,
+                documentNumber, null, null, null, createdById, createdByFullName, null, null, null, null,
                 null, null, null, occurredAt, notes, notes, 0);
     }
 
@@ -121,6 +125,9 @@ public record StockMovementDto(
                 unitPrice,
                 totalAmount(m.getQuantity(), unitPrice, m.getTotalAmount()),
                 m.getDocumentNumber(),
+                m.getSourceType(),
+                m.getSourceId(),
+                m.getSourceLineId(),
                 m.getCreatedById(),
                 null,
                 m.getResponsiblePersonId(),
@@ -156,6 +163,9 @@ public record StockMovementDto(
                 unitPrice,
                 totalAmount(row.getQuantity(), unitPrice, row.getTotalAmount()),
                 row.getDocumentNumber(),
+                parseSourceType(row.getSourceType()),
+                row.getSourceId(),
+                row.getSourceLineId(),
                 row.getCreatedById(),
                 row.getCreatedByFullName(),
                 row.getResponsiblePersonId(),
@@ -178,6 +188,17 @@ public record StockMovementDto(
         }
         try {
             return SparePartType.valueOf(value);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private static StockMovementSourceType parseSourceType(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return StockMovementSourceType.valueOf(value);
         } catch (IllegalArgumentException ignored) {
             return null;
         }

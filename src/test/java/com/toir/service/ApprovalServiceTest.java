@@ -1,12 +1,16 @@
 package com.toir.service;
 
 import com.toir.dto.approval.ApprovalRequestDto;
+import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.ReturnApprovalRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
+import com.toir.entity.users.Role;
+import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalStatus;
+import com.toir.enums.UserStatus;
 import com.toir.enums.NotificationSeverity;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalDelegateRepository;
@@ -30,6 +34,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -84,6 +89,102 @@ class ApprovalServiceTest {
 
     @InjectMocks
     ApprovalService service;
+
+    @Test
+    void createKeepsRoleOnlyManualStepUnassigned() {
+        UUID documentId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        String approverRole = "WORK_ORDER_APPROVER";
+        CreateApprovalRequest request = new CreateApprovalRequest(
+                "WORK_ORDER",
+                documentId,
+                "Role based approval",
+                requesterId,
+                null,
+                List.of(new CreateApprovalRequest.StepInput(null, approverRole))
+        );
+
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(userRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> {
+            return Optional.empty();
+        });
+        when(requestRepository.save(any(ApprovalRequest.class))).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            return saved;
+        });
+
+        ApprovalRequestDto result = service.create(request);
+
+        assertThat(result.steps()).hasSize(1);
+        assertThat(result.steps().getFirst().approverId()).isNull();
+        assertThat(result.steps().getFirst().approverRole()).isEqualTo(approverRole);
+    }
+
+    @Test
+    void roleOnlyStepCanBeApprovedByAnyActiveUserWithRole() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        String approverRole = "WORK_ORDER_APPROVER";
+        ApprovalRequest approval = pendingRoleOnlyApproval(approvalId, requesterId, approverRole);
+        User actor = activeUserWithRole(actorId, approverRole);
+
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(userRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> {
+            UUID userId = invocation.getArgument(0);
+            return actorId.equals(userId) ? Optional.of(actor) : Optional.empty();
+        });
+        when(requestRepository.save(any(ApprovalRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ApprovalRequestDto result = service.approve(approvalId, new com.toir.dto.approval.DecisionRequest(actorId, "ok"));
+
+        ApprovalStep step = approval.getSteps().getFirst();
+        assertThat(step.getDecision()).isEqualTo(ApprovalDecision.APPROVED);
+        assertThat(step.getDecidedById()).isEqualTo(actorId);
+        assertThat(step.getApproverId()).isNull();
+        assertThat(step.getApproverRole()).isEqualTo(approverRole);
+        assertThat(result.canApprove()).isFalse();
+    }
+
+    @Test
+    void roleOnlyStepCannotBeApprovedByUserWithoutRole() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        String approverRole = "WORK_ORDER_APPROVER";
+        ApprovalRequest approval = pendingRoleOnlyApproval(approvalId, requesterId, approverRole);
+        User actor = activeUserWithRole(actorId, "OTHER_ROLE");
+
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(userRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> {
+            UUID userId = invocation.getArgument(0);
+            return actorId.equals(userId) ? Optional.of(actor) : Optional.empty();
+        });
+
+        assertThatThrownBy(() -> service.approve(approvalId, new com.toir.dto.approval.DecisionRequest(actorId, "no")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only designated approver");
+        verify(requestRepository, never()).save(any());
+    }
+
+    @Test
+    void userSpecificStepStillRejectsUnassignedUser() {
+        UUID approvalId = UUID.randomUUID();
+        UUID assignedApproverId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+        ApprovalRequest approval = pendingMultiStepApproval(approvalId, UUID.randomUUID(), 1, assignedApproverId);
+
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+
+        assertThatThrownBy(() -> service.approve(approvalId, new com.toir.dto.approval.DecisionRequest(otherUserId, "spoof")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only designated approver");
+        verify(requestRepository, never()).save(any());
+    }
 
     @Test
     void createOrReuseApprovalForDocumentLocksAndReturnsExistingPendingApproval() {
@@ -313,5 +414,28 @@ class ApprovalServiceTest {
             approval.getSteps().add(step);
         }
         return approval;
+    }
+
+    private ApprovalRequest pendingRoleOnlyApproval(UUID id, UUID requesterId, String approverRole) {
+        ApprovalRequest approval = pendingApproval(id, UUID.randomUUID(), requesterId);
+        ApprovalStep step = new ApprovalStep();
+        step.setRequest(approval);
+        step.setStepNumber(1);
+        step.setApproverId(null);
+        step.setApproverRole(approverRole);
+        step.setDecision(ApprovalDecision.PENDING);
+        approval.getSteps().add(step);
+        return approval;
+    }
+
+    private User activeUserWithRole(UUID userId, String roleCode) {
+        Role role = new Role();
+        role.setCode(roleCode);
+        User user = new User();
+        user.setId(userId);
+        user.setFullName("Approver " + roleCode);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setPrimaryRole(role);
+        return user;
     }
 }

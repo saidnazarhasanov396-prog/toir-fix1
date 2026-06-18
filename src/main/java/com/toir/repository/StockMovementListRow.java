@@ -38,6 +38,12 @@ public interface StockMovementListRow {
 
     String getDocumentNumber();
 
+    String getSourceType();
+
+    UUID getSourceId();
+
+    UUID getSourceLineId();
+
     UUID getCreatedById();
 
     String getCreatedByFullName();
