@@ -123,7 +123,8 @@ class ProcurementPbacScopeTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
         when(scopeAccessService.canAccessDepartment(currentDepartmentId)).thenReturn(true);
-        when(repository.search(isNull(), isNull(), any(), isNull(), isNull(), isNull(), isNull(), isNull())).thenReturn(List.of(allowed));
+        when(repository.search(isNull(), isNull(), any(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of(allowed));
 
         var result = service.findAll(null, requestedDepartmentId, null);
 

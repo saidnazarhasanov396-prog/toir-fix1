@@ -31,8 +31,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -97,7 +97,8 @@ class ProcurementRequestSearchTest {
     @Test
     void adminSearchWithStatusFilter() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.search(isNull(), eq("DRAFT"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull())).thenReturn(List.of());
+        when(repository.search(isNull(), eq("DRAFT"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of());
 
         service.findAll(ProcurementRequestStatus.DRAFT, null, null);
 
@@ -108,7 +109,8 @@ class ProcurementRequestSearchTest {
     void adminSearchWithDepartmentFilter() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID deptId = UUID.randomUUID();
-        when(repository.search(isNull(), isNull(), eq(deptId), isNull(), isNull(), isNull(), isNull(), isNull())).thenReturn(List.of());
+        when(repository.search(isNull(), isNull(), eq(deptId), isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of());
 
         service.findAll(null, deptId, null);
 
@@ -172,7 +174,8 @@ class ProcurementRequestSearchTest {
     @Test
     void adminBlankSearchNormalizesToNull() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull())).thenReturn(List.of());
+        when(repository.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of());
 
         service.findAll(null, null, "   ");
 
@@ -193,7 +196,8 @@ class ProcurementRequestSearchTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         UUID deptId = UUID.randomUUID();
         when(scopeAccessService.enforceDepartmentScope(deptId)).thenReturn(deptId);
-        when(repository.search(eq("pump"), isNull(), eq(deptId), isNull(), isNull(), isNull(), isNull(), isNull())).thenReturn(List.of());
+        when(repository.search(eq("pump"), isNull(), eq(deptId), isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of());
 
         service.findAll(null, deptId, "pump");
 
@@ -204,11 +208,23 @@ class ProcurementRequestSearchTest {
     void scopedUserWithStatusCanSearch() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(repository.search(isNull(), eq("APPROVED"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull())).thenReturn(List.of());
+        when(repository.search(isNull(), eq("APPROVED"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of());
 
         service.findAll(ProcurementRequestStatus.APPROVED, null, null);
 
         verify(repository).search(null, "APPROVED", null, null, null, null, null, null);
+    }
+
+    @Test
+    void adminSearchBothMinAndMaxAtSameValue() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(250.0), eq(250.0)))
+                .thenReturn(List.of());
+
+        service.findAll(null, null, null, null, null, null, 250.0, 250.0);
+
+        verify(repository).search(null, null, null, null, null, null, 250.0, 250.0);
     }
 
     private ProcurementRequest procurement(String title, String number) {
