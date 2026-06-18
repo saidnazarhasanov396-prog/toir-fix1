@@ -13,6 +13,7 @@ public record MaintenanceOperationDto(
         String actionName,
         UUID specialistId,
         String specialistName,
+        String actionSpecialization,
         @Positive Integer sequence,
         String name,
         String description,
@@ -48,7 +49,7 @@ public record MaintenanceOperationDto(
             Double controlMax,
             String instructionUrl
     ) {
-        this(id, actionId, actionCode, actionName, null, null, sequence, name, description, durationHours,
+        this(id, actionId, actionCode, actionName, null, null, null, sequence, name, description, durationHours,
                 requiredSkill, safetyNotes, toolsRequired, sparePartsRequired, consumablesRequired, controlParameter,
                 controlUnit, controlMin, controlMax, instructionUrl);
     }
@@ -60,6 +61,7 @@ public record MaintenanceOperationDto(
                 o.getAction() != null ? o.getAction().getCode() : null,
                 o.getAction() != null ? o.getAction().getName() : null,
                 o.getSpecialistId(),
+                null,
                 null,
                 o.getSequence(), o.getName(), o.getDescription(),
                 durationHoursOrZero(o.getDurationHours()), o.getRequiredSkill(), o.getSafetyNotes(),

@@ -59,7 +59,13 @@ public class WarehouseController {
 
     @GetMapping("/{id}/stocks")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
-    public ResponseEntity<Page<WarehouseStockDto>> stocks(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findStocks(id), page, size)); }
+    public ResponseEntity<Page<WarehouseStockDto>> stocks(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findStocks(id, search), page, size));
+    }
 
     @GetMapping("/{id}/stock-balances")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
