@@ -5,11 +5,9 @@ import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.enums.ApprovalActionType;
-import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.repository.ApprovalTemplateRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.util.List;
 
@@ -52,21 +50,12 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
         if (!configuredSteps.isEmpty()) {
             return configuredSteps;
         }
-        ApprovalRoutePolicy policy = template.getRoutePolicy();
-        if (policy == ApprovalRoutePolicy.USER_BASED && template.getApproverId() != null) {
+        if (template.getApproverId() != null) {
             return List.of(new CreateApprovalRequest.StepInput(template.getApproverId(), null));
         }
-        if (template.getApproverId() != null) {
-            return List.of(new CreateApprovalRequest.StepInput(template.getApproverId(), template.getApproverRole()));
-        }
-        String routeRole = switch (policy) {
-            case SYSTEM_ADMIN -> "SYSTEM_ADMIN";
-            case DEPARTMENT_HEAD -> "DEPARTMENT_HEAD";
-            case ROLE_BASED, USER_BASED -> template.getApproverRole();
-        };
-        if (!StringUtils.hasText(routeRole)) {
+        if (template.getApproverRole() == null || template.getApproverRole().isBlank()) {
             return List.of();
         }
-        return List.of(new CreateApprovalRequest.StepInput(null, routeRole.trim()));
+        return List.of(new CreateApprovalRequest.StepInput(null, template.getApproverRole().trim()));
     }
 }

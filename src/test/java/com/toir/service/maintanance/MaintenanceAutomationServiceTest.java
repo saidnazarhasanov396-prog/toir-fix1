@@ -47,6 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -689,7 +690,7 @@ class MaintenanceAutomationServiceTest {
                 eq(ApprovalActionType.CREATE_WORK_ORDER),
                 eq(requesterId),
                 eq(equipment.getResponsibleId()),
-                eq("MAINTENANCE_EVENT_APPROVER"),
+                isNull(),
                 any(),
                 any()
         )).thenReturn(approvalDto(approvalId, eventId, ApprovalActionType.CREATE_WORK_ORDER));
@@ -703,7 +704,7 @@ class MaintenanceAutomationServiceTest {
                 eq(ApprovalActionType.CREATE_WORK_ORDER),
                 eq(requesterId),
                 eq(equipment.getResponsibleId()),
-                eq("MAINTENANCE_EVENT_APPROVER"),
+                isNull(),
                 any(),
                 any()
         );
@@ -751,7 +752,7 @@ class MaintenanceAutomationServiceTest {
                 eq(ApprovalActionType.CREATE_TASK),
                 eq(requesterId),
                 eq(equipment.getResponsibleId()),
-                eq("MAINTENANCE_EVENT_APPROVER"),
+                isNull(),
                 any(),
                 any()
         )).thenReturn(approvalDto(approvalId, eventId, ApprovalActionType.CREATE_TASK));
@@ -764,7 +765,7 @@ class MaintenanceAutomationServiceTest {
                 eq(ApprovalActionType.CREATE_TASK),
                 eq(requesterId),
                 eq(equipment.getResponsibleId()),
-                eq("MAINTENANCE_EVENT_APPROVER"),
+                isNull(),
                 any(),
                 any()
         );
@@ -810,7 +811,7 @@ class MaintenanceAutomationServiceTest {
                 eq(ApprovalActionType.CREATE_TASK),
                 eq(requesterId),
                 eq(equipment.getResponsibleId()),
-                eq("MAINTENANCE_EVENT_APPROVER"),
+                isNull(),
                 any(),
                 any()
         )).thenReturn(approvalDto(approvalId, eventId, ApprovalActionType.CREATE_TASK));
@@ -823,7 +824,7 @@ class MaintenanceAutomationServiceTest {
                 eq(ApprovalActionType.CREATE_TASK),
                 eq(requesterId),
                 eq(equipment.getResponsibleId()),
-                eq("MAINTENANCE_EVENT_APPROVER"),
+                isNull(),
                 any(),
                 any()
         );

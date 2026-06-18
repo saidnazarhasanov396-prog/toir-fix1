@@ -4,7 +4,6 @@ import com.toir.dto.approval.ApprovalRuleDto;
 import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.entity.users.User;
-import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalActionType;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.repository.users.UserRepository;
@@ -89,11 +88,7 @@ public class ApprovalRuleService {
         if (template.getApproverId() != null) {
             return List.of(new RuleStep(1, template.getApproverId(), null));
         }
-        String role = switch (template.getRoutePolicy()) {
-            case SYSTEM_ADMIN -> "SYSTEM_ADMIN";
-            case DEPARTMENT_HEAD -> "DEPARTMENT_HEAD";
-            case ROLE_BASED, USER_BASED -> template.getApproverRole();
-        };
+        String role = template.getApproverRole();
         return StringUtils.hasText(role)
                 ? List.of(new RuleStep(1, null, role.trim()))
                 : List.of();
