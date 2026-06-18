@@ -91,8 +91,7 @@ public class AnalyticsService {
                 .filter(r -> r.getStatus() == RequestStatus.OPEN || r.getStatus() == RequestStatus.IN_PROGRESS)
                 .count();
         long emergencyRequests = allRequests.stream()
-                .filter(r -> r.getStatus() != RequestStatus.CLOSED && r.getStatus() != RequestStatus.CANCELLED)
-                .filter(r -> "EMERGENCY".equals(r.getPriority().name()))
+                .filter(IndustrialKpiAggregations::isActiveEmergencyRequest)
                 .count();
         long closedWorkOrders = allWorkOrders.stream()
                 .filter(w -> w.getStatus() == WorkOrderStatus.CLOSED)
@@ -117,15 +116,15 @@ public class AnalyticsService {
         double unplannedShare = totalWO > 0 ? (double) unplannedWO / totalWO * 100 : 0;
 
         double downtimeHoursTotal = allDowntimes.stream()
-                .map(DowntimeEvent::getDurationMinutes)
-                .filter(Objects::nonNull)
-                .mapToInt(Integer::intValue)
+                .mapToLong(IndustrialKpiAggregations::downtimeMinutes)
                 .sum() / 60.0;
 
         // Reaction = detectedAt → first status transition to IN_PROGRESS (approx: createdAt→now for IN_PROGRESS)
         // Resolution = detectedAt → actualCompletionAt
         List<RepairRequest> closedRequests = allRequests.stream()
-                .filter(r -> r.getStatus() == RequestStatus.CLOSED && r.getActualCompletionAt() != null)
+                .filter(r -> r.getStatus() == RequestStatus.CLOSED
+                        && r.getDetectedAt() != null
+                        && r.getActualCompletionAt() != null)
                 .toList();
         double avgResolutionHours = closedRequests.stream()
                 .mapToLong(r -> java.time.Duration.between(r.getDetectedAt(), r.getActualCompletionAt()).toMinutes())
@@ -133,6 +132,7 @@ public class AnalyticsService {
         // reaction — use createdAt→updatedAt as proxy for non-CLOSED (analyst view approximates)
         double avgReactionHours = allRequests.stream()
                 .filter(r -> r.getStatus() != RequestStatus.OPEN && r.getStatus() != RequestStatus.DRAFT)
+                .filter(r -> r.getCreatedAt() != null && r.getUpdatedAt() != null)
                 .mapToLong(r -> java.time.Duration.between(r.getCreatedAt(), r.getUpdatedAt()).toMinutes())
                 .average().orElse(0) / 60.0;
 

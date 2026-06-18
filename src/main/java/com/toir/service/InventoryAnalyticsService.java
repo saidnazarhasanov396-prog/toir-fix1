@@ -309,9 +309,7 @@ public class InventoryAnalyticsService {
 
     private BigDecimal amount(List<StockMovement> movements, SparePart part) {
         return movements.stream()
-                .map(movement -> movement.getTotalAmount() != null
-                        ? movement.getTotalAmount()
-                        : BigDecimal.valueOf(movement.getQuantity()).multiply(zero(part.getAverageCost())))
+                .map(movement -> IndustrialKpiAggregations.stockIssueCost(movement, part))
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
     }

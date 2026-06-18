@@ -1,5 +1,6 @@
 package com.toir.dto.dashboard;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -19,7 +20,8 @@ public record DashboardOverview(
         List<LowStockItem> lowStockItems,
         List<RepeatedDefectsEquipment> repeatedDefectsEquipment,
         List<MaintenanceKpiRow> maintenanceKpis,
-        MaintenanceDueCounts maintenanceDueCounts
+        MaintenanceDueCounts maintenanceDueCounts,
+        List<ProblemDepartment> problemDepartments
 ) {
     public DashboardOverview(
             Counters counters,
@@ -40,17 +42,24 @@ public record DashboardOverview(
         this(counters, planFact, kpis, topProblemEquipment, downtimeByEquipment, latestDowntimes,
                 latestStockMovements, contractorLoad, financialReviewWorkloadByRole,
                 financialReviewWorkloadByDepartment, contractorReconciliation, lowStockItems,
-                repeatedDefectsEquipment, maintenanceKpis, new MaintenanceDueCounts(0, 0, 0, 0, 0));
+                repeatedDefectsEquipment, maintenanceKpis, new MaintenanceDueCounts(0, 0, 0, 0, 0),
+                List.of());
     }
 
     public record Counters(
             long openRequests,
             long emergencyRequests,
+            long activeEmergencyRequests,
+            long totalEmergencyRequests,
             long overduePpr,
             long repairsThisMonth,
+            long completedRepairs,
+            long closedWorkOrders,
             long activeReservations,
             long lowStockItems,
             long materialIssuedThisMonth,
+            BigDecimal totalSparePartsCost,
+            BigDecimal sparePartsCostThisMonth,
             long pendingActualCosts,
             long dueSoonActualCosts,
             long overdueActualCosts,
@@ -67,13 +76,23 @@ public record DashboardOverview(
             double mttrAverage,
             double unplannedRepairShare,
             double downtimeHoursTotal,
+            long downtimeEventsCount,
+            double downtimeThisMonth,
             double avgReactionHours,
             double avgResolutionHours,
             double pprCompletionRate,
             double overdueWorkShare
     ) {}
 
-    public record TopProblemEquipment(UUID id, String code, String name, String department, long openDefects) {}
+    public record TopProblemEquipment(
+            UUID id,
+            String code,
+            String name,
+            String department,
+            long openDefects,
+            long failureCount,
+            double downtimeHours
+    ) {}
 
     public record DowntimeByEquipment(UUID equipmentId, EquipmentRef equipment, long downtimeMinutes) {}
 
@@ -153,6 +172,16 @@ public record DashboardOverview(
             long overdue,
             long blocked,
             long awaitingApproval
+    ) {}
+
+    public record ProblemDepartment(
+            UUID departmentId,
+            String departmentName,
+            double downtimeHours,
+            long downtimeEvents,
+            long emergencyCount,
+            long repairCount,
+            double score
     ) {}
 
     public record EquipmentRef(UUID id, String code, String name) {}
