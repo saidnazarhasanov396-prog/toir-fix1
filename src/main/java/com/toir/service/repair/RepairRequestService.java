@@ -660,7 +660,6 @@ public class RepairRequestService {
         return toDtoWithLinks(entity);
     }
 
-    @Transactional
     public RepairRequestDto finalizeApprovalFromApprovalRequest(UUID id) {
         RepairRequest entity = getOrThrow(id);
         assertCanTransition(entity, RequestStatus.APPROVED, REVIEWABLE_STATUSES, "Cannot approve repair request from status ");
@@ -751,7 +750,6 @@ public class RepairRequestService {
         }
     }
 
-    @Transactional
     public RepairRequestDto finalizeRejectionFromApprovalRequest(UUID id, String reason) {
         if (reason == null || reason.isBlank()) {
             throw RestException.badRequest("Rejection reason is required");
