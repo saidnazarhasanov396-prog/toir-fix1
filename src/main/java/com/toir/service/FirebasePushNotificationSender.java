@@ -4,6 +4,8 @@ import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MessagingErrorCode;
+import com.toir.config.FirebaseDiagnostics;
+import com.toir.config.FirebaseProperties;
 import com.toir.dto.notification.NotificationDto;
 import com.toir.entity.UserFcmToken;
 import com.toir.repository.UserFcmTokenRepository;
@@ -23,6 +25,7 @@ public class FirebasePushNotificationSender {
 
     private final ObjectProvider<FirebaseMessaging> firebaseMessagingProvider;
     private final UserFcmTokenRepository tokenRepository;
+    private final FirebaseProperties firebaseProperties;
 
     public void sendToUser(NotificationDto notification) {
         FirebaseMessaging firebaseMessaging = firebaseMessagingProvider.getIfAvailable();
@@ -35,8 +38,18 @@ public class FirebasePushNotificationSender {
             return;
         }
         if (firebaseMessaging == null) {
-            log.info("Firebase push skipped for notification {} recipient {} because FirebaseMessaging is not configured",
-                    notification.id(), notification.recipientId());
+            FirebaseDiagnostics.Status status = FirebaseDiagnostics.fromProperties(firebaseProperties);
+            if (!status.enabled()) {
+                log.info("Firebase push skipped for notification {} recipient {} because Firebase is disabled ({}=false)",
+                        notification.id(), notification.recipientId(), FirebaseDiagnostics.ENABLED_KEY);
+            } else {
+                log.warn("Firebase push skipped for notification {} recipient {} because FirebaseMessaging is not configured; credentialSource={}, credentialsAvailable={}, missingOrInvalidConfigKeys={}",
+                        notification.id(),
+                        notification.recipientId(),
+                        status.credentialSource(),
+                        status.credentialsAvailable(),
+                        status.missingOrInvalidConfigKeys());
+            }
             return;
         }
 
