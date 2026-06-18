@@ -1,5 +1,6 @@
 package com.toir.dto.procurement;
 
+import com.toir.entity.SparePart;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
@@ -65,11 +66,15 @@ public record ProcurementRequestDto(
         return from(r, null, null, Map.of());
     }
 
+    public static ProcurementRequestDto from(ProcurementRequest r, Map<UUID, SparePart> sparePartsById) {
+        return from(r, null, null, sparePartsById);
+    }
+
     public static ProcurementRequestDto from(ProcurementRequest r,
                                              String departmentName,
                                              String warehouseName,
-                                             Map<UUID, String> sparePartNamesById) {
-        Map<UUID, String> safeSparePartNamesById = sparePartNamesById == null ? Map.of() : sparePartNamesById;
+                                             Map<UUID, SparePart> sparePartsById) {
+        Map<UUID, SparePart> safeSparePartsById = sparePartsById == null ? Map.of() : sparePartsById;
         return new ProcurementRequestDto(
                 r.getId(),
                 r.getNumber(),
@@ -98,7 +103,7 @@ public record ProcurementRequestDto(
                 r.getLines() == null ? List.of() : r.getLines().stream()
                         .map(line -> ProcurementRequestLineDto.from(
                                 line,
-                                line.getSparePartId() == null ? null : safeSparePartNamesById.get(line.getSparePartId())
+                                line.getSparePartId() == null ? null : safeSparePartsById.get(line.getSparePartId())
                         ))
                         .toList()
         );

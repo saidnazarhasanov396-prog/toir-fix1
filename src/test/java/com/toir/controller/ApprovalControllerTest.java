@@ -8,6 +8,7 @@ import com.toir.enums.ApprovalTargetType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.ApprovalService;
 import com.toir.service.approval.ApprovalAnalyticsService;
+import com.toir.service.approval.ApprovalRuleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,11 +39,14 @@ class ApprovalControllerTest {
     @Mock
     ApprovalAnalyticsService analyticsService;
 
+    @Mock
+    ApprovalRuleService ruleService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new ApprovalController(service, analyticsService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new ApprovalController(service, analyticsService, ruleService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

@@ -61,6 +61,14 @@ public class HrController {
         ));
     }
 
+    @GetMapping("/employees/by-specialisation/{specialisationId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_READ')")
+    public ResponseEntity<List<EmployeeDto>> listEmployeesBySpecialisation(
+            @PathVariable UUID specialisationId
+    ) {
+        return ResponseEntity.ok(service.listEmployeesBySpecialisation(specialisationId));
+    }
+
     @GetMapping("/work-roles")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_READ')")
     public ResponseEntity<List<EmployeeWorkRoleDto>> listWorkRoles() {

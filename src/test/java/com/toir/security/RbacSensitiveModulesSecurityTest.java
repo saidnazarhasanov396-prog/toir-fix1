@@ -36,6 +36,7 @@ import com.toir.service.WarehouseService;
 import com.toir.service.WorkOrderService;
 import com.toir.service.department.DepartmentService;
 import com.toir.service.approval.ApprovalAnalyticsService;
+import com.toir.service.approval.ApprovalRuleService;
 import com.toir.service.maintanance.MaintenanceBudgetService;
 import com.toir.service.users.RoleService;
 import com.toir.service.users.UserService;
@@ -125,6 +126,8 @@ class RbacSensitiveModulesSecurityTest {
     ApprovalService approvalService;
     @MockBean
     ApprovalAnalyticsService approvalAnalyticsService;
+    @MockBean
+    ApprovalRuleService approvalRuleService;
     @MockBean
     WorkOrderService workOrderService;
     @MockBean

@@ -777,7 +777,7 @@ public class MaintenanceAutomationService {
                 actionType,
                 effectiveRequesterId,
                 approverId,
-                StringUtils.hasText(rule.approvalRole()) ? rule.approvalRole() : "MAINTENANCE_EVENT_APPROVER",
+                StringUtils.hasText(rule.approvalRole()) ? rule.approvalRole().trim() : null,
                 "Maintenance due event approval: " + event.getCycleKey(),
                 "Approval request for maintenance due event " + event.getCycleKey()
         );

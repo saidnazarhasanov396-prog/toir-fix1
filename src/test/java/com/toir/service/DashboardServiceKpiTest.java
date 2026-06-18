@@ -1,0 +1,323 @@
+package com.toir.service;
+
+import com.toir.entity.Department;
+import com.toir.entity.DowntimeEvent;
+import com.toir.entity.SparePart;
+import com.toir.entity.StockMovement;
+import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.warehouse.Warehouse;
+import com.toir.enums.DefectStatus;
+import com.toir.enums.PriorityLevel;
+import com.toir.enums.RequestStatus;
+import com.toir.enums.StockMovementType;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkOrderType;
+import com.toir.enums.WorkType;
+import com.toir.repository.CalibrationRecordRepository;
+import com.toir.repository.ConditionReadingRepository;
+import com.toir.repository.DowntimeEventRepository;
+import com.toir.repository.PprTaskRepository;
+import com.toir.repository.ReliabilityMetricRepository;
+import com.toir.repository.ReservationRepository;
+import com.toir.repository.SparePartRepository;
+import com.toir.repository.StockMovementRepository;
+import com.toir.repository.WarehouseRepository;
+import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
+import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceDueEventRepository;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserCertificationRepository;
+import com.toir.repository.users.UserRepository;
+import com.toir.security.ScopeAccessService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class DashboardServiceKpiTest {
+
+    @Mock RepairRequestRepository repairRequestRepository;
+    @Mock DefectRepository defectRepository;
+    @Mock PprTaskRepository pprTaskRepository;
+    @Mock WorkOrderRepository workOrderRepository;
+    @Mock EquipmentRepository equipmentRepository;
+    @Mock DepartmentRepository departmentRepository;
+    @Mock WarehouseStockRepository warehouseStockRepository;
+    @Mock WarehouseRepository warehouseRepository;
+    @Mock SparePartRepository sparePartRepository;
+    @Mock StockMovementRepository stockMovementRepository;
+    @Mock DowntimeEventRepository downtimeEventRepository;
+    @Mock ReliabilityMetricRepository reliabilityMetricRepository;
+    @Mock ContractorRepository contractorRepository;
+    @Mock ContractorWorkRepository contractorWorkRepository;
+    @Mock ReservationRepository reservationRepository;
+    @Mock ActualCostRepository actualCostRepository;
+    @Mock ConditionReadingRepository conditionReadingRepository;
+    @Mock UserCertificationRepository userCertificationRepository;
+    @Mock CalibrationRecordRepository calibrationRecordRepository;
+    @Mock MaintenanceDueEventRepository maintenanceDueEventRepository;
+    @Mock UserRepository userRepository;
+    @Mock ScopeAccessService scopeAccessService;
+
+    @InjectMocks DashboardService service;
+
+    @BeforeEach
+    void stubEmptyDependencies() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(sparePartRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(userRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(repairRequestRepository.search(any(), any(), any())).thenReturn(List.of());
+        when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(workOrderRepository.search(any(), any(), any())).thenReturn(List.of());
+        when(reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(any())).thenReturn(List.of());
+        when(warehouseStockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(any())).thenReturn(List.of());
+        when(contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(conditionReadingRepository.countBySeveritiesAndDepartment(any(), any())).thenReturn(0L);
+        when(userCertificationRepository.findAllByExpiresAtBeforeAndIsDeletedFalse(any())).thenReturn(List.of());
+        when(calibrationRecordRepository.findAllByNextDueAtBeforeAndIsDeletedFalse(any())).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(contractorRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+    }
+
+    @Test
+    void overviewReturnsIndustrialToirKpis() {
+        UUID departmentA = UUID.randomUUID();
+        UUID departmentB = UUID.randomUUID();
+        UUID equipmentA = UUID.randomUUID();
+        UUID equipmentB = UUID.randomUUID();
+        UUID warehouseA = UUID.randomUUID();
+        UUID warehouseB = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        Instant currentMonth = monthStart().plusSeconds(3600);
+        Instant previousMonth = monthStart().minusSeconds(3600);
+
+        when(departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                department(departmentA, "Workshop A"),
+                department(departmentB, "Workshop B")));
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                equipment(equipmentA, departmentA, "Pump A"),
+                equipment(equipmentB, departmentB, "Pump B")));
+        when(warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                warehouse(warehouseA, departmentA),
+                warehouse(warehouseB, departmentB)));
+        SparePart sparePart = new SparePart();
+        sparePart.setId(sparePartId);
+        sparePart.setAverageCost(new BigDecimal("12.50"));
+        when(sparePartRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(sparePart));
+
+        when(repairRequestRepository.search(null, null, null)).thenReturn(List.of(
+                request(departmentA, PriorityLevel.EMERGENCY, RequestStatus.OPEN),
+                request(departmentA, PriorityLevel.EMERGENCY, RequestStatus.CLOSED),
+                request(departmentB, PriorityLevel.HIGH, RequestStatus.OPEN)));
+        when(workOrderRepository.search(null, null, null)).thenReturn(List.of(
+                workOrder(departmentA, equipmentA, WorkType.REPAIR, WorkOrderStatus.COMPLETED, currentMonth),
+                workOrder(departmentB, equipmentB, WorkType.REPAIR, WorkOrderStatus.CLOSED, previousMonth),
+                workOrder(departmentA, equipmentA, WorkType.DIAGNOSTICS, WorkOrderStatus.COMPLETED, currentMonth)));
+        when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                downtime(departmentA, equipmentA, currentMonth, 120),
+                downtimeWithInterval(departmentA, equipmentA, previousMonth, 60),
+                downtime(departmentB, equipmentB, currentMonth, 30)));
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                defect(equipmentA, DefectStatus.OPEN),
+                defect(equipmentA, DefectStatus.CLOSED),
+                defect(equipmentB, DefectStatus.CLOSED)));
+        when(stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                issue(warehouseA, departmentA, sparePartId, currentMonth, 2, new BigDecimal("50.00"), null),
+                issue(warehouseA, departmentA, sparePartId, previousMonth, 3, null, 10.0),
+                issue(warehouseB, departmentB, sparePartId, currentMonth, 4, null, null)));
+
+        var result = service.overview(null);
+
+        assertThat(result.counters().activeEmergencyRequests()).isEqualTo(1);
+        assertThat(result.counters().emergencyRequests()).isEqualTo(1);
+        assertThat(result.counters().totalEmergencyRequests()).isEqualTo(2);
+        assertThat(result.counters().repairsThisMonth()).isEqualTo(1);
+        assertThat(result.counters().completedRepairs()).isEqualTo(2);
+        assertThat(result.counters().closedWorkOrders()).isEqualTo(1);
+        assertThat(result.kpis().downtimeHoursTotal()).isEqualTo(3.5);
+        assertThat(result.kpis().downtimeEventsCount()).isEqualTo(3);
+        assertThat(result.kpis().downtimeThisMonth()).isEqualTo(2.5);
+        assertThat(result.counters().totalSparePartsCost()).isEqualByComparingTo("130.00");
+        assertThat(result.counters().sparePartsCostThisMonth()).isEqualByComparingTo("100.00");
+
+        assertThat(result.problemDepartments()).hasSize(2);
+        assertThat(result.problemDepartments().getFirst().departmentId()).isEqualTo(departmentA);
+        assertThat(result.problemDepartments().getFirst().downtimeHours()).isEqualTo(3.0);
+        assertThat(result.problemDepartments().getFirst().downtimeEvents()).isEqualTo(2);
+        assertThat(result.problemDepartments().getFirst().emergencyCount()).isEqualTo(2);
+        assertThat(result.problemDepartments().getFirst().repairCount()).isEqualTo(1);
+
+        assertThat(result.topProblemEquipment()).hasSize(2);
+        assertThat(result.topProblemEquipment().getFirst().id()).isEqualTo(equipmentA);
+        assertThat(result.topProblemEquipment().getFirst().failureCount()).isEqualTo(2);
+        assertThat(result.topProblemEquipment().getFirst().openDefects()).isEqualTo(1);
+        assertThat(result.topProblemEquipment().getFirst().downtimeHours()).isEqualTo(3.0);
+    }
+
+    @Test
+    void departmentScopeUsesConsumptionDepartmentBeforeWarehouseDepartment() {
+        UUID consumingDepartment = UUID.randomUUID();
+        UUID warehouseDepartment = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        SparePart sparePart = new SparePart();
+        sparePart.setId(sparePartId);
+        sparePart.setAverageCost(new BigDecimal("8.00"));
+        when(warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(warehouse(warehouseId, warehouseDepartment)));
+        when(sparePartRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(sparePart));
+        when(stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                issue(warehouseId, consumingDepartment, sparePartId, Instant.now(), 2, null, null)));
+
+        var result = service.overview(consumingDepartment);
+
+        assertThat(result.counters().totalSparePartsCost()).isEqualByComparingTo("16.00");
+    }
+
+    private Instant monthStart() {
+        return LocalDate.now(ZoneId.of("Asia/Tashkent"))
+                .withDayOfMonth(1)
+                .atStartOfDay(ZoneId.of("Asia/Tashkent"))
+                .toInstant();
+    }
+
+    private Department department(UUID id, String name) {
+        Department department = new Department();
+        department.setId(id);
+        department.setName(name);
+        department.setCode(name.replace(" ", "-"));
+        return department;
+    }
+
+    private Equipment equipment(UUID id, UUID departmentId, String name) {
+        Equipment equipment = new Equipment();
+        equipment.setId(id);
+        equipment.setDepartmentId(departmentId);
+        equipment.setCode(name.replace(" ", "-"));
+        equipment.setName(name);
+        return equipment;
+    }
+
+    private Warehouse warehouse(UUID id, UUID departmentId) {
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(id);
+        warehouse.setDepartmentId(departmentId);
+        warehouse.setCode("WH");
+        warehouse.setName("Warehouse");
+        return warehouse;
+    }
+
+    private RepairRequest request(UUID departmentId, PriorityLevel priority, RequestStatus status) {
+        RepairRequest request = new RepairRequest();
+        request.setId(UUID.randomUUID());
+        request.setDepartmentId(departmentId);
+        request.setPriority(priority);
+        request.setStatus(status);
+        return request;
+    }
+
+    private WorkOrder workOrder(
+            UUID departmentId,
+            UUID equipmentId,
+            WorkType workType,
+            WorkOrderStatus status,
+            Instant completedAt
+    ) {
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(UUID.randomUUID());
+        workOrder.setDepartmentId(departmentId);
+        workOrder.setEquipmentId(equipmentId);
+        workOrder.setWorkType(workType);
+        workOrder.setType(WorkOrderType.DEFECT);
+        workOrder.setStatus(status);
+        workOrder.setCompletedAt(completedAt);
+        return workOrder;
+    }
+
+    private DowntimeEvent downtime(
+            UUID departmentId,
+            UUID equipmentId,
+            Instant startAt,
+            int durationMinutes
+    ) {
+        DowntimeEvent event = new DowntimeEvent();
+        event.setId(UUID.randomUUID());
+        event.setDepartmentId(departmentId);
+        event.setEquipmentId(equipmentId);
+        event.setStartAt(startAt);
+        event.setDurationMinutes(durationMinutes);
+        return event;
+    }
+
+    private DowntimeEvent downtimeWithInterval(
+            UUID departmentId,
+            UUID equipmentId,
+            Instant startAt,
+            int durationMinutes
+    ) {
+        DowntimeEvent event = downtime(departmentId, equipmentId, startAt, 0);
+        event.setDurationMinutes(null);
+        event.setEndAt(startAt.plusSeconds(durationMinutes * 60L));
+        return event;
+    }
+
+    private Defect defect(UUID equipmentId, DefectStatus status) {
+        Defect defect = new Defect();
+        defect.setId(UUID.randomUUID());
+        defect.setEquipmentId(equipmentId);
+        defect.setStatus(status);
+        return defect;
+    }
+
+    private StockMovement issue(
+            UUID warehouseId,
+            UUID departmentId,
+            UUID sparePartId,
+            Instant occurredAt,
+            double quantity,
+            BigDecimal totalAmount,
+            Double unitCost
+    ) {
+        StockMovement movement = new StockMovement();
+        movement.setId(UUID.randomUUID());
+        movement.setWarehouseId(warehouseId);
+        movement.setDepartmentId(departmentId);
+        movement.setSparePartId(sparePartId);
+        movement.setType(StockMovementType.ISSUE);
+        movement.setOccurredAt(occurredAt);
+        movement.setQuantity(quantity);
+        movement.setTotalAmount(totalAmount);
+        movement.setUnitCost(unitCost);
+        return movement;
+    }
+}

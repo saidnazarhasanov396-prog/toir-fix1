@@ -89,7 +89,16 @@ public class ProcurementRequestService {
 
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId, String search) {
-        return findAll(status, departmentId, search, null, null, null);
+        return findAll(status, departmentId, search, null, null, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status,
+                                               UUID departmentId,
+                                               String search,
+                                               Double minAmount,
+                                               Double maxAmount) {
+        return findAll(status, departmentId, search, null, null, null, minAmount, maxAmount);
     }
 
     @Transactional(readOnly = true)
@@ -99,6 +108,18 @@ public class ProcurementRequestService {
                                                ProcurementRequestType type,
                                                UUID sourceDefectId,
                                                UUID sourcePprTaskId) {
+        return findAll(status, departmentId, search, type, sourceDefectId, sourcePprTaskId, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status,
+                                               UUID departmentId,
+                                               String search,
+                                               ProcurementRequestType type,
+                                               UUID sourceDefectId,
+                                               UUID sourcePprTaskId,
+                                               Double minAmount,
+                                               Double maxAmount) {
         String normalizedSearch = (search != null && !search.isBlank()) ? search.trim() : null;
         String typeFilter = type == null ? null : type.name();
 
@@ -109,7 +130,9 @@ public class ProcurementRequestService {
                     departmentId,
                     typeFilter,
                     sourceDefectId,
-                    sourcePprTaskId
+                    sourcePprTaskId,
+                    minAmount,
+                    maxAmount
             ));
         }
 
@@ -123,7 +146,9 @@ public class ProcurementRequestService {
                         scopedDepartmentId,
                         typeFilter,
                         sourceDefectId,
-                        sourcePprTaskId
+                        sourcePprTaskId,
+                        minAmount,
+                        maxAmount
                 ).stream()
                 .filter(this::canRead)
                 .toList());
@@ -1009,14 +1034,14 @@ public class ProcurementRequestService {
 
         Map<UUID, String> departmentNames = departmentNamesById(departmentIds);
         Map<UUID, String> warehouseNames = warehouseNamesById(warehouseIds);
-        Map<UUID, String> sparePartNames = sparePartNamesById(sparePartIds);
+        Map<UUID, SparePart> spareParts = sparePartsById(sparePartIds);
 
         return procurements.stream()
                 .map(request -> ProcurementRequestDto.from(
                         request,
                         nameById(departmentNames, request.getDepartmentId()),
                         nameById(warehouseNames, request.getWarehouseId()),
-                        sparePartNames
+                        spareParts
                 ))
                 .toList();
     }
@@ -1055,7 +1080,7 @@ public class ProcurementRequestService {
                 .collect(Collectors.toMap(Warehouse::getId, Warehouse::getName, (first, ignored) -> first));
     }
 
-    private Map<UUID, String> sparePartNamesById(Set<UUID> ids) {
+    private Map<UUID, SparePart> sparePartsById(Set<UUID> ids) {
         if (ids.isEmpty()) {
             return Map.of();
         }
@@ -1065,7 +1090,7 @@ public class ProcurementRequestService {
         }
         return spareParts.stream()
                 .filter(sparePart -> sparePart.getId() != null)
-                .collect(Collectors.toMap(SparePart::getId, SparePart::getName, (first, ignored) -> first));
+                .collect(Collectors.toMap(SparePart::getId, Function.identity(), (first, ignored) -> first));
     }
 
     private void recalcTotal(ProcurementRequest p) {
