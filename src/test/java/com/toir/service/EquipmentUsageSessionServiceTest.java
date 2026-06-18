@@ -3,6 +3,7 @@ package com.toir.service;
 import com.toir.dto.equipment.EquipmentUsageSessionStartRequest;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentUsageSession;
+import com.toir.entity.equipment.VehicleDetails;
 import com.toir.entity.users.Employee;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
@@ -57,7 +58,7 @@ class EquipmentUsageSessionServiceTest {
         UUID departmentId = UUID.randomUUID();
         UUID operatorId = UUID.randomUUID();
         UUID issuedBy = UUID.randomUUID();
-        Instant startedAt = Instant.parse("2026-06-18T04:05:00Z");
+        Instant startedAt = Instant.parse("2026-06-19T04:05:00Z");
         Equipment equipment = equipment(equipmentId, departmentId, EquipmentCategory.PRODUCTION_EQUIPMENT);
         Employee operator = employee(operatorId, departmentId);
 
@@ -120,6 +121,57 @@ class EquipmentUsageSessionServiceTest {
                 .hasMessageContaining("open usage session");
 
         verify(sessionRepository, never()).save(any());
+    }
+
+    @Test
+    void startVehicleSessionSnapshotsAssignedDriverUsageDeadline() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID driverId = UUID.randomUUID();
+        UUID assignerId = UUID.randomUUID();
+        UUID issuedBy = UUID.randomUUID();
+        Instant startedAt = Instant.parse("2026-06-19T04:05:00Z");
+        Equipment equipment = equipment(equipmentId, departmentId, EquipmentCategory.VEHICLE);
+        Employee driver = employee(driverId, departmentId);
+        VehicleDetails details = new VehicleDetails();
+        details.setEquipmentId(equipmentId);
+        details.setAssignedDriverId(driverId);
+        details.setAssignedDriverUsageLimitMinutes(180);
+        details.setAssignedDriverAssignedBy(assignerId);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(employeeRepository.findByIdAndIsDeletedFalse(driverId)).thenReturn(Optional.of(driver));
+        when(sessionRepository.existsByEquipmentIdAndStatusAndIsDeletedFalse(
+                equipmentId,
+                EquipmentUsageSessionStatus.OPEN
+        )).thenReturn(false);
+        when(sessionRepository.existsByOperatorEmployeeIdAndStatusAndIsDeletedFalse(
+                driverId,
+                EquipmentUsageSessionStatus.OPEN
+        )).thenReturn(false);
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(sessionRepository.save(any(EquipmentUsageSession.class))).thenAnswer(invocation -> {
+            EquipmentUsageSession session = invocation.getArgument(0);
+            session.setId(UUID.randomUUID());
+            return session;
+        });
+
+        var response = service.start(
+                equipmentId,
+                new EquipmentUsageSessionStartRequest(driverId, startedAt, null, null, 1000.0, 200.0, "dispatch"),
+                issuedBy
+        );
+
+        ArgumentCaptor<EquipmentUsageSession> captor = ArgumentCaptor.forClass(EquipmentUsageSession.class);
+        verify(sessionRepository).save(captor.capture());
+        EquipmentUsageSession saved = captor.getValue();
+        assertThat(saved.getUsageLimitMinutes()).isEqualTo(180);
+        assertThat(saved.getDueAt()).isEqualTo(startedAt.plusSeconds(180L * 60L));
+        assertThat(saved.getAssignmentActorUserId()).isEqualTo(assignerId);
+        assertThat(response.usageLimitMinutes()).isEqualTo(180);
+        assertThat(response.dueAt()).isEqualTo(startedAt.plusSeconds(180L * 60L));
+        assertThat(response.overdue()).isFalse();
+        assertThat(response.overdueMinutes()).isZero();
     }
 
     private static Equipment equipment(UUID id, UUID departmentId, EquipmentCategory category) {

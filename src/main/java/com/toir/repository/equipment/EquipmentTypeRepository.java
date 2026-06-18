@@ -71,7 +71,7 @@ public interface EquipmentTypeRepository extends JpaRepository<EquipmentType, UU
                 )
             ) as withActiveEquipment,
             count(t.id) filter (
-                where t.created_at >= current_date - interval '30 days'
+                where t.created_at >= current_date - 30
             ) as recentlyAdded
         from equipment_types t
         where t.is_deleted = false

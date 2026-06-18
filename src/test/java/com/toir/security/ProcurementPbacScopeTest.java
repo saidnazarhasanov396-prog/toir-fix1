@@ -9,12 +9,18 @@ import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.service.LowStockRecommendationService;
 import com.toir.service.ProcurementRequestService;
 import com.toir.service.warehouse.ToirStockService;
@@ -41,6 +47,12 @@ class ProcurementPbacScopeTest {
 
     ProcurementRequestRepository repository;
     SparePartRepository sparePartRepository;
+    EquipmentTypeRepository equipmentTypeRepository;
+    EquipmentRepository equipmentRepository;
+    WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
+    DefectRepository defectRepository;
+    PprTaskRepository pprTaskRepository;
+    DepartmentRepository departmentRepository;
     WarehouseStockRepository stockRepository;
     StockMovementRepository stockMovementRepository;
     WarehouseRepository warehouseRepository;
@@ -55,6 +67,12 @@ class ProcurementPbacScopeTest {
     void setUp() {
         repository = mock(ProcurementRequestRepository.class);
         sparePartRepository = mock(SparePartRepository.class);
+        equipmentTypeRepository = mock(EquipmentTypeRepository.class);
+        equipmentRepository = mock(EquipmentRepository.class);
+        warehouseEquipmentItemRepository = mock(WarehouseEquipmentItemRepository.class);
+        defectRepository = mock(DefectRepository.class);
+        pprTaskRepository = mock(PprTaskRepository.class);
+        departmentRepository = mock(DepartmentRepository.class);
         stockRepository = mock(WarehouseStockRepository.class);
         stockMovementRepository = mock(StockMovementRepository.class);
         warehouseRepository = mock(WarehouseRepository.class);
@@ -66,6 +84,12 @@ class ProcurementPbacScopeTest {
         service = new ProcurementRequestService(
                 repository,
                 sparePartRepository,
+                equipmentTypeRepository,
+                equipmentRepository,
+                warehouseEquipmentItemRepository,
+                defectRepository,
+                pprTaskRepository,
+                departmentRepository,
                 stockRepository,
                 stockMovementRepository,
                 auditBuilderService,
@@ -83,9 +107,10 @@ class ProcurementPbacScopeTest {
         ProcurementRequest first = request(UUID.randomUUID(), UUID.randomUUID(), null, ProcurementRequestStatus.DRAFT);
         ProcurementRequest second = request(UUID.randomUUID(), UUID.randomUUID(), null, ProcurementRequestStatus.SUBMITTED);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.search(isNull(), isNull(), isNull(), isNull(), isNull())).thenReturn(List.of(first, second));
+        when(repository.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of(first, second));
 
-        var result = service.findAll(null, null, null, null, null);
+        var result = service.findAll(null, null, null);
 
         assertThat(result).extracting(dto -> dto.id()).containsExactly(first.getId(), second.getId());
     }
@@ -98,13 +123,14 @@ class ProcurementPbacScopeTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
         when(scopeAccessService.canAccessDepartment(currentDepartmentId)).thenReturn(true);
-        when(repository.search(isNull(), isNull(), any(), isNull(), isNull())).thenReturn(List.of(allowed));
+        when(repository.search(isNull(), isNull(), any(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(List.of(allowed));
 
-        var result = service.findAll(null, requestedDepartmentId, null, null, null);
+        var result = service.findAll(null, requestedDepartmentId, null);
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().departmentId()).isEqualTo(currentDepartmentId);
-        verify(repository).search(null, null, currentDepartmentId, null, null);
+        verify(repository).search(null, null, currentDepartmentId, null, null, null, null, null);
     }
 
     @Test
@@ -112,10 +138,10 @@ class ProcurementPbacScopeTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
 
-        assertThatThrownBy(() -> service.findAll(null, null, null, null, null))
+        assertThatThrownBy(() -> service.findAll(null, null, null))
                 .isInstanceOf(AccessDeniedException.class);
 
-        verify(repository, never()).search(any(), any(), any(), any(), any());
+        verify(repository, never()).search(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

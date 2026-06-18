@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.purchaseorder.ProcurementRequestPurchaseOrderRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderReceiveLineRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderReceiveRequest;
 import com.toir.entity.InventoryTransaction;
@@ -14,8 +15,10 @@ import com.toir.entity.users.Employee;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.PurchaseOrderStatus;
 import com.toir.enums.StockMovementSourceType;
+import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.PurchaseOrderRepository;
@@ -39,7 +42,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -74,6 +79,28 @@ class PurchaseOrderServiceTest {
                 scopeAccessService,
                 inventoryCostService
         );
+    }
+
+    @Test
+    void equipmentProcurementCannotCreateSparePartPurchaseOrder() {
+        UUID procurementId = UUID.randomUUID();
+        ProcurementRequest request = new ProcurementRequest();
+        request.setId(procurementId);
+        request.setNumber("PR-2026-0002");
+        request.setTitle("Equipment procurement");
+        request.setStatus(ProcurementRequestStatus.APPROVED);
+        request.setWarehouseId(UUID.randomUUID());
+        request.setType(ProcurementRequestType.EQUIPMENT);
+        when(procurementRequestRepository.findByIdAndIsDeletedFalse(procurementId)).thenReturn(Optional.of(request));
+
+        assertThatThrownBy(() -> service.createFromProcurementRequest(
+                procurementId,
+                new ProcurementRequestPurchaseOrderRequest(UUID.randomUUID(), null, null)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Equipment procurement requests must be received through procurement receipt");
+
+        verifyNoInteractions(supplierService, sparePartRepository, warehouseRepository);
     }
 
     @Test

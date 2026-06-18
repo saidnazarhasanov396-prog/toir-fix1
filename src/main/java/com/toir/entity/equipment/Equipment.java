@@ -99,6 +99,15 @@ public class Equipment extends BaseEntity {
     @Column(name = "warranty_attachment_id")
     private UUID warrantyAttachmentId;
 
+    @Column(name = "procurement_request_id")
+    private UUID procurementRequestId;
+
+    @Column(name = "procurement_request_line_id")
+    private UUID procurementRequestLineId;
+
+    @Column(name = "procurement_stock_movement_id")
+    private UUID procurementStockMovementId;
+
     @Column(name = "warranty_start_date")
     private LocalDate warrantyStartDate;
 

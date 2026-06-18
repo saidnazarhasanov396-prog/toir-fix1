@@ -2,6 +2,7 @@ package com.toir.entity.projects;
 import com.toir.entity.BaseEntity;
 import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.enums.ProcurementRequestType;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -46,6 +47,22 @@ public class ProcurementRequest extends BaseEntity {
 
     @Column(name = "approved_by")
     private UUID approvedBy;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ProcurementRequestType type = ProcurementRequestType.SPARE_PART;
+
+    @Column(name = "source_defect_id")
+    private UUID sourceDefectId;
+
+    @Column(name = "source_defect_title")
+    private String sourceDefectTitle;
+
+    @Column(name = "source_ppr_task_id")
+    private UUID sourcePprTaskId;
+
+    @Column(name = "source_ppr_task_title")
+    private String sourcePprTaskTitle;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

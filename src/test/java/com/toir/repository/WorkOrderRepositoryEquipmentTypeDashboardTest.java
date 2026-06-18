@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -99,6 +100,7 @@ class WorkOrderRepositoryEquipmentTypeDashboardTest {
     }
 
     @Test
+    @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
     void groupsEquipmentWithoutTypeUnderUnspecified() {
         UUID departmentId = saveDepartment("DEPT-NO-TYPE").getId();
         EquipmentType temporaryType = saveEquipmentType("TEMP-TYPE", "Temporary");

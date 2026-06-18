@@ -1,5 +1,6 @@
 package com.toir.dto.procurement;
-import com.toir.dto.procurement.ProcurementLineRequest;
+
+import com.toir.enums.ProcurementRequestType;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -14,5 +15,17 @@ public record ProcurementRequestRequest(
         UUID departmentId,
         UUID warehouseId,
         LocalDate requiredBy,
-        @Valid List<ProcurementLineRequest> lines
-) {}
+        @Valid List<ProcurementLineRequest> lines,
+        ProcurementRequestType type,
+        UUID sourceDefectId,
+        UUID sourcePprTaskId
+) {
+    public ProcurementRequestRequest(@NotBlank String title,
+                                     String description,
+                                     UUID departmentId,
+                                     UUID warehouseId,
+                                     LocalDate requiredBy,
+                                     @Valid List<ProcurementLineRequest> lines) {
+        this(title, description, departmentId, warehouseId, requiredBy, lines, null, null, null);
+    }
+}

@@ -16,6 +16,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -38,8 +39,11 @@ public class VehicleDrivingSessionService {
     private final EquipmentRepository equipmentRepository;
     private final VehicleDetailsRepository vehicleDetailsRepository;
     private final EmployeeRepository employeeRepository;
-    private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
     private final EquipmentUsageSessionService equipmentUsageSessionService;
+    private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
+
+    @Value("${toir.vehicle.driver-role-required:false}")
+    private boolean driverRoleRequired;
 
     @Transactional
     public VehicleDrivingSessionResponse start(UUID equipmentId,
@@ -131,7 +135,8 @@ public class VehicleDrivingSessionService {
         if (!driver.isActive()) {
             throw RestException.badRequest("Driver employee is not active: " + driverEmployeeId);
         }
-        if (!employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(driverEmployeeId, "DRIVER")) {
+        if (driverRoleRequired
+                && !employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(driverEmployeeId, "DRIVER")) {
             throw RestException.badRequest("Employee must have DRIVER work role");
         }
         if (vehicleDepartmentId == null || !Objects.equals(driver.getDepartmentId(), vehicleDepartmentId)) {

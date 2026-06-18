@@ -22,8 +22,11 @@ public class StockMovement extends ActorStampedEntity {
     @Column(name = "warehouse_id", nullable = false)
     private UUID warehouseId;
 
-    @Column(name = "spare_part_id", nullable = false)
+    @Column(name = "spare_part_id")
     private UUID sparePartId;
+
+    @Column(name = "equipment_type_id")
+    private UUID equipmentTypeId;
 
     @Column(name = "work_order_id")
     private UUID workOrderId;

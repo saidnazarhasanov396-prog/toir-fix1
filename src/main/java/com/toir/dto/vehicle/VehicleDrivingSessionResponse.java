@@ -18,6 +18,10 @@ public record VehicleDrivingSessionResponse(
         Instant startedAt,
         Instant returnedAt,
         Long durationMinutes,
+        Integer usageLimitMinutes,
+        Instant dueAt,
+        Long overdueMinutes,
+        Boolean overdue,
         Double startOdometerKm,
         Double endOdometerKm,
         Double odometerDeltaKm,
@@ -29,6 +33,50 @@ public record VehicleDrivingSessionResponse(
         UUID returnedBy,
         String note
 ) {
+    public VehicleDrivingSessionResponse(
+            UUID id,
+            UUID equipmentId,
+            UUID driverEmployeeId,
+            String driverName,
+            Instant startedAt,
+            Instant returnedAt,
+            Long durationMinutes,
+            Double startOdometerKm,
+            Double endOdometerKm,
+            Double odometerDeltaKm,
+            Double startEngineHours,
+            Double endEngineHours,
+            Double engineHoursDelta,
+            VehicleDrivingSessionStatus status,
+            UUID issuedBy,
+            UUID returnedBy,
+            String note
+    ) {
+        this(
+                id,
+                equipmentId,
+                driverEmployeeId,
+                driverName,
+                startedAt,
+                returnedAt,
+                durationMinutes,
+                null,
+                null,
+                0L,
+                false,
+                startOdometerKm,
+                endOdometerKm,
+                odometerDeltaKm,
+                startEngineHours,
+                endEngineHours,
+                engineHoursDelta,
+                status,
+                issuedBy,
+                returnedBy,
+                note
+        );
+    }
+
     public static VehicleDrivingSessionResponse from(VehicleDrivingSession session, Employee driver) {
         return new VehicleDrivingSessionResponse(
                 session.getId(),
@@ -38,6 +86,10 @@ public record VehicleDrivingSessionResponse(
                 session.getStartedAt(),
                 session.getReturnedAt(),
                 durationMinutes(session.getStartedAt(), session.getReturnedAt()),
+                null,
+                null,
+                0L,
+                false,
                 session.getStartOdometerKm(),
                 session.getEndOdometerKm(),
                 delta(session.getStartOdometerKm(), session.getEndOdometerKm()),
@@ -60,6 +112,10 @@ public record VehicleDrivingSessionResponse(
                 session.startedAt(),
                 session.returnedAt(),
                 session.durationMinutes(),
+                session.usageLimitMinutes(),
+                session.dueAt(),
+                session.overdueMinutes(),
+                session.overdue(),
                 session.startOdometerKm(),
                 session.endOdometerKm(),
                 session.odometerDeltaKm(),

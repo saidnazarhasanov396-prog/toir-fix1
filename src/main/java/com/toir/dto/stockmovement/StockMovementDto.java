@@ -43,7 +43,9 @@ public record StockMovementDto(
         Instant occurredAt,
         String notes,
         String comment,
-        int fileCount
+        int fileCount,
+        UUID equipmentTypeId,
+        String equipmentTypeName
 ) {
     public StockMovementDto(
             UUID id,
@@ -78,7 +80,8 @@ public record StockMovementDto(
         this(id, warehouseId, warehouseName, sparePartId, sparePartName, sparePartType, workOrderId,
                 workOrderNumber, workOrderName, type, quantity, unit, unitCost, unitPrice, totalAmount,
                 documentNumber, null, null, null, createdById, createdByFullName, responsiblePersonId, responsiblePersonName,
-                takenById, takenByName, departmentId, supplierName, movementDate, occurredAt, notes, comment, 0);
+                takenById, takenByName, departmentId, supplierName, movementDate, occurredAt, notes, comment, 0,
+                null, null);
     }
 
     public StockMovementDto(
@@ -103,7 +106,7 @@ public record StockMovementDto(
                 workOrderNumber, workOrderName, type, quantity, null, unitCost,
                 unitPriceFromLegacy(unitCost), totalAmount(quantity, unitPriceFromLegacy(unitCost), null),
                 documentNumber, null, null, null, createdById, createdByFullName, null, null, null, null,
-                null, null, null, occurredAt, notes, notes, 0);
+                null, null, null, occurredAt, notes, notes, 0, null, null);
     }
 
     public static StockMovementDto from(StockMovement m) {
@@ -140,7 +143,9 @@ public record StockMovementDto(
                 m.getOccurredAt(),
                 m.getNotes(),
                 m.getComment() != null ? m.getComment() : m.getNotes(),
-                0
+                0,
+                m.getEquipmentTypeId(),
+                null
         );
     }
 
@@ -178,7 +183,9 @@ public record StockMovementDto(
                 row.getOccurredAt(),
                 row.getNotes(),
                 row.getComment() != null ? row.getComment() : row.getNotes(),
-                Math.toIntExact(row.getFileCount())
+                Math.toIntExact(row.getFileCount()),
+                row.getEquipmentTypeId(),
+                row.getEquipmentTypeName()
         );
     }
 

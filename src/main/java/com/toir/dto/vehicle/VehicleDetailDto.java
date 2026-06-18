@@ -53,6 +53,7 @@ public record VehicleDetailDto(
             Double carryingCapacity,
             Integer seatCount,
             UUID assignedDriverId,
+            Integer assignedDriverUsageLimitMinutes,
             double currentOdometerKm,
             double currentEngineHours,
             String registrationCertificateNumber,
@@ -63,6 +64,40 @@ public record VehicleDetailDto(
             DocumentRef document,
             List<VehicleDocumentDto> documents
     ) {
+        public Details(
+                UUID id,
+                String plateNumber,
+                VehicleRegistrationPlateType plateType,
+                String vin,
+                String brand,
+                String model,
+                Integer manufactureYear,
+                VehicleType vehicleType,
+                String bodyNumber,
+                String chassisNumber,
+                String engineNumber,
+                String fuelType,
+                Double fuelTankCapacity,
+                Double carryingCapacity,
+                Integer seatCount,
+                UUID assignedDriverId,
+                double currentOdometerKm,
+                double currentEngineHours,
+                String registrationCertificateNumber,
+                String insurancePolicyNumber,
+                LocalDate insuranceExpiryDate,
+                LocalDate technicalInspectionExpiryDate,
+                String gpsDeviceId,
+                DocumentRef document,
+                List<VehicleDocumentDto> documents
+        ) {
+            this(id, plateNumber, plateType, vin, brand, model, manufactureYear, vehicleType,
+                    bodyNumber, chassisNumber, engineNumber, fuelType, fuelTankCapacity, carryingCapacity, seatCount,
+                    assignedDriverId, null, currentOdometerKm, currentEngineHours, registrationCertificateNumber,
+                    insurancePolicyNumber, insuranceExpiryDate, technicalInspectionExpiryDate, gpsDeviceId, document,
+                    documents);
+        }
+
         public Details(
                 UUID id,
                 String plateNumber,
@@ -91,9 +126,43 @@ public record VehicleDetailDto(
         ) {
             this(id, plateNumber, VehicleRegistrationPlateType.UNKNOWN, vin, brand, model, manufactureYear, vehicleType,
                     bodyNumber, chassisNumber, engineNumber, fuelType, fuelTankCapacity, carryingCapacity, seatCount,
-                    assignedDriverId, currentOdometerKm, currentEngineHours, registrationCertificateNumber,
+                    assignedDriverId, null, currentOdometerKm, currentEngineHours, registrationCertificateNumber,
                     insurancePolicyNumber, insuranceExpiryDate, technicalInspectionExpiryDate, gpsDeviceId, document,
                     documents);
+        }
+
+        public Details(
+                UUID id,
+                String plateNumber,
+                String vin,
+                String brand,
+                String model,
+                Integer manufactureYear,
+                VehicleType vehicleType,
+                String bodyNumber,
+                String chassisNumber,
+                String engineNumber,
+                String fuelType,
+                Double fuelTankCapacity,
+                Double carryingCapacity,
+                Integer seatCount,
+                UUID assignedDriverId,
+                Integer assignedDriverUsageLimitMinutes,
+                double currentOdometerKm,
+                double currentEngineHours,
+                String registrationCertificateNumber,
+                String insurancePolicyNumber,
+                LocalDate insuranceExpiryDate,
+                LocalDate technicalInspectionExpiryDate,
+                String gpsDeviceId,
+                DocumentRef document,
+                List<VehicleDocumentDto> documents
+        ) {
+            this(id, plateNumber, VehicleRegistrationPlateType.UNKNOWN, vin, brand, model, manufactureYear, vehicleType,
+                    bodyNumber, chassisNumber, engineNumber, fuelType, fuelTankCapacity, carryingCapacity, seatCount,
+                    assignedDriverId, assignedDriverUsageLimitMinutes, currentOdometerKm, currentEngineHours,
+                    registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
+                    technicalInspectionExpiryDate, gpsDeviceId, document, documents);
         }
     }
 
@@ -172,6 +241,7 @@ public record VehicleDetailDto(
                         details.getCarryingCapacity(),
                         details.getSeatCount(),
                         details.getAssignedDriverId(),
+                        details.getAssignedDriverUsageLimitMinutes(),
                         details.getCurrentOdometerKm(),
                         details.getCurrentEngineHours(),
                         details.getRegistrationCertificateNumber(),

@@ -25,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -53,13 +54,13 @@ class VehicleDrivingSessionServiceTest {
     @Mock
     EmployeeRepository employeeRepository;
     @Mock
-    EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
-    @Mock
     EquipmentMeterRepository equipmentMeterRepository;
     @Mock
     MeterService meterService;
     @Mock
     EquipmentUsageSessionService equipmentUsageSessionService;
+    @Mock
+    EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
     @InjectMocks
     VehicleDrivingSessionService service;
@@ -77,8 +78,6 @@ class VehicleDrivingSessionServiceTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
         when(employeeRepository.findByIdAndIsDeletedFalse(driverId)).thenReturn(Optional.of(driver));
-        when(employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(driverId, "DRIVER"))
-                .thenReturn(true);
         lenient().when(sessionRepository.save(any(VehicleDrivingSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(equipmentUsageSessionService.start(
                 eq(equipmentId),
@@ -137,8 +136,6 @@ class VehicleDrivingSessionServiceTest {
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
         when(employeeRepository.findByIdAndIsDeletedFalse(otherDriverId)).thenReturn(Optional.of(driver));
-        when(employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(otherDriverId, "DRIVER"))
-                .thenReturn(true);
 
         assertThatThrownBy(() -> service.start(
                 equipmentId,
@@ -148,6 +145,32 @@ class VehicleDrivingSessionServiceTest {
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("assigned driver");
 
+        verify(sessionRepository, never()).save(any());
+    }
+
+    @Test
+    void startRejectsEmployeeWithoutDriverWorkRoleWhenRoleRequirementEnabled() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID driverId = UUID.randomUUID();
+        Equipment equipment = vehicle(equipmentId, EquipmentStatus.ACTIVE);
+        VehicleDetails details = details(equipmentId, driverId);
+        Employee driver = employee(driverId, equipment.getDepartmentId(), true);
+
+        ReflectionTestUtils.setField(service, "driverRoleRequired", true);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(employeeRepository.findByIdAndIsDeletedFalse(driverId)).thenReturn(Optional.of(driver));
+        when(employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(driverId, "DRIVER")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.start(
+                equipmentId,
+                new VehicleDrivingSessionStartRequest(driverId, Instant.parse("2026-06-16T06:00:00Z"), null, null, "dispatch"),
+                UUID.randomUUID()
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("DRIVER");
+
+        verify(equipmentUsageSessionService, never()).start(any(), any(), any());
         verify(sessionRepository, never()).save(any());
     }
 

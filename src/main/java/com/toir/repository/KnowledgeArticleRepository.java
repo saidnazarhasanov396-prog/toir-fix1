@@ -50,13 +50,13 @@ public interface KnowledgeArticleRepository extends JpaRepository<KnowledgeArtic
     @Query(value = "SELECT * FROM knowledge_articles WHERE kind = :kind AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<KnowledgeArticle> findAllByKindAndIsDeletedFalse(@Param("kind") String kind);
 
-    @Query(value = """
-        select distinct defect_id
-        from knowledge_articles
-        where is_deleted = false
-          and defect_id in (:defectIds)
-          and kind = :kind
-        """, nativeQuery = true)
+    @Query("""
+        select distinct a.defectId
+        from KnowledgeArticle a
+        where a.isDeleted = false
+          and a.defectId in :defectIds
+          and a.kind = :kind
+        """)
     List<UUID> findDefectIdsWithLesson(
             @Param("defectIds") Collection<UUID> defectIds,
             @Param("kind") String kind

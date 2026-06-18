@@ -45,6 +45,7 @@ import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -77,6 +78,9 @@ public class VehicleService {
     private final AttachmentGroupService attachmentGroupService;
     private final EmployeeRepository employeeRepository;
     private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
+
+    @Value("${toir.vehicle.driver-role-required:false}")
+    private boolean driverRoleRequired;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, VehicleRegistrationPlateType plateType,
@@ -152,7 +156,7 @@ public class VehicleService {
         Equipment equipment = new Equipment();
         equipment.setCode(nextEquipmentCode());
         applyEquipment(equipment, request);
-        validateAssignedDriver(request.assignedDriverId(), request.departmentId(), null);
+        validateAssignedDriver(request.assignedDriverId(), request.assignedDriverUsageLimitMinutes(), request.departmentId(), null);
         Equipment savedEquipment = equipmentRepository.save(equipment);
         writeInitialLocationHistory(savedEquipment);
 
@@ -206,7 +210,7 @@ public class VehicleService {
         validateUniqueUpdate(equipmentId, equipment, details, request);
         boolean equipmentTypeChanged = isEquipmentTypeChanged(equipment.getEquipmentTypeId(), request.equipmentTypeId());
         validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
-        validateAssignedDriver(request.assignedDriverId(), request.departmentId(), equipmentId);
+        validateAssignedDriver(request.assignedDriverId(), request.assignedDriverUsageLimitMinutes(), request.departmentId(), equipmentId);
         VehicleLocationSnapshot fromLocation = vehicleLocationSnapshot(equipment);
         applyEquipment(equipment, request);
         applyDetails(details, request);
@@ -846,7 +850,7 @@ public class VehicleService {
         details.setFuelTankCapacity(request.fuelTankCapacity());
         details.setCarryingCapacity(request.carryingCapacity());
         details.setSeatCount(request.seatCount());
-        details.setAssignedDriverId(request.assignedDriverId());
+        applyAssignedDriver(details, request.assignedDriverId(), request.assignedDriverUsageLimitMinutes());
         details.setCurrentOdometerKm(request.currentOdometerKm() != null ? request.currentOdometerKm() : 0);
         details.setCurrentEngineHours(request.currentEngineHours() != null ? request.currentEngineHours() : 0);
         details.setRegistrationCertificateNumber(request.registrationCertificateNumber());
@@ -856,7 +860,16 @@ public class VehicleService {
         details.setGpsDeviceId(request.gpsDeviceId());
     }
 
-    private void validateAssignedDriver(UUID assignedDriverId, UUID vehicleDepartmentId, UUID currentEquipmentId) {
+    private void validateAssignedDriver(UUID assignedDriverId,
+                                        Integer assignedDriverUsageLimitMinutes,
+                                        UUID vehicleDepartmentId,
+                                        UUID currentEquipmentId) {
+        if (assignedDriverId == null && assignedDriverUsageLimitMinutes != null) {
+            throw RestException.badRequest("assignedDriverId is required when assignedDriverUsageLimitMinutes is provided");
+        }
+        if (assignedDriverUsageLimitMinutes != null && assignedDriverUsageLimitMinutes <= 0) {
+            throw RestException.badRequest("assignedDriverUsageLimitMinutes must be positive");
+        }
         if (assignedDriverId == null) {
             return;
         }
@@ -868,7 +881,8 @@ public class VehicleService {
         if (!driver.isActive()) {
             throw RestException.badRequest("Assigned driver employee is not active: " + assignedDriverId);
         }
-        if (!employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(assignedDriverId, "DRIVER")) {
+        if (driverRoleRequired
+                && !employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(assignedDriverId, "DRIVER")) {
             throw RestException.badRequest("Assigned employee must have DRIVER work role");
         }
         if (!Objects.equals(driver.getDepartmentId(), vehicleDepartmentId)) {
@@ -879,6 +893,24 @@ public class VehicleService {
                 : vehicleDetailsRepository.existsAssignedDriverOnAnotherVehicle(assignedDriverId, currentEquipmentId);
         if (assignedElsewhere) {
             throw RestException.conflict("Assigned driver already has a default vehicle");
+        }
+    }
+
+    private void applyAssignedDriver(VehicleDetails details, UUID assignedDriverId, Integer usageLimitMinutes) {
+        UUID previousDriverId = details.getAssignedDriverId();
+        Integer previousLimitMinutes = details.getAssignedDriverUsageLimitMinutes();
+        details.setAssignedDriverId(assignedDriverId);
+        if (assignedDriverId == null) {
+            details.setAssignedDriverUsageLimitMinutes(null);
+            details.setAssignedDriverAssignedBy(null);
+            details.setAssignedDriverAssignedAt(null);
+            return;
+        }
+        details.setAssignedDriverUsageLimitMinutes(usageLimitMinutes);
+        if (!Objects.equals(previousDriverId, assignedDriverId)
+                || !Objects.equals(previousLimitMinutes, usageLimitMinutes)) {
+            details.setAssignedDriverAssignedBy(currentActorIdOrNull());
+            details.setAssignedDriverAssignedAt(Instant.now());
         }
     }
 

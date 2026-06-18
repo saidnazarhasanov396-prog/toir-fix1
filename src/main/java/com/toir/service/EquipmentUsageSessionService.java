@@ -27,6 +27,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
@@ -85,6 +86,7 @@ public class EquipmentUsageSessionService {
         session.setIssuedBy(issuedBy);
         session.setNote(trimToNull(request.note()));
         session.setStatus(EquipmentUsageSessionStatus.OPEN);
+        applyVehicleAssignmentDeadline(equipment, session);
 
         return EquipmentUsageSessionResponse.from(sessionRepository.save(session), operator);
     }
@@ -162,6 +164,25 @@ public class EquipmentUsageSessionService {
 
     private UUID effectiveDepartmentId(Equipment equipment) {
         return equipment.getDepartmentId() != null ? equipment.getDepartmentId() : equipment.getResponsibleDepartmentId();
+    }
+
+    private void applyVehicleAssignmentDeadline(Equipment equipment, EquipmentUsageSession session) {
+        if (equipment.getCategory() != EquipmentCategory.VEHICLE) {
+            return;
+        }
+        VehicleDetails details = vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipment.getId())
+                .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipment.getId()));
+        if (details.getAssignedDriverId() != null
+                && !Objects.equals(details.getAssignedDriverId(), session.getOperatorEmployeeId())) {
+            throw RestException.badRequest("Vehicle usage session can only start with the assigned driver");
+        }
+        Integer usageLimitMinutes = details.getAssignedDriverUsageLimitMinutes();
+        if (usageLimitMinutes == null) {
+            return;
+        }
+        session.setUsageLimitMinutes(usageLimitMinutes);
+        session.setDueAt(session.getStartedAt().plus(Duration.ofMinutes(usageLimitMinutes)));
+        session.setAssignmentActorUserId(details.getAssignedDriverAssignedBy());
     }
 
     private void validateEndReading(String label, Double start, Double end) {

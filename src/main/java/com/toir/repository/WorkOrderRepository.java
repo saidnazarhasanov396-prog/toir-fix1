@@ -305,11 +305,11 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
                   and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
                   and (
                       nullif(trim(cast(:search as varchar)), '') is null
-                      or lower(coalesce(to_jsonb(w)->>'number', '')) like lower(concat('%', cast(:search as varchar), '%'))
-                      or lower(coalesce(to_jsonb(w)->>'title', '')) like lower(concat('%', cast(:search as varchar), '%'))
-                      or lower(coalesce(to_jsonb(w)->>'summary', '')) like lower(concat('%', cast(:search as varchar), '%'))
-                      or lower(coalesce(to_jsonb(w)->>'result', '')) like lower(concat('%', cast(:search as varchar), '%'))
-                      or lower(coalesce(to_jsonb(w)->>'closure_notes', '')) like lower(concat('%', cast(:search as varchar), '%'))
+                      or lower(coalesce(w.number, '')) like lower(concat('%', cast(:search as varchar), '%'))
+                      or lower(coalesce(w.title, '')) like lower(concat('%', cast(:search as varchar), '%'))
+                      or lower(coalesce(w.summary, '')) like lower(concat('%', cast(:search as varchar), '%'))
+                      or lower(coalesce(w.result, '')) like lower(concat('%', cast(:search as varchar), '%'))
+                      or lower(coalesce(w.closure_notes, '')) like lower(concat('%', cast(:search as varchar), '%'))
                   )
             """)
     WorkOrderStatsProjection getWorkOrderStats(
