@@ -14,6 +14,7 @@ import com.toir.service.EquipmentUsageSessionService;
 import com.toir.service.equipment.EquipmentPictureService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.EquipmentUsageSessionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;

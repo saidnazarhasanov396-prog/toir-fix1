@@ -3,6 +3,8 @@ package com.toir.service.approval;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalTemplate;
+import com.toir.entity.ApprovalTemplateStep;
+import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.repository.ApprovalTemplateRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,13 +24,34 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
         if (request == null || request.getTargetType() == null) {
             return List.of();
         }
+        ApprovalActionType actionType = request.getActionType() == null
+                ? ApprovalActionType.APPROVE
+                : request.getActionType();
         return templateRepository
-                .findFirstByTargetTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(request.getTargetType())
+                .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                        request.getTargetType(),
+                        actionType
+                )
+                .or(() -> templateRepository
+                        .findFirstByTargetTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                                request.getTargetType()
+                        ))
                 .map(this::stepsFromTemplate)
                 .orElse(List.of());
     }
 
     private List<CreateApprovalRequest.StepInput> stepsFromTemplate(ApprovalTemplate template) {
+        List<CreateApprovalRequest.StepInput> configuredSteps = template.getSteps().stream()
+                .filter(step -> !step.isDeleted())
+                .sorted(java.util.Comparator.comparingInt(ApprovalTemplateStep::getStepOrder))
+                .map(step -> new CreateApprovalRequest.StepInput(
+                        step.getApproverId(),
+                        step.getApproverId() == null ? step.getApproverRole() : null
+                ))
+                .toList();
+        if (!configuredSteps.isEmpty()) {
+            return configuredSteps;
+        }
         ApprovalRoutePolicy policy = template.getRoutePolicy();
         if (policy == ApprovalRoutePolicy.USER_BASED && template.getApproverId() != null) {
             return List.of(new CreateApprovalRequest.StepInput(template.getApproverId(), null));

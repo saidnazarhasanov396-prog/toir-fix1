@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.approval.ApprovalHistoryDto;
 import com.toir.dto.approval.ApprovalAnalyticsDto;
 import com.toir.dto.approval.ApprovalRequestDto;
+import com.toir.dto.approval.ApprovalRuleDto;
 import com.toir.dto.approval.ApprovalStartRequest;
 import com.toir.dto.approval.ApprovalStatisticsDto;
 import com.toir.dto.approval.CreateApprovalRequest;
@@ -14,6 +15,7 @@ import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.ApprovalService;
 import com.toir.service.approval.ApprovalAnalyticsService;
+import com.toir.service.approval.ApprovalRuleService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -37,6 +39,7 @@ public class ApprovalController {
 
     private final ApprovalService service;
     private final ApprovalAnalyticsService analyticsService;
+    private final ApprovalRuleService ruleService;
 
 
     @GetMapping
@@ -94,6 +97,12 @@ public class ApprovalController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_CREATE')")
     public ResponseEntity<ApprovalRequestDto> create(@Valid @RequestBody CreateApprovalRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
+    }
+
+    @GetMapping("/rules")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_READ') or hasAuthority('ADMIN') or hasAuthority('MANAGER')")
+    public ResponseEntity<List<ApprovalRuleDto>> rules() {
+        return ResponseEntity.ok(ruleService.listRules());
     }
 
     @PutMapping("/{id}")
