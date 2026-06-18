@@ -68,10 +68,14 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
                 OR lower(coalesce(number, '')) LIKE lower(concat('%', cast(:search as varchar), '%'))
                 OR lower(coalesce(title, '')) LIKE lower(concat('%', cast(:search as varchar), '%'))
             )
+            AND (cast(:minAmount as float8) IS NULL OR total_estimated_cost >= cast(:minAmount as float8))
+            AND (cast(:maxAmount as float8) IS NULL OR total_estimated_cost <= cast(:maxAmount as float8))
             ORDER BY updated_at DESC
             """, nativeQuery = true)
     List<ProcurementRequest> search(
             @Param("search") String search,
             @Param("status") String status,
-            @Param("departmentId") UUID departmentId);
+            @Param("departmentId") UUID departmentId,
+            @Param("minAmount") Double minAmount,
+            @Param("maxAmount") Double maxAmount);
 }

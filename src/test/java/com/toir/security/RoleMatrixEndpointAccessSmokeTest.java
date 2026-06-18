@@ -241,7 +241,7 @@ class RoleMatrixEndpointAccessSmokeTest {
     })
     void supplySpecialistCanCreateAndProgressProcurementButCannotApproveOrReject() throws Exception {
         UUID requestId = UUID.randomUUID();
-        when(procurementRequestService.findAll(null, null,null)).thenReturn(List.of(procurementRequestDto(requestId)));
+        when(procurementRequestService.findAll(null, null, null, null, null)).thenReturn(List.of(procurementRequestDto(requestId)));
         when(procurementRequestService.create(any())).thenReturn(procurementRequestDto(requestId));
         when(procurementRequestService.submit(requestId)).thenReturn(procurementRequestDto(requestId));
         when(procurementRequestService.markOrdered(requestId)).thenReturn(procurementRequestDto(requestId));

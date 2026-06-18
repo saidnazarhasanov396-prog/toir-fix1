@@ -66,43 +66,43 @@ class ProcurementRequestSearchTest {
     @Test
     void adminSearchPassesSearchTermToRepository() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.search("bearing", null, null)).thenReturn(List.of(procurement("Bearing order", "PR-001")));
+        when(repository.search("bearing", null, null, null, null)).thenReturn(List.of(procurement("Bearing order", "PR-001")));
 
-        var result = service.findAll(null, null, "bearing");
+        var result = service.findAll(null, null, "bearing", null, null);
 
         assertThat(result).hasSize(1);
-        verify(repository).search("bearing", null, null);
+        verify(repository).search("bearing", null, null, null, null);
     }
 
     @Test
     void adminSearchWithStatusFilter() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.search(isNull(), eq("DRAFT"), isNull())).thenReturn(List.of());
+        when(repository.search(isNull(), eq("DRAFT"), isNull(), isNull(), isNull())).thenReturn(List.of());
 
-        service.findAll(ProcurementRequestStatus.DRAFT, null, null);
+        service.findAll(ProcurementRequestStatus.DRAFT, null, null, null, null);
 
-        verify(repository).search(null, "DRAFT", null);
+        verify(repository).search(null, "DRAFT", null, null, null);
     }
 
     @Test
     void adminSearchWithDepartmentFilter() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID deptId = UUID.randomUUID();
-        when(repository.search(isNull(), isNull(), eq(deptId))).thenReturn(List.of());
+        when(repository.search(isNull(), isNull(), eq(deptId), isNull(), isNull())).thenReturn(List.of());
 
-        service.findAll(null, deptId, null);
+        service.findAll(null, deptId, null, null, null);
 
-        verify(repository).search(null, null, deptId);
+        verify(repository).search(null, null, deptId, null, null);
     }
 
     @Test
     void adminBlankSearchNormalizesToNull() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.search(isNull(), isNull(), isNull())).thenReturn(List.of());
+        when(repository.search(isNull(), isNull(), isNull(), isNull(), isNull())).thenReturn(List.of());
 
-        service.findAll(null, null, "   ");
+        service.findAll(null, null, "   ", null, null);
 
-        verify(repository).search(null, null, null);
+        verify(repository).search(null, null, null, null, null);
     }
 
     @Test
@@ -110,7 +110,7 @@ class ProcurementRequestSearchTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
 
-        assertThatThrownBy(() -> service.findAll(null, null, "pump"))
+        assertThatThrownBy(() -> service.findAll(null, null, "pump", null, null))
                 .isInstanceOf(AccessDeniedException.class);
     }
 
@@ -119,22 +119,62 @@ class ProcurementRequestSearchTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         UUID deptId = UUID.randomUUID();
         when(scopeAccessService.enforceDepartmentScope(deptId)).thenReturn(deptId);
-        when(repository.search(eq("pump"), isNull(), eq(deptId))).thenReturn(List.of());
+        when(repository.search(eq("pump"), isNull(), eq(deptId), isNull(), isNull())).thenReturn(List.of());
 
-        service.findAll(null, deptId, "pump");
+        service.findAll(null, deptId, "pump", null, null);
 
-        verify(repository).search("pump", null, deptId);
+        verify(repository).search("pump", null, deptId, null, null);
     }
 
     @Test
     void scopedUserWithStatusCanSearch() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(repository.search(isNull(), eq("APPROVED"), isNull())).thenReturn(List.of());
+        when(repository.search(isNull(), eq("APPROVED"), isNull(), isNull(), isNull())).thenReturn(List.of());
 
-        service.findAll(ProcurementRequestStatus.APPROVED, null, null);
+        service.findAll(ProcurementRequestStatus.APPROVED, null, null, null, null);
 
-        verify(repository).search(null, "APPROVED", null);
+        verify(repository).search(null, "APPROVED", null, null, null);
+    }
+
+    @Test
+    void adminSearchWithMinAmountFilter() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.search(isNull(), isNull(), isNull(), eq(100.0), isNull())).thenReturn(List.of());
+
+        service.findAll(null, null, null, 100.0, null);
+
+        verify(repository).search(null, null, null, 100.0, null);
+    }
+
+    @Test
+    void adminSearchWithMaxAmountFilter() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.search(isNull(), isNull(), isNull(), isNull(), eq(500.0))).thenReturn(List.of());
+
+        service.findAll(null, null, null, null, 500.0);
+
+        verify(repository).search(null, null, null, null, 500.0);
+    }
+
+    @Test
+    void adminSearchWithAmountRange() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.search(isNull(), isNull(), isNull(), eq(100.0), eq(500.0))).thenReturn(List.of());
+
+        service.findAll(null, null, null, 100.0, 500.0);
+
+        verify(repository).search(null, null, null, 100.0, 500.0);
+    }
+
+    @Test
+    void adminSearchBothMinAndMaxAtSameValue() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.search(isNull(), isNull(), isNull(), eq(250.0), eq(250.0))).thenReturn(List.of());
+
+        service.findAll(null, null, null, 250.0, 250.0);
+
+        verify(repository).search(null, null, null, 250.0, 250.0);
     }
 
     private ProcurementRequest procurement(String title, String number) {
