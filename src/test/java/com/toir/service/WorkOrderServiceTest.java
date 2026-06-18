@@ -9,6 +9,7 @@ import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
+import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.entity.CompletionAct;
 import com.toir.entity.CertificationType;
 import com.toir.entity.Department;
@@ -60,6 +61,7 @@ import com.toir.enums.ReservationStatus;
 import com.toir.enums.SafetyPermitStatus;
 import com.toir.enums.TaskExecutionStatus;
 import com.toir.enums.NotificationSeverity;
+import com.toir.enums.PlacementTargetType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -103,6 +105,7 @@ import com.toir.dto.file.UploadFileResponse;
 import com.toir.security.AuthenticatedUser;
 import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
+import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
@@ -224,6 +227,9 @@ class WorkOrderServiceTest {
 
     @Mock
     WarehouseEquipmentItemService warehouseEquipmentItemService;
+
+    @Mock
+    EquipmentService equipmentService;
 
     @Mock
     SafetyPermitRepository safetyPermitRepository;
@@ -2411,22 +2417,26 @@ class WorkOrderServiceTest {
         when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
                 .thenReturn(Optional.of(item));
         when(warehouseRepository.findByIdAndIsDeletedFalse(oldEquipmentReturnWarehouseId)).thenReturn(Optional.of(returnWarehouse));
-        when(equipmentRepository.findByIdAndIsDeletedFalse(replacementEquipmentId)).thenReturn(Optional.of(replacementEquipment));
-        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(equipmentRepository.findByIdAndIsDeletedFalse(replacementEquipmentId)).thenReturn(Optional.of(replacementEquipment));
+        lenient().when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubLifecycleDtoLookups(workOrder);
 
         service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", oldEquipmentReturnWarehouseId));
 
-        assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.INSTALLED);
-        assertThat(replacementEquipment.getDepartmentId()).isEqualTo(workOrderDepartmentId);
-        verify(equipmentRepository).save(replacementEquipment);
-        verify(warehouseEquipmentItemService).transferEquipmentToWarehouse(
-                workOrder.getEquipmentId(),
-                oldEquipmentReturnWarehouseId,
-                WarehouseEquipmentStatus.OUT_OF_SERVICE
-        );
+        verify(equipmentService).updatePlacement(eq(replacementEquipmentId), argThat(request ->
+                request.targetType() == PlacementTargetType.DEPARTMENT
+                        && workOrderDepartmentId.equals(request.departmentId())
+                        && request.note().contains(workOrder.getNumber())
+        ));
+        verify(equipmentService).updatePlacement(eq(workOrder.getEquipmentId()), argThat(request ->
+                request.targetType() == PlacementTargetType.WAREHOUSE
+                        && oldEquipmentReturnWarehouseId.equals(request.warehouseId())
+                        && request.warehouseStatus() == WarehouseEquipmentStatus.OUT_OF_SERVICE
+                        && request.note().contains(workOrder.getNumber())
+        ));
+        verify(warehouseEquipmentItemService, never()).transferEquipmentToWarehouse(any(), any(), any());
     }
 
     @Test

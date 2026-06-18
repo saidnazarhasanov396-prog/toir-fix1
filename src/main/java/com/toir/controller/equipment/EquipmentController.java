@@ -14,6 +14,7 @@ import com.toir.security.ScopeAccessService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentPictureService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.EquipmentUsageSessionService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -48,6 +49,7 @@ public class EquipmentController {
     private final ScopeAccessService scopeAccessService;
     private final EquipmentStatusLifecycleService statusLifecycleService;
     private final EquipmentPictureService pictureService;
+    private final EquipmentUsageSessionService usageSessionService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
@@ -386,6 +388,57 @@ public class EquipmentController {
         ));
     }
 
+    @GetMapping("/{id}/location-history")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Page<EquipmentLocationHistoryResponse>> locationHistory(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.ok(service.locationHistory(
+                id,
+                PageRequest.of(Math.max(0, page), Math.max(1, size))
+        ));
+    }
+
+    @PostMapping("/{id}/usage-sessions/start")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    public ResponseEntity<EquipmentUsageSessionResponse> startUsageSession(
+            @PathVariable UUID id,
+            @Valid @RequestBody EquipmentUsageSessionStartRequest request,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.ok(usageSessionService.start(id, request, currentUserId(user)));
+    }
+
+    @PostMapping("/{id}/usage-sessions/{sessionId}/return")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
+    public ResponseEntity<EquipmentUsageSessionResponse> returnUsageSession(
+            @PathVariable UUID id,
+            @PathVariable UUID sessionId,
+            @Valid @RequestBody EquipmentUsageSessionReturnRequest request,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.ok(usageSessionService.returnEquipment(id, sessionId, request, currentUserId(user)));
+    }
+
+    @GetMapping("/{id}/usage-sessions")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Page<EquipmentUsageSessionResponse>> usageSessionHistory(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size
+    ) {
+        assertCanAccessEquipment(equipmentOrThrow(id));
+        return ResponseEntity.ok(usageSessionService.history(
+                id,
+                PageRequest.of(Math.max(0, page), Math.max(1, size))
+        ));
+    }
+
     @PatchMapping("/{id}/placement")
     @Operation(
             summary = "Move equipment between warehouse and department",
@@ -441,5 +494,12 @@ public class EquipmentController {
             throw new AccessDeniedException("Access denied by equipment department scope");
         }
         return currentDepartmentId;
+    }
+
+    private UUID currentUserId(AuthenticatedUser user) {
+        if (user == null || user.id() == null || user.id().isBlank()) {
+            throw RestException.unauthorized("Authenticated user is required");
+        }
+        return UUID.fromString(user.id());
     }
 }

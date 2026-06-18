@@ -23,6 +23,7 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -76,6 +77,9 @@ class ProcurementRequestServiceTest {
     @Mock
     CostCategoryRepository costCategoryRepository;
 
+    @Mock
+    ToirStockService toirStockService;
+
     ProcurementRequestService service;
 
     @BeforeEach
@@ -90,7 +94,8 @@ class ProcurementRequestServiceTest {
                 scopeAccessService,
                 lowStockRecommendationService,
                 actualCostRepository,
-                costCategoryRepository
+                costCategoryRepository,
+                toirStockService
         );
     }
 
@@ -103,7 +108,7 @@ class ProcurementRequestServiceTest {
         ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED,
                 List.of(line(sparePartId, 4, 12.5)));
         WarehouseStock stock = stock(warehouseId, sparePartId, 6);
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
         when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -138,7 +143,7 @@ class ProcurementRequestServiceTest {
         SparePart sparePart = sparePart(sparePartId);
         ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED,
                 List.of(line(sparePartId, 3, null)));
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.empty());
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
@@ -167,7 +172,7 @@ class ProcurementRequestServiceTest {
         UUID secondSparePartId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED,
                 List.of(line(firstSparePartId, 2, 5.0), line(secondSparePartId, 7, 9.0)));
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, firstSparePartId))
                 .thenReturn(Optional.of(stock(warehouseId, firstSparePartId, 1)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, secondSparePartId))
@@ -266,7 +271,7 @@ class ProcurementRequestServiceTest {
         CostCategory category = new CostCategory();
         category.setId(categoryId);
         category.setCode("MATERIALS");
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock(warehouseId, sparePartId, 1)));
         when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -312,7 +317,7 @@ class ProcurementRequestServiceTest {
         existingCost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
         existingCost.setSourceId(movementId);
         existingCost.setAmount(10.0);
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock(warehouseId, sparePartId, 1)));
         when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -344,7 +349,7 @@ class ProcurementRequestServiceTest {
         UUID requestId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.RECEIVED,
                 List.of(line(UUID.randomUUID(), 1, null)));
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
 
         assertThatThrownBy(() -> service.markReceived(requestId))
                 .isInstanceOf(RestException.class)
@@ -360,7 +365,7 @@ class ProcurementRequestServiceTest {
         UUID requestId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, null, ProcurementRequestStatus.ORDERED,
                 List.of(line(UUID.randomUUID(), 1, null)));
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
 
         assertThatThrownBy(() -> service.markReceived(requestId))
                 .isInstanceOf(RestException.class)
@@ -375,7 +380,7 @@ class ProcurementRequestServiceTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.ORDERED, List.of());
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
 
         assertThatThrownBy(() -> service.markReceived(requestId))
                 .isInstanceOf(RestException.class)
@@ -397,11 +402,11 @@ class ProcurementRequestServiceTest {
             UUID requestId = UUID.randomUUID();
             ProcurementRequest request = request(requestId, UUID.randomUUID(), status,
                     List.of(line(UUID.randomUUID(), 1, null)));
-            when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+            when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
 
             assertThatThrownBy(() -> service.markReceived(requestId))
                     .isInstanceOf(RestException.class)
-                    .hasMessageContaining("Only ORDERED can be marked RECEIVED");
+                    .hasMessageContaining("Only ORDERED or PARTIALLY_RECEIVED can be marked RECEIVED");
         }
 
         verify(stockRepository, never()).save(any());
@@ -414,7 +419,7 @@ class ProcurementRequestServiceTest {
         UUID requestId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.ORDERED,
                 List.of(line(null, 1, null)));
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
 
         assertThatThrownBy(() -> service.markReceived(requestId))
                 .isInstanceOf(RestException.class)
@@ -430,7 +435,7 @@ class ProcurementRequestServiceTest {
         UUID requestId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.ORDERED,
                 List.of(line(UUID.randomUUID(), 0, null)));
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
 
         assertThatThrownBy(() -> service.markReceived(requestId))
                 .isInstanceOf(RestException.class)
@@ -443,7 +448,7 @@ class ProcurementRequestServiceTest {
     @Test
     void missingRequestRemains404OnReceive() {
         UUID requestId = UUID.randomUUID();
-        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.empty());
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.markReceived(requestId))
                 .isInstanceOf(RestException.class)
@@ -477,6 +482,8 @@ class ProcurementRequestServiceTest {
         line.setId(UUID.randomUUID());
         line.setSparePartId(sparePartId);
         line.setQuantity(quantity);
+        line.setReceivedQuantity(0);
+        line.setRemainingQuantity(quantity);
         line.setUnit("pcs");
         line.setUnitPrice(unitPrice);
         line.setEstimatedCost(unitPrice == null ? 0 : unitPrice * quantity);

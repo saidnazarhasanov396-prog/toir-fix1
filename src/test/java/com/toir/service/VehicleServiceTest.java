@@ -15,11 +15,13 @@ import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.dto.vehicle.VehicleSummaryDto;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentLocationHistory;
 import com.toir.entity.equipment.VehicleDocument;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.AttachmentTargetType;
+import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
 import com.toir.enums.MeterType;
@@ -31,6 +33,7 @@ import com.toir.repository.VehicleDocumentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.projection.VehicleStatsProjection;
+import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentService;
@@ -72,6 +75,9 @@ class VehicleServiceTest {
 
     @Mock
     EquipmentRepository equipmentRepository;
+
+    @Mock
+    EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
 
     @Mock
     VehicleDetailsRepository vehicleDetailsRepository;
@@ -188,6 +194,57 @@ class VehicleServiceTest {
 
         assertThat(result.equipment().category()).isEqualTo(EquipmentCategory.VEHICLE);
         assertThat(result.vehicleDetails().plateNumber()).isEqualTo("01A123AA");
+    }
+
+    @Test
+    void createVehicleInitializesEquipmentPlacementAndHistory() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        VehicleRequest request = VehicleRequest.minimal(
+                null,
+                "Truck Placement",
+                "INV-VH-PLACE-001",
+                equipmentTypeId,
+                departmentId,
+                "01A177AA",
+                VehicleType.TRUCK
+        );
+
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-PLACE-001")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A177AA")).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(equipmentId);
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenAnswer(invocation -> {
+            Equipment equipment = equipment(equipmentId, "EQ-2026-0001", "Truck Placement", "INV-VH-PLACE-001");
+            equipment.setDepartmentId(departmentId);
+            equipment.setCurrentLocationType(EquipmentLocationType.DEPARTMENT);
+            equipment.setResponsibleDepartmentId(departmentId);
+            return EquipmentDto.from(equipment);
+        });
+
+        service.create(request);
+
+        ArgumentCaptor<Equipment> equipmentCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(equipmentRepository).save(equipmentCaptor.capture());
+        Equipment savedEquipment = equipmentCaptor.getValue();
+        assertThat(savedEquipment.getCurrentLocationType()).isEqualTo(EquipmentLocationType.DEPARTMENT);
+        assertThat(savedEquipment.getResponsibleDepartmentId()).isEqualTo(departmentId);
+        assertThat(savedEquipment.getCurrentWarehouseId()).isNull();
+
+        ArgumentCaptor<EquipmentLocationHistory> historyCaptor = ArgumentCaptor.forClass(EquipmentLocationHistory.class);
+        verify(equipmentLocationHistoryRepository).save(historyCaptor.capture());
+        EquipmentLocationHistory history = historyCaptor.getValue();
+        assertThat(history.getEquipmentId()).isEqualTo(equipmentId);
+        assertThat(history.getFromLocationType()).isNull();
+        assertThat(history.getToLocationType()).isEqualTo(EquipmentLocationType.DEPARTMENT);
+        assertThat(history.getToDepartmentId()).isEqualTo(departmentId);
+        assertThat(history.getResponsibleDepartmentId()).isEqualTo(departmentId);
+        assertThat(history.getChangedAt()).isNotNull();
     }
 
     @Test
@@ -778,6 +835,45 @@ class VehicleServiceTest {
         verify(equipmentRepository, never()).findByInventoryNumberAndIsDeletedFalse("INV-VH-020");
         verify(vehicleDetailsRepository, never()).findByPlateNumberAndIsDeletedFalse("01A020AA");
         verify(vehicleDetailsRepository, never()).findByVinAndIsDeletedFalse("VIN-020");
+    }
+
+    @Test
+    void updateVehicleDepartmentChangeWritesLocationHistory() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID fromDepartmentId = UUID.randomUUID();
+        UUID toDepartmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-021", "Truck 021", "INV-VH-021");
+        equipment.setDepartmentId(fromDepartmentId);
+        equipment.setCurrentLocationType(EquipmentLocationType.DEPARTMENT);
+        equipment.setResponsibleDepartmentId(fromDepartmentId);
+        VehicleDetails details = details(equipmentId, "01A021AA", null);
+        VehicleRequest request = VehicleRequest.minimal(
+                null,
+                "Truck 021 Updated",
+                "INV-VH-021",
+                equipment.getEquipmentTypeId(),
+                toDepartmentId,
+                "01A021AA",
+                VehicleType.TRUCK
+        );
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(equipment));
+
+        service.update(equipmentId, request);
+
+        ArgumentCaptor<EquipmentLocationHistory> historyCaptor = ArgumentCaptor.forClass(EquipmentLocationHistory.class);
+        verify(equipmentLocationHistoryRepository).save(historyCaptor.capture());
+        EquipmentLocationHistory history = historyCaptor.getValue();
+        assertThat(history.getEquipmentId()).isEqualTo(equipmentId);
+        assertThat(history.getFromLocationType()).isEqualTo(EquipmentLocationType.DEPARTMENT);
+        assertThat(history.getFromDepartmentId()).isEqualTo(fromDepartmentId);
+        assertThat(history.getToLocationType()).isEqualTo(EquipmentLocationType.DEPARTMENT);
+        assertThat(history.getToDepartmentId()).isEqualTo(toDepartmentId);
+        assertThat(history.getResponsibleDepartmentId()).isEqualTo(toDepartmentId);
     }
 
     @Test

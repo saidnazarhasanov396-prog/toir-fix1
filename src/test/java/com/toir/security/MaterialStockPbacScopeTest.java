@@ -9,6 +9,7 @@ import com.toir.enums.StockMovementType;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementFileRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -58,6 +59,7 @@ class MaterialStockPbacScopeTest {
         lowStockRecommendationService = mock(LowStockRecommendationService.class);
         stockMovementService = new StockMovementService(
                 movementRepository,
+                mock(ProcurementRequestRepository.class),
                 stockRepository,
                 sparePartRepository,
                 auditBuilderService,

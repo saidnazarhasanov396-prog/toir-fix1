@@ -1,5 +1,8 @@
 package com.toir.service;
 
+import com.toir.dto.equipment.EquipmentUsageSessionResponse;
+import com.toir.dto.equipment.EquipmentUsageSessionReturnRequest;
+import com.toir.dto.equipment.EquipmentUsageSessionStartRequest;
 import com.toir.dto.vehicle.VehicleDrivingSessionReturnRequest;
 import com.toir.dto.vehicle.VehicleDrivingSessionStartRequest;
 import com.toir.entity.equipment.Equipment;
@@ -8,6 +11,7 @@ import com.toir.entity.equipment.VehicleDrivingSession;
 import com.toir.entity.users.Employee;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.EquipmentUsageSessionStatus;
 import com.toir.enums.VehicleDrivingSessionStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.VehicleDetailsRepository;
@@ -30,7 +34,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,9 +58,72 @@ class VehicleDrivingSessionServiceTest {
     EquipmentMeterRepository equipmentMeterRepository;
     @Mock
     MeterService meterService;
+    @Mock
+    EquipmentUsageSessionService equipmentUsageSessionService;
 
     @InjectMocks
     VehicleDrivingSessionService service;
+
+    @Test
+    void startDelegatesToGenericUsageSessionService() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID driverId = UUID.randomUUID();
+        UUID issuedBy = UUID.randomUUID();
+        Instant startedAt = Instant.parse("2026-06-16T06:00:00Z");
+        Equipment equipment = vehicle(equipmentId, EquipmentStatus.ACTIVE);
+        VehicleDetails details = details(equipmentId, driverId);
+        Employee driver = employee(driverId, equipment.getDepartmentId(), true);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(employeeRepository.findByIdAndIsDeletedFalse(driverId)).thenReturn(Optional.of(driver));
+        when(employeeWorkRoleAssignmentRepository.existsActiveByEmployeeIdAndWorkRoleCode(driverId, "DRIVER"))
+                .thenReturn(true);
+        lenient().when(sessionRepository.save(any(VehicleDrivingSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentUsageSessionService.start(
+                eq(equipmentId),
+                argThat(request -> driverId.equals(request.operatorEmployeeId())
+                        && startedAt.equals(request.startedAt())
+                        && request.startOdometerKm().equals(details.getCurrentOdometerKm())
+                        && request.startEngineHours().equals(details.getCurrentEngineHours())
+                        && "dispatch".equals(request.note())),
+                eq(issuedBy)
+        )).thenReturn(new EquipmentUsageSessionResponse(
+                UUID.randomUUID(),
+                equipmentId,
+                driverId,
+                "Driver Ali",
+                equipment.getDepartmentId(),
+                startedAt,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                details.getCurrentOdometerKm(),
+                null,
+                null,
+                details.getCurrentEngineHours(),
+                null,
+                null,
+                EquipmentUsageSessionStatus.OPEN,
+                issuedBy,
+                null,
+                "dispatch"
+        ));
+
+        var response = service.start(
+                equipmentId,
+                new VehicleDrivingSessionStartRequest(driverId, startedAt, null, null, "dispatch"),
+                issuedBy
+        );
+
+        assertThat(response.driverEmployeeId()).isEqualTo(driverId);
+        assertThat(response.status()).isEqualTo(VehicleDrivingSessionStatus.OPEN);
+        verify(equipmentUsageSessionService).start(eq(equipmentId), any(EquipmentUsageSessionStartRequest.class), eq(issuedBy));
+        verify(sessionRepository, never()).save(any());
+    }
 
     @Test
     void startRejectsDriverWhoIsNotAssignedToVehicle() {
@@ -82,38 +152,52 @@ class VehicleDrivingSessionServiceTest {
     }
 
     @Test
-    void returnClosesOpenSessionAndUpdatesVehicleDetails() {
+    void returnDelegatesToGenericUsageSessionService() {
         UUID equipmentId = UUID.randomUUID();
         UUID driverId = UUID.randomUUID();
         UUID returnedBy = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
         Instant startedAt = Instant.parse("2026-06-16T06:00:00Z");
         Instant returnedAt = Instant.parse("2026-06-16T08:30:00Z");
         Equipment equipment = vehicle(equipmentId, EquipmentStatus.ACTIVE);
-        VehicleDetails details = details(equipmentId, driverId);
-        details.setCurrentOdometerKm(1000.0);
-        details.setCurrentEngineHours(200.0);
-
-        VehicleDrivingSession session = new VehicleDrivingSession();
-        session.setId(UUID.randomUUID());
-        session.setEquipmentId(equipmentId);
-        session.setDriverEmployeeId(driverId);
-        session.setStartedAt(startedAt);
-        session.setStartOdometerKm(1000.0);
-        session.setStartEngineHours(200.0);
-        session.setStatus(VehicleDrivingSessionStatus.OPEN);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
-        when(sessionRepository.findByIdAndEquipmentIdAndIsDeletedFalse(session.getId(), equipmentId))
-                .thenReturn(Optional.of(session));
-        when(sessionRepository.save(any(VehicleDrivingSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId))
-                .thenReturn(java.util.List.of());
+        when(equipmentUsageSessionService.returnEquipment(
+                eq(equipmentId),
+                eq(sessionId),
+                argThat(request -> returnedAt.equals(request.returnedAt())
+                        && request.endOdometerKm().equals(1_125.0)
+                        && request.endEngineHours().equals(225.0)
+                        && "returned clean".equals(request.note())),
+                eq(returnedBy)
+        )).thenReturn(new EquipmentUsageSessionResponse(
+                sessionId,
+                equipmentId,
+                driverId,
+                "Driver Ali",
+                equipment.getDepartmentId(),
+                startedAt,
+                returnedAt,
+                150L,
+                null,
+                null,
+                null,
+                null,
+                1000.0,
+                1_125.0,
+                125.0,
+                200.0,
+                225.0,
+                25.0,
+                EquipmentUsageSessionStatus.RETURNED,
+                UUID.randomUUID(),
+                returnedBy,
+                "returned clean"
+        ));
 
         var response = service.returnVehicle(
                 equipmentId,
-                session.getId(),
+                sessionId,
                 new VehicleDrivingSessionReturnRequest(returnedAt, 1_125.0, 225.0, "returned clean"),
                 returnedBy
         );
@@ -122,10 +206,9 @@ class VehicleDrivingSessionServiceTest {
         assertThat(response.durationMinutes()).isEqualTo(150);
         assertThat(response.odometerDeltaKm()).isEqualTo(125.0);
         assertThat(response.engineHoursDelta()).isEqualTo(25.0);
-        assertThat(details.getCurrentOdometerKm()).isEqualTo(1_125.0);
-        assertThat(details.getCurrentEngineHours()).isEqualTo(225.0);
-        verify(sessionRepository).save(session);
-        verify(vehicleDetailsRepository).save(details);
+        verify(equipmentUsageSessionService).returnEquipment(eq(equipmentId), eq(sessionId), any(EquipmentUsageSessionReturnRequest.class), eq(returnedBy));
+        verify(sessionRepository, never()).save(any());
+        verify(vehicleDetailsRepository, never()).save(any());
     }
 
     private static Equipment vehicle(UUID equipmentId, EquipmentStatus status) {

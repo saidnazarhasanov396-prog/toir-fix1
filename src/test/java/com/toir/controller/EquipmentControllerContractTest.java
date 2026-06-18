@@ -4,14 +4,18 @@ import com.toir.controller.equipment.EquipmentController;
 import com.toir.dto.equipment.EquipmentDetailDto;
 import com.toir.dto.equipment.EquipmentDocumentDto;
 import com.toir.dto.equipment.EquipmentDto;
+import com.toir.dto.equipment.EquipmentLocationHistoryResponse;
 import com.toir.dto.equipment.EquipmentPictureDto;
 import com.toir.dto.equipment.EquipmentStatusHistoryResponse;
+import com.toir.dto.equipment.EquipmentUsageSessionResponse;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentCategory;
+import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.EquipmentStatusSource;
+import com.toir.enums.EquipmentUsageSessionStatus;
 import com.toir.enums.PlacementType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.GlobalExceptionHandler;
@@ -21,6 +25,7 @@ import com.toir.security.ScopeAccessService;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.service.equipment.EquipmentService;
+import com.toir.service.EquipmentUsageSessionService;
 import com.toir.service.equipment.EquipmentPictureService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import org.junit.jupiter.api.BeforeEach;
@@ -90,6 +95,9 @@ class EquipmentControllerContractTest {
     @Mock
     EquipmentPictureService pictureService;
 
+    @Mock
+    EquipmentUsageSessionService usageSessionService;
+
     private MockMvc mockMvc;
     private UUID currentUserId;
 
@@ -97,7 +105,7 @@ class EquipmentControllerContractTest {
     void setUp() {
         currentUserId = UUID.randomUUID();
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        mockMvc = MockMvcBuilders.standaloneSetup(new EquipmentController(service, repository, scopeAccessService, statusLifecycleService, pictureService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new EquipmentController(service, repository, scopeAccessService, statusLifecycleService, pictureService, usageSessionService))
                 .setCustomArgumentResolvers(new TestCurrentUserResolver(currentUserId))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -1073,6 +1081,98 @@ class EquipmentControllerContractTest {
                                 """.formatted(departmentId)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Department not found: " + departmentId));
+    }
+
+    @Test
+    void locationHistoryReturnsPagedTimelineWithDuration() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Instant changedAt = Instant.parse("2026-06-18T04:05:00Z");
+        Instant activeUntil = Instant.parse("2026-06-18T08:08:00Z");
+        EquipmentLocationHistoryResponse response = new EquipmentLocationHistoryResponse(
+                UUID.randomUUID(),
+                id,
+                null,
+                new EquipmentLocationHistoryResponse.LocationSnapshot(
+                        EquipmentLocationType.DEPARTMENT,
+                        departmentId,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                ),
+                departmentId,
+                currentUserId,
+                changedAt,
+                activeUntil,
+                243L,
+                "Department transfer"
+        );
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(equipmentEntity(id, departmentId)));
+        when(service.locationHistory(id, PageRequest.of(0, 20))).thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/equipment/{id}/location-history", id)
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].equipmentId").value(id.toString()))
+                .andExpect(jsonPath("$.content[0].to.departmentId").value(departmentId.toString()))
+                .andExpect(jsonPath("$.content[0].activeUntil").exists())
+                .andExpect(jsonPath("$.content[0].durationMinutes").value(243));
+
+        verify(service).locationHistory(id, PageRequest.of(0, 20));
+    }
+
+    @Test
+    void startUsageSessionDelegatesToGenericUsageServiceWithCurrentUser() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID operatorId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(equipmentEntity(id, UUID.randomUUID())));
+        when(usageSessionService.start(eq(id), any(), eq(currentUserId))).thenReturn(new EquipmentUsageSessionResponse(
+                sessionId,
+                id,
+                operatorId,
+                "Operator Ali",
+                UUID.randomUUID(),
+                Instant.parse("2026-06-18T04:05:00Z"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                EquipmentUsageSessionStatus.OPEN,
+                currentUserId,
+                null,
+                "start"
+        ));
+
+        mockMvc.perform(post("/api/v1/equipment/{id}/usage-sessions/start", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "operatorEmployeeId": "%s",
+                                  "startedAt": "2026-06-18T04:05:00Z",
+                                  "note": "start"
+                                }
+                                """.formatted(operatorId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(sessionId.toString()))
+                .andExpect(jsonPath("$.operatorEmployeeId").value(operatorId.toString()))
+                .andExpect(jsonPath("$.status").value("OPEN"));
+
+        verify(usageSessionService).start(eq(id), any(), eq(currentUserId));
     }
 
     @Test

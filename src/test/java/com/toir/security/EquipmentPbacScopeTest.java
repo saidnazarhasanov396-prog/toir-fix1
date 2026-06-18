@@ -14,6 +14,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentPictureService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.EquipmentUsageSessionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -65,12 +66,15 @@ class EquipmentPbacScopeTest {
     @Mock
     EquipmentPictureService pictureService;
 
+    @Mock
+    EquipmentUsageSessionService usageSessionService;
+
     MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new EquipmentController(service, repository, scopeAccessService, statusLifecycleService, pictureService),
+                        new EquipmentController(service, repository, scopeAccessService, statusLifecycleService, pictureService, usageSessionService),
                         new EquipmentLabelController(repository, scopeAccessService),
                         new EquipmentScanCompatibilityController(repository, scopeAccessService)
                 )
@@ -471,4 +475,3 @@ class EquipmentPbacScopeTest {
                 """.formatted(department);
     }
 }
-

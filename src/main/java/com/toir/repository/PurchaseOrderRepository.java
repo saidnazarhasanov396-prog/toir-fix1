@@ -24,6 +24,8 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, UU
 
     List<PurchaseOrder> findAllBySupplierIdAndIsDeletedFalse(UUID supplierId);
 
+    List<PurchaseOrder> findAllByProcurementRequestIdAndIsDeletedFalse(UUID procurementRequestId);
+
     @Query("""
             select po
             from PurchaseOrder po

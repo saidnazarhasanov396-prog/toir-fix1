@@ -1,5 +1,7 @@
 package com.toir.service;
 
+import com.toir.dto.equipment.EquipmentUsageSessionReturnRequest;
+import com.toir.dto.equipment.EquipmentUsageSessionStartRequest;
 import com.toir.dto.meter.MeterReadingRequest;
 import com.toir.dto.vehicle.VehicleDrivingSessionResponse;
 import com.toir.dto.vehicle.VehicleDrivingSessionReturnRequest;
@@ -52,6 +54,7 @@ public class VehicleDrivingSessionService {
     private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
     private final EquipmentMeterRepository equipmentMeterRepository;
     private final MeterService meterService;
+    private final EquipmentUsageSessionService equipmentUsageSessionService;
 
     @Transactional
     public VehicleDrivingSessionResponse start(UUID equipmentId,
@@ -73,13 +76,6 @@ public class VehicleDrivingSessionService {
         if (!Objects.equals(assignedDriverId, requestedDriverId)) {
             throw RestException.badRequest("Driving session can only start with the assigned driver");
         }
-        if (sessionRepository.existsByEquipmentIdAndStatusAndIsDeletedFalse(equipmentId, VehicleDrivingSessionStatus.OPEN)) {
-            throw RestException.conflict("Vehicle already has an open driving session");
-        }
-        if (sessionRepository.existsByDriverEmployeeIdAndStatusAndIsDeletedFalse(requestedDriverId, VehicleDrivingSessionStatus.OPEN)) {
-            throw RestException.conflict("Driver already has an open driving session");
-        }
-
         Instant startedAt = request != null && request.startedAt() != null ? request.startedAt() : Instant.now();
         Double startOdometer = request != null && request.startOdometerKm() != null
                 ? request.startOdometerKm()
@@ -88,17 +84,19 @@ public class VehicleDrivingSessionService {
                 ? request.startEngineHours()
                 : details.getCurrentEngineHours();
 
-        VehicleDrivingSession session = new VehicleDrivingSession();
-        session.setEquipmentId(equipmentId);
-        session.setDriverEmployeeId(requestedDriverId);
-        session.setStartedAt(startedAt);
-        session.setStartOdometerKm(startOdometer);
-        session.setStartEngineHours(startEngineHours);
-        session.setIssuedBy(issuedBy);
-        session.setNote(request == null ? null : trimToNull(request.note()));
-        session.setStatus(VehicleDrivingSessionStatus.OPEN);
-
-        return VehicleDrivingSessionResponse.from(sessionRepository.save(session), driver);
+        return VehicleDrivingSessionResponse.from(equipmentUsageSessionService.start(
+                equipmentId,
+                new EquipmentUsageSessionStartRequest(
+                        requestedDriverId,
+                        startedAt,
+                        null,
+                        null,
+                        startOdometer,
+                        startEngineHours,
+                        request == null ? null : trimToNull(request.note())
+                ),
+                issuedBy
+        ));
     }
 
     @Transactional
@@ -107,46 +105,25 @@ public class VehicleDrivingSessionService {
                                                        VehicleDrivingSessionReturnRequest request,
                                                        UUID returnedBy) {
         vehicleEquipmentOrThrow(equipmentId);
-        VehicleDetails details = vehicleDetailsOrThrow(equipmentId);
-        VehicleDrivingSession session = sessionRepository.findByIdAndEquipmentIdAndIsDeletedFalse(sessionId, equipmentId)
-                .orElseThrow(() -> RestException.notFound("Driving session not found: " + sessionId));
-        if (session.getStatus() != VehicleDrivingSessionStatus.OPEN || session.getReturnedAt() != null) {
-            throw RestException.conflict("Driving session is already returned");
-        }
-
-        Instant returnedAt = request != null && request.returnedAt() != null ? request.returnedAt() : Instant.now();
-        if (returnedAt.isBefore(session.getStartedAt())) {
-            throw RestException.badRequest("Return time cannot be before start time");
-        }
-        Double endOdometer = request == null ? null : request.endOdometerKm();
-        Double endEngineHours = request == null ? null : request.endEngineHours();
-        validateEndReading("End odometer", session.getStartOdometerKm(), endOdometer);
-        validateEndReading("End engine hours", session.getStartEngineHours(), endEngineHours);
-
-        session.setReturnedAt(returnedAt);
-        session.setEndOdometerKm(endOdometer);
-        session.setEndEngineHours(endEngineHours);
-        session.setReturnedBy(returnedBy);
-        session.setStatus(VehicleDrivingSessionStatus.RETURNED);
-        String returnNote = request == null ? null : trimToNull(request.note());
-        if (returnNote != null) {
-            session.setNote(returnNote);
-        }
-
-        syncVehicleReadings(details, returnedAt, endOdometer, endEngineHours, returnedBy, session.getNote());
-        VehicleDrivingSession saved = sessionRepository.save(session);
-        Employee driver = employeeRepository.findByIdAndIsDeletedFalse(saved.getDriverEmployeeId()).orElse(null);
-        return VehicleDrivingSessionResponse.from(saved, driver);
+        return VehicleDrivingSessionResponse.from(equipmentUsageSessionService.returnEquipment(
+                equipmentId,
+                sessionId,
+                new EquipmentUsageSessionReturnRequest(
+                        request == null ? null : request.returnedAt(),
+                        null,
+                        request == null ? null : request.endOdometerKm(),
+                        request == null ? null : request.endEngineHours(),
+                        request == null ? null : trimToNull(request.note())
+                ),
+                returnedBy
+        ));
     }
 
     @Transactional(readOnly = true)
     public Page<VehicleDrivingSessionResponse> history(UUID equipmentId, Pageable pageable) {
         vehicleEquipmentOrThrow(equipmentId);
-        return sessionRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartedAtDesc(equipmentId, pageable)
-                .map(session -> VehicleDrivingSessionResponse.from(
-                        session,
-                        employeeRepository.findByIdAndIsDeletedFalse(session.getDriverEmployeeId()).orElse(null)
-                ));
+        return equipmentUsageSessionService.history(equipmentId, pageable)
+                .map(VehicleDrivingSessionResponse::from);
     }
 
     private Equipment vehicleEquipmentOrThrow(UUID equipmentId) {

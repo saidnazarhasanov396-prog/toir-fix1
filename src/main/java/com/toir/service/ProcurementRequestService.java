@@ -1,8 +1,12 @@
 package com.toir.service;
 
 import com.toir.dto.procurement.ProcurementLineRequest;
+import com.toir.dto.procurement.ProcurementReceiptLineRequest;
+import com.toir.dto.procurement.ProcurementReceiptRequest;
+import com.toir.dto.procurement.ProcurementReceiptResponse;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
+import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.equipment.ProcurementRequestLine;
@@ -16,6 +20,7 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.ProcurementRequestStatus;
+import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
@@ -26,12 +31,14 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.ToirStockService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -40,6 +47,8 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class ProcurementRequestService {
+
+    private static final double QUANTITY_EPSILON = 0.000001;
 
     private final ProcurementRequestRepository repo;
     private final SparePartRepository sparePartRepository;
@@ -51,6 +60,7 @@ public class ProcurementRequestService {
     private final LowStockRecommendationService lowStockRecommendationService;
     private final ActualCostRepository actualCostRepository;
     private final CostCategoryRepository costCategoryRepository;
+    private final ToirStockService toirStockService;
 
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId, String search) {
@@ -252,15 +262,23 @@ public class ProcurementRequestService {
 
     @Transactional
     public ProcurementRequestDto markReceived(UUID id) {
-        ProcurementRequest p = load(id);
+        return receiveStock(id, new ProcurementReceiptRequest(null, null, null, null, null)).procurementRequest();
+    }
+
+    @Transactional
+    public ProcurementReceiptResponse receiveStock(UUID id, ProcurementReceiptRequest receiptRequest) {
+        ProcurementReceiptRequest normalizedRequest = receiptRequest == null
+                ? new ProcurementReceiptRequest(null, null, null, null, null)
+                : receiptRequest;
+        ProcurementRequest p = loadForReceipt(id);
         assertCanMutate(p);
         if (!scopeAccessService.isScopeAdmin() && p.getWarehouseId() != null) {
             assertCanAccessWarehouse(p.getWarehouseId());
         }
-        List<ProcurementRequestLine> receiptLines = validateReceivable(p);
-        applyReceiptToStock(p, receiptLines);
-        p.setStatus(ProcurementRequestStatus.RECEIVED);
-        p.setReceivedAt(Instant.now());
+        List<ProcurementRequestLine> activeLines = validateReceivable(p);
+        List<ReceiptLine> receiptLines = resolveReceiptLines(activeLines, normalizedRequest.lines());
+        List<UUID> movementIds = applyReceiptToStock(p, receiptLines, normalizedRequest);
+        recalculateReceiptStatus(p, activeLines);
         ProcurementRequest saved = repo.save(p);
         auditBuilderService.log(
                 "procurement_request",
@@ -271,15 +289,16 @@ public class ProcurementRequestService {
                 p,
                 saved
         );
-        return ProcurementRequestDto.from(p);
+        return new ProcurementReceiptResponse(ProcurementRequestDto.from(saved), movementIds);
     }
 
     private List<ProcurementRequestLine> validateReceivable(ProcurementRequest request) {
         if (request.getStatus() == ProcurementRequestStatus.RECEIVED) {
             throw RestException.badRequest("Procurement request is already RECEIVED");
         }
-        if (request.getStatus() != ProcurementRequestStatus.ORDERED) {
-            throw RestException.badRequest("Only ORDERED can be marked RECEIVED");
+        if (request.getStatus() != ProcurementRequestStatus.ORDERED
+                && request.getStatus() != ProcurementRequestStatus.PARTIALLY_RECEIVED) {
+            throw RestException.badRequest("Only ORDERED or PARTIALLY_RECEIVED can be marked RECEIVED");
         }
         if (request.getWarehouseId() == null) {
             throw RestException.badRequest("Procurement request warehouseId is required before receipt");
@@ -294,34 +313,148 @@ public class ProcurementRequestService {
             throw RestException.badRequest("Procurement request must have at least one line before receipt");
         }
         for (ProcurementRequestLine line : receiptLines) {
-            if (line.getSparePartId() == null) {
-                throw RestException.badRequest("Procurement line sparePartId is required before receipt");
-            }
-            if (line.getQuantity() <= 0) {
-                throw RestException.badRequest("Procurement line quantity must be greater than 0 before receipt");
-            }
+            validateReceiptLineBasics(line);
+            ensureLineProgressInitialized(line);
         }
         return receiptLines;
     }
 
-    private void applyReceiptToStock(ProcurementRequest request, List<ProcurementRequestLine> receiptLines) {
+    private List<ReceiptLine> resolveReceiptLines(List<ProcurementRequestLine> activeLines,
+                                                  List<ProcurementReceiptLineRequest> requestedLines) {
+        if (requestedLines == null || requestedLines.isEmpty()) {
+            List<ReceiptLine> receiptLines = activeLines.stream()
+                    .map(line -> new ReceiptLine(line, effectiveRemainingQuantity(line)))
+                    .filter(line -> line.quantity() > QUANTITY_EPSILON)
+                    .toList();
+            if (receiptLines.isEmpty()) {
+                throw RestException.badRequest("Procurement request has no remaining quantity to receive");
+            }
+            return receiptLines;
+        }
+
+        Map<UUID, ProcurementRequestLine> linesById = new HashMap<>();
+        for (ProcurementRequestLine line : activeLines) {
+            if (line.getId() != null) {
+                linesById.put(line.getId(), line);
+            }
+        }
+
+        Set<UUID> seenLineIds = new HashSet<>();
+        List<ReceiptLine> receiptLines = new ArrayList<>();
+        for (ProcurementReceiptLineRequest requestedLine : requestedLines) {
+            if (requestedLine == null || requestedLine.procurementLineId() == null) {
+                throw RestException.badRequest("Receipt line procurementLineId is required");
+            }
+            if (!seenLineIds.add(requestedLine.procurementLineId())) {
+                throw RestException.badRequest("Duplicate receipt line: " + requestedLine.procurementLineId());
+            }
+            if (requestedLine.quantity() <= 0) {
+                throw RestException.badRequest("Receipt line quantity must be greater than 0");
+            }
+            ProcurementRequestLine line = linesById.get(requestedLine.procurementLineId());
+            if (line == null) {
+                throw RestException.badRequest("Receipt line does not belong to this procurement request: "
+                        + requestedLine.procurementLineId());
+            }
+            double remaining = effectiveRemainingQuantity(line);
+            if (remaining <= QUANTITY_EPSILON) {
+                throw RestException.badRequest("Procurement line has no remaining quantity: " + line.getId());
+            }
+            if (requestedLine.quantity() - remaining > QUANTITY_EPSILON) {
+                throw RestException.badRequest("Cannot receive more than remaining quantity for procurement line "
+                        + line.getId() + ": remaining=" + remaining + ", requested=" + requestedLine.quantity());
+            }
+            receiptLines.add(new ReceiptLine(line, requestedLine.quantity()));
+        }
+        if (receiptLines.isEmpty()) {
+            throw RestException.badRequest("At least one receipt line is required");
+        }
+        return receiptLines;
+    }
+
+    private List<UUID> applyReceiptToStock(ProcurementRequest request,
+                                           List<ReceiptLine> receiptLines,
+                                           ProcurementReceiptRequest receiptRequest) {
         UUID warehouseId = request.getWarehouseId();
-        for (ProcurementRequestLine line : receiptLines) {
-            WarehouseStock stock = stockRepository
-                    .findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, line.getSparePartId())
+        List<UUID> movementIds = new ArrayList<>();
+        for (ReceiptLine receiptLine : receiptLines) {
+            ProcurementRequestLine line = receiptLine.line();
+            double quantity = receiptLine.quantity();
+            WarehouseStock stock = findStockForReceipt(warehouseId, line.getSparePartId())
                     .orElseGet(() -> createEmptyStock(warehouseId, line.getSparePartId()));
-            stock.setQuantity(stock.getQuantity() + line.getQuantity());
+            stock.setQuantity(stock.getQuantity() + quantity);
             stockRepository.save(stock);
-            StockMovement movement = stockMovementRepository.save(receiptMovement(request, line));
-            syncProcurementReceiptActualCost(request, line, movement);
+            line.setReceivedQuantity(line.getReceivedQuantity() + quantity);
+            line.setRemainingQuantity(Math.max(0, line.getQuantity() - line.getReceivedQuantity()));
+            StockMovement movement = stockMovementRepository.save(receiptMovement(request, line, quantity, receiptRequest));
+            if (movement.getId() != null) {
+                movementIds.add(movement.getId());
+            }
+            postProcurementCoreStockReceipt(request, movement, quantity);
+            syncProcurementReceiptActualCost(request, line, quantity, movement);
             lowStockRecommendationService.evaluateStockSafely(stock);
         }
+        return movementIds;
+    }
+
+    private Optional<WarehouseStock> findStockForReceipt(UUID warehouseId, UUID sparePartId) {
+        Optional<WarehouseStock> locked =
+                stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId);
+        return locked.isPresent()
+                ? locked
+                : stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId);
+    }
+
+    private void recalculateReceiptStatus(ProcurementRequest request, List<ProcurementRequestLine> activeLines) {
+        boolean anyReceived = activeLines.stream()
+                .anyMatch(line -> line.getReceivedQuantity() > QUANTITY_EPSILON);
+        boolean anyRemaining = activeLines.stream()
+                .anyMatch(line -> effectiveRemainingQuantity(line) > QUANTITY_EPSILON);
+        if (!anyRemaining) {
+            request.setStatus(ProcurementRequestStatus.RECEIVED);
+            request.setReceivedAt(Instant.now());
+        } else if (anyReceived) {
+            request.setStatus(ProcurementRequestStatus.PARTIALLY_RECEIVED);
+            request.setReceivedAt(null);
+        }
+    }
+
+    private void validateReceiptLineBasics(ProcurementRequestLine line) {
+        if (line.getSparePartId() == null) {
+            throw RestException.badRequest("Procurement line sparePartId is required before receipt");
+        }
+        if (line.getQuantity() <= 0) {
+            throw RestException.badRequest("Procurement line quantity must be greater than 0 before receipt");
+        }
+        if (line.getReceivedQuantity() < -QUANTITY_EPSILON || line.getRemainingQuantity() < -QUANTITY_EPSILON) {
+            throw RestException.badRequest("Procurement line received and remaining quantities cannot be negative");
+        }
+    }
+
+    private void ensureLineProgressInitialized(ProcurementRequestLine line) {
+        if (line.getReceivedQuantity() <= QUANTITY_EPSILON
+                && line.getRemainingQuantity() <= QUANTITY_EPSILON
+                && line.getQuantity() > QUANTITY_EPSILON) {
+            line.setReceivedQuantity(0);
+            line.setRemainingQuantity(line.getQuantity());
+            return;
+        }
+        double expectedRemaining = Math.max(0, line.getQuantity() - line.getReceivedQuantity());
+        if (Math.abs(line.getRemainingQuantity() - expectedRemaining) > QUANTITY_EPSILON) {
+            line.setRemainingQuantity(expectedRemaining);
+        }
+    }
+
+    private double effectiveRemainingQuantity(ProcurementRequestLine line) {
+        ensureLineProgressInitialized(line);
+        return line.getRemainingQuantity();
     }
 
     private void syncProcurementReceiptActualCost(ProcurementRequest request,
                                                   ProcurementRequestLine line,
+                                                  double quantity,
                                                   StockMovement movement) {
-        if (line.getUnitPrice() == null || line.getUnitPrice() <= 0 || line.getQuantity() <= 0
+        if (line.getUnitPrice() == null || line.getUnitPrice() <= 0 || quantity <= 0
                 || movement == null || movement.getId() == null) {
             return;
         }
@@ -338,7 +471,7 @@ public class ProcurementRequestService {
         cost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
         cost.setSourceId(movement.getId());
         cost.setCostCategoryId(category.get().getId());
-        cost.setAmount(line.getQuantity() * line.getUnitPrice());
+        cost.setAmount(quantity * line.getUnitPrice());
         cost.setStatus(ActualCostStatus.PENDING);
         cost.setCostDate(movement.getOccurredAt() == null ? Instant.now() : movement.getOccurredAt());
         cost.setNotes("Generated from procurement receipt %s line %s".formatted(request.getId(), line.getId()));
@@ -357,16 +490,83 @@ public class ProcurementRequestService {
         return stock;
     }
 
-    private StockMovement receiptMovement(ProcurementRequest request, ProcurementRequestLine line) {
+    private StockMovement receiptMovement(ProcurementRequest request,
+                                          ProcurementRequestLine line,
+                                          double quantity,
+                                          ProcurementReceiptRequest receiptRequest) {
         StockMovement movement = new StockMovement();
         movement.setWarehouseId(request.getWarehouseId());
         movement.setSparePartId(line.getSparePartId());
         movement.setType(StockMovementType.RECEIPT);
-        movement.setQuantity(line.getQuantity());
+        movement.setQuantity(quantity);
+        movement.setUnit(line.getUnit());
         movement.setUnitCost(line.getUnitPrice());
-        movement.setDocumentNumber(request.getNumber());
-        movement.setNotes("Procurement receipt: " + request.getId());
+        movement.setUnitPrice(unitPrice(line));
+        movement.setTotalAmount(totalAmount(quantity, line.getUnitPrice()));
+        movement.setDocumentNumber(firstNonBlank(receiptRequest.documentNumber(), request.getNumber()));
+        movement.setMovementDate(receiptRequest.receiptDate() == null
+                ? LocalDate.now(ZoneOffset.UTC)
+                : receiptRequest.receiptDate());
+        movement.setResponsiblePersonId(receiptRequest.responsiblePersonId());
+        movement.setSourceType(StockMovementSourceType.PROCUREMENT_REQUEST);
+        movement.setSourceId(request.getId());
+        movement.setSourceLineId(line.getId());
+        movement.setNotes(procurementReceiptNotes(request, receiptRequest.comment()));
+        movement.setComment(trimToNull(receiptRequest.comment()));
         return movement;
+    }
+
+    private void postProcurementCoreStockReceipt(ProcurementRequest request, StockMovement movement, double quantity) {
+        toirStockService.postReceipt(new StockReceiptCommand(
+                movement.getWarehouseId(),
+                movement.getSparePartId(),
+                null,
+                BigDecimal.valueOf(quantity),
+                unitPrice(movement.getUnitCost()),
+                null,
+                null,
+                null,
+                "PROCUREMENT_REQUEST",
+                request.getId(),
+                movement.getDocumentNumber(),
+                movement.getNotes(),
+                "procurement-receipt:" + movement.getId()
+        ));
+    }
+
+    private BigDecimal unitPrice(ProcurementRequestLine line) {
+        return unitPrice(line.getUnitPrice());
+    }
+
+    private BigDecimal unitPrice(Double unitPrice) {
+        return unitPrice == null ? null : BigDecimal.valueOf(unitPrice);
+    }
+
+    private BigDecimal totalAmount(double quantity, Double unitPrice) {
+        return unitPrice == null ? null : BigDecimal.valueOf(unitPrice).multiply(BigDecimal.valueOf(quantity));
+    }
+
+    private String procurementReceiptNotes(ProcurementRequest request, String comment) {
+        String note = "Procurement receipt: " + request.getId();
+        String normalizedComment = trimToNull(comment);
+        return normalizedComment == null ? note : note + " - " + normalizedComment;
+    }
+
+    private String firstNonBlank(String first, String fallback) {
+        String normalized = trimToNull(first);
+        return normalized == null ? fallback : normalized;
+    }
+
+    private String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private ProcurementRequest loadForReceipt(UUID id) {
+        return repo.findByIdAndIsDeletedFalseForUpdate(id)
+                .orElseThrow(() -> RestException.notFound("Procurement request not found: " + id));
+    }
+
+    private record ReceiptLine(ProcurementRequestLine line, double quantity) {
     }
 
     @Transactional
@@ -427,6 +627,8 @@ public class ProcurementRequestService {
             line.setRequest(p);
             line.setSparePartId(sp.getId());
             line.setQuantity(needed);
+            line.setReceivedQuantity(0);
+            line.setRemainingQuantity(needed);
             line.setUnit(sp.getUnit());
             line.setEstimatedCost(0.0);
             line.setNotes("Автогенерация: available=" + s.getAvailable() + ", min=" + s.getMinQty());
@@ -461,6 +663,8 @@ public class ProcurementRequestService {
         line.setRequest(p);
         line.setSparePartId(sp.getId());
         line.setQuantity(r.quantity());
+        line.setReceivedQuantity(0);
+        line.setRemainingQuantity(r.quantity());
         line.setUnit(r.unit() != null ? r.unit() : sp.getUnit());
         line.setUnitPrice(r.unitPrice());
         line.setEstimatedCost(r.unitPrice() != null ? r.unitPrice() * r.quantity() : 0.0);

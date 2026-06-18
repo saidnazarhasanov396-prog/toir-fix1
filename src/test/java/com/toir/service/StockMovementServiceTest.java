@@ -19,6 +19,7 @@ import com.toir.enums.FileCategory;
 import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.SparePartType;
 import com.toir.enums.StockLedgerMovementType;
+import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.StockMovementFileRepository;
@@ -437,6 +438,9 @@ class StockMovementServiceTest {
         assertThat(dto.workOrderNumber()).isEqualTo("WO-42");
         assertThat(dto.createdById()).isEqualTo(createdById);
         assertThat(dto.createdByFullName()).isEqualTo("Jane Smith");
+        assertThat(dto.sourceType()).isEqualTo(StockMovementSourceType.PROCUREMENT_REQUEST);
+        assertThat(dto.sourceId()).isEqualTo(movementId);
+        assertThat(dto.sourceLineId()).isEqualTo(sparePartId);
         assertThat(dto.occurredAt()).isEqualTo(occurredAt);
         assertThat(dto.fileCount()).isEqualTo(2);
     }
@@ -812,6 +816,21 @@ class StockMovementServiceTest {
             @Override
             public String getDocumentNumber() {
                 return "DOC-1";
+            }
+
+            @Override
+            public String getSourceType() {
+                return StockMovementSourceType.PROCUREMENT_REQUEST.name();
+            }
+
+            @Override
+            public UUID getSourceId() {
+                return id;
+            }
+
+            @Override
+            public UUID getSourceLineId() {
+                return sparePartId;
             }
 
             @Override

@@ -1,6 +1,8 @@
 package com.toir.controller;
 
 import com.toir.dto.procurement.ProcurementLineRequest;
+import com.toir.dto.procurement.ProcurementReceiptRequest;
+import com.toir.dto.procurement.ProcurementReceiptResponse;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.dto.purchaseorder.ProcurementRequestPurchaseOrderRequest;
@@ -86,6 +88,15 @@ public class ProcurementRequestController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_RECEIVE')")
     public ResponseEntity<ProcurementRequestDto> markReceived(@PathVariable UUID id) {
         return ResponseEntity.ok(service.markReceived(id));
+    }
+
+    @PostMapping("/{id}/stock-receipt")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_RECEIVE')")
+    public ResponseEntity<ProcurementReceiptResponse> receiveStock(
+            @PathVariable UUID id,
+            @Valid @RequestBody(required = false) ProcurementReceiptRequest request
+    ) {
+        return ResponseEntity.ok(service.receiveStock(id, request));
     }
 
     @PostMapping("/{id}/cancel")
