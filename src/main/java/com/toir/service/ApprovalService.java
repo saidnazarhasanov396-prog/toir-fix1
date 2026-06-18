@@ -673,6 +673,9 @@ public class ApprovalService {
     private ApprovalRequestDto applyDecision(UUID requestId, DecisionRequest decision, ApprovalDecision outcome) {
         ApprovalRequest request = getOrThrow(requestId);
         UUID actorId = effectiveDecisionActor(decision);
+        if (request.getStatus() == ApprovalStatus.FAILED) {
+            return retryFailedFinalization(request, decision, outcome, actorId);
+        }
         expireIfNeeded(request);
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
@@ -729,6 +732,35 @@ public class ApprovalService {
 
 
         return toDto(request);
+    }
+
+    private ApprovalRequestDto retryFailedFinalization(ApprovalRequest request,
+                                                       DecisionRequest decision,
+                                                       ApprovalDecision outcome,
+                                                       UUID actorId) {
+        ApprovalStep current = currentStepOrThrow(request);
+        if (current.getDecision() != outcome) {
+            throw RestException.conflict(
+                    "Failed approval can only retry its original decision: " + current.getDecision()
+            );
+        }
+        assertCanActOnCurrentStep(request, current, actorId);
+
+        ApprovalStatus retriedStatus = outcome == ApprovalDecision.APPROVED
+                ? ApprovalStatus.APPROVED
+                : ApprovalStatus.REJECTED;
+        request.setStatus(retriedStatus);
+        request.setCompletedAt(Instant.now());
+        request.setFailureReason(null);
+        request.setResultJson(null);
+        executeTerminalAction(request, outcome);
+
+        ApprovalRequest saved = requestRepository.save(request);
+        governanceService.record(saved, ApprovalStatus.FAILED, saved.getStatus(), actorId, decision.comment());
+        if (saved.getStatus() != ApprovalStatus.FAILED) {
+            notifyFinalDecision(saved, outcome);
+        }
+        return toDto(saved);
     }
 
     private UUID effectiveDecisionActor(DecisionRequest decision) {
