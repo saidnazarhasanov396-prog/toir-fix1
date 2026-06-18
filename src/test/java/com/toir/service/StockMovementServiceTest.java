@@ -815,6 +815,21 @@ class StockMovementServiceTest {
             }
 
             @Override
+            public String getSourceType() {
+                return null;
+            }
+
+            @Override
+            public UUID getSourceId() {
+                return null;
+            }
+
+            @Override
+            public UUID getSourceLineId() {
+                return null;
+            }
+
+            @Override
             public UUID getCreatedById() {
                 return createdById;
             }

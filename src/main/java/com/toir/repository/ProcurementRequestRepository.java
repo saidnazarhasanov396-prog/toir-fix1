@@ -6,7 +6,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -16,6 +18,10 @@ import org.springframework.stereotype.Repository;
 public interface ProcurementRequestRepository extends JpaRepository<ProcurementRequest, UUID> {
     @Query(value = "SELECT * FROM procurement_requests WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<ProcurementRequest> findByIdAndIsDeletedFalse(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from ProcurementRequest p where p.id = :id and p.isDeleted = false")
+    Optional<ProcurementRequest> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
 
     @Query(value = "SELECT * FROM procurement_requests WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ProcurementRequest> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
@@ -37,6 +43,17 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM procurement_requests WHERE number = cast(:number as varchar) AND is_deleted = false)", nativeQuery = true)
     boolean existsByNumberAndIsDeletedFalse(@Param("number") String number);
+
+    @Query(value = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM procurement_requests
+                WHERE number = cast(:number as varchar)
+                  AND status IN ('ORDERED', 'PARTIALLY_RECEIVED')
+                  AND is_deleted = false
+            )
+            """, nativeQuery = true)
+    boolean existsOpenReceivableByNumber(@Param("number") String number);
 
     @Query(value = "SELECT COUNT(*) FROM procurement_requests WHERE status = :status AND is_deleted = false", nativeQuery = true)
     long countByStatusAndIsDeletedFalse(@Param("status") String status);

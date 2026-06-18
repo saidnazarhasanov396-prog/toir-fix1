@@ -1,6 +1,9 @@
 package com.toir.service;
 
 import com.toir.dto.procurement.ProcurementLineRequest;
+import com.toir.dto.procurement.ProcurementReceiptLineRequest;
+import com.toir.dto.procurement.ProcurementReceiptRequest;
+import com.toir.dto.procurement.ProcurementReceiptResponse;
 import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.entity.SparePart;
@@ -17,6 +20,7 @@ import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.StockMovementSourceType;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.ProcurementRequestRepository;
@@ -274,6 +278,116 @@ public class ProcurementRequestService {
         return ProcurementRequestDto.from(p);
     }
 
+    @Transactional
+    public ProcurementReceiptResponse receiveStock(UUID id, ProcurementReceiptRequest receipt) {
+        if (receipt == null || receipt.lines() == null || receipt.lines().isEmpty()) {
+            throw RestException.badRequest("At least one receipt line is required");
+        }
+
+        ProcurementRequest request = repo.findByIdAndIsDeletedFalseForUpdate(id)
+                .orElseThrow(() -> RestException.notFound("Procurement request not found: " + id));
+        assertCanMutate(request);
+        if (!scopeAccessService.isScopeAdmin() && request.getWarehouseId() != null) {
+            assertCanAccessWarehouse(request.getWarehouseId());
+        }
+        validatePartialReceiptRequest(request);
+
+        Map<UUID, ProcurementRequestLine> requestLines = new HashMap<>();
+        for (ProcurementRequestLine line : request.getLines()) {
+            if (!line.isDeleted()) {
+                requestLines.put(line.getId(), line);
+            }
+        }
+
+        Set<UUID> receivedLineIds = new HashSet<>();
+        List<UUID> movementIds = new ArrayList<>();
+        LocalDate receiptDate = receipt.receiptDate() == null
+                ? LocalDate.now(ZoneOffset.UTC)
+                : receipt.receiptDate();
+
+        for (ProcurementReceiptLineRequest receiptLine : receipt.lines()) {
+            if (receiptLine == null || receiptLine.procurementLineId() == null) {
+                throw RestException.badRequest("Procurement receipt line id is required");
+            }
+            if (receiptLine.quantity() <= 0) {
+                throw RestException.badRequest("Receipt quantity must be greater than 0");
+            }
+            if (!receivedLineIds.add(receiptLine.procurementLineId())) {
+                throw RestException.badRequest("Duplicate procurement receipt line: "
+                        + receiptLine.procurementLineId());
+            }
+
+            ProcurementRequestLine line = Optional.ofNullable(requestLines.get(receiptLine.procurementLineId()))
+                    .orElseThrow(() -> RestException.badRequest(
+                            "Procurement line does not belong to request: " + receiptLine.procurementLineId()));
+            double remaining = remainingQuantity(line);
+            if (receiptLine.quantity() > remaining) {
+                throw RestException.badRequest("Receipt quantity exceeds remaining quantity for line: " + line.getId());
+            }
+
+            WarehouseStock stock = stockRepository
+                    .findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(
+                            request.getWarehouseId(),
+                            line.getSparePartId()
+                    )
+                    .orElseGet(() -> createEmptyStock(request.getWarehouseId(), line.getSparePartId()));
+            stock.setQuantity(stock.getQuantity() + receiptLine.quantity());
+            stockRepository.save(stock);
+
+            StockMovement movement = stockMovementRepository.save(
+                    partialReceiptMovement(request, line, receiptLine.quantity(), receiptDate, receipt)
+            );
+            if (movement.getId() != null) {
+                movementIds.add(movement.getId());
+            }
+            syncProcurementReceiptActualCost(request, line, movement);
+            lowStockRecommendationService.evaluateStockSafely(stock);
+
+            line.setReceivedQuantity(line.getReceivedQuantity() + receiptLine.quantity());
+            line.setRemainingQuantity(Math.max(0, line.getQuantity() - line.getReceivedQuantity()));
+        }
+
+        boolean fullyReceived = request.getLines().stream()
+                .filter(line -> !line.isDeleted())
+                .allMatch(line -> remainingQuantity(line) <= 0);
+        request.setStatus(fullyReceived
+                ? ProcurementRequestStatus.RECEIVED
+                : ProcurementRequestStatus.PARTIALLY_RECEIVED);
+        request.setReceivedAt(fullyReceived ? Instant.now() : null);
+
+        ProcurementRequest saved = repo.save(request);
+        auditBuilderService.log(
+                "procurement_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PROCUREMENT_REQUEST,
+                "Procurement stock receipt recorded",
+                request,
+                saved
+        );
+        return new ProcurementReceiptResponse(ProcurementRequestDto.from(saved), List.copyOf(movementIds));
+    }
+
+    private void validatePartialReceiptRequest(ProcurementRequest request) {
+        if (request.getStatus() == ProcurementRequestStatus.RECEIVED) {
+            throw RestException.badRequest("Procurement request is already RECEIVED");
+        }
+        if (request.getStatus() != ProcurementRequestStatus.ORDERED
+                && request.getStatus() != ProcurementRequestStatus.PARTIALLY_RECEIVED) {
+            throw RestException.badRequest("Only ORDERED or PARTIALLY_RECEIVED requests can receive stock");
+        }
+        if (request.getWarehouseId() == null) {
+            throw RestException.badRequest("Procurement request warehouseId is required before receipt");
+        }
+        if (request.getLines() == null || request.getLines().stream().noneMatch(line -> !line.isDeleted())) {
+            throw RestException.badRequest("Procurement request must have at least one line before receipt");
+        }
+    }
+
+    private double remainingQuantity(ProcurementRequestLine line) {
+        return Math.max(0, line.getQuantity() - line.getReceivedQuantity());
+    }
+
     private List<ProcurementRequestLine> validateReceivable(ProcurementRequest request) {
         if (request.getStatus() == ProcurementRequestStatus.RECEIVED) {
             throw RestException.badRequest("Procurement request is already RECEIVED");
@@ -338,7 +452,7 @@ public class ProcurementRequestService {
         cost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
         cost.setSourceId(movement.getId());
         cost.setCostCategoryId(category.get().getId());
-        cost.setAmount(line.getQuantity() * line.getUnitPrice());
+        cost.setAmount(movement.getQuantity() * line.getUnitPrice());
         cost.setStatus(ActualCostStatus.PENDING);
         cost.setCostDate(movement.getOccurredAt() == null ? Instant.now() : movement.getOccurredAt());
         cost.setNotes("Generated from procurement receipt %s line %s".formatted(request.getId(), line.getId()));
@@ -366,6 +480,31 @@ public class ProcurementRequestService {
         movement.setUnitCost(line.getUnitPrice());
         movement.setDocumentNumber(request.getNumber());
         movement.setNotes("Procurement receipt: " + request.getId());
+        return movement;
+    }
+
+    private StockMovement partialReceiptMovement(ProcurementRequest request,
+                                                 ProcurementRequestLine line,
+                                                 double quantity,
+                                                 LocalDate receiptDate,
+                                                 ProcurementReceiptRequest receipt) {
+        StockMovement movement = new StockMovement();
+        movement.setWarehouseId(request.getWarehouseId());
+        movement.setSparePartId(line.getSparePartId());
+        movement.setType(StockMovementType.RECEIPT);
+        movement.setQuantity(quantity);
+        movement.setUnit(line.getUnit());
+        movement.setUnitCost(line.getUnitPrice());
+        movement.setDocumentNumber(receipt.documentNumber() == null
+                ? request.getNumber()
+                : receipt.documentNumber());
+        movement.setSourceType(StockMovementSourceType.PROCUREMENT_REQUEST);
+        movement.setSourceId(request.getId());
+        movement.setSourceLineId(line.getId());
+        movement.setResponsiblePersonId(receipt.responsiblePersonId());
+        movement.setMovementDate(receiptDate);
+        movement.setNotes("Procurement receipt: " + request.getId());
+        movement.setComment(receipt.comment());
         return movement;
     }
 

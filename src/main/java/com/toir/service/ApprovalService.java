@@ -908,9 +908,9 @@ public class ApprovalService {
             request.setExpiresAt(Instant.now().plus(slaPolicyService.slaFor(request)));
         }
 
-        List<CreateApprovalRequest.StepInput> effectiveSteps = normalizeStepInputs(steps);
+        List<CreateApprovalRequest.StepInput> effectiveSteps = normalizeStepInputs(steps, true);
         if (effectiveSteps.isEmpty()) {
-            effectiveSteps = normalizeStepInputs(routeResolver.resolveRoute(request));
+            effectiveSteps = normalizeStepInputs(routeResolver.resolveRoute(request), false);
         }
         if (effectiveSteps.isEmpty()) {
             throw RestException.badRequest("At least one approval step is required");
@@ -949,7 +949,10 @@ public class ApprovalService {
         return toDto(saved);
     }
 
-    private List<CreateApprovalRequest.StepInput> normalizeStepInputs(List<CreateApprovalRequest.StepInput> steps) {
+    private List<CreateApprovalRequest.StepInput> normalizeStepInputs(
+            List<CreateApprovalRequest.StepInput> steps,
+            boolean resolveRoleOnlySteps
+    ) {
         if (steps == null || steps.isEmpty()) {
             return List.of();
         }
@@ -968,7 +971,14 @@ public class ApprovalService {
             if (!StringUtils.hasText(approverRole)) {
                 continue;
             }
-            normalized.add(new CreateApprovalRequest.StepInput(null, approverRole));
+            UUID resolvedApproverId = resolveRoleOnlySteps
+                    ? activeUsersWithRole(approverRole).stream()
+                    .map(User::getId)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null)
+                    : null;
+            normalized.add(new CreateApprovalRequest.StepInput(resolvedApproverId, approverRole));
         }
         return normalized;
     }
