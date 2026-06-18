@@ -25,6 +25,7 @@ public class FirebaseConfig {
     @Bean
     @Conditional(FirebaseCredentialsCondition.class)
     public FirebaseApp firebaseApp(FirebaseProperties properties) throws IOException {
+        FirebaseDiagnostics.Status status = FirebaseDiagnostics.fromProperties(properties);
         if (!FirebaseApp.getApps().isEmpty()) {
             log.info("FirebaseApp already exists; reusing default Firebase application");
             return FirebaseApp.getInstance();
@@ -32,6 +33,13 @@ public class FirebaseConfig {
         GoogleCredentials credentials;
         try (InputStream inputStream = serviceAccountStream(properties)) {
             credentials = GoogleCredentials.fromStream(inputStream);
+        } catch (IOException | RuntimeException ex) {
+            log.warn("FirebaseApp initialization failed; credentialSource={}, credentialConfigKey={}, projectIdPresent={}: {}",
+                    status.credentialSource(),
+                    status.credentialConfigKey(),
+                    status.projectIdPresent(),
+                    ex.getMessage());
+            throw ex;
         }
 
         FirebaseOptions.Builder builder = FirebaseOptions.builder()
@@ -40,7 +48,8 @@ public class FirebaseConfig {
             builder.setProjectId(properties.getProjectId());
         }
         FirebaseApp app = FirebaseApp.initializeApp(builder.build());
-        log.info("FirebaseApp created for projectIdPresent={}", StringUtils.hasText(properties.getProjectId()));
+        log.info("FirebaseApp created for projectIdPresent={}, credentialSource={}",
+                status.projectIdPresent(), status.credentialSource());
         return app;
     }
 
@@ -63,6 +72,7 @@ public class FirebaseConfig {
         if (StringUtils.hasText(properties.getServiceAccountFile())) {
             return new FileInputStream(properties.getServiceAccountFile());
         }
-        throw new IllegalStateException("Firebase service account must be configured when app.firebase.enabled=true");
+        throw new IllegalStateException("Firebase service account must be configured when "
+                + FirebaseDiagnostics.ENABLED_KEY + "=true");
     }
 }
