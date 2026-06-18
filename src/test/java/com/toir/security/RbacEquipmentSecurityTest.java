@@ -10,6 +10,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.service.EquipmentUsageSessionService;
 import com.toir.service.equipment.EquipmentPictureService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
@@ -70,6 +71,9 @@ class RbacEquipmentSecurityTest {
 
     @MockBean
     EquipmentPictureService equipmentPictureService;
+
+    @MockBean
+    EquipmentUsageSessionService equipmentUsageSessionService;
 
     @MockBean
     ScopeAccessService scopeAccessService;
@@ -328,4 +332,3 @@ class RbacEquipmentSecurityTest {
                 """.formatted(UUID.randomUUID());
     }
 }
-
