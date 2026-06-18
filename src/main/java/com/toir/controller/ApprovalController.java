@@ -8,6 +8,7 @@ import com.toir.dto.approval.ApprovalStatisticsDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
 import com.toir.dto.approval.ReturnApprovalRequest;
+import com.toir.dto.approval.UpdateApprovalRequest;
 import com.toir.enums.ApprovalStatus;
 import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
@@ -93,6 +94,13 @@ public class ApprovalController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_CREATE')")
     public ResponseEntity<ApprovalRequestDto> create(@Valid @RequestBody CreateApprovalRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApprovalRequestDto> update(@PathVariable UUID id,
+                                                     @Valid @RequestBody UpdateApprovalRequest request) {
+        return ResponseEntity.ok(service.update(id, request));
     }
 
     @PostMapping("/request")
