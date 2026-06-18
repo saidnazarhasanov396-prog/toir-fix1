@@ -57,9 +57,12 @@ public class WarehouseService {
     }
 
     @Transactional(readOnly = true)
-    public List<WarehouseStockDto> findStocks(UUID warehouseId) {
+    public List<WarehouseStockDto> findStocks(UUID warehouseId, String search) {
         assertCanAccessWarehouse(getOrThrow(warehouseId));
-        return stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId).stream().map(WarehouseStockDto::from).toList();
+        return stockRepository.searchByWarehouse(warehouseId, search)
+                .stream()
+                .map(WarehouseStockDto::from)
+                .toList();
     }
 
     @Transactional
