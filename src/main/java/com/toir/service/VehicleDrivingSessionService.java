@@ -2,25 +2,16 @@ package com.toir.service;
 
 import com.toir.dto.equipment.EquipmentUsageSessionReturnRequest;
 import com.toir.dto.equipment.EquipmentUsageSessionStartRequest;
-import com.toir.dto.meter.MeterReadingRequest;
 import com.toir.dto.vehicle.VehicleDrivingSessionResponse;
 import com.toir.dto.vehicle.VehicleDrivingSessionReturnRequest;
 import com.toir.dto.vehicle.VehicleDrivingSessionStartRequest;
 import com.toir.entity.equipment.Equipment;
-import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.entity.equipment.VehicleDetails;
-import com.toir.entity.equipment.VehicleDrivingSession;
 import com.toir.entity.users.Employee;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
-import com.toir.enums.MeterReadingContext;
-import com.toir.enums.MeterSource;
-import com.toir.enums.MeterType;
-import com.toir.enums.VehicleDrivingSessionStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.VehicleDetailsRepository;
-import com.toir.repository.VehicleDrivingSessionRepository;
-import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
@@ -31,12 +22,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -49,11 +37,8 @@ public class VehicleDrivingSessionService {
 
     private final EquipmentRepository equipmentRepository;
     private final VehicleDetailsRepository vehicleDetailsRepository;
-    private final VehicleDrivingSessionRepository sessionRepository;
     private final EmployeeRepository employeeRepository;
     private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
-    private final EquipmentMeterRepository equipmentMeterRepository;
-    private final MeterService meterService;
     private final EquipmentUsageSessionService equipmentUsageSessionService;
 
     @Transactional
@@ -153,61 +138,6 @@ public class VehicleDrivingSessionService {
             throw RestException.badRequest("Driver must be in the same department as the vehicle");
         }
         return driver;
-    }
-
-    private void validateEndReading(String label, Double start, Double end) {
-        if (start != null && end != null && end < start) {
-            throw RestException.badRequest(label + " cannot be less than the start value");
-        }
-    }
-
-    private void syncVehicleReadings(VehicleDetails details,
-                                     Instant returnedAt,
-                                     Double endOdometer,
-                                     Double endEngineHours,
-                                     UUID returnedBy,
-                                     String note) {
-        if (endOdometer == null && endEngineHours == null) {
-            return;
-        }
-        Map<MeterType, EquipmentMeter> metersByType = equipmentMeterRepository
-                .findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(details.getEquipmentId())
-                .stream()
-                .collect(Collectors.toMap(
-                        EquipmentMeter::getMeterType,
-                        Function.identity(),
-                        (a, b) -> a
-                ));
-        if (endOdometer != null) {
-            syncMeter(metersByType.get(MeterType.MILEAGE_KM), endOdometer, returnedAt, returnedBy, note);
-            details.setCurrentOdometerKm(endOdometer);
-        }
-        if (endEngineHours != null) {
-            syncMeter(metersByType.get(MeterType.ENGINE_HOURS), endEngineHours, returnedAt, returnedBy, note);
-            details.setCurrentEngineHours(endEngineHours);
-        }
-        vehicleDetailsRepository.save(details);
-    }
-
-    private void syncMeter(EquipmentMeter meter, Double value, Instant returnedAt, UUID returnedBy, String note) {
-        if (meter == null || value == null) {
-            return;
-        }
-        meterService.addReading(
-                new MeterReadingRequest(
-                        meter.getId(),
-                        value,
-                        returnedAt,
-                        MeterSource.MANUAL,
-                        returnedBy,
-                        null,
-                        note
-                ),
-                MeterReadingContext.WORK_COMPLETED,
-                null,
-                null,
-                null
-        );
     }
 
     private String trimToNull(String value) {

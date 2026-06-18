@@ -84,7 +84,7 @@ class RbacWarehouseEquipmentSecurityTest {
         UUID warehouseId = UUID.randomUUID();
         when(warehouseEquipmentItemService.list(eq(warehouseId), eq(null), eq(0), eq(1)))
                 .thenReturn(new PageImpl<>(List.of(warehouseEquipmentItemDto(warehouseId)), PageRequest.of(0, 1), 1));
-        when(warehouseService.findStocks(warehouseId)).thenReturn(List.of());
+        when(warehouseService.findStocks(warehouseId, null)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/warehouses/{warehouseId}/equipment?page=0&size=1", warehouseId))
                 .andExpect(status().isOk());
@@ -96,7 +96,7 @@ class RbacWarehouseEquipmentSecurityTest {
     @WithMockUser(authorities = PermissionConstants.STOCK_READ)
     void stockReadCanReadWarehouseStocks() throws Exception {
         UUID warehouseId = UUID.randomUUID();
-        when(warehouseService.findStocks(warehouseId)).thenReturn(List.of());
+        when(warehouseService.findStocks(warehouseId, null)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/warehouses/{warehouseId}/stocks?page=0&size=1", warehouseId))
                 .andExpect(status().isOk());

@@ -9,7 +9,6 @@ import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
-import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.entity.CompletionAct;
 import com.toir.entity.CertificationType;
 import com.toir.entity.Department;
@@ -2405,21 +2404,12 @@ class WorkOrderServiceTest {
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPLACEMENT, WorkOrderStatus.IN_PROGRESS, warehouseId, replacementEquipmentId);
         UUID workOrderDepartmentId = UUID.randomUUID();
         workOrder.setDepartmentId(workOrderDepartmentId);
-        WarehouseEquipmentItem item = warehouseItem(warehouseId, replacementEquipmentId, WarehouseEquipmentStatus.RESERVED);
-        Equipment replacementEquipment = new Equipment();
-        replacementEquipment.setId(replacementEquipmentId);
-        replacementEquipment.setDepartmentId(UUID.randomUUID());
         Warehouse returnWarehouse = new Warehouse();
         returnWarehouse.setId(oldEquipmentReturnWarehouseId);
         returnWarehouse.setActive(true);
 
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(warehouseId, replacementEquipmentId))
-                .thenReturn(Optional.of(item));
         when(warehouseRepository.findByIdAndIsDeletedFalse(oldEquipmentReturnWarehouseId)).thenReturn(Optional.of(returnWarehouse));
-        lenient().when(equipmentRepository.findByIdAndIsDeletedFalse(replacementEquipmentId)).thenReturn(Optional.of(replacementEquipment));
-        lenient().when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubLifecycleDtoLookups(workOrder);
 

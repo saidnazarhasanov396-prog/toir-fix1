@@ -34,4 +34,5 @@ class DefaultApprovalRouteResolverTest {
         assertThat(steps.getFirst().approverId()).isNull();
         assertThat(steps.getFirst().approverRole()).isEqualTo("WORK_ORDER_APPROVER");
     }
+
 }

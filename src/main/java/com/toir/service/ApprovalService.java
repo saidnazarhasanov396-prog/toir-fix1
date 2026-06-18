@@ -8,6 +8,7 @@ import com.toir.dto.approval.ApprovalStatisticsDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
 import com.toir.dto.approval.ReturnApprovalRequest;
+import com.toir.dto.approval.UpdateApprovalRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.entity.users.Role;
@@ -35,6 +36,9 @@ import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -199,6 +203,67 @@ public class ApprovalService {
                 r.steps(),
                 r.actionType()
         );
+    }
+
+    @Transactional
+    public ApprovalRequestDto update(UUID id, UpdateApprovalRequest update) {
+        ApprovalRequest request = getOrThrow(id);
+        approvalScopeService.assertCanUpdateApproval(request);
+
+        if (request.getStatus() != ApprovalStatus.PENDING
+                && request.getStatus() != ApprovalStatus.DRAFT) {
+            throw RestException.badRequest("Only pending or draft approval requests can be updated");
+        }
+        boolean processStarted = request.getCurrentStep() > 1
+                || request.getLastReturnedAt() != null
+                || request.isExecuted()
+                || request.getSteps().stream()
+                .anyMatch(step -> step.getDecision() != ApprovalDecision.PENDING
+                        || step.getDecidedAt() != null
+                        || step.getDecidedById() != null);
+        if (processStarted) {
+            throw RestException.badRequest("Approval request cannot be updated after the approval process has started");
+        }
+
+        List<CreateApprovalRequest.StepInput> steps = normalizeUpdateStepInputs(update.steps());
+        request.setTitle(update.title().trim());
+        request.setDescription(update.description());
+
+        request.getSteps().clear();
+        requestRepository.saveAndFlush(request);
+
+        int stepNumber = 1;
+        for (CreateApprovalRequest.StepInput input : steps) {
+            ApprovalStep step = new ApprovalStep();
+            step.setRequest(request);
+            step.setStepNumber(stepNumber++);
+            step.setApproverId(input.approverId());
+            step.setApproverRole(input.approverRole());
+            step.setDecision(ApprovalDecision.PENDING);
+            request.getSteps().add(step);
+        }
+        request.setCurrentStep(1);
+
+        ApprovalRequest saved = requestRepository.save(request);
+        UUID actorId = scopeAccessService.currentUserIdOrNull();
+        governanceService.record(
+                saved,
+                saved.getStatus(),
+                saved.getStatus(),
+                actorId,
+                "Approval request updated",
+                ApprovalActionType.UPDATED
+        );
+        auditBuilderService.log(
+                "approval_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.APPROVAL_REQUEST,
+                "Approval request updated",
+                null,
+                saved
+        );
+        return toDto(saved);
     }
 
     private ApprovalTargetType effectiveTargetType(CreateApprovalRequest request) {
@@ -697,16 +762,16 @@ public class ApprovalService {
         if (current.getApproverId() != null) {
             boolean designatedApprover = current.getApproverId().equals(actorId);
             boolean delegateApprover = isActiveDelegate(current.getApproverId(), actorId);
-            if (designatedApprover) {
+            if (designatedApprover && canActorActOnStep(current, actorId)) {
                 approvalScopeService.assertCanDecideApproval(request, current);
                 return null;
             }
-            if (!delegateApprover || !matchesCurrentPrincipal(actorId)) {
+            if (!delegateApprover || !canActorActOnStep(current, actorId)) {
                 throw RestException.forbidden("Only designated approver can act on this step");
             }
             return current.getApproverId();
         }
-        if (canActorApproveRoleStep(actorId, current.getApproverRole())) {
+        if (canActorActOnStep(current, actorId)) {
             approvalScopeService.assertCanDecideApproval(request, current);
             return null;
         }
@@ -803,21 +868,34 @@ public class ApprovalService {
         if (step == null) {
             return false;
         }
-        if (step.getApproverId() != null) {
-            return matchesCurrentPrincipal(step.getApproverId())
-                    || isActiveDelegate(step.getApproverId(), scopeAccessService.currentUserIdOrNull());
+        UUID actorId = scopeAccessService.currentUserIdOrNull();
+        if (actorId == null) {
+            actorId = scopeAccessService.currentEmployeeId().orElse(null);
         }
-        return isActiveUserWithRole(scopeAccessService.currentUserIdOrNull(), step.getApproverRole());
+        return canActorActOnStep(step, actorId);
+    }
+
+    private boolean canActorActOnStep(ApprovalStep step, UUID actorId) {
+        if (step == null || actorId == null) {
+            return false;
+        }
+        if (step.getApproverId() != null) {
+            if (step.getApproverId().equals(actorId)) {
+                return true;
+            }
+            return matchesAuthenticatedPrincipal(actorId)
+                    && isActiveDelegate(step.getApproverId(), actorId);
+        }
+        return canActorApproveRoleStep(actorId, step.getApproverRole());
     }
 
     private boolean isActiveUserWithRole(UUID userId, String roleCode) {
         if (userId == null || !StringUtils.hasText(roleCode)) {
             return false;
         }
-        String normalizedRole = roleCode.trim();
         return userRepository.findByIdAndIsDeletedFalse(userId)
                 .filter(this::isActiveUser)
-                .filter(user -> hasRole(user, normalizedRole))
+                .filter(user -> hasRole(user, roleCode) || currentAuthenticationHasRole(roleCode))
                 .isPresent();
     }
 
@@ -825,14 +903,13 @@ public class ApprovalService {
         if (!StringUtils.hasText(roleCode)) {
             return List.of();
         }
-        String normalizedRole = roleCode.trim();
         List<User> users = userRepository.findAllWithRolesAndIsDeletedFalse();
         if (users == null || users.isEmpty()) {
             return List.of();
         }
         return users.stream()
                 .filter(this::isActiveUser)
-                .filter(user -> hasRole(user, normalizedRole))
+                .filter(user -> hasRole(user, roleCode))
                 .toList();
     }
 
@@ -841,10 +918,37 @@ public class ApprovalService {
     }
 
     private boolean hasRole(User user, String roleCode) {
+        String expectedRole = normalizeRole(roleCode);
+        if (expectedRole == null) {
+            return false;
+        }
         return roleStream(user)
                 .map(Role::getCode)
+                .map(this::normalizeRole)
                 .filter(Objects::nonNull)
-                .anyMatch(roleCode::equals);
+                .anyMatch(expectedRole::equals);
+    }
+
+    private boolean currentAuthenticationHasRole(String roleCode) {
+        String expectedRole = normalizeRole(roleCode);
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (expectedRole == null || authentication == null || !authentication.isAuthenticated()
+                || authentication.getAuthorities() == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .map(this::normalizeRole)
+                .filter(Objects::nonNull)
+                .anyMatch(expectedRole::equals);
+    }
+
+    private String normalizeRole(String roleCode) {
+        if (!StringUtils.hasText(roleCode)) {
+            return null;
+        }
+        String normalized = roleCode.trim().toUpperCase(Locale.ROOT);
+        return normalized.startsWith("ROLE_") ? normalized.substring("ROLE_".length()) : normalized;
     }
 
     private Stream<Role> roleStream(User user) {
@@ -969,6 +1073,28 @@ public class ApprovalService {
                 continue;
             }
             normalized.add(new CreateApprovalRequest.StepInput(null, approverRole));
+        }
+        return normalized;
+    }
+
+    private List<CreateApprovalRequest.StepInput> normalizeUpdateStepInputs(
+            List<CreateApprovalRequest.StepInput> steps
+    ) {
+        if (steps == null || steps.isEmpty()) {
+            throw RestException.badRequest("At least one approval step is required");
+        }
+        List<CreateApprovalRequest.StepInput> normalized = new ArrayList<>();
+        for (CreateApprovalRequest.StepInput input : steps) {
+            if (input == null) {
+                throw RestException.badRequest("approverId or approverRole is required for each step");
+            }
+            String approverRole = StringUtils.hasText(input.approverRole())
+                    ? input.approverRole().trim()
+                    : null;
+            if (input.approverId() == null && approverRole == null) {
+                throw RestException.badRequest("approverId or approverRole is required for each step");
+            }
+            normalized.add(new CreateApprovalRequest.StepInput(input.approverId(), approverRole));
         }
         return normalized;
     }

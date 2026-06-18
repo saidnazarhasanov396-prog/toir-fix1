@@ -3,6 +3,7 @@ package com.toir.service;
 import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.ReturnApprovalRequest;
+import com.toir.dto.approval.UpdateApprovalRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.entity.users.Role;
@@ -28,6 +29,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -91,6 +96,117 @@ class ApprovalServiceTest {
     ApprovalService service;
 
     @Test
+    void requesterCanUpdatePendingApprovalBeforeAnyDecision() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        ApprovalRequest approval = pendingMultiStepApproval(
+                approvalId, requesterId, 1, UUID.randomUUID(), UUID.randomUUID());
+        UpdateApprovalRequest update = new UpdateApprovalRequest(
+                "Updated title",
+                "Updated description",
+                List.of(
+                        new CreateApprovalRequest.StepInput(UUID.randomUUID(), null),
+                        new CreateApprovalRequest.StepInput(UUID.randomUUID(), null)
+                )
+        );
+        stubSuccessfulUpdate(approvalId, approval, requesterId);
+
+        ApprovalRequestDto result = service.update(approvalId, update);
+
+        assertThat(result.title()).isEqualTo("Updated title");
+        assertThat(result.description()).isEqualTo("Updated description");
+        assertThat(result.currentStep()).isEqualTo(1);
+        assertThat(result.steps()).extracting(step -> step.stepNumber()).containsExactly(1, 2);
+        verify(approvalScopeService).assertCanUpdateApproval(approval);
+        verify(governanceService).record(
+                approval,
+                ApprovalStatus.PENDING,
+                ApprovalStatus.PENDING,
+                requesterId,
+                "Approval request updated",
+                ApprovalActionType.UPDATED
+        );
+    }
+
+    @Test
+    void updateKeepsRoleOnlyStepUnassigned() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        ApprovalRequest approval = pendingRoleOnlyApproval(approvalId, requesterId, "OLD_ROLE");
+        stubSuccessfulUpdate(approvalId, approval, requesterId);
+
+        ApprovalRequestDto result = service.update(approvalId, new UpdateApprovalRequest(
+                "Updated",
+                null,
+                List.of(new CreateApprovalRequest.StepInput(null, " APPROVAL_MANAGER "))
+        ));
+
+        assertThat(result.steps()).hasSize(1);
+        assertThat(result.steps().getFirst().approverId()).isNull();
+        assertThat(result.steps().getFirst().approverRole()).isEqualTo("APPROVAL_MANAGER");
+    }
+
+    @Test
+    void updateFailsAfterAnyStepDecision() {
+        UUID approvalId = UUID.randomUUID();
+        ApprovalRequest approval = pendingMultiStepApproval(
+                approvalId, UUID.randomUUID(), 2, UUID.randomUUID(), UUID.randomUUID());
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+
+        assertThatThrownBy(() -> service.update(approvalId, validUpdate()))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("process has started");
+        verify(requestRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateFailsForCompletedApproval() {
+        UUID approvalId = UUID.randomUUID();
+        ApprovalRequest approval = pendingRoleOnlyApproval(approvalId, UUID.randomUUID(), "APPROVER");
+        approval.setStatus(ApprovalStatus.APPROVED);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+
+        assertThatThrownBy(() -> service.update(approvalId, validUpdate()))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only pending or draft");
+        verify(requestRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void unauthorizedUserCannotUpdate() {
+        UUID approvalId = UUID.randomUUID();
+        ApprovalRequest approval = pendingRoleOnlyApproval(approvalId, UUID.randomUUID(), "APPROVER");
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        org.mockito.Mockito.doThrow(new AccessDeniedException("Access denied"))
+                .when(approvalScopeService).assertCanUpdateApproval(approval);
+
+        assertThatThrownBy(() -> service.update(approvalId, validUpdate()))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(requestRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateDoesNotChangeImmutableApprovalFields() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        ApprovalRequest approval = pendingRoleOnlyApproval(approvalId, requesterId, "APPROVER");
+        approval.setTargetType(com.toir.enums.ApprovalTargetType.WORK_ORDER);
+        approval.setTargetId(targetId);
+        approval.setActionType(ApprovalActionType.APPROVE);
+        stubSuccessfulUpdate(approvalId, approval, requesterId);
+
+        service.update(approvalId, validUpdate());
+
+        assertThat(approval.getTargetType()).isEqualTo(com.toir.enums.ApprovalTargetType.WORK_ORDER);
+        assertThat(approval.getTargetId()).isEqualTo(targetId);
+        assertThat(approval.getDocumentType()).isEqualTo("WORK_ORDER");
+        assertThat(approval.getDocumentId()).isEqualTo(targetId);
+        assertThat(approval.getActionType()).isEqualTo(ApprovalActionType.APPROVE);
+        assertThat(approval.getRequesterId()).isEqualTo(requesterId);
+    }
+
+    @Test
     void createKeepsRoleOnlyManualStepUnassigned() {
         UUID documentId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
@@ -147,6 +263,39 @@ class ApprovalServiceTest {
         assertThat(step.getApproverId()).isNull();
         assertThat(step.getApproverRole()).isEqualTo(approverRole);
         assertThat(result.canApprove()).isFalse();
+    }
+
+    @Test
+    void roleOnlyStepAcceptsRolePrefixedSecurityAuthority() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = pendingRoleOnlyApproval(approvalId, UUID.randomUUID(), "USTA");
+        User actor = new User();
+        actor.setId(actorId);
+        actor.setStatus(UserStatus.ACTIVE);
+
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(userRepository.findByIdAndIsDeletedFalse(actorId)).thenReturn(Optional.of(actor));
+        when(requestRepository.save(any(ApprovalRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                actorId.toString(),
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_USTA"))
+        ));
+
+        try {
+            ApprovalRequestDto beforeDecision = service.findById(approvalId);
+            assertThat(beforeDecision.canApprove()).isTrue();
+            assertThat(beforeDecision.canReject()).isTrue();
+
+            service.approve(approvalId, new com.toir.dto.approval.DecisionRequest(actorId, "ok"));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(approval.getSteps().getFirst().getDecidedById()).isEqualTo(actorId);
     }
 
     @Test
@@ -392,6 +541,24 @@ class ApprovalServiceTest {
         approval.setCurrentStep(1);
         approval.setExpiresAt(Instant.now().plus(Duration.ofHours(24)));
         return approval;
+    }
+
+    private UpdateApprovalRequest validUpdate() {
+        return new UpdateApprovalRequest(
+                "Updated approval",
+                "Updated description",
+                List.of(new CreateApprovalRequest.StepInput(UUID.randomUUID(), null))
+        );
+    }
+
+    private void stubSuccessfulUpdate(UUID approvalId, ApprovalRequest approval, UUID actorId) {
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(requestRepository.save(any(ApprovalRequest.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenReturn(Optional.empty());
     }
 
     private ApprovalRequest pendingMultiStepApproval(UUID id, UUID requesterId, int currentStep, UUID... approverIds) {

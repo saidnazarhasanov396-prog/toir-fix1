@@ -24,6 +24,7 @@ import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.security.PermissionConstants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -109,6 +110,16 @@ public class ApprovalScopeService {
         if (scopeAccessService.isScopeAdmin()
                 || isRequester(approval)
                 || canAccessLinkedDocumentScope(effectiveTargetType(approval), effectiveTargetId(approval))) {
+            return;
+        }
+        throw forbidden();
+    }
+
+    public void assertCanUpdateApproval(ApprovalRequest approval) {
+        if (approval != null
+                && (scopeAccessService.isScopeAdmin()
+                || scopeAccessService.hasAuthority(PermissionConstants.APPROVAL_UPDATE)
+                || isRequester(approval))) {
             return;
         }
         throw forbidden();

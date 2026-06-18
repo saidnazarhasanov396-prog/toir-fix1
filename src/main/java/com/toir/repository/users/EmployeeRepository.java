@@ -29,6 +29,9 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
     @Query(value = "SELECT * FROM hr_employees WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<Employee> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
+    @Query(value = "SELECT * FROM hr_employees WHERE user_id IN (:userIds) AND is_deleted = false", nativeQuery = true)
+    List<Employee> findAllByUserIdInAndIsDeletedFalse(@Param("userIds") Collection<UUID> userIds);
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM hr_employees WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 

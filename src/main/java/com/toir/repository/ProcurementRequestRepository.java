@@ -6,7 +6,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -17,7 +19,8 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
     @Query(value = "SELECT * FROM procurement_requests WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<ProcurementRequest> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    @Query(value = "SELECT * FROM procurement_requests WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1 FOR UPDATE", nativeQuery = true)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from ProcurementRequest p where p.id = :id and p.isDeleted = false")
     Optional<ProcurementRequest> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
 
     @Query(value = "SELECT * FROM procurement_requests WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)

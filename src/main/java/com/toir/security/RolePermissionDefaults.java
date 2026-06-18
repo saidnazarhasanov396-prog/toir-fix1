@@ -360,6 +360,7 @@ public final class RolePermissionDefaults {
                 PermissionConstants.ANALYTICS_READ,
                 PermissionConstants.ANALYTICS_EXPORT,
                 PermissionConstants.APPROVAL_READ,
+                PermissionConstants.APPROVAL_UPDATE,
                 PermissionConstants.APPROVAL_APPROVE,
                 PermissionConstants.APPROVAL_REJECT,
                 PermissionConstants.APPROVAL_RETURN

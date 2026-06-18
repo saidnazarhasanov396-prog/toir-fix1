@@ -35,7 +35,7 @@ class ApprovalRequestStatusConstraintMigrationTest {
     }
 
     @Test
-    void approvalRequestsStatusConstraintAcceptsFailedAndExpired() throws Exception {
+    void approvalRequestsStatusConstraintAcceptsDraftFailedAndExpired() throws Exception {
         try (Connection connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(),
                 POSTGRES.getUsername(),
@@ -44,6 +44,8 @@ class ApprovalRequestStatusConstraintMigrationTest {
             assertThatCode(() -> insertApprovalRequest(connection, "FAILED"))
                     .doesNotThrowAnyException();
             assertThatCode(() -> insertApprovalRequest(connection, "EXPIRED"))
+                    .doesNotThrowAnyException();
+            assertThatCode(() -> insertApprovalRequest(connection, "DRAFT"))
                     .doesNotThrowAnyException();
         }
     }

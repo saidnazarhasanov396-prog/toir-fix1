@@ -11,6 +11,7 @@ public enum ApprovalActionType {
     CREATE_TASK,
     CREATE_WORK_ORDER,
     SUBMIT,
+    UPDATED,
     RETURNED,
     RETURNED_TO_STEP,
     CUSTOM
