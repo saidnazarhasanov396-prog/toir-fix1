@@ -5,6 +5,7 @@ import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.enums.ApprovalStatus;
 import com.toir.service.ApprovalService;
 import com.toir.service.approval.ApprovalAnalyticsService;
+import com.toir.service.approval.ApprovalRuleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -57,6 +58,9 @@ class RbacApprovalSecurityTest {
 
     @MockBean
     ApprovalAnalyticsService approvalAnalyticsService;
+
+    @MockBean
+    ApprovalRuleService approvalRuleService;
 
     @TestConfiguration
     static class SecurityBeans {
@@ -220,6 +224,24 @@ class RbacApprovalSecurityTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(decisionPayload()))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = APPROVAL_READ)
+    void approvalReadCanReadRules() throws Exception {
+        when(approvalRuleService.listRules()).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/approvals/rules"))
+                .andExpect(status().isOk());
+
+        verify(approvalRuleService).listRules();
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.USER_READ)
+    void unrelatedPermissionCannotReadRules() throws Exception {
+        mockMvc.perform(get("/api/v1/approvals/rules"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
