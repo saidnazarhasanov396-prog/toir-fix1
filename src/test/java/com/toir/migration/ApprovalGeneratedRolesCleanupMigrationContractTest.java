@@ -12,7 +12,7 @@ class ApprovalGeneratedRolesCleanupMigrationContractTest {
     @Test
     void migrationRemovesKnownGeneratedRolesOnlyFromSeededTemplates() throws Exception {
         String sql = Files.readString(Path.of(
-                "src/main/resources/db/migration/V20260618_6__remove_generated_approval_roles.sql"
+                "src/main/resources/db/migration/V20260618_7__remove_generated_approval_roles.sql"
         ));
 
         assertThat(sql).containsIgnoringCase("DELETE FROM approval_template_steps");
