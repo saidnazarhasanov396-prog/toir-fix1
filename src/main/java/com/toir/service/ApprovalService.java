@@ -8,6 +8,7 @@ import com.toir.dto.approval.ApprovalStatisticsDto;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.DecisionRequest;
 import com.toir.dto.approval.ReturnApprovalRequest;
+import com.toir.dto.approval.UpdateApprovalRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.entity.users.Role;
@@ -202,6 +203,67 @@ public class ApprovalService {
                 r.steps(),
                 r.actionType()
         );
+    }
+
+    @Transactional
+    public ApprovalRequestDto update(UUID id, UpdateApprovalRequest update) {
+        ApprovalRequest request = getOrThrow(id);
+        approvalScopeService.assertCanUpdateApproval(request);
+
+        if (request.getStatus() != ApprovalStatus.PENDING
+                && request.getStatus() != ApprovalStatus.DRAFT) {
+            throw RestException.badRequest("Only pending or draft approval requests can be updated");
+        }
+        boolean processStarted = request.getCurrentStep() > 1
+                || request.getLastReturnedAt() != null
+                || request.isExecuted()
+                || request.getSteps().stream()
+                .anyMatch(step -> step.getDecision() != ApprovalDecision.PENDING
+                        || step.getDecidedAt() != null
+                        || step.getDecidedById() != null);
+        if (processStarted) {
+            throw RestException.badRequest("Approval request cannot be updated after the approval process has started");
+        }
+
+        List<CreateApprovalRequest.StepInput> steps = normalizeUpdateStepInputs(update.steps());
+        request.setTitle(update.title().trim());
+        request.setDescription(update.description());
+
+        request.getSteps().clear();
+        requestRepository.saveAndFlush(request);
+
+        int stepNumber = 1;
+        for (CreateApprovalRequest.StepInput input : steps) {
+            ApprovalStep step = new ApprovalStep();
+            step.setRequest(request);
+            step.setStepNumber(stepNumber++);
+            step.setApproverId(input.approverId());
+            step.setApproverRole(input.approverRole());
+            step.setDecision(ApprovalDecision.PENDING);
+            request.getSteps().add(step);
+        }
+        request.setCurrentStep(1);
+
+        ApprovalRequest saved = requestRepository.save(request);
+        UUID actorId = scopeAccessService.currentUserIdOrNull();
+        governanceService.record(
+                saved,
+                saved.getStatus(),
+                saved.getStatus(),
+                actorId,
+                "Approval request updated",
+                ApprovalActionType.UPDATED
+        );
+        auditBuilderService.log(
+                "approval_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.APPROVAL_REQUEST,
+                "Approval request updated",
+                null,
+                saved
+        );
+        return toDto(saved);
     }
 
     private ApprovalTargetType effectiveTargetType(CreateApprovalRequest request) {
@@ -1011,6 +1073,28 @@ public class ApprovalService {
                 continue;
             }
             normalized.add(new CreateApprovalRequest.StepInput(null, approverRole));
+        }
+        return normalized;
+    }
+
+    private List<CreateApprovalRequest.StepInput> normalizeUpdateStepInputs(
+            List<CreateApprovalRequest.StepInput> steps
+    ) {
+        if (steps == null || steps.isEmpty()) {
+            throw RestException.badRequest("At least one approval step is required");
+        }
+        List<CreateApprovalRequest.StepInput> normalized = new ArrayList<>();
+        for (CreateApprovalRequest.StepInput input : steps) {
+            if (input == null) {
+                throw RestException.badRequest("approverId or approverRole is required for each step");
+            }
+            String approverRole = StringUtils.hasText(input.approverRole())
+                    ? input.approverRole().trim()
+                    : null;
+            if (input.approverId() == null && approverRole == null) {
+                throw RestException.badRequest("approverId or approverRole is required for each step");
+            }
+            normalized.add(new CreateApprovalRequest.StepInput(input.approverId(), approverRole));
         }
         return normalized;
     }

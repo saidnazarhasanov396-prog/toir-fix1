@@ -65,6 +65,22 @@ public class ScopeAccessService {
         return authorities.contains(SYSTEM_ADMIN) || authorities.contains(PermissionConstants.WILDCARD);
     }
 
+    public boolean hasAuthority(String authority) {
+        if (!StringUtils.hasText(authority)) {
+            return false;
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        if (authentication.getPrincipal() instanceof AuthenticatedUser user
+                && user.permissions() != null
+                && user.permissions().stream().anyMatch(authority::equals)) {
+            return true;
+        }
+        return authorityNames(authentication).contains(authority);
+    }
+
     public boolean canAccessDepartment(UUID departmentId) {
         if (departmentId == null) {
             return false;
