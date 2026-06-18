@@ -37,6 +37,7 @@ import com.toir.enums.EquipmentAttributeDataType;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.EquipmentUsageSessionStatus;
 import com.toir.enums.FileCategory;
 import com.toir.enums.MeterType;
 import com.toir.enums.PlacementType;
@@ -49,6 +50,7 @@ import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.DowntimeEventRepository;
+import com.toir.repository.EquipmentUsageSessionRepository;
 import com.toir.repository.FileAssetRepository;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.equipment.EquipmentDocumentRepository;
@@ -147,6 +149,9 @@ class EquipmentServiceTest {
 
     @Mock
     EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
+
+    @Mock
+    EquipmentUsageSessionRepository equipmentUsageSessionRepository;
 
     @Mock
     WarehouseRepository warehouseRepository;
@@ -2200,6 +2205,30 @@ class EquipmentServiceTest {
         ))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("targetType is required");
+    }
+
+    @Test
+    void moveRejectedWhenEquipmentHasOpenUsageSession() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-PLACEMENT-OPEN");
+        equipment.setId(equipmentId);
+
+        when(repository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(equipmentUsageSessionRepository.existsByEquipmentIdAndStatusAndIsDeletedFalse(
+                equipmentId,
+                EquipmentUsageSessionStatus.OPEN
+        )).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updatePlacement(
+                equipmentId,
+                new EquipmentPlacementRequest(PlacementTargetType.WAREHOUSE, warehouseId, null, null)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("open usage session");
+
+        verifyNoInteractions(warehouseEquipmentItemService);
+        verify(repository, never()).save(any());
     }
 
     @Test

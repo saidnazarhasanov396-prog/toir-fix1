@@ -21,11 +21,12 @@ import com.toir.enums.AuditModule;
 import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.FileCategory;
 import com.toir.enums.StockLedgerMovementType;
+import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
+import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementFileRepository;
-import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.WarehouseRepository;
@@ -61,8 +62,8 @@ public class StockMovementService {
     private static final int MAX_STOCK_MOVEMENT_FILES = 25;
 
     private final StockMovementRepository repository;
-    private final WarehouseStockRepository stockRepository;
     private final ProcurementRequestRepository procurementRequestRepository;
+    private final WarehouseStockRepository stockRepository;
     private final SparePartRepository sparePartRepository;
     private final AuditBuilderService auditBuilderService;
     private final WarehouseRepository warehouseRepository;
@@ -121,7 +122,7 @@ public class StockMovementService {
         validatePositiveQuantity(request.quantity());
         assertGenericMovementTypeIsSupported(request.type());
         assertWorkOrderMovementUsesDomainEndpoint(request);
-        assertProcurementReceiptUsesDomainEndpoint(request);
+        assertGenericReceiptDoesNotTargetOpenProcurement(request);
         assertCanAccessWarehouseId(request.warehouseId());
         assertMovementHasReasonOrSource(request);
 
@@ -178,6 +179,7 @@ public class StockMovementService {
         movement.setDocumentNumber(request.documentNumber());
         movement.setNotes(request.notes());
         movement.setComment(request.notes());
+        movement.setSourceType(StockMovementSourceType.MANUAL);
         StockMovement saved = repository.save(movement);
         postCoreStockMovement(saved, previousQuantity);
 
@@ -196,15 +198,6 @@ public class StockMovementService {
         );
 
         return StockMovementDto.from(saved);
-    }
-
-    private void assertProcurementReceiptUsesDomainEndpoint(StockMovementRequest request) {
-        String documentNumber = trimToNull(request.documentNumber());
-        if (request.type() == StockMovementType.RECEIPT
-                && documentNumber != null
-                && procurementRequestRepository.existsOpenReceivableByNumber(documentNumber)) {
-            throw RestException.badRequest("Use procurement receipt endpoint");
-        }
     }
 
     @Transactional
@@ -557,6 +550,16 @@ public class StockMovementService {
         if (request.type() == StockMovementType.RECEIPT) {
             throw RestException.badRequest(
                     "Work order receipts are not valid stock receipt sources; use procurement, purchase receipt, or a manual receipt document");
+        }
+    }
+
+    private void assertGenericReceiptDoesNotTargetOpenProcurement(StockMovementRequest request) {
+        if (request.type() != StockMovementType.RECEIPT) {
+            return;
+        }
+        String documentNumber = trimToNull(request.documentNumber());
+        if (documentNumber != null && procurementRequestRepository.existsOpenReceivableByNumber(documentNumber)) {
+            throw RestException.badRequest("Use procurement receipt endpoint for open procurement request " + documentNumber);
         }
     }
 

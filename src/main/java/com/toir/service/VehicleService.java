@@ -12,6 +12,7 @@ import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.dto.vehicle.VehicleSummaryDto;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.EquipmentLocationHistory;
 import com.toir.entity.equipment.VehicleDocument;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.entity.users.Employee;
@@ -19,6 +20,7 @@ import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.EquipmentCategory;
+import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.FileCategory;
 import com.toir.enums.MeterType;
@@ -27,6 +29,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.VehicleDocumentRepository;
 import com.toir.repository.VehicleDetailsRepository;
+import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.VehicleStatsProjection;
 import com.toir.repository.users.EmployeeRepository;
@@ -50,6 +53,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -60,6 +64,7 @@ import java.util.stream.Collectors;
 public class VehicleService {
 
     private final EquipmentRepository equipmentRepository;
+    private final EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
     private final VehicleDetailsRepository vehicleDetailsRepository;
     private final EquipmentService equipmentService;
     private final AuditBuilderService auditBuilderService;
@@ -149,6 +154,7 @@ public class VehicleService {
         applyEquipment(equipment, request);
         validateAssignedDriver(request.assignedDriverId(), request.departmentId(), null);
         Equipment savedEquipment = equipmentRepository.save(equipment);
+        writeInitialLocationHistory(savedEquipment);
 
         VehicleDetails details = new VehicleDetails();
         details.setEquipmentId(savedEquipment.getId());
@@ -201,10 +207,17 @@ public class VehicleService {
         boolean equipmentTypeChanged = isEquipmentTypeChanged(equipment.getEquipmentTypeId(), request.equipmentTypeId());
         validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
         validateAssignedDriver(request.assignedDriverId(), request.departmentId(), equipmentId);
+        VehicleLocationSnapshot fromLocation = vehicleLocationSnapshot(equipment);
         applyEquipment(equipment, request);
         applyDetails(details, request);
 
         Equipment newEquipment = equipmentRepository.save(equipment);
+        writeLocationHistoryIfChanged(
+                newEquipment,
+                fromLocation,
+                vehicleLocationSnapshot(newEquipment),
+                "Vehicle department updated"
+        );
         VehicleDetails newDetails = vehicleDetailsRepository.save(details);
         if (equipmentAttributeService != null && request.attributes() != null) {
             equipmentAttributeService.upsertValues(newEquipment, request.attributes());
@@ -673,9 +686,102 @@ public class VehicleService {
         equipment.setCategory(EquipmentCategory.VEHICLE);
         equipment.setManufacturer(request.brand());
         equipment.setResponsibleId(request.assignedDriverId());
+        equipment.setCurrentLocationType(EquipmentLocationType.DEPARTMENT);
+        equipment.setCurrentWarehouseId(null);
+        equipment.setResponsibleDepartmentId(request.departmentId());
+        equipment.setOutsideReason(null);
+        equipment.setOutsideTakenBy(null);
+        equipment.setOutsideRecipientUserId(null);
+        equipment.setOutsideStartedDate(null);
+        equipment.setOutsideExpectedReturnDate(null);
+        equipment.setOutsideDestination(null);
+        equipment.setOutsideReasonNote(null);
         equipment.setProducedYear(request.manufactureYear());
         equipment.setAverageDailyUsage(request.averageDailyUsage());
         applyVehicleLifetime(equipment, request);
+    }
+
+    private void writeInitialLocationHistory(Equipment equipment) {
+        VehicleLocationSnapshot toLocation = vehicleLocationSnapshot(equipment);
+        EquipmentLocationHistory history = new EquipmentLocationHistory();
+        history.setEquipmentId(equipment.getId());
+        history.setToLocationType(toLocation.locationType());
+        history.setToDepartmentId(toLocation.departmentId());
+        history.setToWarehouseId(toLocation.warehouseId());
+        history.setResponsibleDepartmentId(toLocation.responsibleDepartmentId());
+        history.setChangedBy(currentActorIdOrNull());
+        history.setChangedAt(Instant.now());
+        history.setNote("Vehicle created");
+        equipmentLocationHistoryRepository.save(history);
+    }
+
+    private void writeLocationHistoryIfChanged(Equipment equipment,
+                                               VehicleLocationSnapshot fromLocation,
+                                               VehicleLocationSnapshot toLocation,
+                                               String note) {
+        if (!locationChanged(fromLocation, toLocation)) {
+            return;
+        }
+        EquipmentLocationHistory history = new EquipmentLocationHistory();
+        history.setEquipmentId(equipment.getId());
+        history.setFromLocationType(fromLocation.locationType());
+        history.setFromDepartmentId(fromLocation.departmentId());
+        history.setFromWarehouseId(fromLocation.warehouseId());
+        history.setToLocationType(toLocation.locationType());
+        history.setToDepartmentId(toLocation.departmentId());
+        history.setToWarehouseId(toLocation.warehouseId());
+        history.setResponsibleDepartmentId(toLocation.responsibleDepartmentId());
+        history.setChangedBy(currentActorIdOrNull());
+        history.setChangedAt(Instant.now());
+        history.setNote(note);
+        equipmentLocationHistoryRepository.save(history);
+    }
+
+    private boolean locationChanged(VehicleLocationSnapshot fromLocation, VehicleLocationSnapshot toLocation) {
+        return !Objects.equals(fromLocation.locationType(), toLocation.locationType())
+                || !Objects.equals(fromLocation.departmentId(), toLocation.departmentId())
+                || !Objects.equals(fromLocation.warehouseId(), toLocation.warehouseId())
+                || !Objects.equals(fromLocation.responsibleDepartmentId(), toLocation.responsibleDepartmentId());
+    }
+
+    private VehicleLocationSnapshot vehicleLocationSnapshot(Equipment equipment) {
+        EquipmentLocationType locationType = equipment.getCurrentLocationType();
+        if (locationType == null && equipment.getDepartmentId() != null) {
+            locationType = EquipmentLocationType.DEPARTMENT;
+        }
+        UUID departmentId = locationType == EquipmentLocationType.DEPARTMENT
+                ? equipment.getDepartmentId()
+                : null;
+        UUID warehouseId = locationType == EquipmentLocationType.WAREHOUSE
+                ? equipment.getCurrentWarehouseId()
+                : null;
+        UUID responsibleDepartmentId = equipment.getResponsibleDepartmentId() != null
+                ? equipment.getResponsibleDepartmentId()
+                : departmentId;
+        return new VehicleLocationSnapshot(locationType, departmentId, warehouseId, responsibleDepartmentId);
+    }
+
+    private UUID currentActorIdOrNull() {
+        if (securityScope == null) {
+            return null;
+        }
+        try {
+            AuthenticatedUser user = securityScope.currentUser();
+            if (user == null || user.id() == null || user.id().isBlank()) {
+                return null;
+            }
+            return UUID.fromString(user.id());
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private record VehicleLocationSnapshot(
+            EquipmentLocationType locationType,
+            UUID departmentId,
+            UUID warehouseId,
+            UUID responsibleDepartmentId
+    ) {
     }
 
     private void applyVehicleLifetime(Equipment equipment, VehicleRequest request) {
