@@ -36,6 +36,9 @@ public class RepairRequestTemplateAction extends BaseEntity {
     @Column(name = "specialist_id")
     private UUID specialistId;
 
+    @Column(name = "specialisation_id")
+    private UUID specialisationId;
+
     @Column(nullable = false)
     private int sequence;
 
