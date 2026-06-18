@@ -95,6 +95,18 @@ class ProductionConfigSecretsTest {
                 .contains("--env-file /tmp/toir-backend.env");
     }
 
+    @Test
+    void gitlabDeployEnablesFirebaseWhenCredentialVariableIsPresent() throws IOException {
+        String gitlabCi = Files.readString(GITLAB_CI);
+
+        assertThat(gitlabCi)
+                .as("Firebase credentials in CI must enable backend Firebase without requiring a separate toggle")
+                .contains("APP_FIREBASE_EFFECTIVE_ENABLED=\"${APP_FIREBASE_ENABLED:-true}\"")
+                .contains("APP_FIREBASE_EFFECTIVE_PROJECT_ID=\"${APP_FIREBASE_PROJECT_ID:-toir-51480}\"")
+                .contains("APP_FIREBASE_EFFECTIVE_ENABLED=true")
+                .contains("APP_FIREBASE_ENABLED=${APP_FIREBASE_EFFECTIVE_ENABLED}");
+    }
+
     private static void assertEnvPlaceholder(List<String> lines, String key) {
         String line = findTrimmedLine(lines, key);
 
