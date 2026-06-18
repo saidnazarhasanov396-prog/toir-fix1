@@ -25,6 +25,7 @@ import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementFileRepository;
+import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.WarehouseRepository;
@@ -61,6 +62,7 @@ public class StockMovementService {
 
     private final StockMovementRepository repository;
     private final WarehouseStockRepository stockRepository;
+    private final ProcurementRequestRepository procurementRequestRepository;
     private final SparePartRepository sparePartRepository;
     private final AuditBuilderService auditBuilderService;
     private final WarehouseRepository warehouseRepository;
@@ -119,6 +121,7 @@ public class StockMovementService {
         validatePositiveQuantity(request.quantity());
         assertGenericMovementTypeIsSupported(request.type());
         assertWorkOrderMovementUsesDomainEndpoint(request);
+        assertProcurementReceiptUsesDomainEndpoint(request);
         assertCanAccessWarehouseId(request.warehouseId());
         assertMovementHasReasonOrSource(request);
 
@@ -193,6 +196,15 @@ public class StockMovementService {
         );
 
         return StockMovementDto.from(saved);
+    }
+
+    private void assertProcurementReceiptUsesDomainEndpoint(StockMovementRequest request) {
+        String documentNumber = trimToNull(request.documentNumber());
+        if (request.type() == StockMovementType.RECEIPT
+                && documentNumber != null
+                && procurementRequestRepository.existsOpenReceivableByNumber(documentNumber)) {
+            throw RestException.badRequest("Use procurement receipt endpoint");
+        }
     }
 
     @Transactional

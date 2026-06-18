@@ -9,9 +9,12 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.Role;
+import com.toir.entity.users.User;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.UserStatus;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
@@ -19,15 +22,19 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +49,7 @@ public class ApprovalScopeService {
     private final MaintenanceBudgetRepository maintenanceBudgetRepository;
     private final ActualCostRepository actualCostRepository;
     private final FinanceScopeService financeScopeService;
+    private final UserRepository userRepository;
 
     public boolean canReadApproval(ApprovalRequest approval) {
         if (approval == null) {
@@ -79,15 +87,17 @@ public class ApprovalScopeService {
     }
 
     public void assertCanDecideApproval(ApprovalRequest approval, ApprovalStep currentStep) {
-        if (scopeAccessService.isScopeAdmin()) {
-            return;
-        }
         if (approval == null
                 || approval.getStatus() != ApprovalStatus.PENDING
                 || currentStep == null
                 || currentStep.getDecision() != ApprovalDecision.PENDING
-                || currentStep.getStepNumber() != approval.getCurrentStep()
-                || !matchesCurrentPrincipal(currentStep.getApproverId())) {
+                || currentStep.getStepNumber() != approval.getCurrentStep()) {
+            throw forbidden();
+        }
+        if (scopeAccessService.isScopeAdmin() && currentStep.getApproverId() != null) {
+            return;
+        }
+        if (!canCurrentPrincipalActOnStep(currentStep)) {
             throw forbidden();
         }
     }
@@ -123,9 +133,18 @@ public class ApprovalScopeService {
                 .filter(step -> step.getStepNumber() == approval.getCurrentStep())
                 .filter(step -> step.getDecision() == ApprovalDecision.PENDING)
                 .findFirst()
-                .map(ApprovalStep::getApproverId)
-                .map(this::matchesCurrentPrincipal)
+                .map(this::canCurrentPrincipalActOnStep)
                 .orElse(false);
+    }
+
+    private boolean canCurrentPrincipalActOnStep(ApprovalStep step) {
+        if (step == null) {
+            return false;
+        }
+        if (step.getApproverId() != null) {
+            return matchesCurrentPrincipal(step.getApproverId());
+        }
+        return currentUserHasRole(step.getApproverRole());
     }
 
     private boolean matchesCurrentPrincipal(UUID candidateId) {
@@ -143,6 +162,38 @@ public class ApprovalScopeService {
         }
         scopeAccessService.currentEmployeeId().ifPresent(ids::add);
         return ids;
+    }
+
+    private boolean currentUserHasRole(String roleCode) {
+        UUID userId = scopeAccessService.currentUserIdOrNull();
+        if (userId == null || !StringUtils.hasText(roleCode)) {
+            return false;
+        }
+        String normalizedRole = roleCode.trim();
+        return userRepository.findByIdAndIsDeletedFalse(userId)
+                .filter(this::isActiveUser)
+                .filter(user -> hasRole(user, normalizedRole))
+                .isPresent();
+    }
+
+    private boolean isActiveUser(User user) {
+        return user != null && (user.getStatus() == null || user.getStatus() == UserStatus.ACTIVE);
+    }
+
+    private boolean hasRole(User user, String roleCode) {
+        return roleStream(user)
+                .map(Role::getCode)
+                .filter(Objects::nonNull)
+                .anyMatch(roleCode::equals);
+    }
+
+    private Stream<Role> roleStream(User user) {
+        if (user == null) {
+            return Stream.empty();
+        }
+        Stream<Role> primary = user.getPrimaryRole() == null ? Stream.empty() : Stream.of(user.getPrimaryRole());
+        Stream<Role> additional = user.getRoles() == null ? Stream.empty() : user.getRoles().stream();
+        return Stream.concat(primary, additional).filter(Objects::nonNull);
     }
 
     private boolean canAccessLinkedDocumentScope(ApprovalTargetType targetType, UUID targetId) {

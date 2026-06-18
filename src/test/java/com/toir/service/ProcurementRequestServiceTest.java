@@ -1,5 +1,8 @@
 package com.toir.service;
 
+import com.toir.dto.procurement.ProcurementReceiptLineRequest;
+import com.toir.dto.procurement.ProcurementReceiptRequest;
+import com.toir.dto.procurement.ProcurementReceiptResponse;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.equipment.ProcurementRequestLine;
@@ -28,6 +31,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -179,6 +183,75 @@ class ProcurementRequestServiceTest {
         assertThat(movementCaptor.getAllValues())
                 .extracting(StockMovement::getSparePartId)
                 .containsExactly(firstSparePartId, secondSparePartId);
+    }
+
+    @Test
+    void partialReceiptUpdatesLineProgressAndKeepsRequestPartiallyReceived() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        ProcurementRequestLine line = line(sparePartId, 10, 12.5);
+        ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED, List.of(line));
+        WarehouseStock stock = stock(warehouseId, sparePartId, 6);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProcurementReceiptResponse result = service.receiveStock(requestId, new ProcurementReceiptRequest(
+                List.of(new ProcurementReceiptLineRequest(line.getId(), 4)),
+                LocalDate.of(2026, 6, 18),
+                "ACT-1",
+                null,
+                "partial receipt"
+        ));
+
+        assertThat(result.procurementRequest().status()).isEqualTo(ProcurementRequestStatus.PARTIALLY_RECEIVED);
+        assertThat(line.getReceivedQuantity()).isEqualTo(4);
+        assertThat(line.getRemainingQuantity()).isEqualTo(6);
+        assertThat(stock.getQuantity()).isEqualTo(10);
+    }
+
+    @Test
+    void fullReceiptMarksReceivedAndCreatesOneMovementPerReceivedLine() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        ProcurementRequestLine line = line(sparePartId, 10, 12.5);
+        ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED, List.of(line));
+        WarehouseStock stock = stock(warehouseId, sparePartId, 6);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProcurementReceiptResponse result = service.receiveStock(requestId, new ProcurementReceiptRequest(
+                List.of(new ProcurementReceiptLineRequest(line.getId(), 10)),
+                LocalDate.of(2026, 6, 18),
+                "ACT-2",
+                null,
+                "full receipt"
+        ));
+
+        assertThat(result.procurementRequest().status()).isEqualTo(ProcurementRequestStatus.RECEIVED);
+        assertThat(result.createdStockMovementIds()).hasSize(1);
+        assertThat(line.getReceivedQuantity()).isEqualTo(10);
+        assertThat(line.getRemainingQuantity()).isZero();
+        verify(stockMovementRepository).save(any(StockMovement.class));
     }
 
     @Test

@@ -26,6 +26,12 @@ public class ProcurementRequestLine extends BaseEntity {
     @Column(name = "quantity", nullable = false)
     private double quantity;
 
+    @Column(name = "received_quantity", nullable = false)
+    private double receivedQuantity = 0;
+
+    @Column(name = "remaining_quantity", nullable = false)
+    private double remainingQuantity;
+
     @Column(name = "unit", nullable = false)
     private String unit;
 

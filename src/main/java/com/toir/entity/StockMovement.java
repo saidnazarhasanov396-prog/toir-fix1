@@ -1,5 +1,6 @@
 package com.toir.entity;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.StockMovementSourceType;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -48,6 +49,16 @@ public class StockMovement extends ActorStampedEntity {
 
     @Column(name = "document_number")
     private String documentNumber;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type", length = 64)
+    private StockMovementSourceType sourceType;
+
+    @Column(name = "source_id")
+    private UUID sourceId;
+
+    @Column(name = "source_line_id")
+    private UUID sourceLineId;
 
     @Column(name = "responsible_person_id")
     private UUID responsiblePersonId;
