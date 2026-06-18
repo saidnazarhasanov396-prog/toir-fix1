@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/toir_demo
+    url: jdbc:postgresql://localhost:5433/toir_demo
     username: postgres
-    password: Sardorbek.01
+    password: root123
     hikari:
       connection-timeout: 3000
 
