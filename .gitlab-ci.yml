@@ -48,9 +48,39 @@ deploy:
   script:
     - chmod og= $SSH_PRIVATE_KEY
     - apk update && apk add openssh-client
+    - |
+      if [ "${APP_FIREBASE_ENABLED:-false}" = "true" ]; then
+        if [ -z "${APP_FIREBASE_PROJECT_ID:-}" ]; then
+          echo "Missing APP_FIREBASE_PROJECT_ID while APP_FIREBASE_ENABLED=true"
+          exit 1
+        fi
+        if [ -z "${APP_FIREBASE_SERVICE_ACCOUNT_BASE64:-}" ] && [ -z "${APP_FIREBASE_SERVICE_ACCOUNT_JSON:-}" ] && [ -z "${APP_FIREBASE_SERVICE_ACCOUNT_FILE:-}" ]; then
+          echo "Missing Firebase credentials: set APP_FIREBASE_SERVICE_ACCOUNT_BASE64, APP_FIREBASE_SERVICE_ACCOUNT_JSON, or APP_FIREBASE_SERVICE_ACCOUNT_FILE"
+          exit 1
+        fi
+      fi
+    - |
+      cat > toir-backend.env <<EOF
+      SPRING_PROFILES_ACTIVE=prod
+      APP_FIREBASE_ENABLED=${APP_FIREBASE_ENABLED:-false}
+      APP_FIREBASE_PROJECT_ID=${APP_FIREBASE_PROJECT_ID:-}
+      APP_FIREBASE_SERVICE_ACCOUNT_BASE64=${APP_FIREBASE_SERVICE_ACCOUNT_BASE64:-}
+      APP_FIREBASE_SERVICE_ACCOUNT_JSON=${APP_FIREBASE_SERVICE_ACCOUNT_JSON:-}
+      APP_FIREBASE_SERVICE_ACCOUNT_FILE=${APP_FIREBASE_SERVICE_ACCOUNT_FILE:-}
+      EOF
     - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password ${CI_REGISTRY_PASSWORD}"
     - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker pull ${CI_REGISTRY_IMAGE}:latest"
     - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker stop ${SERVICE_NAME} || true"
     - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker rm ${SERVICE_NAME} || true"
-    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker run -d --name ${SERVICE_NAME} --restart unless-stopped -p 10260:8080 ${CI_REGISTRY_IMAGE}:latest"
-
+    - scp -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -P $SSH_PORT toir-backend.env $SSH_USER@$SERVER_HOST:/tmp/toir-backend.env
+    - rm -f toir-backend.env
+    - |
+      FIREBASE_VOLUME_ARG=""
+      if [ -n "${APP_FIREBASE_SERVICE_ACCOUNT_FILE:-}" ]; then
+        ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "test -r ${APP_FIREBASE_SERVICE_ACCOUNT_FILE}"
+        FIREBASE_VOLUME_ARG="-v ${APP_FIREBASE_SERVICE_ACCOUNT_FILE}:${APP_FIREBASE_SERVICE_ACCOUNT_FILE}:ro"
+      fi
+      RUN_STATUS=0
+      ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker run -d --name ${SERVICE_NAME} --restart unless-stopped --env-file /tmp/toir-backend.env ${FIREBASE_VOLUME_ARG} -p 10260:8080 ${CI_REGISTRY_IMAGE}:latest" || RUN_STATUS=$?
+      ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "rm -f /tmp/toir-backend.env"
+      exit $RUN_STATUS

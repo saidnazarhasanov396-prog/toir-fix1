@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.google.firebase.messaging.FirebaseMessaging;
+import com.toir.config.FirebaseProperties;
 import com.toir.dto.notification.NotificationDto;
 import com.toir.entity.UserFcmToken;
 import com.toir.enums.FcmDevicePlatform;
@@ -32,7 +33,9 @@ class FirebasePushNotificationSenderTest {
 
     @Test
     void sendToUserSkipsWhenFirebaseIsNotConfigured() {
-        FirebasePushNotificationSender sender = new FirebasePushNotificationSender(firebaseMessagingProvider, tokenRepository);
+        FirebaseProperties properties = new FirebaseProperties();
+        properties.setEnabled(true);
+        FirebasePushNotificationSender sender = new FirebasePushNotificationSender(firebaseMessagingProvider, tokenRepository, properties);
         when(firebaseMessagingProvider.getIfAvailable()).thenReturn(null);
 
         sender.sendToUser(notification(UUID.randomUUID()));
@@ -44,7 +47,7 @@ class FirebasePushNotificationSenderTest {
 
     @Test
     void sendToUserLoadsActiveTokensWhenFirebaseIsConfigured() {
-        FirebasePushNotificationSender sender = new FirebasePushNotificationSender(firebaseMessagingProvider, tokenRepository);
+        FirebasePushNotificationSender sender = new FirebasePushNotificationSender(firebaseMessagingProvider, tokenRepository, new FirebaseProperties());
         FirebaseMessaging messaging = org.mockito.Mockito.mock(FirebaseMessaging.class);
         UUID userId = UUID.randomUUID();
         UserFcmToken token = new UserFcmToken();

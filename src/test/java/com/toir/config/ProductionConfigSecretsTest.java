@@ -16,6 +16,7 @@ class ProductionConfigSecretsTest {
     private static final Path PROD_CONFIG = Path.of("src/main/resources/application-prod.yml");
     private static final Path DEV_CONFIG = Path.of("src/main/resources/application-dev.yml");
     private static final Path DOCKER_COMPOSE = Path.of("docker-compose.yml");
+    private static final Path GITLAB_CI = Path.of(".gitlab-ci.yml");
     private static final Pattern ENV_PLACEHOLDER = Pattern.compile("\\$\\{[A-Z0-9_]+(?::[^}]*)?}");
     private static final Pattern COMPOSE_ENV_LINE = Pattern.compile("^\\s*([A-Z0-9_]+):\\s*(.+?)\\s*$");
 
@@ -79,6 +80,19 @@ class ProductionConfigSecretsTest {
                 .startsWith("test-only-local-demo-")
                 .hasSizeGreaterThanOrEqualTo(32)
                 .matches("[\\x20-\\x7E]+");
+    }
+
+    @Test
+    void gitlabDeployPassesFirebaseRuntimeConfigurationIntoBackendContainer() throws IOException {
+        String gitlabCi = Files.readString(GITLAB_CI);
+
+        assertThat(gitlabCi)
+                .as("production deploy must pass Firebase enablement to the backend container")
+                .contains("APP_FIREBASE_ENABLED")
+                .contains("APP_FIREBASE_PROJECT_ID")
+                .contains("APP_FIREBASE_SERVICE_ACCOUNT_BASE64")
+                .contains("APP_FIREBASE_SERVICE_ACCOUNT_FILE")
+                .contains("--env-file /tmp/toir-backend.env");
     }
 
     private static void assertEnvPlaceholder(List<String> lines, String key) {
