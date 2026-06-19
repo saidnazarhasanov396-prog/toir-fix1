@@ -41,6 +41,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -114,6 +115,8 @@ class ProcurementRequestServiceTest {
 
     @Mock
     ToirStockService toirStockService;
+    @Mock
+    LegacyStockProjectionService legacyStockProjectionService;
 
     ProcurementRequestService service;
 
@@ -136,7 +139,8 @@ class ProcurementRequestServiceTest {
                 lowStockRecommendationService,
                 actualCostRepository,
                 costCategoryRepository,
-                toirStockService
+                toirStockService,
+                legacyStockProjectionService
         );
     }
 
@@ -235,9 +239,10 @@ class ProcurementRequestServiceTest {
                 List.of(line(sparePartId, 4, 12.5)));
         WarehouseStock stock = stock(warehouseId, sparePartId, 6);
         when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(10);
+            return stock;
+        });
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -266,27 +271,19 @@ class ProcurementRequestServiceTest {
         UUID requestId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
-        SparePart sparePart = sparePart(sparePartId);
         ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED,
                 List.of(line(sparePartId, 3, null)));
+        WarehouseStock projectedStock = stock(warehouseId, sparePartId, 3);
         when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
-                .thenReturn(Optional.empty());
-        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenReturn(projectedStock);
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.markReceived(requestId);
 
-        ArgumentCaptor<WarehouseStock> stockCaptor = ArgumentCaptor.forClass(WarehouseStock.class);
-        verify(stockRepository).save(stockCaptor.capture());
-        WarehouseStock savedStock = stockCaptor.getValue();
-        assertThat(savedStock.getWarehouseId()).isEqualTo(warehouseId);
-        assertThat(savedStock.getSparePart()).isEqualTo(sparePart);
-        assertThat(savedStock.getQuantity()).isEqualTo(3);
-        assertThat(savedStock.getReservedQty()).isZero();
-        assertThat(savedStock.getMinQty()).isZero();
+        verify(legacyStockProjectionService).sync(warehouseId, sparePartId);
+        verify(lowStockRecommendationService).evaluateStockSafely(projectedStock);
+        verify(stockRepository, never()).save(any());
     }
 
     @Test
@@ -299,11 +296,10 @@ class ProcurementRequestServiceTest {
         ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED,
                 List.of(line(firstSparePartId, 2, 5.0), line(secondSparePartId, 7, 9.0)));
         when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, firstSparePartId))
-                .thenReturn(Optional.of(stock(warehouseId, firstSparePartId, 1)));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, secondSparePartId))
-                .thenReturn(Optional.of(stock(warehouseId, secondSparePartId, 4)));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, firstSparePartId))
+                .thenReturn(stock(warehouseId, firstSparePartId, 3));
+        when(legacyStockProjectionService.sync(warehouseId, secondSparePartId))
+                .thenReturn(stock(warehouseId, secondSparePartId, 11));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -326,9 +322,10 @@ class ProcurementRequestServiceTest {
         ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED, List.of(line));
         WarehouseStock stock = stock(warehouseId, sparePartId, 6);
         when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(10);
+            return stock;
+        });
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
             movement.setId(UUID.randomUUID());
@@ -429,11 +426,9 @@ class ProcurementRequestServiceTest {
         UUID sparePartId = UUID.randomUUID();
         ProcurementRequestLine line = line(sparePartId, 10, 12.5);
         ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED, List.of(line));
-        WarehouseStock stock = stock(warehouseId, sparePartId, 6);
         when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId))
+                .thenReturn(stock(warehouseId, sparePartId, 16));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
             movement.setId(UUID.randomUUID());
@@ -469,9 +464,8 @@ class ProcurementRequestServiceTest {
         category.setId(categoryId);
         category.setCode("MATERIALS");
         when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock(warehouseId, sparePartId, 1)));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId))
+                .thenReturn(stock(warehouseId, sparePartId, 3));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
             movement.setId(UUID.randomUUID());
@@ -515,9 +509,8 @@ class ProcurementRequestServiceTest {
         existingCost.setSourceId(movementId);
         existingCost.setAmount(10.0);
         when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock(warehouseId, sparePartId, 1)));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId))
+                .thenReturn(stock(warehouseId, sparePartId, 5));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
             movement.setId(movementId);

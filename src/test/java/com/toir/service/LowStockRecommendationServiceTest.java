@@ -13,6 +13,9 @@ import com.toir.repository.OperationalIssueRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,6 +51,9 @@ class LowStockRecommendationServiceTest {
 
     @Mock
     OperationalIssueService operationalIssueService;
+
+    @Mock
+    LegacyStockProjectionService legacyStockProjectionService;
 
     @InjectMocks
     LowStockRecommendationService service;
@@ -293,6 +300,13 @@ class LowStockRecommendationServiceTest {
         stock.setReorderPoint(reorderPoint);
         stock.setReorderQty(reorderQty);
         stock.setMaxQty(maxQty);
+        lenient().when(legacyStockProjectionService.current(warehouseId, sparePartId))
+                .thenReturn(new WmsStockSnapshot(
+                        warehouseId,
+                        sparePartId,
+                        BigDecimal.valueOf(quantity),
+                        BigDecimal.valueOf(reservedQty)
+                ));
         return stock;
     }
 

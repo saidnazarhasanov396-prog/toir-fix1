@@ -19,6 +19,8 @@ import com.toir.service.WarehouseReorderService;
 import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +48,7 @@ class MaterialStockPbacScopeTest {
     ScopeAccessService scopeAccessService;
     LowStockRecommendationService lowStockRecommendationService;
     StockMovementService stockMovementService;
+    LegacyStockProjectionService legacyStockProjectionService;
     WarehouseReorderService reorderService;
 
     @BeforeEach
@@ -57,6 +60,7 @@ class MaterialStockPbacScopeTest {
         warehouseRepository = mock(WarehouseRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
         lowStockRecommendationService = mock(LowStockRecommendationService.class);
+        legacyStockProjectionService = mock(LegacyStockProjectionService.class);
         stockMovementService = new StockMovementService(
                 movementRepository,
                 mock(ProcurementRequestRepository.class),
@@ -70,10 +74,12 @@ class MaterialStockPbacScopeTest {
                 mock(FileService.class),
                 mock(UploadedFileRepository.class),
                 mock(StockMovementFileRepository.class),
-                mock(AttachmentGroupService.class)
+                mock(AttachmentGroupService.class),
+                legacyStockProjectionService
         );
         when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
-        reorderService = new WarehouseReorderService(stockRepository, warehouseRepository, sparePartRepository, scopeAccessService);
+        reorderService = new WarehouseReorderService(
+                stockRepository, warehouseRepository, sparePartRepository, scopeAccessService, legacyStockProjectionService);
     }
 
     @Test
@@ -122,6 +128,13 @@ class MaterialStockPbacScopeTest {
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
+        when(legacyStockProjectionService.current(warehouseId, sparePartId))
+                .thenReturn(new WmsStockSnapshot(warehouseId, sparePartId,
+                        java.math.BigDecimal.valueOf(5), java.math.BigDecimal.ZERO));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(10);
+            return stock;
+        });
         when(movementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
             movement.setId(UUID.randomUUID());
@@ -153,6 +166,14 @@ class MaterialStockPbacScopeTest {
         when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any()))
                 .thenReturn(List.of(sparePart(allowedSparePartId, "SP-ALLOWED", "Allowed Part", "PCS")));
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+        when(legacyStockProjectionService.currentAll()).thenReturn(java.util.Map.of(
+                new LegacyStockProjectionService.StockKey(allowedWarehouseId, allowedSparePartId),
+                new WmsStockSnapshot(allowedWarehouseId, allowedSparePartId,
+                        java.math.BigDecimal.ONE, java.math.BigDecimal.ZERO)
+        ));
+        when(legacyStockProjectionService.snapshot(any(), any(), any())).thenAnswer(invocation ->
+                ((java.util.Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot>) invocation.getArgument(0))
+                        .get(new LegacyStockProjectionService.StockKey(invocation.getArgument(1), invocation.getArgument(2))));
 
         var result = reorderService.suggestions(null, 0, 20);
 

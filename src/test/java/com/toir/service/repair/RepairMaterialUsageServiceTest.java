@@ -1,6 +1,7 @@
 package com.toir.service.repair;
 
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
+import com.toir.dto.warehouse.StockIssueCommand;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.StockMovement;
@@ -30,6 +31,8 @@ import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.LowStockRecommendationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -96,6 +99,11 @@ class RepairMaterialUsageServiceTest {
     @Mock
     WorkOrderSparePartRequirementRepository requirementRepository;
 
+    @Mock
+    ToirStockService toirStockService;
+    @Mock
+    LegacyStockProjectionService legacyStockProjectionService;
+
     @InjectMocks
     RepairMaterialUsageService service;
 
@@ -135,17 +143,25 @@ class RepairMaterialUsageServiceTest {
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        org.mockito.Mockito.doThrow(RestException.badRequest(
+                        "Insufficient available stock: available=6, requested=7"))
+                .when(toirStockService).postIssue(any(StockIssueCommand.class));
 
         assertThatThrownBy(() -> service.register(
                 workOrderId,
                 new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 7, 10.0)
-        ))
+                ))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Cannot write off more than available");
+                .hasMessageContaining("Insufficient available stock");
 
         verify(stockRepository, never()).save(any(WarehouseStock.class));
         verify(repository, never()).save(any(RepairMaterialUsage.class));
-        verify(stockMovementRepository, never()).save(any(StockMovement.class));
+        verify(stockMovementRepository).save(any(StockMovement.class));
     }
 
     @Test
@@ -181,14 +197,21 @@ class RepairMaterialUsageServiceTest {
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(3);
+            return stock;
+        });
         when(repository.save(any(RepairMaterialUsage.class)))
                 .thenAnswer(invocation -> {
                     RepairMaterialUsage usage = invocation.getArgument(0);
                     ReflectionTestUtils.setField(usage, "id", UUID.randomUUID());
                     return usage;
                 });
-        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
 
         RepairMaterialUsageDto result = service.register(
                 workOrderId,
@@ -212,6 +235,15 @@ class RepairMaterialUsageServiceTest {
         assertThat(movement.getSparePartId()).isEqualTo(sparePartId);
         assertThat(movement.getQuantity()).isEqualTo(7);
         assertThat(movement.getUnitCost()).isEqualTo(12.5);
+        ArgumentCaptor<StockIssueCommand> coreIssueCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
+        verify(toirStockService).postIssue(coreIssueCaptor.capture());
+        StockIssueCommand coreIssue = coreIssueCaptor.getValue();
+        assertThat(coreIssue.warehouseId()).isEqualTo(warehouseId);
+        assertThat(coreIssue.sparePartId()).isEqualTo(sparePartId);
+        assertThat(coreIssue.quantity()).isEqualByComparingTo("7");
+        assertThat(coreIssue.referenceType()).isEqualTo("WORK_ORDER");
+        assertThat(coreIssue.referenceId()).isEqualTo(workOrderId);
+        assertThat(coreIssue.idempotencyKey()).isEqualTo("work-order-material-issue:" + movement.getId());
         verify(lowStockRecommendationService).evaluateStockSafely(stock);
     }
 
@@ -230,7 +262,7 @@ class RepairMaterialUsageServiceTest {
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenReturn(stock);
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
             movement.setId(UUID.randomUUID());
@@ -284,7 +316,7 @@ class RepairMaterialUsageServiceTest {
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenReturn(stock);
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
             movement.setId(UUID.randomUUID());
@@ -323,7 +355,7 @@ class RepairMaterialUsageServiceTest {
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenReturn(stock);
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
             movement.setId(UUID.randomUUID());
@@ -413,7 +445,10 @@ class RepairMaterialUsageServiceTest {
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.IN_PROGRESS)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(7);
+            return stock;
+        });
         when(repository.save(any(RepairMaterialUsage.class)))
                 .thenAnswer(invocation -> {
                     RepairMaterialUsage usage = invocation.getArgument(0);

@@ -18,6 +18,15 @@ public class Reservation extends BaseEntity {
     @Column(name = "warehouse_stock_id", nullable = false)
     private UUID warehouseStockId;
 
+    @Column(name = "warehouse_id")
+    private UUID warehouseId;
+
+    @Column(name = "spare_part_id")
+    private UUID sparePartId;
+
+    @Column(name = "bin_id")
+    private UUID binId;
+
     @Column(name = "work_order_id")
     private UUID workOrderId;
 

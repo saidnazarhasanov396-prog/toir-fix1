@@ -19,6 +19,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,6 +57,7 @@ class ProcurementRequestSearchTest {
     @Mock ActualCostRepository actualCostRepository;
     @Mock CostCategoryRepository costCategoryRepository;
     @Mock ToirStockService toirStockService;
+    @Mock LegacyStockProjectionService legacyStockProjectionService;
 
     ProcurementRequestService service;
 
@@ -78,7 +80,8 @@ class ProcurementRequestSearchTest {
                 lowStockRecommendationService,
                 actualCostRepository,
                 costCategoryRepository,
-                toirStockService
+                toirStockService,
+                legacyStockProjectionService
         );
     }
 

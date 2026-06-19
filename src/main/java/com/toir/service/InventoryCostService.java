@@ -1,9 +1,8 @@
 package com.toir.service;
 
 import com.toir.entity.SparePart;
-import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.SparePartRepository;
-import com.toir.repository.WarehouseStockRepository;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,7 +15,7 @@ import java.math.RoundingMode;
 public class InventoryCostService {
 
     private final SparePartRepository sparePartRepository;
-    private final WarehouseStockRepository stockRepository;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
     @Transactional
     public void applyReceiptCost(SparePart sparePart, BigDecimal previousQuantity, BigDecimal receivedQuantity, BigDecimal unitCost) {
@@ -40,9 +39,7 @@ public class InventoryCostService {
         if (sparePart == null || sparePart.getId() == null) {
             return;
         }
-        BigDecimal available = stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePart.getId()).stream()
-                .map(stock -> BigDecimal.valueOf(Math.max(stock.getAvailable(), 0)))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal available = availableQuantity(sparePart);
         sparePart.setInventoryValue(available.multiply(zero(sparePart.getAverageCost())).setScale(2, RoundingMode.HALF_UP));
         sparePartRepository.save(sparePart);
     }
@@ -51,10 +48,9 @@ public class InventoryCostService {
         if (sparePart == null || sparePart.getId() == null) {
             return BigDecimal.ZERO;
         }
-        return stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePart.getId()).stream()
-                .map(WarehouseStock::getAvailable)
-                .map(value -> BigDecimal.valueOf(Math.max(value, 0)))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return legacyStockProjectionService.totalAvailable(
+                legacyStockProjectionService.currentForSparePart(sparePart.getId()).values()
+        ).max(BigDecimal.ZERO);
     }
 
     private BigDecimal zero(BigDecimal value) {

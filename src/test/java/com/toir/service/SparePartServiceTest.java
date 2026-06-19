@@ -25,6 +25,8 @@ import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +43,8 @@ import org.springframework.security.access.AccessDeniedException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -51,6 +55,7 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -99,10 +104,15 @@ class SparePartServiceTest {
     @Mock
     AuditBuilderService auditBuilderService;
 
+    @Mock
+    LegacyStockProjectionService legacyStockProjectionService;
+
     SparePartService service;
+    Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> wmsSnapshots;
 
     @BeforeEach
     void setUp() {
+        wmsSnapshots = new HashMap<>();
         service = new SparePartService(
                 repository,
                 typeRepository,
@@ -117,8 +127,17 @@ class SparePartServiceTest {
                 unitOfMeasurementRepository,
                 unitOfMeasurementService,
                 scopeAccessService,
-                auditBuilderService
+                auditBuilderService,
+                legacyStockProjectionService
         );
+        lenient().when(legacyStockProjectionService.currentAll()).thenAnswer(invocation -> wmsSnapshots);
+        lenient().when(legacyStockProjectionService.currentForSparePart(any())).thenAnswer(invocation -> wmsSnapshots);
+        lenient().when(legacyStockProjectionService.snapshot(any(), any(), any())).thenAnswer(invocation ->
+                wmsSnapshots.getOrDefault(
+                        new LegacyStockProjectionService.StockKey(invocation.getArgument(1), invocation.getArgument(2)),
+                        new WmsStockSnapshot(invocation.getArgument(1), invocation.getArgument(2),
+                                BigDecimal.ZERO, BigDecimal.ZERO)
+                ));
     }
 
     @Test
@@ -608,6 +627,11 @@ class SparePartServiceTest {
         stock.setQuantity(quantity);
         stock.setReservedQty(reservedQty);
         stock.setMinQty(0);
+        wmsSnapshots.put(
+                new LegacyStockProjectionService.StockKey(warehouseId, sparePartId),
+                new WmsStockSnapshot(warehouseId, sparePartId,
+                        BigDecimal.valueOf(quantity), BigDecimal.valueOf(reservedQty))
+        );
         return stock;
     }
 

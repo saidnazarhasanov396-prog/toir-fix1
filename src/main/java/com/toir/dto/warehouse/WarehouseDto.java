@@ -5,8 +5,11 @@ import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.LocationRepository;
+import com.toir.service.warehouse.LegacyStockProjectionService.StockKey;
+import com.toir.service.warehouse.WmsStockSnapshot;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public record WarehouseDto(
@@ -36,26 +39,30 @@ public record WarehouseDto(
                 List.of());
     }
 
-    public static WarehouseDto fromWithStocks(Warehouse w, List<WarehouseStock> stocks) {
-        double totalQty = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
-        double totalReserved = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
-        long lowStock = stocks.stream().filter(s -> s.getQuantity() <= s.getMinQty()).count();
-        return new WarehouseDto(
-                w.getId(), w.getCode(), w.getName(),
-                w.getDepartmentId(), w.getLocationId(), w.getResponsibleId(), w.isActive(),
-                null, null, null,
-                new Summary(stocks.size(), totalQty, totalReserved, (int) lowStock),
-                stocks.stream().map(WarehouseStockDto::from).toList()
-        );
-    }
-
     public static WarehouseDto fromWithStocks(Warehouse w, List<WarehouseStock> stocks,
                                              DepartmentRepository departmentRepository,
                                              LocationRepository locationRepository,
                                              EmployeeRepository employeeRepository) {
-        double totalQty = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
-        double totalReserved = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
-        long lowStock = stocks.stream().filter(s -> s.getQuantity() <= s.getMinQty()).count();
+        Map<StockKey, WmsStockSnapshot> snapshots = stocks.stream().collect(java.util.stream.Collectors.toMap(
+                s -> new StockKey(s.getWarehouseId(), s.getSparePartId()),
+                s -> new WmsStockSnapshot(s.getWarehouseId(), s.getSparePartId(),
+                        java.math.BigDecimal.valueOf(s.getQuantity()),
+                        java.math.BigDecimal.valueOf(s.getReservedQty()))
+        ));
+        return fromWithStocks(w, stocks, snapshots, departmentRepository, locationRepository, employeeRepository);
+    }
+
+    public static WarehouseDto fromWithStocks(Warehouse w,
+                                              List<WarehouseStock> stocks,
+                                              Map<StockKey, WmsStockSnapshot> snapshots,
+                                              DepartmentRepository departmentRepository,
+                                              LocationRepository locationRepository,
+                                              EmployeeRepository employeeRepository) {
+        double totalQty = stocks.stream().mapToDouble(s -> snapshot(s, snapshots).qtyOnHand().doubleValue()).sum();
+        double totalReserved = stocks.stream().mapToDouble(s -> snapshot(s, snapshots).qtyReserved().doubleValue()).sum();
+        long lowStock = stocks.stream()
+                .filter(s -> snapshot(s, snapshots).availableQty().doubleValue() <= s.getMinQty())
+                .count();
 
         DepartmentRef department = null;
         LocationRef location = null;
@@ -91,7 +98,15 @@ public record WarehouseDto(
                 w.getDepartmentId(), w.getLocationId(), w.getResponsibleId(), w.isActive(),
                 department, location, responsible,
                 new Summary(stocks.size(), totalQty, totalReserved, (int) lowStock),
-                stocks.stream().map(WarehouseStockDto::from).toList()
+                stocks.stream().map(s -> WarehouseStockDto.from(s, snapshot(s, snapshots))).toList()
+        );
+    }
+
+    private static WmsStockSnapshot snapshot(WarehouseStock stock, Map<StockKey, WmsStockSnapshot> snapshots) {
+        return snapshots.getOrDefault(
+                new StockKey(stock.getWarehouseId(), stock.getSparePartId()),
+                new WmsStockSnapshot(stock.getWarehouseId(), stock.getSparePartId(),
+                        java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO)
         );
     }
 

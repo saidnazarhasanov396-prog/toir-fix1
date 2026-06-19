@@ -3,6 +3,7 @@ package com.toir.service;
 import com.toir.dto.purchaseorder.ProcurementRequestPurchaseOrderRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderReceiveLineRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderReceiveRequest;
+import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.InventoryTransaction;
 import com.toir.entity.PurchaseOrder;
 import com.toir.entity.PurchaseOrderLine;
@@ -25,9 +26,10 @@ import com.toir.repository.PurchaseOrderRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
-import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,12 +57,13 @@ class PurchaseOrderServiceTest {
     @Mock SupplierService supplierService;
     @Mock SparePartRepository sparePartRepository;
     @Mock WarehouseRepository warehouseRepository;
-    @Mock WarehouseStockRepository stockRepository;
     @Mock StockMovementRepository stockMovementRepository;
     @Mock InventoryTransactionRepository inventoryTransactionRepository;
     @Mock EmployeeRepository employeeRepository;
     @Mock ScopeAccessService scopeAccessService;
     @Mock InventoryCostService inventoryCostService;
+    @Mock ToirStockService toirStockService;
+    @Mock LegacyStockProjectionService legacyStockProjectionService;
 
     PurchaseOrderService service;
 
@@ -72,12 +75,13 @@ class PurchaseOrderServiceTest {
                 supplierService,
                 sparePartRepository,
                 warehouseRepository,
-                stockRepository,
                 stockMovementRepository,
                 inventoryTransactionRepository,
                 employeeRepository,
                 scopeAccessService,
-                inventoryCostService
+                inventoryCostService,
+                toirStockService,
+                legacyStockProjectionService
         );
     }
 
@@ -124,10 +128,12 @@ class PurchaseOrderServiceTest {
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse(warehouseId)));
         when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(employee(responsibleId)));
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
-        when(stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId)).thenReturn(List.of(stock));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.currentForSparePart(sparePartId)).thenReturn(java.util.Map.of());
+        when(legacyStockProjectionService.totalOnHand(any())).thenReturn(BigDecimal.valueOf(3));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(7);
+            return stock;
+        });
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
             movement.setId(UUID.randomUUID());
@@ -160,6 +166,17 @@ class PurchaseOrderServiceTest {
         assertThat(movement.getSourceId()).isEqualTo(orderId);
         assertThat(movement.getSourceLineId()).isEqualTo(orderLineId);
         assertThat(stock.getQuantity()).isEqualTo(7);
+
+        ArgumentCaptor<StockReceiptCommand> coreReceiptCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
+        org.mockito.Mockito.verify(toirStockService).postReceipt(coreReceiptCaptor.capture());
+        StockReceiptCommand coreReceipt = coreReceiptCaptor.getValue();
+        assertThat(coreReceipt.warehouseId()).isEqualTo(warehouseId);
+        assertThat(coreReceipt.sparePartId()).isEqualTo(sparePartId);
+        assertThat(coreReceipt.quantity()).isEqualByComparingTo("4");
+        assertThat(coreReceipt.unitCost()).isEqualByComparingTo("12");
+        assertThat(coreReceipt.referenceType()).isEqualTo("PURCHASE_ORDER");
+        assertThat(coreReceipt.referenceId()).isEqualTo(orderId);
+        assertThat(coreReceipt.idempotencyKey()).isEqualTo("purchase-order-receipt:" + movement.getId());
     }
 
     private PurchaseOrder purchaseOrder(UUID id,

@@ -11,7 +11,6 @@ import com.toir.dto.sparepart.SparePartAnalyticsDto;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.warehouse.Warehouse;
-import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.InventoryMovementClass;
 import com.toir.enums.StockMovementType;
@@ -20,8 +19,8 @@ import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
-import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -50,11 +49,11 @@ public class InventoryAnalyticsService {
     private static final int DEAD_STOCK_MONTHS = 6;
 
     private final SparePartRepository sparePartRepository;
-    private final WarehouseStockRepository stockRepository;
     private final StockMovementRepository movementRepository;
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
     private final InventoryCostService inventoryCostService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
     @Transactional(readOnly = true)
     public InventoryValuationDto valuation() {
@@ -328,9 +327,10 @@ public class InventoryAnalyticsService {
         if (scopeAccessService.isScopeAdmin()) {
             return parts;
         }
-        List<UUID> scopedPartIds = scopedStocks().stream()
-                .map(WarehouseStock::getSparePartId)
-                .filter(Objects::nonNull)
+        List<UUID> scopedWarehouses = scopedWarehouseIds();
+        List<UUID> scopedPartIds = legacyStockProjectionService.currentAll().keySet().stream()
+                .filter(key -> scopedWarehouses.contains(key.warehouseId()))
+                .map(LegacyStockProjectionService.StockKey::sparePartId)
                 .distinct()
                 .toList();
         return parts.stream().filter(part -> scopedPartIds.contains(part.getId())).toList();
@@ -340,13 +340,6 @@ public class InventoryAnalyticsService {
         List<UUID> scopedWarehouses = scopedWarehouseIds();
         return movementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(movement -> scopeAccessService.isScopeAdmin() || scopedWarehouses.contains(movement.getWarehouseId()))
-                .toList();
-    }
-
-    private List<WarehouseStock> scopedStocks() {
-        List<UUID> scopedWarehouses = scopedWarehouseIds();
-        return stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(stock -> scopeAccessService.isScopeAdmin() || scopedWarehouses.contains(stock.getWarehouseId()))
                 .toList();
     }
 

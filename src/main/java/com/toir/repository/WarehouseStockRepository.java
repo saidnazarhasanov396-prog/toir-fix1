@@ -14,6 +14,7 @@ import org.springframework.stereotype.Repository;
 
 
 @Repository
+@Deprecated(forRemoval = false)
 public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, UUID> {
     @Query(value = "SELECT * FROM warehouse_stocks WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<WarehouseStock> findByIdAndIsDeletedFalse(@Param("id") UUID id);
@@ -90,11 +91,16 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
                   WHERE r.is_deleted = false
                     AND ws.is_deleted = false
                     AND r.status = 'ACTIVE') AS activeReservations,
-                (SELECT COUNT(ws.id)
-                   FROM warehouse_stocks ws
-                  WHERE ws.is_deleted = false
-                    AND COALESCE(ws.reorder_point, ws.min_qty) > 0
-                    AND (ws.quantity - ws.reserved_qty) <= COALESCE(ws.reorder_point, ws.min_qty)) AS lowStockItems,
+                (SELECT COUNT(*)
+                   FROM (
+                       SELECT ws.warehouse_id, ws.spare_part_id
+                         FROM warehouse_stocks ws
+                        WHERE ws.is_deleted = false
+                        GROUP BY ws.warehouse_id, ws.spare_part_id,
+                                 ws.quantity, ws.reserved_qty, ws.reorder_point, ws.min_qty
+                       HAVING COALESCE(ws.reorder_point, ws.min_qty) > 0
+                          AND (ws.quantity - ws.reserved_qty) <= COALESCE(ws.reorder_point, ws.min_qty)
+                   ) low_stock) AS lowStockItems,
                 (SELECT COALESCE(SUM(sm.quantity), 0)
                    FROM stock_movements sm
                   WHERE sm.is_deleted = false
@@ -116,12 +122,17 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
                     AND ws.is_deleted = false
                     AND r.status = 'ACTIVE'
                     AND ws.warehouse_id IN (:warehouseIds)) AS activeReservations,
-                (SELECT COUNT(ws.id)
-                   FROM warehouse_stocks ws
-                  WHERE ws.is_deleted = false
-                    AND ws.warehouse_id IN (:warehouseIds)
-                    AND COALESCE(ws.reorder_point, ws.min_qty) > 0
-                    AND (ws.quantity - ws.reserved_qty) <= COALESCE(ws.reorder_point, ws.min_qty)) AS lowStockItems,
+                (SELECT COUNT(*)
+                   FROM (
+                       SELECT ws.warehouse_id, ws.spare_part_id
+                         FROM warehouse_stocks ws
+                        WHERE ws.is_deleted = false
+                          AND ws.warehouse_id IN (:warehouseIds)
+                        GROUP BY ws.warehouse_id, ws.spare_part_id,
+                                 ws.quantity, ws.reserved_qty, ws.reorder_point, ws.min_qty
+                       HAVING COALESCE(ws.reorder_point, ws.min_qty) > 0
+                          AND (ws.quantity - ws.reserved_qty) <= COALESCE(ws.reorder_point, ws.min_qty)
+                   ) low_stock) AS lowStockItems,
                 (SELECT COALESCE(SUM(sm.quantity), 0)
                    FROM stock_movements sm
                   WHERE sm.is_deleted = false

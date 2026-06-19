@@ -8,6 +8,7 @@ import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +47,9 @@ class WarehouseServiceTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    LegacyStockProjectionService legacyStockProjectionService;
+
     @InjectMocks
     WarehouseService service;
 
@@ -73,6 +77,7 @@ class WarehouseServiceTest {
                 eq(true)
         )).thenReturn(List.of(warehouse));
         when(stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouse.getId())).thenReturn(List.of());
+        when(legacyStockProjectionService.currentForWarehouse(warehouse.getId())).thenReturn(java.util.Map.of());
 
         List<WarehouseDto> result = service.findAll(" main ", departmentId, locationId, responsibleId, true);
 

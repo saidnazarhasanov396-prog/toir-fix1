@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.warehouse.WarehouseEquipmentItemDto;
 import com.toir.dto.warehouse.WarehouseStockBalanceDto;
 import com.toir.dto.warehouse.WarehouseStockLedgerDto;
+import com.toir.dto.warehouse.WarehouseStockReconciliationDto;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.GlobalExceptionHandler;
@@ -187,5 +188,37 @@ class WarehouseControllerContractTest {
                 .andExpect(jsonPath("$.content[0].movementType").value("RECEIPT"))
                 .andExpect(jsonPath("$.content[0].quantity").value(4))
                 .andExpect(jsonPath("$.content[0].referenceDocNo").value("SM-1"));
+    }
+
+    @Test
+    void getWarehouseStockReconciliationReturnsDriftDetails() throws Exception {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WarehouseStockReconciliationDto row = new WarehouseStockReconciliationDto(
+                warehouseId,
+                sparePartId,
+                true,
+                true,
+                BigDecimal.TEN,
+                BigDecimal.ONE,
+                BigDecimal.valueOf(8),
+                BigDecimal.ONE,
+                BigDecimal.valueOf(8),
+                BigDecimal.ONE,
+                BigDecimal.valueOf(-2),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                false
+        );
+        when(warehouseQueryService.stockReconciliation(warehouseId)).thenReturn(List.of(row));
+
+        mockMvc.perform(get("/api/v1/warehouses/{warehouseId}/stock-reconciliation", warehouseId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].sparePartId").value(sparePartId.toString()))
+                .andExpect(jsonPath("$[0].legacyQtyOnHand").value(10))
+                .andExpect(jsonPath("$[0].wmsQtyOnHand").value(8))
+                .andExpect(jsonPath("$[0].legacyOnHandDrift").value(-2))
+                .andExpect(jsonPath("$[0].inSync").value(false));
     }
 }

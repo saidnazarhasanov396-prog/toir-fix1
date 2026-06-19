@@ -8,6 +8,8 @@ import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,6 +35,7 @@ class WarehouseReorderServiceStatsTest {
     @Mock WarehouseRepository warehouseRepository;
     @Mock SparePartRepository sparePartRepository;
     @Mock ScopeAccessService scopeAccessService;
+    @Mock LegacyStockProjectionService legacyStockProjectionService;
 
     @InjectMocks
     WarehouseReorderService service;
@@ -43,6 +47,22 @@ class WarehouseReorderServiceStatsTest {
                 .thenAnswer(inv -> Optional.of(warehouse(inv.getArgument(0), null)));
         lenient().when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any()))
                 .thenReturn(Collections.emptyList());
+        lenient().when(legacyStockProjectionService.currentAll())
+                .thenAnswer(invocation -> snapshots(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()));
+        lenient().when(legacyStockProjectionService.currentForWarehouse(any()))
+                .thenAnswer(invocation -> snapshots(stockRepository.findAllByWarehouseIdAndIsDeletedFalse(invocation.getArgument(0))));
+        lenient().when(legacyStockProjectionService.snapshot(any(), any(), any()))
+                .thenAnswer(invocation -> ((Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot>) invocation.getArgument(0))
+                        .get(new LegacyStockProjectionService.StockKey(invocation.getArgument(1), invocation.getArgument(2))));
+    }
+
+    private Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots(List<WarehouseStock> stocks) {
+        return stocks.stream().collect(java.util.stream.Collectors.toMap(
+                stock -> new LegacyStockProjectionService.StockKey(stock.getWarehouseId(), stock.getSparePartId()),
+                stock -> new WmsStockSnapshot(stock.getWarehouseId(), stock.getSparePartId(),
+                        java.math.BigDecimal.valueOf(stock.getQuantity()),
+                        java.math.BigDecimal.valueOf(stock.getReservedQty()))
+        ));
     }
 
     // ------------------------------------------------------------------ //

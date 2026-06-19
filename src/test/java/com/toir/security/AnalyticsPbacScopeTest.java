@@ -37,6 +37,7 @@ import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.AnalyticsService;
 import com.toir.service.DashboardService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -85,6 +86,7 @@ class AnalyticsPbacScopeTest {
     MaintenanceDueEventRepository maintenanceDueEventRepository;
     UserRepository userRepository;
     ScopeAccessService scopeAccessService;
+    LegacyStockProjectionService legacyStockProjectionService;
     DashboardService dashboardService;
     AnalyticsService analyticsService;
 
@@ -117,6 +119,8 @@ class AnalyticsPbacScopeTest {
         maintenanceDueEventRepository = mock(MaintenanceDueEventRepository.class);
         userRepository = mock(UserRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
+        legacyStockProjectionService = mock(LegacyStockProjectionService.class);
+        when(legacyStockProjectionService.currentAll()).thenReturn(java.util.Map.of());
 
         dashboardService = new DashboardService(
                 repairRequestRepository,
@@ -140,7 +144,8 @@ class AnalyticsPbacScopeTest {
                 calibrationRecordRepository,
                 maintenanceDueEventRepository,
                 userRepository,
-                scopeAccessService
+                scopeAccessService,
+                legacyStockProjectionService
         );
         analyticsService = new AnalyticsService(
                 repairRequestRepository,
