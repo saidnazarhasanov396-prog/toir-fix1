@@ -8,6 +8,8 @@ import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderPerformerOptionDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderStatsResponse;
+import com.toir.dto.workorder.WorkOrderTaskDto;
+import com.toir.dto.workorder.WorkOrderTaskStatusUpdateRequest;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
@@ -260,6 +262,16 @@ public class WorkOrderController {
     public ResponseEntity<WorkOrderDto> start(@PathVariable UUID id) {
         assertCanAccessWorkOrder(workOrderOrThrow(id));
         return ResponseEntity.ok(service.start(id));
+    }
+
+    @PatchMapping("/{workOrderId}/tasks/{taskId}/status")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_UPDATE')")
+    public ResponseEntity<WorkOrderTaskDto> updateTaskStatus(
+            @PathVariable UUID workOrderId,
+            @PathVariable UUID taskId,
+            @Valid @RequestBody WorkOrderTaskStatusUpdateRequest request) {
+        assertCanAccessWorkOrder(workOrderOrThrow(workOrderId));
+        return ResponseEntity.ok(service.updateTaskStatus(workOrderId, taskId, request));
     }
 
     @PostMapping("/{id}/complete")
