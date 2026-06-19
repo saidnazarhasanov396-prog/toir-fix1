@@ -706,6 +706,42 @@ public class WorkOrderService {
     }
 
     @Transactional
+    public WorkOrderTaskDto updateTaskStatus(UUID workOrderId, UUID taskId, WorkOrderTaskStatusUpdateRequest request) {
+        if (request == null || request.status() == null) {
+            throw RestException.badRequest("Task status is required");
+        }
+        if (request.actualHours() != null && request.actualHours() < 0) {
+            throw RestException.badRequest("actualHours must be zero or greater");
+        }
+
+        WorkOrder entity = getOrThrow(workOrderId);
+        assertCanAccessWorkOrder(entity);
+        WorkOrderTask task = taskOrThrow(entity, taskId);
+        validateTaskStatusTransition(task.getStatus(), request.status());
+
+        Instant now = Instant.now();
+        task.setStatus(request.status());
+        if (request.actualHours() != null) {
+            task.setActualHours(request.actualHours());
+        }
+        if (request.status() == TaskExecutionStatus.IN_PROGRESS && task.getStartedAt() == null) {
+            task.setStartedAt(now);
+        }
+        if (request.status() == TaskExecutionStatus.DONE) {
+            if (task.getStartedAt() == null) {
+                task.setStartedAt(now);
+            }
+            task.setCompletedAt(now);
+        }
+        if (request.status() == TaskExecutionStatus.CANCELLED) {
+            task.setCompletedAt(now);
+        }
+
+        repository.save(entity);
+        return taskDtos(List.of(task)).getFirst();
+    }
+
+    @Transactional
     public WorkOrderDto complete(UUID id, CompleteWorkOrderRequest request) {
         WorkOrder entity = getOrThrow(id);
         assertCanComplete(entity, request);
@@ -1116,6 +1152,38 @@ public class WorkOrderService {
             return task.getTitle();
         }
         return task.getId() == null ? "unnamed task" : task.getId().toString();
+    }
+
+    private WorkOrderTask taskOrThrow(WorkOrder entity, UUID taskId) {
+        if (taskId == null || entity.getTasks() == null) {
+            throw RestException.notFound("Work order task not found: " + taskId);
+        }
+        return entity.getTasks().stream()
+                .filter(task -> taskId.equals(task.getId()) && !task.isDeleted())
+                .findFirst()
+                .orElseThrow(() -> RestException.notFound("Work order task not found: " + taskId));
+    }
+
+    private void validateTaskStatusTransition(TaskExecutionStatus current, TaskExecutionStatus requested) {
+        if (current == requested) {
+            return;
+        }
+        if (current == TaskExecutionStatus.DONE || current == TaskExecutionStatus.CANCELLED) {
+            throw RestException.badRequest("DONE or CANCELLED work order tasks cannot be changed");
+        }
+        if (current == TaskExecutionStatus.TODO) {
+            if (requested == TaskExecutionStatus.IN_PROGRESS
+                    || requested == TaskExecutionStatus.DONE
+                    || requested == TaskExecutionStatus.CANCELLED) {
+                return;
+            }
+        }
+        if (current == TaskExecutionStatus.IN_PROGRESS) {
+            if (requested == TaskExecutionStatus.DONE || requested == TaskExecutionStatus.CANCELLED) {
+                return;
+            }
+        }
+        throw RestException.badRequest("Invalid work order task status transition: " + current + " -> " + requested);
     }
 
     private List<String> incompleteTaskNames(WorkOrder entity) {

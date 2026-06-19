@@ -32,5 +32,5 @@ minio:
   endpoint: ${MINIO_ENDPOINT:https://s3.tenzorsoft.uz}
   access-key: ${MINIO_ACCESS_KEY:s3_tenzorsoft_minio_user}
   secret-key: ${MINIO_SECRET_KEY:b7Qbuf8DpyAdZmlok2X3PSlD6n9jilSuhctZRd2b}
-  bucket-name: ${MINIO_BUCKET_NAME:s3-tenzorsoft}
+  bucket-name: ${MINIO_BUCKET_NAME:s3-toir}
   public-url: ${MINIO_PUBLIC_URL:https://s3.tenzorsoft.uz}
