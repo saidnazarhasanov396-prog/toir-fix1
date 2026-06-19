@@ -21,6 +21,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
@@ -130,7 +131,7 @@ class EquipmentUsageSessionServiceTest {
         UUID driverId = UUID.randomUUID();
         UUID assignerId = UUID.randomUUID();
         UUID issuedBy = UUID.randomUUID();
-        Instant startedAt = Instant.parse("2026-06-19T04:05:00Z");
+        Instant startedAt = Instant.now().plus(Duration.ofDays(1));
         Equipment equipment = equipment(equipmentId, departmentId, EquipmentCategory.VEHICLE);
         Employee driver = employee(driverId, departmentId);
         VehicleDetails details = new VehicleDetails();
