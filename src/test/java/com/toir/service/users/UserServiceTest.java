@@ -1,7 +1,9 @@
 package com.toir.service.users;
 
+import com.toir.dto.user.UserFilterRequest;
 import com.toir.dto.user.UserDto;
 import com.toir.entity.users.User;
+import com.toir.enums.UserStatus;
 import com.toir.repository.users.RoleRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.util.AuditBuilderService;
@@ -14,6 +16,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
@@ -75,6 +79,43 @@ class UserServiceTest {
         assertThat(page.getContent()).hasSize(2);
         assertThat(page.getContent().get(0).username()).isEqualTo("first.user");
         assertThat(page.getContent().get(1).username()).isEqualTo("second.user");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void searchWithFiltersPreservesPageOrderAfterRoleHydration() {
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        PageRequest pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "updatedAt"));
+        User firstPageUser = user(firstId, "first.user");
+        User secondPageUser = user(secondId, "second.user");
+        when(userRepository.findAll(any(Specification.class), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(firstPageUser, secondPageUser), pageable, 2));
+        when(userRepository.findAllWithRolesByIdInAndIsDeletedFalse(List.of(firstId, secondId)))
+                .thenReturn(List.of(secondPageUser, firstPageUser));
+
+        Page<UserDto> page = service.searchWithFilters(new UserFilterRequest(
+                "ali",
+                null,
+                null,
+                null,
+                null,
+                null,
+                UserStatus.ACTIVE,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ), 0, 20);
+
+        assertThat(page.getTotalElements()).isEqualTo(2);
+        assertThat(page.getContent()).extracting(UserDto::username)
+                .containsExactly("first.user", "second.user");
+        verify(userRepository).findAll(any(Specification.class), eq(pageable));
+        verify(userRepository).findAllWithRolesByIdInAndIsDeletedFalse(List.of(firstId, secondId));
     }
 
     @Test

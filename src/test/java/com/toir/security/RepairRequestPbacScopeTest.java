@@ -3,6 +3,7 @@ package com.toir.security;
 import com.toir.controller.repair.RepairRequestController;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
+import com.toir.dto.repairrequest.RepairRequestFilterRequest;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.CriticalityLevel;
@@ -30,6 +31,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
@@ -69,7 +71,7 @@ class RepairRequestPbacScopeTest {
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId)).thenReturn(currentDepartmentId);
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(currentDepartmentId);
-        when(service.search(null, currentDepartmentId, null, null, 0, 20, null))
+        when(service.search(any(RepairRequestFilterRequest.class), eq(0), eq(20)))
                 .thenReturn(new PageImpl<>(List.of(dto(UUID.randomUUID(), currentDepartmentId, UUID.randomUUID(), null)),
                         PageRequest.of(0, 20), 1));
 
@@ -77,7 +79,7 @@ class RepairRequestPbacScopeTest {
                         .param("departmentId", requestedDepartmentId.toString()))
                 .andExpect(status().isOk());
 
-        verify(service).search(null, currentDepartmentId, null, null, 0, 20, null);
+        verify(service).search(argThat(filter -> currentDepartmentId.equals(filter.departmentId())), eq(0), eq(20));
     }
 
     @Test
@@ -89,20 +91,20 @@ class RepairRequestPbacScopeTest {
         mockMvc.perform(get("/api/v1/repair-requests/stats"))
                 .andExpect(status().isForbidden());
 
-        verify(service, never()).getStats(any(), any(), any());
+        verify(service, never()).getStats(any(RepairRequestFilterRequest.class));
     }
 
     @Test
     void systemAdminCanRequestGlobalList() throws Exception {
         when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(service.search(null, null, null, null, 0, 20, null))
+        when(service.search(any(RepairRequestFilterRequest.class), eq(0), eq(20)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/repair-requests"))
                 .andExpect(status().isOk());
 
-        verify(service).search(null, null, null, null, 0, 20, null);
+        verify(service).search(argThat(filter -> filter.departmentId() == null), eq(0), eq(20));
     }
 
     @Test
