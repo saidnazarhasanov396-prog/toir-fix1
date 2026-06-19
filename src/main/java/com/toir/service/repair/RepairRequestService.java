@@ -131,8 +131,7 @@ public class RepairRequestService {
             RequestStatus.CLOSED,
             RequestStatus.CANCELLED
     );
-    private static final Set<WorkOrderStatus> TERMINAL_WORK_ORDER_STATUSES = EnumSet.of(
-            WorkOrderStatus.COMPLETED,
+    private static final Set<WorkOrderStatus> CLOSE_READY_WORK_ORDER_STATUSES = EnumSet.of(
             WorkOrderStatus.CLOSED,
             WorkOrderStatus.CANCELLED
     );
@@ -1054,8 +1053,8 @@ public class RepairRequestService {
         if (linkedWorkOrders.isEmpty()) {
             throw RestException.badRequest("Cannot close repair request without linked work order execution evidence");
         }
-        if (linkedWorkOrders.stream().anyMatch(workOrder -> !isWorkOrderTerminal(workOrder))) {
-            throw RestException.badRequest("Cannot close repair request while active linked work orders exist");
+        if (linkedWorkOrders.stream().anyMatch(workOrder -> !isWorkOrderCloseReady(workOrder))) {
+            throw RestException.badRequest("Cannot close repair request while linked work orders are not closed or cancelled");
         }
 
         List<Defect> linkedDefects = defectRepository
@@ -1065,8 +1064,8 @@ public class RepairRequestService {
         }
     }
 
-    private boolean isWorkOrderTerminal(WorkOrder workOrder) {
-        return workOrder != null && TERMINAL_WORK_ORDER_STATUSES.contains(workOrder.getStatus());
+    private boolean isWorkOrderCloseReady(WorkOrder workOrder) {
+        return workOrder != null && CLOSE_READY_WORK_ORDER_STATUSES.contains(workOrder.getStatus());
     }
 
     private boolean isDefectTerminal(Defect defect) {

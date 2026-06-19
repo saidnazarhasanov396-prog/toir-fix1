@@ -167,6 +167,50 @@ public class MaintenanceRegulationService {
         return toDto(getOrThrow(id));
     }
 
+    @Transactional(readOnly = true)
+    public MaintenanceRegulationDto validateCanApprove(UUID id) {
+        return toDto(getOrThrow(id));
+    }
+
+    @Transactional
+    public MaintenanceRegulationDto finalizeApprovalFromApprovalRequest(UUID id) {
+        MaintenanceRegulation entity = getOrThrow(id);
+        MaintenanceRegulation before = copyForAudit(entity);
+        entity.setActive(true);
+        MaintenanceRegulation saved = repository.save(entity);
+        meterBaselineService.seedForRegulation(saved);
+
+        auditBuilderService.log(
+                "maintenance_regulation",
+                saved.getId().toString(),
+                AuditAction.APPROVE,
+                AuditModule.MAINTENANCE_REGULATION,
+                "Регламент обслуживания утвержден",
+                before,
+                saved);
+
+        return toDto(saved);
+    }
+
+    @Transactional
+    public MaintenanceRegulationDto finalizeRejectionFromApprovalRequest(UUID id) {
+        MaintenanceRegulation entity = getOrThrow(id);
+        MaintenanceRegulation before = copyForAudit(entity);
+        entity.setActive(false);
+        MaintenanceRegulation saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "maintenance_regulation",
+                saved.getId().toString(),
+                AuditAction.CANCEL,
+                AuditModule.MAINTENANCE_REGULATION,
+                "Регламент обслуживания отклонен",
+                before,
+                saved);
+
+        return toDto(saved);
+    }
+
 
     @Transactional(readOnly = true)
     public List<MaintenanceRegulation> findActiveByEquipmentType(UUID equipmentTypeId) {
@@ -242,6 +286,47 @@ public class MaintenanceRegulationService {
     private MaintenanceRegulation getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Maintenance regulation not found: " + id));
+    }
+
+    private MaintenanceRegulation copyForAudit(MaintenanceRegulation source) {
+        if (source == null) {
+            return null;
+        }
+        MaintenanceRegulation copy = MaintenanceRegulation.builder()
+                .code(source.getCode())
+                .name(source.getName())
+                .description(source.getDescription())
+                .equipmentTypeId(source.getEquipmentTypeId())
+                .templateId(source.getTemplateId())
+                .maintenanceKind(source.getMaintenanceKind())
+                .normativeLaborHours(source.getNormativeLaborHours())
+                .active(source.isActive())
+                .periodicityUnit(source.getPeriodicityUnit())
+                .periodicityValue(source.getPeriodicityValue())
+                .toleranceDays(source.getToleranceDays())
+                .requiresShutdown(source.isRequiresShutdown())
+                .triggerMeterType(source.getTriggerMeterType())
+                .triggerMeterInterval(source.getTriggerMeterInterval())
+                .triggerPolicy(source.getTriggerPolicy())
+                .recalculationPolicy(source.getRecalculationPolicy())
+                .initialSchedulePolicy(source.getInitialSchedulePolicy())
+                .automationAction(source.getAutomationAction())
+                .approvalResultAction(source.getApprovalResultAction())
+                .duplicatePolicy(source.getDuplicatePolicy())
+                .leadTimeDays(source.getLeadTimeDays())
+                .leadMeterPercent(source.getLeadMeterPercent())
+                .defaultDepartmentId(source.getDefaultDepartmentId())
+                .defaultResponsibleId(source.getDefaultResponsibleId())
+                .defaultPriority(source.getDefaultPriority())
+                .requiresApproval(source.isRequiresApproval())
+                .approvalRole(source.getApprovalRole())
+                .approvalPermission(source.getApprovalPermission())
+                .build();
+        copy.setId(source.getId());
+        copy.setCreatedAt(source.getCreatedAt());
+        copy.setUpdatedAt(source.getUpdatedAt());
+        copy.setDeleted(source.isDeleted());
+        return copy;
     }
 
     private List<EquipmentWithRegulationsDto> equipmentWithRegulations(UUID equipmentTypeId, Boolean active) {
