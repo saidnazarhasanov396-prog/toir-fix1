@@ -93,6 +93,17 @@ class FileServiceImplTest {
     }
 
     @Test
+    void getMetadataForAuthorizedFileAllowsNonOwner() {
+        UploadedFile uploadedFile = uploadedFile(ownerId);
+        when(repository.findByIdAndDeletedFalse(uploadedFile.getId())).thenReturn(Optional.of(uploadedFile));
+
+        var response = service.getMetadataForAuthorizedFile(uploadedFile.getId());
+
+        assertThat(response.id()).isEqualTo(uploadedFile.getId());
+        assertThat(response.uploadedBy()).isEqualTo(ownerId);
+    }
+
+    @Test
     void deleteSoftDeletesMetadata() {
         UploadedFile uploadedFile = uploadedFile(ownerId);
         when(repository.findByIdAndDeletedFalse(uploadedFile.getId())).thenReturn(Optional.of(uploadedFile));
@@ -112,6 +123,19 @@ class FileServiceImplTest {
 
         service.delete(uploadedFile.getId(), ownerId);
 
+        verify(s3Service).delete(uploadedFile.getObjectName());
+    }
+
+    @Test
+    void deleteAuthorizedFileSoftDeletesMetadataWithoutOwnerCheck() {
+        UploadedFile uploadedFile = uploadedFile(ownerId);
+        when(repository.findByIdAndDeletedFalse(uploadedFile.getId())).thenReturn(Optional.of(uploadedFile));
+        when(repository.save(uploadedFile)).thenReturn(uploadedFile);
+
+        service.deleteAuthorizedFile(uploadedFile.getId());
+
+        assertThat(uploadedFile.getDeleted()).isTrue();
+        assertThat(uploadedFile.getDeletedAt()).isNotNull();
         verify(s3Service).delete(uploadedFile.getObjectName());
     }
 

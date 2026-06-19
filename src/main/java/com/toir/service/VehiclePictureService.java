@@ -36,6 +36,7 @@ public class VehiclePictureService {
 
     private static final Set<String> ALLOWED_IMAGE_CONTENT_TYPES = Set.of(
             "image/jpeg",
+            "image/jpg",
             "image/png",
             "image/webp",
             "image/gif"
@@ -99,42 +100,42 @@ public class VehiclePictureService {
 
     @Transactional(readOnly = true)
     public List<VehiclePictureDto> getPictures(UUID equipmentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
+        currentUserId(user);
         Equipment equipment = vehicleEquipmentOrThrow(equipmentId);
         enforceVehicleAccess(equipment);
         return vehiclePictureRepository.findAllByEquipmentId(equipmentId)
                 .stream()
-                .map(picture -> toDtoWithMetadata(equipmentId, picture, currentUserId))
+                .map(picture -> toDtoWithMetadata(equipmentId, picture))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public VehiclePictureDto getPicture(UUID pictureId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
+        currentUserId(user);
         VehiclePicture picture = pictureOrThrow(pictureId);
         Equipment equipment = vehicleEquipmentOrThrow(picture.getVehicleDetails().getEquipmentId());
         enforceVehicleAccess(equipment);
-        return toDtoWithMetadata(equipment.getId(), picture, currentUserId);
+        return toDtoWithMetadata(equipment.getId(), picture);
     }
 
     @Transactional(readOnly = true)
     public Resource downloadPicture(UUID pictureId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
+        currentUserId(user);
         VehiclePicture picture = pictureOrThrow(pictureId);
         Equipment equipment = vehicleEquipmentOrThrow(picture.getVehicleDetails().getEquipmentId());
         enforceVehicleAccess(equipment);
-        return fileService.download(picture.getFile().getId(), currentUserId);
+        return fileService.downloadAuthorizedFile(picture.getFile().getId());
     }
 
     @Transactional
     public void deletePicture(UUID pictureId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
+        currentUserId(user);
         VehiclePicture picture = pictureOrThrow(pictureId);
         Equipment equipment = vehicleEquipmentOrThrow(picture.getVehicleDetails().getEquipmentId());
         enforceVehicleAccess(equipment);
         picture.setDeleted(true);
         vehiclePictureRepository.save(picture);
-        fileService.delete(picture.getFile().getId(), currentUserId);
+        fileService.deleteAuthorizedFile(picture.getFile().getId());
     }
 
     private Equipment vehicleEquipmentOrThrow(UUID equipmentId) {
@@ -156,8 +157,8 @@ public class VehiclePictureService {
                 .orElseThrow(() -> RestException.notFound("Vehicle picture not found: " + pictureId));
     }
 
-    private VehiclePictureDto toDtoWithMetadata(UUID equipmentId, VehiclePicture picture, UUID currentUserId) {
-        fileService.getMetadata(picture.getFile().getId(), currentUserId);
+    private VehiclePictureDto toDtoWithMetadata(UUID equipmentId, VehiclePicture picture) {
+        fileService.getMetadataForAuthorizedFile(picture.getFile().getId());
         return VehiclePictureDto.from(equipmentId, picture);
     }
 
