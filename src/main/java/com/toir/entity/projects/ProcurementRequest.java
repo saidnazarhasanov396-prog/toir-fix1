@@ -48,6 +48,9 @@ public class ProcurementRequest extends BaseEntity {
     @Column(name = "approved_by")
     private UUID approvedBy;
 
+    @Column(name = "responsible_id")
+    private UUID responsibleId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ProcurementRequestType type = ProcurementRequestType.SPARE_PART;

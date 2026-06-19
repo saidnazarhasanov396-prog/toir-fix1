@@ -181,6 +181,36 @@ class ProcurementRequestServiceTest {
     }
 
     @Test
+    void creatingRequestPreservesFrontendResponsibleIdInResponse() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID departmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID responsibleId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        SparePart sparePart = sparePart(sparePartId);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.create(new ProcurementRequestRequest(
+                "Spare procurement",
+                "Procure bolts",
+                departmentId,
+                warehouseId,
+                LocalDate.of(2026, 7, 15),
+                List.of(new ProcurementLineRequest(sparePartId, 4, "PCS", 10.0, "M8 bolts")),
+                ProcurementRequestType.SPARE_PART,
+                null,
+                null,
+                responsibleId
+        ));
+
+        assertThat(result.responsibleId()).isEqualTo(responsibleId);
+        ArgumentCaptor<ProcurementRequest> saved = ArgumentCaptor.forClass(ProcurementRequest.class);
+        verify(repository).save(saved.capture());
+        assertThat(saved.getValue().getResponsibleId()).isEqualTo(responsibleId);
+    }
+
+    @Test
     void creatingEquipmentRequestRejectsMixedLineItems() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID equipmentTypeId = UUID.randomUUID();
