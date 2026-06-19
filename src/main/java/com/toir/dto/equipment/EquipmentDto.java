@@ -69,7 +69,8 @@ public record EquipmentDto(
         Double lifetimeRemainingValue,
         Double lifetimeConsumedPercent,
         String lifetimeUnit,
-        Double averageDailyUsage
+        Double averageDailyUsage,
+        ResponsibleRef responsible
 ) {
     public EquipmentDto(
             UUID id,
@@ -121,7 +122,7 @@ public record EquipmentDto(
                 expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, operatingDuration,
                 expectedEndDate, remainingLifetime, lifetimeStatus, hasWarranty, warrantyAttachmentId,
                 warrantyStartDate, warrantyEndDate, warrantyAttachment, passportCompleteness,
-                null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -169,7 +170,7 @@ public record EquipmentDto(
                 department, location, equipmentType, parent, passport, placement, operationStartDate,
                 expectedLifetimeMonths, expectedLifetimeYears, null, operatingDuration, expectedEndDate, remainingLifetime,
                 lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment, null,
-                null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -205,7 +206,7 @@ public record EquipmentDto(
                 category, commissionedAt, null, warrantyUntil, description, averageOperatingLifeHours, department,
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null, null,
                 LifetimeStatus.UNKNOWN, false, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -242,6 +243,13 @@ public record EquipmentDto(
     }
 
     public record Ref(UUID id, String code, String name) {}
+
+    public record ResponsibleRef(
+            UUID id,
+            String personnelNumber,
+            String fullName,
+            String phone
+    ) {}
 
     public record PassportRef(
             String passportNumber,
@@ -321,7 +329,7 @@ public record EquipmentDto(
     }
 
     public static EquipmentDto from(Equipment e, EquipmentMeter lifetimeMeter) {
-        return from(e, null, null, null, null, null, null, null, null, lifetimeMeter);
+        return from(e, null, null, null, null, null, null, null, null, lifetimeMeter, null);
     }
 
     public static EquipmentDto from(Equipment e,
@@ -364,7 +372,7 @@ public record EquipmentDto(
                                     FileAsset warrantyAttachment,
                                     PassportCompletenessRef passportCompleteness) {
         return from(e, department, location, equipmentType, parent, passport, placement, warrantyAttachment,
-                passportCompleteness, null);
+                passportCompleteness, null, null);
     }
 
     public static EquipmentDto from(Equipment e,
@@ -376,7 +384,8 @@ public record EquipmentDto(
                                     PlacementRef placement,
                                     FileAsset warrantyAttachment,
                                     PassportCompletenessRef passportCompleteness,
-                                    EquipmentMeter lifetimeMeter) {
+                                    EquipmentMeter lifetimeMeter,
+                                    ResponsibleRef responsible) {
         return new EquipmentDto(
                 e.getId(), e.getCode(), e.getName(), e.getInventoryNumber(), e.getTechnicalNumber(),
                 e.getSerialNumber(), e.getModel(), e.getProducedYear(), e.getEquipmentTypeId(), e.getDepartmentId(),
@@ -399,7 +408,8 @@ public record EquipmentDto(
                 lifetimeRemainingValue(e, lifetimeMeter),
                 lifetimeConsumedPercent(e, lifetimeMeter),
                 lifetimeUnit(e, lifetimeMeter),
-                e.getAverageDailyUsage()
+                e.getAverageDailyUsage(),
+                responsible
         );
     }
 

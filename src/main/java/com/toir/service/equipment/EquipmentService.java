@@ -688,6 +688,7 @@ public class EquipmentService {
         if (items.isEmpty()) return Collections.emptyList();
 
         Set<UUID> deptIds = collectIds(items, Equipment::getDepartmentId);
+        Set<UUID> responsibleIds = collectIds(items, Equipment::getResponsibleId);
         Set<UUID> locIds = collectIds(items, Equipment::getLocationId);
         Set<UUID> typeIds = collectIds(items, Equipment::getEquipmentTypeId);
         Set<UUID> parentIds = collectIds(items, Equipment::getParentId);
@@ -696,6 +697,9 @@ public class EquipmentService {
         Set<UUID> equipmentIds = items.stream().map(Equipment::getId).collect(Collectors.toSet());
 
         Map<UUID, Department> deptMap = byId(departmentRepository.findAllByIdInAndIsDeletedFalse(deptIds), Department::getId);
+        Map<UUID, Employee> employeeMap = responsibleIds.isEmpty()
+                ? Collections.emptyMap()
+                : byId(employeeRepository.findAllByIdInAndIsDeletedFalse(responsibleIds), Employee::getId);
         Map<UUID, Location> locMap = byId(locationRepository.findAllByIdInAndIsDeletedFalse(locIds), Location::getId);
         Set<UUID> unresolvedLocIds = locIds.stream()
                 .filter(id -> !locMap.containsKey(id))
@@ -736,6 +740,7 @@ public class EquipmentService {
         return items.stream()
                 .map(e -> {
                     EquipmentDto.Ref departmentRef = deptRef(deptMap.get(e.getDepartmentId()));
+                    EquipmentDto.ResponsibleRef responsibleRef = responsibleRef(employeeMap.get(e.getResponsibleId()));
                     EquipmentDto.Ref locationRef = locRef(e.getLocationId(), locMap, warehouseMap);
                     WarehouseEquipmentItem activeWarehouseItem = activeWarehouseItemMap.get(e.getId());
                     EquipmentDto.Ref warehouseRef = warehouseRef(
@@ -762,7 +767,8 @@ public class EquipmentService {
                                     requiredDefinitionsByType.getOrDefault(e.getEquipmentTypeId(), List.of()),
                                     valuesByEquipment.getOrDefault(e.getId(), Map.of())
                             ),
-                            resolveLifetimeMeter(e, activeMetersByEquipment.getOrDefault(e.getId(), List.of()))
+                            resolveLifetimeMeter(e, activeMetersByEquipment.getOrDefault(e.getId(), List.of())),
+                            responsibleRef
                     );
                 })
                 .toList();
@@ -889,6 +895,35 @@ public class EquipmentService {
 
     private static EquipmentDto.Ref deptRef(Department d) {
         return d == null ? null : new EquipmentDto.Ref(d.getId(), d.getCode(), d.getName());
+    }
+
+    private static EquipmentDto.ResponsibleRef responsibleRef(Employee emp) {
+        if (emp == null) {
+            return null;
+        }
+        String fullName = buildEmployeeFullName(emp.getLastName(), emp.getFirstName(), emp.getMiddleName());
+        return new EquipmentDto.ResponsibleRef(
+                emp.getId(),
+                emp.getPersonnelNumber(),
+                fullName,
+                emp.getPhone()
+        );
+    }
+
+    private static String buildEmployeeFullName(String lastName, String firstName, String middleName) {
+        StringBuilder sb = new StringBuilder();
+        if (lastName != null && !lastName.isBlank()) {
+            sb.append(lastName);
+        }
+        if (firstName != null && !firstName.isBlank()) {
+            if (sb.length() > 0) sb.append(" ");
+            sb.append(firstName);
+        }
+        if (middleName != null && !middleName.isBlank()) {
+            if (sb.length() > 0) sb.append(" ");
+            sb.append(middleName);
+        }
+        return sb.toString();
     }
 
     private static EquipmentDto.Ref locRef(Location l) {
