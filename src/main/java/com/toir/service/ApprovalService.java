@@ -27,6 +27,7 @@ import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
+import com.toir.service.maintanance.MaintenanceRegulationService;
 import com.toir.service.approval.ApprovalActionExecutor;
 import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalRouteResolver;
@@ -89,6 +90,7 @@ public class ApprovalService {
     private final ObjectProvider<ProcurementRequestService> procurementRequestServiceProvider;
     private final ObjectProvider<RepairRequestService> repairRequestServiceProvider;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
+    private final ObjectProvider<MaintenanceRegulationService> maintenanceRegulationServiceProvider;
 
 
     @Transactional(readOnly = true)
@@ -401,6 +403,7 @@ public class ApprovalService {
             case PPR_PLAN -> pprPlanServiceProvider.getObject().validateCanApprove(targetId);
             case PROCUREMENT_REQUEST, PROCUREMENT -> procurementRequestServiceProvider.getObject().validateCanApprove(targetId);
             case REPAIR_REQUEST -> repairRequestServiceProvider.getObject().assertMeterReadingsReadyForApproval(targetId);
+            case MAINTENANCE_REGULATION -> maintenanceRegulationServiceProvider.getObject().validateCanApprove(targetId);
             default -> {
             }
         }
@@ -562,8 +565,18 @@ public class ApprovalService {
     }
 
     @Transactional
+    public ApprovalRequestDto approveStep(UUID requestId, UUID stepId, DecisionRequest decision) {
+        return applyDecision(requestId, stepId, decision, ApprovalDecision.APPROVED);
+    }
+
+    @Transactional
     public ApprovalRequestDto reject(UUID requestId, DecisionRequest decision) {
         return applyDecision(requestId, decision, ApprovalDecision.REJECTED);
+    }
+
+    @Transactional
+    public ApprovalRequestDto rejectStep(UUID requestId, UUID stepId, DecisionRequest decision) {
+        return applyDecision(requestId, stepId, decision, ApprovalDecision.REJECTED);
     }
 
     @Transactional
@@ -671,9 +684,16 @@ public class ApprovalService {
     }
 
     private ApprovalRequestDto applyDecision(UUID requestId, DecisionRequest decision, ApprovalDecision outcome) {
+        return applyDecision(requestId, null, decision, outcome);
+    }
+
+    private ApprovalRequestDto applyDecision(UUID requestId, UUID expectedStepId, DecisionRequest decision, ApprovalDecision outcome) {
         ApprovalRequest request = getOrThrow(requestId);
         UUID actorId = effectiveDecisionActor(decision);
         if (request.getStatus() == ApprovalStatus.FAILED) {
+            if (expectedStepId != null && !expectedStepId.equals(currentStepOrThrow(request).getId())) {
+                throw RestException.conflict("Only current pending step can be acted on");
+            }
             return retryFailedFinalization(request, decision, outcome, actorId);
         }
         expireIfNeeded(request);
@@ -681,6 +701,9 @@ public class ApprovalService {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
         }
         ApprovalStep current = currentStepOrThrow(request);
+        if (expectedStepId != null && !expectedStepId.equals(current.getId())) {
+            throw RestException.conflict("Only current pending step can be acted on");
+        }
         boolean delegateApprover = assertCanActOnCurrentStep(request, current, actorId) != null;
         current.setDecision(outcome);
         current.setDecidedById(actorId);
