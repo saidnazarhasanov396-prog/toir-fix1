@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 public record ApprovalRuleDto(
+        UUID id,
         ApprovalTargetType targetType,
         ApprovalActionType actionType,
         String documentName,
@@ -14,6 +15,17 @@ public record ApprovalRuleDto(
         List<Step> steps,
         boolean active
 ) {
+    public ApprovalRuleDto(
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType,
+            String documentName,
+            int stepsCount,
+            List<Step> steps,
+            boolean active
+    ) {
+        this(null, targetType, actionType, documentName, stepsCount, steps, active);
+    }
+
     public record Step(
             int order,
             UUID approverId,

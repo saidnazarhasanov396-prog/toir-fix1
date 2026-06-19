@@ -1,5 +1,6 @@
 package com.toir.service.approval;
 
+import com.toir.dto.approval.ApprovalRuleDto;
 import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.entity.users.User;
@@ -15,7 +16,9 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -105,6 +108,44 @@ class ApprovalRuleServiceTest {
 
         assertThat(rule.stepsCount()).isZero();
         assertThat(rule.steps()).isEmpty();
+    }
+
+    @Test
+    void saveRulePersistsRoleOnlyTemplateAndReplacesExistingSteps() {
+        ApprovalTemplate template = template(
+                "WORK_ORDER_APPROVE",
+                "Old Work Order",
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE
+        );
+        template.getSteps().add(step(template, 1, UUID.randomUUID(), null));
+
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE
+        )).thenReturn(java.util.Optional.of(template));
+        when(templateRepository.save(any(ApprovalTemplate.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ApprovalRuleDto saved = service.saveRule(new ApprovalRuleDto(
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE,
+                "Work Order",
+                2,
+                List.of(
+                        new ApprovalRuleDto.Step(1, null, null, "MANAGER", ApprovalRuleDto.ApproverType.ROLE),
+                        new ApprovalRuleDto.Step(2, null, null, "SYSTEM_ADMIN", ApprovalRuleDto.ApproverType.ROLE)
+                ),
+                true
+        ));
+
+        assertThat(saved.stepsCount()).isEqualTo(2);
+        assertThat(saved.steps()).extracting(ApprovalRuleDto.Step::approverRole)
+                .containsExactly("MANAGER", "SYSTEM_ADMIN");
+        assertThat(template.getApproverId()).isNull();
+        assertThat(template.getApproverRole()).isEqualTo("MANAGER");
+        assertThat(template.getSteps()).hasSize(2);
+        assertThat(template.getSteps()).allSatisfy(step -> assertThat(step.getApproverId()).isNull());
+        verify(templateRepository).save(template);
     }
 
     private ApprovalTemplate template(

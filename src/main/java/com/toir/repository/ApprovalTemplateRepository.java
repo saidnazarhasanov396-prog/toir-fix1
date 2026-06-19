@@ -22,6 +22,20 @@ public interface ApprovalTemplateRepository extends JpaRepository<ApprovalTempla
     );
 
     @EntityGraph(attributePaths = "steps")
+    Optional<ApprovalTemplate> findFirstByTargetTypeAndActionTypeAndIsDeletedFalseOrderByCreatedAtDesc(
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType
+    );
+
+    @EntityGraph(attributePaths = "steps")
+    Optional<ApprovalTemplate> findByIdAndIsDeletedFalse(UUID id);
+
+    List<ApprovalTemplate> findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType
+    );
+
+    @EntityGraph(attributePaths = "steps")
     @Query("""
             SELECT DISTINCT template
             FROM ApprovalTemplate template

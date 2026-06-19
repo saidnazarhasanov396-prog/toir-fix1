@@ -50,6 +50,7 @@ import com.toir.service.approval.WorkOrderApprovalHandler;
 import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
+import com.toir.service.maintanance.MaintenanceRegulationService;
 import com.toir.service.repair.RepairRequestService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -89,6 +90,7 @@ class ApprovalPbacScopeTest {
     ProcurementRequestService procurementRequestService;
     RepairRequestService repairRequestService;
     MaintenanceAutomationService maintenanceAutomationService;
+    MaintenanceRegulationService maintenanceRegulationService;
     ScopeAccessService scopeAccessService;
     NotificationService notificationService;
     ApprovalGovernanceService governanceService;
@@ -111,6 +113,7 @@ class ApprovalPbacScopeTest {
         procurementRequestService = mock(ProcurementRequestService.class);
         repairRequestService = mock(RepairRequestService.class);
         maintenanceAutomationService = mock(MaintenanceAutomationService.class);
+        maintenanceRegulationService = mock(MaintenanceRegulationService.class);
         scopeAccessService = mock(ScopeAccessService.class);
         notificationService = mock(NotificationService.class);
         governanceService = mock(ApprovalGovernanceService.class);
@@ -140,7 +143,8 @@ class ApprovalPbacScopeTest {
                 provider(pprPlanService),
                 provider(procurementRequestService),
                 provider(repairRequestService),
-                provider(maintenanceAutomationService)
+                provider(maintenanceAutomationService),
+                provider(maintenanceRegulationService)
         );
     }
 
@@ -546,7 +550,7 @@ class ApprovalPbacScopeTest {
         service.approve(approvalId, new DecisionRequest(delegateId, "delegated ok"));
 
         assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
-        verify(workOrderService).approve(documentId, delegateId);
+        verify(workOrderService).finalizeApprovalFromApprovalRequest(documentId, delegateId);
         verify(approvalScopeService, never()).assertCanDecideApproval(any(), any());
     }
 
@@ -969,7 +973,7 @@ class ApprovalPbacScopeTest {
 
         service.approve(approvalId, new DecisionRequest(approverId, "ok"));
 
-        verify(workOrderService).approve(documentId, approverId);
+        verify(workOrderService).finalizeApprovalFromApprovalRequest(documentId, approverId);
         assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
         assertThat(approval.isExecuted()).isTrue();
         assertThat(approval.getExecutedAt()).isNotNull();
@@ -988,7 +992,7 @@ class ApprovalPbacScopeTest {
 
         service.reject(approvalId, new DecisionRequest(approverId, "no"));
 
-        verify(workOrderService, never()).approve(any(), any());
+        verify(workOrderService, never()).finalizeApprovalFromApprovalRequest(any(), any());
         assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.REJECTED);
         assertThat(approval.isExecuted()).isTrue();
     }
@@ -1005,7 +1009,7 @@ class ApprovalPbacScopeTest {
 
         service.approve(approvalId, new DecisionRequest(approverId, "ok"));
 
-        verify(pprPlanService).approve(documentId, approverId);
+        verify(pprPlanService).finalizeApprovalFromApprovalRequest(documentId, approverId);
         assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
     }
 

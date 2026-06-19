@@ -33,7 +33,7 @@ public class PprPlanApprovalHandler implements ApprovalActionHandler {
                 .map(step -> step.getDecidedById() == null ? step.getApproverId() : step.getDecidedById())
                 .reduce((first, second) -> second)
                 .orElse(null);
-        pprPlanService.approve(targetId, approverId);
+        pprPlanService.finalizeApprovalFromApprovalRequest(targetId, approverId);
         return "{\"status\":\"APPROVED\"}";
     }
 }

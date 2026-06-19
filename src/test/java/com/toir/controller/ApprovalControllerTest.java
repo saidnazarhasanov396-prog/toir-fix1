@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -101,6 +102,61 @@ class ApprovalControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("steps")));
+    }
+
+    @Test
+    void startCreatesApprovalThroughCanonicalEndpoint() throws Exception {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        ApprovalRequestDto response = response(approvalId, requesterId, targetId);
+        when(service.requestApproval(org.mockito.ArgumentMatchers.any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/approvals/start")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "targetType": "WORK_ORDER",
+                                  "targetId": "%s",
+                                  "actionType": "APPROVE",
+                                  "comment": "Please approve"
+                                }
+                                """.formatted(targetId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(approvalId.toString()));
+
+        ArgumentCaptor<com.toir.dto.approval.ApprovalStartRequest> captor =
+                ArgumentCaptor.forClass(com.toir.dto.approval.ApprovalStartRequest.class);
+        verify(service).requestApproval(captor.capture());
+        assertThat(captor.getValue().targetType()).isEqualTo(ApprovalTargetType.WORK_ORDER);
+        assertThat(captor.getValue().targetId()).isEqualTo(targetId);
+    }
+
+    @Test
+    void stepApproveIgnoresClientApproverAndUsesCurrentAuthenticatedActor() throws Exception {
+        UUID approvalId = UUID.randomUUID();
+        UUID stepId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        ApprovalRequestDto response = response(approvalId, requesterId, targetId);
+        when(service.approveStep(eq(approvalId), eq(stepId), org.mockito.ArgumentMatchers.any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/approvals/{id}/steps/{stepId}/approve", approvalId, stepId)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "approverId": "%s",
+                                  "comment": "Looks good"
+                                }
+                                """.formatted(UUID.randomUUID())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(approvalId.toString()));
+
+        ArgumentCaptor<com.toir.dto.approval.DecisionRequest> captor =
+                ArgumentCaptor.forClass(com.toir.dto.approval.DecisionRequest.class);
+        verify(service).approveStep(eq(approvalId), eq(stepId), captor.capture());
+        assertThat(captor.getValue().approverId()).isNull();
+        assertThat(captor.getValue().comment()).isEqualTo("Looks good");
     }
 
     private ApprovalRequestDto response(UUID id, UUID requesterId, UUID targetId) {

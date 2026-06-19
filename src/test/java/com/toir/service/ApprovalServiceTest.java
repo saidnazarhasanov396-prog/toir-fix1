@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.approval.ApprovalRequestDto;
+import com.toir.dto.approval.ApprovalStartRequest;
 import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.approval.ReturnApprovalRequest;
 import com.toir.dto.approval.UpdateApprovalRequest;
@@ -11,6 +12,7 @@ import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalStatus;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.UserStatus;
 import com.toir.enums.NotificationSeverity;
 import com.toir.exception.RestException;
@@ -22,12 +24,14 @@ import com.toir.service.approval.ApprovalActionExecutor;
 import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalRouteResolver;
 import com.toir.service.approval.ApprovalSlaPolicyService;
+import com.toir.service.maintanance.MaintenanceRegulationService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.access.AccessDeniedException;
@@ -91,6 +95,12 @@ class ApprovalServiceTest {
 
     @Mock
     UserRepository userRepository;
+
+    @Mock
+    ObjectProvider<MaintenanceRegulationService> maintenanceRegulationServiceProvider;
+
+    @Mock
+    MaintenanceRegulationService maintenanceRegulationService;
 
     @InjectMocks
     ApprovalService service;
@@ -373,6 +383,40 @@ class ApprovalServiceTest {
     }
 
     @Test
+    void requestApprovalValidatesMaintenanceRegulationBeforeCreatingApproval() {
+        UUID targetId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
+        when(maintenanceRegulationServiceProvider.getObject()).thenReturn(maintenanceRegulationService);
+        stubTargetMetadata(ApprovalTargetType.MAINTENANCE_REGULATION, "MR-001", "Oil change regulation");
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class)))
+                .thenReturn(List.of(new CreateApprovalRequest.StepInput(null, "MAINTENANCE_MANAGER")));
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        ApprovalRequestDto result = service.requestApproval(new ApprovalStartRequest(
+                ApprovalTargetType.MAINTENANCE_REGULATION,
+                targetId,
+                ApprovalActionType.APPROVE,
+                "Approve regulation"
+        ));
+
+        assertThat(result.targetType()).isEqualTo(ApprovalTargetType.MAINTENANCE_REGULATION);
+        assertThat(result.targetId()).isEqualTo(targetId);
+        assertThat(result.steps()).hasSize(1);
+        assertThat(result.steps().getFirst().approverRole()).isEqualTo("MAINTENANCE_MANAGER");
+        verify(maintenanceRegulationService).validateCanApprove(targetId);
+        verify(approvalScopeService).assertCanCreateApproval(any(CreateApprovalRequest.class));
+    }
+
+    @Test
     void step2CanReturnToStep1AndReopenSteps() {
         UUID approvalId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
@@ -643,5 +687,37 @@ class ApprovalServiceTest {
         user.setStatus(UserStatus.ACTIVE);
         user.setPrimaryRole(role);
         return user;
+    }
+
+    private void stubTargetMetadata(ApprovalTargetType targetType, String code, String title) {
+        when(jdbcTemplate.query(
+                eq(targetMetadataSql(targetType)),
+                any(PreparedStatementSetter.class),
+                any(ResultSetExtractor.class)
+        )).thenAnswer(invocation -> {
+            ResultSetExtractor<?> extractor = invocation.getArgument(2);
+            java.sql.ResultSet rs = org.mockito.Mockito.mock(java.sql.ResultSet.class);
+            when(rs.next()).thenReturn(true, false);
+            when(rs.getString("title")).thenReturn(title);
+            when(rs.getString("code")).thenReturn(code);
+            return extractor.extractData(rs);
+        });
+    }
+
+    private String targetMetadataSql(ApprovalTargetType targetType) {
+        return switch (targetType) {
+            case WORK_ORDER -> "select number as code, title as title from work_orders where id = ? and is_deleted = false";
+            case PPR_PLAN -> "select code as code, name as title from ppr_plans where id = ? and is_deleted = false";
+            case PROCUREMENT_REQUEST, PROCUREMENT -> "select number as code, title as title from procurement_requests where id = ? and is_deleted = false";
+            case MAINTENANCE_BUDGET, BUDGET -> "select code as code, name as title from maintenance_budgets where id = ? and is_deleted = false";
+            case REPAIR_REQUEST -> "select number as code, title as title from repair_requests where id = ? and is_deleted = false";
+            case MAINTENANCE_REGULATION -> "select code as code, name as title from maintenance_regulations where id = ? and is_deleted = false";
+            case REGULATION_CHANGE_PROPOSAL -> "select code as code, title as title from regulation_change_proposals where id = ? and is_deleted = false";
+            case ACTUAL_COST -> "select null as code, concat('Actual cost ', amount) as title from actual_costs where id = ? and is_deleted = false";
+            case DEFECT_LIST -> "select code as code, title as title from defect_lists where id = ? and is_deleted = false";
+            case PLANNED_SHUTDOWN -> "select null as code, name as title from planned_shutdowns where id = ? and is_deleted = false";
+            case REPAIR_CAMPAIGN -> "select code as code, name as title from repair_campaigns where id = ? and is_deleted = false";
+            default -> null;
+        };
     }
 }

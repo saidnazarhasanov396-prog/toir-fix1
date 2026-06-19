@@ -105,6 +105,12 @@ public class ApprovalController {
         return ResponseEntity.ok(ruleService.listRules());
     }
 
+    @PutMapping("/rules")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_UPDATE') or hasAuthority('ADMIN') or hasAuthority('MANAGER')")
+    public ResponseEntity<ApprovalRuleDto> saveRule(@Valid @RequestBody ApprovalRuleDto request) {
+        return ResponseEntity.ok(ruleService.saveRule(request));
+    }
+
     @PutMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApprovalRequestDto> update(@PathVariable UUID id,
@@ -118,23 +124,45 @@ public class ApprovalController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.requestApproval(request));
     }
 
+    @PostMapping("/start")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_CREATE')")
+    public ResponseEntity<ApprovalRequestDto> start(@Valid @RequestBody ApprovalStartRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.requestApproval(request));
+    }
+
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_APPROVE')")
     public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id, @Valid @RequestBody DecisionRequest decision) {
-        return decisionResponse(service.approve(id, decision));
+        return decisionResponse(service.approve(id, principalOnlyDecision(decision)));
+    }
+
+    @PostMapping("/{id}/steps/{stepId}/approve")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_APPROVE')")
+    public ResponseEntity<ApprovalRequestDto> approveStep(@PathVariable UUID id,
+                                                          @PathVariable UUID stepId,
+                                                          @Valid @RequestBody(required = false) DecisionRequest decision) {
+        return decisionResponse(service.approveStep(id, stepId, principalOnlyDecision(decision)));
     }
 
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_REJECT')")
     public ResponseEntity<ApprovalRequestDto> reject(@PathVariable UUID id, @Valid @RequestBody DecisionRequest decision) {
-        return decisionResponse(service.reject(id, decision));
+        return decisionResponse(service.reject(id, principalOnlyDecision(decision)));
+    }
+
+    @PostMapping("/{id}/steps/{stepId}/reject")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_REJECT')")
+    public ResponseEntity<ApprovalRequestDto> rejectStep(@PathVariable UUID id,
+                                                         @PathVariable UUID stepId,
+                                                         @Valid @RequestBody(required = false) DecisionRequest decision) {
+        return decisionResponse(service.rejectStep(id, stepId, principalOnlyDecision(decision)));
     }
 
     @PostMapping("/{id}/return")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_RETURN')")
     public ResponseEntity<ApprovalRequestDto> returnApproval(@PathVariable UUID id,
                                                              @Valid @RequestBody ReturnApprovalRequest request) {
-        return ResponseEntity.ok(service.returnToStep(id, request));
+        return ResponseEntity.ok(service.returnToStep(id, principalOnlyReturnRequest(request)));
     }
 
     @PostMapping("/{id}/cancel")
@@ -148,5 +176,13 @@ public class ApprovalController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(approval);
         }
         return ResponseEntity.ok(approval);
+    }
+
+    private DecisionRequest principalOnlyDecision(DecisionRequest decision) {
+        return new DecisionRequest(null, decision == null ? null : decision.comment());
+    }
+
+    private ReturnApprovalRequest principalOnlyReturnRequest(ReturnApprovalRequest request) {
+        return new ReturnApprovalRequest(null, request.returnToStep(), request.comment());
     }
 }
