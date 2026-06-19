@@ -7,6 +7,8 @@ import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.CompletionMeterSnapshotRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
+import com.toir.dto.workorder.WorkOrderTaskDto;
+import com.toir.dto.workorder.WorkOrderTaskStatusUpdateRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.CompletionAct;
@@ -2916,6 +2918,34 @@ class WorkOrderServiceTest {
 
         assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
         assertThat(result.result()).isEqualTo("done");
+    }
+
+    @Test
+    void updateTaskStatusToDoneSetsActualHoursAndTimestamps() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        WorkOrderTask task = workOrderTask(workOrder, "Inspect coupling", TaskExecutionStatus.TODO);
+        ReflectionTestUtils.setField(task, "id", taskId);
+        workOrder.getTasks().add(task);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.save(workOrder)).thenReturn(workOrder);
+
+        WorkOrderTaskDto result = service.updateTaskStatus(
+                workOrderId,
+                taskId,
+                new WorkOrderTaskStatusUpdateRequest(TaskExecutionStatus.DONE, 1.5)
+        );
+
+        assertThat(result.id()).isEqualTo(taskId);
+        assertThat(result.status()).isEqualTo(TaskExecutionStatus.DONE);
+        assertThat(result.actualHours()).isEqualTo(1.5);
+        assertThat(task.getStatus()).isEqualTo(TaskExecutionStatus.DONE);
+        assertThat(task.getStartedAt()).isNotNull();
+        assertThat(task.getCompletedAt()).isNotNull();
+        verify(repository).save(workOrder);
     }
 
     @Test

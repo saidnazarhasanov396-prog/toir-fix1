@@ -6,9 +6,12 @@ import com.toir.dto.workorder.WorkOrderDocumentDto;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderPerformerOptionDto;
 import com.toir.dto.workorder.WorkOrderStatusCountDto;
+import com.toir.dto.workorder.WorkOrderTaskDto;
+import com.toir.dto.workorder.WorkOrderTaskStatusUpdateRequest;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.RepairRequestBriefDto;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.enums.TaskExecutionStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
@@ -60,6 +63,7 @@ import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -225,6 +229,43 @@ class WorkOrderControllerContractTest {
                 .andExpect(jsonPath("$.defect.id").value(response.defect().id().toString()))
                 .andExpect(jsonPath("$.defect.code").value(response.defect().code()))
                 .andExpect(jsonPath("$.defect.status").value(response.defect().status().name()));
+    }
+
+    @Test
+    void updateTaskStatusReturnsUpdatedTask() throws Exception {
+        UUID workOrderId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        WorkOrderTaskDto response = new WorkOrderTaskDto(
+                taskId,
+                "Inspect coupling",
+                "Check alignment",
+                TaskExecutionStatus.DONE,
+                null,
+                2.0,
+                1.5,
+                Instant.parse("2026-06-19T05:00:00Z"),
+                Instant.parse("2026-06-19T06:00:00Z")
+        );
+        when(service.updateTaskStatus(eq(workOrderId), eq(taskId), any(WorkOrderTaskStatusUpdateRequest.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(patch("/api/v1/work-orders/{workOrderId}/tasks/{taskId}/status", workOrderId, taskId)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "status": "DONE",
+                                  "actualHours": 1.5
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(taskId.toString()))
+                .andExpect(jsonPath("$.status").value("DONE"))
+                .andExpect(jsonPath("$.actualHours").value(1.5));
+
+        var captor = forClass(WorkOrderTaskStatusUpdateRequest.class);
+        verify(service).updateTaskStatus(eq(workOrderId), eq(taskId), captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().status()).isEqualTo(TaskExecutionStatus.DONE);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().actualHours()).isEqualTo(1.5);
     }
 
     @Test
