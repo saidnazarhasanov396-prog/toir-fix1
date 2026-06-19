@@ -526,6 +526,45 @@ class ApprovalServiceTest {
                 .hasMessageContaining("Executed approvals cannot be returned");
     }
 
+    @Test
+    void failedFinalizationCanRetryItsOriginalApprovalDecision() {
+        UUID approvalId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        ApprovalRequest approval = pendingMultiStepApproval(
+                approvalId,
+                UUID.randomUUID(),
+                1,
+                approverId
+        );
+        ApprovalStep step = approval.getSteps().getFirst();
+        step.setDecision(ApprovalDecision.APPROVED);
+        step.setDecidedById(approverId);
+        step.setDecidedAt(Instant.now().minusSeconds(30));
+        approval.setStatus(ApprovalStatus.FAILED);
+        approval.setFailureReason("Previous finalization failed");
+        approval.setCompletedAt(Instant.now().minusSeconds(30));
+
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(approvalActionExecutor.execute(approval)).thenReturn("{\"status\":\"APPROVED\"}");
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.approve(
+                approvalId,
+                new com.toir.dto.approval.DecisionRequest(approverId, "retry")
+        );
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(result.failureReason()).isNull();
+        assertThat(result.resultJson()).isEqualTo("{\"status\":\"APPROVED\"}");
+        verify(governanceService).record(
+                approval,
+                ApprovalStatus.FAILED,
+                ApprovalStatus.APPROVED,
+                approverId,
+                "retry"
+        );
+    }
+
     private ApprovalRequest pendingApproval(UUID id, UUID workOrderId, UUID requesterId) {
         ApprovalRequest approval = new ApprovalRequest();
         ReflectionTestUtils.setField(approval, "id", id);
