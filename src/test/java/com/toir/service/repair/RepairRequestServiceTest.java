@@ -1131,7 +1131,7 @@ class RepairRequestServiceTest {
                 .thenReturn(List.of(activeWorkOrder));
 
         assertThatThrownBy(() -> service.close(id, new CloseRequestRequest("Resolved")))
-                .hasMessageContaining("active linked work orders");
+                .hasMessageContaining("not closed or cancelled");
     }
 
     @Test
@@ -1166,6 +1166,24 @@ class RepairRequestServiceTest {
 
         assertThatThrownBy(() -> service.close(id, new CloseRequestRequest("Resolved")))
                 .hasMessageContaining("execution evidence");
+    }
+
+    @Test
+    void closeBlocksWhenLinkedWorkOrderIsCompletedButNotClosed() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.COMPLETED);
+        WorkOrder completedWorkOrder = workOrder(id);
+        completedWorkOrder.setStatus(WorkOrderStatus.COMPLETED);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(completedWorkOrder));
+
+        assertThatThrownBy(() -> service.close(id, new CloseRequestRequest("Resolved")))
+                .hasMessageContaining("not closed or cancelled");
+
+        verify(maintenanceCompletionAnchorRepository, never()).save(any(MaintenanceCompletionAnchor.class));
     }
 
     @Test
