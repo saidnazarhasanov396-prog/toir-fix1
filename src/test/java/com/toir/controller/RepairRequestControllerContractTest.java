@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.controller.repair.RepairRequestController;
 import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.repairrequest.RepairRequestDto;
+import com.toir.dto.repairrequest.RepairRequestFilterRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.triad.DefectBriefDto;
@@ -79,7 +80,7 @@ class RepairRequestControllerContractTest {
     void listWithEquipmentIdAndApprovedStatusReturnsOnlyMatchingRepairRequests() throws Exception {
         UUID equipmentId = UUID.randomUUID();
         RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
-        when(service.search(RequestStatus.APPROVED, null, equipmentId, null, 0, 100, null))
+        when(service.search(any(RepairRequestFilterRequest.class), eq(0), eq(100)))
                 .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
 
         mockMvc.perform(get("/api/v1/repair-requests")
@@ -90,14 +91,17 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
 
         verify(scopeAccessService).enforceDepartmentScope(null);
-        verify(service).search(RequestStatus.APPROVED, null, equipmentId, null, 0, 100, null);
+        ArgumentCaptor<RepairRequestFilterRequest> filterCaptor = ArgumentCaptor.forClass(RepairRequestFilterRequest.class);
+        verify(service).search(filterCaptor.capture(), eq(0), eq(100));
+        assertThat(filterCaptor.getValue().status()).isEqualTo(RequestStatus.APPROVED);
+        assertThat(filterCaptor.getValue().equipmentId()).isEqualTo(equipmentId);
     }
 
     @Test
     void listWithEquipmentIdReturnsOnlyMatchingRepairRequests() throws Exception {
         UUID equipmentId = UUID.randomUUID();
         RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
-        when(service.search(null, null, equipmentId, null, 0, 100, null))
+        when(service.search(any(RepairRequestFilterRequest.class), eq(0), eq(100)))
                 .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
 
         mockMvc.perform(get("/api/v1/repair-requests")
@@ -107,14 +111,16 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
 
         verify(scopeAccessService).enforceDepartmentScope(null);
-        verify(service).search(null, null, equipmentId, null, 0, 100, null);
+        ArgumentCaptor<RepairRequestFilterRequest> filterCaptor = ArgumentCaptor.forClass(RepairRequestFilterRequest.class);
+        verify(service).search(filterCaptor.capture(), eq(0), eq(100));
+        assertThat(filterCaptor.getValue().equipmentId()).isEqualTo(equipmentId);
     }
 
     @Test
     void listWithStatusReturnsOnlyMatchingRepairRequests() throws Exception {
         RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(service.search(RequestStatus.APPROVED, null, null, null, 0, 100, null))
+        when(service.search(any(RepairRequestFilterRequest.class), eq(0), eq(100)))
                 .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
 
         mockMvc.perform(get("/api/v1/repair-requests")
@@ -124,13 +130,15 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
 
         verify(scopeAccessService).enforceDepartmentScope(null);
-        verify(service).search(RequestStatus.APPROVED, null, null, null, 0, 100, null);
+        ArgumentCaptor<RepairRequestFilterRequest> filterCaptor = ArgumentCaptor.forClass(RepairRequestFilterRequest.class);
+        verify(service).search(filterCaptor.capture(), eq(0), eq(100));
+        assertThat(filterCaptor.getValue().status()).isEqualTo(RequestStatus.APPROVED);
     }
 
     @Test
     void listWithEquipmentIdAndStatusNoMatchesReturnsEmptyPage() throws Exception {
         UUID equipmentId = UUID.randomUUID();
-        when(service.search(RequestStatus.APPROVED, null, equipmentId, null, 0, 100, null))
+        when(service.search(any(RepairRequestFilterRequest.class), eq(0), eq(100)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 100), 0));
 
         mockMvc.perform(get("/api/v1/repair-requests")
@@ -143,7 +151,10 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.totalElements").value(0));
 
         verify(scopeAccessService).enforceDepartmentScope(null);
-        verify(service).search(RequestStatus.APPROVED, null, equipmentId, null, 0, 100, null);
+        ArgumentCaptor<RepairRequestFilterRequest> filterCaptor = ArgumentCaptor.forClass(RepairRequestFilterRequest.class);
+        verify(service).search(filterCaptor.capture(), eq(0), eq(100));
+        assertThat(filterCaptor.getValue().status()).isEqualTo(RequestStatus.APPROVED);
+        assertThat(filterCaptor.getValue().equipmentId()).isEqualTo(equipmentId);
     }
 
     @Test
@@ -151,7 +162,7 @@ class RepairRequestControllerContractTest {
         UUID scopedDepartmentId = UUID.randomUUID();
         RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(scopedDepartmentId);
-        when(service.search(null, scopedDepartmentId, null, null, 0, 100, null))
+        when(service.search(any(RepairRequestFilterRequest.class), eq(0), eq(100)))
                 .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
 
         mockMvc.perform(get("/api/v1/repair-requests")
@@ -160,7 +171,9 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
 
         verify(scopeAccessService).enforceDepartmentScope(null);
-        verify(service).search(null, scopedDepartmentId, null, null, 0, 100, null);
+        ArgumentCaptor<RepairRequestFilterRequest> filterCaptor = ArgumentCaptor.forClass(RepairRequestFilterRequest.class);
+        verify(service).search(filterCaptor.capture(), eq(0), eq(100));
+        assertThat(filterCaptor.getValue().departmentId()).isEqualTo(scopedDepartmentId);
     }
 
     @Test
@@ -239,7 +252,7 @@ class RepairRequestControllerContractTest {
     void listIncludesEquipmentDepartmentReporterIds() throws Exception {
         RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(service.search(null, null, null, null, 0, 20, null))
+        when(service.search(any(RepairRequestFilterRequest.class), eq(0), eq(20)))
                 .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/repair-requests"))
@@ -247,6 +260,84 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.content[0].equipmentId").value(response.equipmentId().toString()))
                 .andExpect(jsonPath("$.content[0].departmentId").value(response.departmentId().toString()))
                 .andExpect(jsonPath("$.content[0].reporterId").value(response.reporterId().toString()));
+    }
+
+    @Test
+    void listBindsAdvancedRepairRequestFilters() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID scopedDepartmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID templateId = UUID.randomUUID();
+        UUID locationId = UUID.randomUUID();
+        UUID reporterId = UUID.randomUUID();
+        UUID assigneeId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(scopedDepartmentId);
+        when(service.search(any(RepairRequestFilterRequest.class), eq(2), eq(50)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(2, 50), 0));
+
+        mockMvc.perform(get("/api/v1/repair-requests")
+                        .param("page", "2")
+                        .param("size", "50")
+                        .param("status", "OPEN")
+                        .param("departmentId", departmentId.toString())
+                        .param("equipmentId", equipmentId.toString())
+                        .param("priority", "HIGH")
+                        .param("search", "pump")
+                        .param("number", "RR-2026-0001")
+                        .param("title", "Leak")
+                        .param("description", "seal")
+                        .param("templateId", templateId.toString())
+                        .param("locationId", locationId.toString())
+                        .param("reporterId", reporterId.toString())
+                        .param("assignedToId", assigneeId.toString())
+                        .param("criticality", "CRITICAL")
+                        .param("source", "MOBILE")
+                        .param("detectedAtFrom", "2026-06-01T00:00:00Z")
+                        .param("detectedAtTo", "2026-06-19T23:59:59Z")
+                        .param("targetCompletionAtFrom", "2026-06-20T00:00:00Z")
+                        .param("targetCompletionAtTo", "2026-06-25T23:59:59Z")
+                        .param("actualCompletionAtFrom", "2026-06-26T00:00:00Z")
+                        .param("actualCompletionAtTo", "2026-06-27T23:59:59Z")
+                        .param("reactedAtFrom", "2026-06-02T00:00:00Z")
+                        .param("reactedAtTo", "2026-06-03T23:59:59Z")
+                        .param("rejectionReason", "duplicate")
+                        .param("clarificationReason", "more data")
+                        .param("closeResult", "fixed")
+                        .param("hasLinkedDefects", "true")
+                        .param("hasLinkedWorkOrders", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+
+        ArgumentCaptor<RepairRequestFilterRequest> filterCaptor = ArgumentCaptor.forClass(RepairRequestFilterRequest.class);
+        verify(service).search(filterCaptor.capture(), eq(2), eq(50));
+        RepairRequestFilterRequest filter = filterCaptor.getValue();
+        assertThat(filter.status()).isEqualTo(RequestStatus.OPEN);
+        assertThat(filter.departmentId()).isEqualTo(scopedDepartmentId);
+        assertThat(filter.equipmentId()).isEqualTo(equipmentId);
+        assertThat(filter.priority()).isEqualTo(PriorityLevel.HIGH);
+        assertThat(filter.search()).isEqualTo("pump");
+        assertThat(filter.number()).isEqualTo("RR-2026-0001");
+        assertThat(filter.title()).isEqualTo("Leak");
+        assertThat(filter.description()).isEqualTo("seal");
+        assertThat(filter.templateId()).isEqualTo(templateId);
+        assertThat(filter.locationId()).isEqualTo(locationId);
+        assertThat(filter.reporterId()).isEqualTo(reporterId);
+        assertThat(filter.assignedToId()).isEqualTo(assigneeId);
+        assertThat(filter.criticality()).isEqualTo(CriticalityLevel.CRITICAL);
+        assertThat(filter.source()).isEqualTo(RequestSource.MOBILE);
+        assertThat(filter.detectedAtFrom()).isEqualTo(Instant.parse("2026-06-01T00:00:00Z"));
+        assertThat(filter.detectedAtTo()).isEqualTo(Instant.parse("2026-06-19T23:59:59Z"));
+        assertThat(filter.targetCompletionAtFrom()).isEqualTo(Instant.parse("2026-06-20T00:00:00Z"));
+        assertThat(filter.targetCompletionAtTo()).isEqualTo(Instant.parse("2026-06-25T23:59:59Z"));
+        assertThat(filter.actualCompletionAtFrom()).isEqualTo(Instant.parse("2026-06-26T00:00:00Z"));
+        assertThat(filter.actualCompletionAtTo()).isEqualTo(Instant.parse("2026-06-27T23:59:59Z"));
+        assertThat(filter.reactedAtFrom()).isEqualTo(Instant.parse("2026-06-02T00:00:00Z"));
+        assertThat(filter.reactedAtTo()).isEqualTo(Instant.parse("2026-06-03T23:59:59Z"));
+        assertThat(filter.rejectionReason()).isEqualTo("duplicate");
+        assertThat(filter.clarificationReason()).isEqualTo("more data");
+        assertThat(filter.closeResult()).isEqualTo("fixed");
+        assertThat(filter.hasLinkedDefects()).isTrue();
+        assertThat(filter.hasLinkedWorkOrders()).isFalse();
     }
 
     @Test
@@ -273,7 +364,7 @@ class RepairRequestControllerContractTest {
         );
 
         when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
-        when(service.getStats(null, null, null)).thenReturn(response);
+        when(service.getStats(any(RepairRequestFilterRequest.class))).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/repair-requests/stats"))
                 .andExpect(status().isOk())
@@ -283,7 +374,9 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.withWorkOrder").value(12));
 
         verify(scopeAccessService).enforceDepartmentScope(null);
-        verify(service).getStats(null, null, null);
+        ArgumentCaptor<RepairRequestFilterRequest> filterCaptor = ArgumentCaptor.forClass(RepairRequestFilterRequest.class);
+        verify(service).getStats(filterCaptor.capture());
+        assertThat(filterCaptor.getValue().departmentId()).isNull();
     }
 
     @Test
@@ -300,7 +393,7 @@ class RepairRequestControllerContractTest {
         );
 
         when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(scopedDepartmentId);
-        when(service.getStats(scopedDepartmentId, equipmentId, "pump")).thenReturn(response);
+        when(service.getStats(any(RepairRequestFilterRequest.class))).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/repair-requests/stats")
                         .param("departmentId", departmentId.toString())
@@ -313,7 +406,11 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.withWorkOrder").value(5));
 
         verify(scopeAccessService).enforceDepartmentScope(departmentId);
-        verify(service).getStats(scopedDepartmentId, equipmentId, "pump");
+        ArgumentCaptor<RepairRequestFilterRequest> filterCaptor = ArgumentCaptor.forClass(RepairRequestFilterRequest.class);
+        verify(service).getStats(filterCaptor.capture());
+        assertThat(filterCaptor.getValue().departmentId()).isEqualTo(scopedDepartmentId);
+        assertThat(filterCaptor.getValue().equipmentId()).isEqualTo(equipmentId);
+        assertThat(filterCaptor.getValue().search()).isEqualTo("pump");
     }
 
     @Test

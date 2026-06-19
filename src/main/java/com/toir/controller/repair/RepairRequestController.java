@@ -3,12 +3,12 @@ import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestClarificationRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
+import com.toir.dto.repairrequest.RepairRequestFilterRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.entity.repair.RepairRequest;
-import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.repair.RepairRequestRepository;
@@ -41,30 +41,21 @@ public class RepairRequestController {
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_READ')")
     public ResponseEntity<Page<RepairRequestDto>> list(
-            @RequestParam(required = false) RequestStatus status,
-            @RequestParam(required = false) UUID departmentId,
-            @RequestParam(required = false) UUID equipmentId,
-            @RequestParam(required = false)PriorityLevel priority,
+            @ModelAttribute RepairRequestFilterRequest filter,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "20") int size,
-            @RequestParam(required = false) String search
+            @RequestParam(name = "size", defaultValue = "20") int size
     ) {
-        UUID scopedDepartmentId = resolveDepartmentFilter(departmentId, equipmentId);
-        return ResponseEntity.ok(service.search(status, scopedDepartmentId, equipmentId,priority, page, size, search));
+        UUID scopedDepartmentId = resolveDepartmentFilter(filter.departmentId(), filter.equipmentId());
+        return ResponseEntity.ok(service.search(filter.withDepartmentId(scopedDepartmentId), page, size));
     }
 
     @GetMapping("/stats")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_READ')")
     public ResponseEntity<RepairRequestStatsResponse> stats(
-            @RequestParam(required = false) UUID departmentId,
-            @RequestParam(required = false) UUID equipmentId,
-            @RequestParam(required = false) String search
+            @ModelAttribute RepairRequestFilterRequest filter
     ) {
-        return ResponseEntity.ok(service.getStats(
-                resolveDepartmentFilter(departmentId, equipmentId),
-                equipmentId,
-                search
-        ));
+        UUID scopedDepartmentId = resolveDepartmentFilter(filter.departmentId(), filter.equipmentId());
+        return ResponseEntity.ok(service.getStats(filter.withDepartmentId(scopedDepartmentId)));
     }
 
     @GetMapping("/{id}")
