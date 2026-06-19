@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.controller.users.HrController;
 import com.toir.dto.hr.EmployeeDto;
+import com.toir.dto.hr.EmployeeFilterRequest;
 import com.toir.dto.hr.EmployeeStatsResponse;
 import com.toir.dto.hr.EmployeeSpecialisationDto;
 import com.toir.dto.hr.EmployeeSpecialisationRequest;
@@ -11,6 +12,7 @@ import com.toir.service.users.HrService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -24,6 +26,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
@@ -64,7 +67,7 @@ class HrControllerContractTest {
         Page<EmployeeDto> page = getEmployeeDtos(employeeId, departmentId, brigadeId);
 
         when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
-        when(service.listEmployees(-1, 20, null, null, null, null)).thenReturn(page);
+        when(service.listEmployees(eq(-1), eq(20), any(EmployeeFilterRequest.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/v1/hr/employees")
                         .param("page", "0")
@@ -76,7 +79,9 @@ class HrControllerContractTest {
                 .andExpect(jsonPath("$.content[0].brigadeId").value(brigadeId.toString()))
                 .andExpect(jsonPath("$.content[0].brigadeName").value("Repair Brigade A"));
 
-        verify(service).listEmployees(-1, 20, null, null, null, null);
+        ArgumentCaptor<EmployeeFilterRequest> filterCaptor = ArgumentCaptor.forClass(EmployeeFilterRequest.class);
+        verify(service).listEmployees(eq(-1), eq(20), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().departmentId()).isNull();
     }
     @Test
     void getEmployeeReturnsDepartmentNameAndBrigadeName() throws Exception {
@@ -194,7 +199,7 @@ class HrControllerContractTest {
         Page<EmployeeDto> page = getEmployeeDtos(employeeId, departmentId, brigadeId);
 
         when(securityScope.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
-        when(service.listEmployees(-1, 20, "Ali", true, departmentId, brigadeId))
+        when(service.listEmployees(eq(-1), eq(20), any(EmployeeFilterRequest.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/hr/employees")
@@ -208,7 +213,13 @@ class HrControllerContractTest {
                 .andExpect(jsonPath("$.content[0].departmentId").value(departmentId.toString()))
                 .andExpect(jsonPath("$.content[0].brigadeId").value(brigadeId.toString()));
 
-        verify(service).listEmployees(-1, 20, "Ali", true, departmentId, brigadeId);
+        ArgumentCaptor<EmployeeFilterRequest> filterCaptor = ArgumentCaptor.forClass(EmployeeFilterRequest.class);
+        verify(service).listEmployees(eq(-1), eq(20), filterCaptor.capture());
+        EmployeeFilterRequest filter = filterCaptor.getValue();
+        assertThat(filter.search()).isEqualTo("Ali");
+        assertThat(filter.activeOnly()).isTrue();
+        assertThat(filter.departmentId()).isEqualTo(departmentId);
+        assertThat(filter.brigadeId()).isEqualTo(brigadeId);
     }
 
     @Test
@@ -219,7 +230,7 @@ class HrControllerContractTest {
         Page<EmployeeDto> page = getEmployeeDtos(employeeId, departmentId, null);
 
         when(securityScope.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
-        when(service.listEmployees(-1, 20, null, true, departmentId, null, "DRIVER"))
+        when(service.listEmployees(eq(-1), eq(20), any(EmployeeFilterRequest.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/hr/employees")
@@ -231,7 +242,9 @@ class HrControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].departmentId").value(departmentId.toString()));
 
-        verify(service).listEmployees(-1, 20, null, true, departmentId, null, "DRIVER");
+        ArgumentCaptor<EmployeeFilterRequest> filterCaptor = ArgumentCaptor.forClass(EmployeeFilterRequest.class);
+        verify(service).listEmployees(eq(-1), eq(20), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().workRoleCode()).isEqualTo("DRIVER");
     }
 
     @Test
@@ -245,7 +258,7 @@ class HrControllerContractTest {
 
         when(securityScope.enforceDepartmentScope(requestedDepartmentId))
                 .thenReturn(scopedDepartmentId);
-        when(service.listEmployees(-1, 20, null, null, scopedDepartmentId, brigadeId))
+        when(service.listEmployees(eq(-1), eq(20), any(EmployeeFilterRequest.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/hr/employees")
@@ -257,7 +270,71 @@ class HrControllerContractTest {
                 .andExpect(jsonPath("$.content[0].departmentId").value(scopedDepartmentId.toString()));
 
         verify(securityScope).enforceDepartmentScope(requestedDepartmentId);
-        verify(service).listEmployees(-1, 20, null, null, scopedDepartmentId, brigadeId);
+        ArgumentCaptor<EmployeeFilterRequest> filterCaptor = ArgumentCaptor.forClass(EmployeeFilterRequest.class);
+        verify(service).listEmployees(eq(-1), eq(20), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().departmentId()).isEqualTo(scopedDepartmentId);
+        assertThat(filterCaptor.getValue().brigadeId()).isEqualTo(brigadeId);
+    }
+
+    @Test
+    void listEmployeesBindsAdvancedEmployeeFilters() throws Exception {
+        UUID requestedDepartmentId = UUID.randomUUID();
+        UUID scopedDepartmentId = UUID.randomUUID();
+        UUID brigadeId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID specialisationId = UUID.randomUUID();
+        Page<EmployeeDto> page = getEmployeeDtos(UUID.randomUUID(), scopedDepartmentId, brigadeId);
+
+        when(securityScope.enforceDepartmentScope(requestedDepartmentId)).thenReturn(scopedDepartmentId);
+        when(service.listEmployees(eq(1), eq(50), any(EmployeeFilterRequest.class))).thenReturn(page);
+
+        mockMvc.perform(get("/api/v1/hr/employees")
+                        .param("page", "2")
+                        .param("size", "50")
+                        .param("search", "mechanic")
+                        .param("activeOnly", "true")
+                        .param("departmentId", requestedDepartmentId.toString())
+                        .param("brigadeId", brigadeId.toString())
+                        .param("workRoleCode", "MECHANIC")
+                        .param("personnelNumber", "TAB-100")
+                        .param("firstName", "Ali")
+                        .param("lastName", "Karimov")
+                        .param("middleName", "Valiyevich")
+                        .param("position", "Mechanic")
+                        .param("userId", userId.toString())
+                        .param("specialisationId", specialisationId.toString())
+                        .param("hireDateFrom", "2026-06-01")
+                        .param("hireDateTo", "2026-06-19")
+                        .param("terminatedDateFrom", "2026-06-10")
+                        .param("terminatedDateTo", "2026-06-18")
+                        .param("grade", "10")
+                        .param("phone", "+998")
+                        .param("email", "ali@example.com"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].departmentId").value(scopedDepartmentId.toString()));
+
+        ArgumentCaptor<EmployeeFilterRequest> filterCaptor = ArgumentCaptor.forClass(EmployeeFilterRequest.class);
+        verify(service).listEmployees(eq(1), eq(50), filterCaptor.capture());
+        EmployeeFilterRequest filter = filterCaptor.getValue();
+        assertThat(filter.search()).isEqualTo("mechanic");
+        assertThat(filter.activeOnly()).isTrue();
+        assertThat(filter.departmentId()).isEqualTo(scopedDepartmentId);
+        assertThat(filter.brigadeId()).isEqualTo(brigadeId);
+        assertThat(filter.workRoleCode()).isEqualTo("MECHANIC");
+        assertThat(filter.personnelNumber()).isEqualTo("TAB-100");
+        assertThat(filter.firstName()).isEqualTo("Ali");
+        assertThat(filter.lastName()).isEqualTo("Karimov");
+        assertThat(filter.middleName()).isEqualTo("Valiyevich");
+        assertThat(filter.position()).isEqualTo("Mechanic");
+        assertThat(filter.userId()).isEqualTo(userId);
+        assertThat(filter.specialisationId()).isEqualTo(specialisationId);
+        assertThat(filter.hireDateFrom()).isEqualTo(LocalDate.of(2026, 6, 1));
+        assertThat(filter.hireDateTo()).isEqualTo(LocalDate.of(2026, 6, 19));
+        assertThat(filter.terminatedDateFrom()).isEqualTo(LocalDate.of(2026, 6, 10));
+        assertThat(filter.terminatedDateTo()).isEqualTo(LocalDate.of(2026, 6, 18));
+        assertThat(filter.grade()).isEqualTo("10");
+        assertThat(filter.phone()).isEqualTo("+998");
+        assertThat(filter.email()).isEqualTo("ali@example.com");
     }
 
 
@@ -271,7 +348,7 @@ class HrControllerContractTest {
         );
 
         when(securityScope.enforceDepartmentScope(null)).thenReturn(null);
-        when(service.getEmployeeStats(null, null, null)).thenReturn(response);
+        when(service.getEmployeeStats(any(EmployeeFilterRequest.class))).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/hr/employees/stats"))
                 .andExpect(status().isOk())
@@ -280,7 +357,9 @@ class HrControllerContractTest {
                 .andExpect(jsonPath("$.terminated").value(0))
                 .andExpect(jsonPath("$.withoutEmail").value(1));
 
-        verify(service).getEmployeeStats(null, null, null);
+        ArgumentCaptor<EmployeeFilterRequest> filterCaptor = ArgumentCaptor.forClass(EmployeeFilterRequest.class);
+        verify(service).getEmployeeStats(filterCaptor.capture());
+        assertThat(filterCaptor.getValue().departmentId()).isNull();
     }
 
     @Test
@@ -296,7 +375,7 @@ class HrControllerContractTest {
         );
 
         when(securityScope.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
-        when(service.getEmployeeStats(departmentId, brigadeId, "Ali"))
+        when(service.getEmployeeStats(any(EmployeeFilterRequest.class)))
                 .thenReturn(response);
 
         mockMvc.perform(get("/api/v1/hr/employees/stats")
@@ -309,7 +388,12 @@ class HrControllerContractTest {
                 .andExpect(jsonPath("$.terminated").value(1))
                 .andExpect(jsonPath("$.withoutEmail").value(2));
 
-        verify(service).getEmployeeStats(departmentId, brigadeId, "Ali");
+        ArgumentCaptor<EmployeeFilterRequest> filterCaptor = ArgumentCaptor.forClass(EmployeeFilterRequest.class);
+        verify(service).getEmployeeStats(filterCaptor.capture());
+        EmployeeFilterRequest filter = filterCaptor.getValue();
+        assertThat(filter.departmentId()).isEqualTo(departmentId);
+        assertThat(filter.brigadeId()).isEqualTo(brigadeId);
+        assertThat(filter.search()).isEqualTo("Ali");
     }
 
     

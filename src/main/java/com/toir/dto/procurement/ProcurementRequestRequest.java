@@ -18,7 +18,8 @@ public record ProcurementRequestRequest(
         @Valid List<ProcurementLineRequest> lines,
         ProcurementRequestType type,
         UUID sourceDefectId,
-        UUID sourcePprTaskId
+        UUID sourcePprTaskId,
+        UUID responsibleId
 ) {
     public ProcurementRequestRequest(@NotBlank String title,
                                      String description,
@@ -26,6 +27,19 @@ public record ProcurementRequestRequest(
                                      UUID warehouseId,
                                      LocalDate requiredBy,
                                      @Valid List<ProcurementLineRequest> lines) {
-        this(title, description, departmentId, warehouseId, requiredBy, lines, null, null, null);
+        this(title, description, departmentId, warehouseId, requiredBy, lines, null, null, null, null);
+    }
+
+    public ProcurementRequestRequest(@NotBlank String title,
+                                     String description,
+                                     UUID departmentId,
+                                     UUID warehouseId,
+                                     LocalDate requiredBy,
+                                     @Valid List<ProcurementLineRequest> lines,
+                                     ProcurementRequestType type,
+                                     UUID sourceDefectId,
+                                     UUID sourcePprTaskId) {
+        this(title, description, departmentId, warehouseId, requiredBy, lines, type,
+                sourceDefectId, sourcePprTaskId, null);
     }
 }

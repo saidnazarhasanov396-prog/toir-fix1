@@ -1,6 +1,7 @@
 package com.toir.service.users;
 
 import com.toir.dto.hr.EmployeeDto;
+import com.toir.dto.hr.EmployeeFilterRequest;
 import com.toir.dto.hr.EmployeeRequest;
 import com.toir.dto.hr.EmployeeSpecialisationDto;
 import com.toir.dto.hr.EmployeeSpecialisationRequest;
@@ -22,6 +23,7 @@ import com.toir.repository.TimesheetEntryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
+import com.toir.repository.specification.EmployeeSpecifications;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.EmployeeSpecialisationRepository;
 import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
@@ -33,6 +35,7 @@ import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -124,6 +127,18 @@ public class HrService {
     }
 
     @Transactional(readOnly = true)
+    public Page<EmployeeDto> listEmployees(int page, int pageSize, EmployeeFilterRequest filter) {
+        EmployeeFilterRequest effectiveFilter = filterOrEmpty(filter);
+        UUID scopedDepartmentId = enforceEmployeeListDepartmentScope(effectiveFilter.departmentId());
+        effectiveFilter = effectiveFilter.withDepartmentId(scopedDepartmentId);
+        Page<Employee> employeePage = employeeRepository.findAll(
+                EmployeeSpecifications.byFilter(effectiveFilter),
+                PaginationUtils.pageRequest(page, pageSize, Sort.by(Sort.Direction.DESC, "updatedAt"))
+        );
+        return toDtoPage(employeePage);
+    }
+
+    @Transactional(readOnly = true)
     public List<EmployeeWorkRoleDto> listWorkRoles() {
         return employeeWorkRoleRepository.findAllByActiveTrueAndIsDeletedFalseOrderByCodeAsc()
                 .stream()
@@ -193,6 +208,24 @@ public class HrService {
                 safe(stats.getTerminated()),
                 safe(stats.getWithoutEmail())
         );
+    }
+
+    @Transactional(readOnly = true)
+    public EmployeeStatsResponse getEmployeeStats(EmployeeFilterRequest filter) {
+        EmployeeFilterRequest effectiveFilter = filterOrEmpty(filter);
+        UUID scopedDepartmentId = enforceEmployeeListDepartmentScope(effectiveFilter.departmentId());
+        effectiveFilter = effectiveFilter.withDepartmentId(scopedDepartmentId);
+
+        List<Employee> employees = employeeRepository.findAll(EmployeeSpecifications.byFilter(effectiveFilter));
+        long total = employees.size();
+        long active = employees.stream().filter(Employee::isActive).count();
+        long terminated = employees.stream()
+                .filter(employee -> !employee.isActive() || employee.getTerminatedDate() != null)
+                .count();
+        long withoutEmail = employees.stream()
+                .filter(employee -> employee.getEmail() == null || employee.getEmail().isBlank())
+                .count();
+        return new EmployeeStatsResponse(total, active, terminated, withoutEmail);
     }
 
 
@@ -470,6 +503,33 @@ public class HrService {
 
     private void throwAccessDenied() {
         throw new AccessDeniedException("Access denied by data scope");
+    }
+
+    private EmployeeFilterRequest filterOrEmpty(EmployeeFilterRequest filter) {
+        if (filter != null) {
+            return filter;
+        }
+        return new EmployeeFilterRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     private void applyEmployee(Employee e, EmployeeRequest r) {

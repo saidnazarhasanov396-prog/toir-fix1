@@ -31,33 +31,13 @@ public class HrController {
     public ResponseEntity<Page<EmployeeDto>> listEmployees(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) Boolean activeOnly,
-            @RequestParam(required = false) UUID departmentId,
-            @RequestParam(required = false) UUID brigadeId,
-            @RequestParam(required = false) String workRoleCode
+            @ModelAttribute EmployeeFilterRequest filter
     ) {
-        UUID scopedDepartmentId = securityScope.enforceDepartmentScope(departmentId);
-
-        if (workRoleCode == null || workRoleCode.isBlank()) {
-            return ResponseEntity.ok(service.listEmployees(
-                    page - 1,
-                    size,
-                    search,
-                    activeOnly,
-                    scopedDepartmentId,
-                    brigadeId
-            ));
-        }
-
+        UUID scopedDepartmentId = securityScope.enforceDepartmentScope(filter.departmentId());
         return ResponseEntity.ok(service.listEmployees(
                 page - 1,
                 size,
-                search,
-                activeOnly,
-                scopedDepartmentId,
-                brigadeId,
-                workRoleCode
+                filter.withDepartmentId(scopedDepartmentId)
         ));
     }
 
@@ -124,17 +104,10 @@ public class HrController {
     @GetMapping("/employees/stats")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_READ')")
     public ResponseEntity<EmployeeStatsResponse> employeeStats(
-            @RequestParam(required = false) UUID departmentId,
-            @RequestParam(required = false) UUID brigadeId,
-            @RequestParam(required = false) String search
+            @ModelAttribute EmployeeFilterRequest filter
     ) {
-        UUID scopedDepartmentId = securityScope.enforceDepartmentScope(departmentId);
-
-        return ResponseEntity.ok(service.getEmployeeStats(
-                scopedDepartmentId,
-                brigadeId,
-                search
-        ));
+        UUID scopedDepartmentId = securityScope.enforceDepartmentScope(filter.departmentId());
+        return ResponseEntity.ok(service.getEmployeeStats(filter.withDepartmentId(scopedDepartmentId)));
     }
 
     @GetMapping("/employees/{id}")
