@@ -3427,7 +3427,7 @@ class WorkOrderServiceTest {
     }
 
     @Test
-    void closeClosesRepairRequestWhenAllWorkOrdersTerminalAndAllDefectsResolvedOrClosed() {
+    void closeDoesNotCloseRepairRequestWhenAllWorkOrdersTerminalAndAllDefectsResolvedOrClosed() {
         UUID workOrderId = UUID.randomUUID();
         UUID repairRequestId = UUID.randomUUID();
         UUID linkedDefectId = UUID.randomUUID();
@@ -3438,7 +3438,7 @@ class WorkOrderServiceTest {
         completedSibling.setRepairRequestId(repairRequestId);
         WorkOrder cancelledSibling = lifecycleWorkOrder(UUID.randomUUID(), WorkType.REPAIR, WorkOrderStatus.CANCELLED, null, null);
         cancelledSibling.setRepairRequestId(repairRequestId);
-        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.IN_PROGRESS);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.COMPLETED);
         Defect linkedDefect = defect(linkedDefectId, repairRequestId, DefectStatus.RESOLVED);
         Defect alreadyClosedDefect = defect(UUID.randomUUID(), repairRequestId, DefectStatus.CLOSED);
 
@@ -3449,7 +3449,6 @@ class WorkOrderServiceTest {
         when(repository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId))
                 .thenReturn(java.util.List.of(workOrder, completedSibling, cancelledSibling));
         when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId)).thenReturn(Optional.of(repairRequest));
-        when(repairRequestRepository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(defectRepository.findByIdAndIsDeletedFalse(linkedDefectId)).thenReturn(Optional.of(linkedDefect));
         when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId))
                 .thenReturn(java.util.List.of(linkedDefect, alreadyClosedDefect));
@@ -3459,12 +3458,11 @@ class WorkOrderServiceTest {
         WorkOrderDto response = service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes"));
 
         assertThat(linkedDefect.getStatus()).isEqualTo(DefectStatus.CLOSED);
-        assertThat(repairRequest.getStatus()).isEqualTo(RequestStatus.CLOSED);
-        assertThat(repairRequest.getCloseResult()).isEqualTo("closed");
-        assertThat(repairRequest.getActualCompletionAt()).isNotNull();
+        assertThat(repairRequest.getStatus()).isEqualTo(RequestStatus.COMPLETED);
+        assertThat(repairRequest.getCloseResult()).isNull();
         assertThat(response.repairRequest()).isNotNull();
-        assertThat(response.repairRequest().status()).isEqualTo(RequestStatus.CLOSED);
-        verify(repairRequestRepository).save(repairRequest);
+        assertThat(response.repairRequest().status()).isEqualTo(RequestStatus.COMPLETED);
+        verify(repairRequestRepository, never()).save(any(RepairRequest.class));
     }
 
     @Test

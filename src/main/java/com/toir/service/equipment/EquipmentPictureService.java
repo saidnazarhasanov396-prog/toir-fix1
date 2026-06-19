@@ -33,6 +33,7 @@ public class EquipmentPictureService {
 
     private static final Set<String> ALLOWED_IMAGE_CONTENT_TYPES = Set.of(
             "image/jpeg",
+            "image/jpg",
             "image/png",
             "image/webp",
             "image/gif"
@@ -94,39 +95,39 @@ public class EquipmentPictureService {
 
     @Transactional(readOnly = true)
     public List<EquipmentPictureDto> getPictures(UUID equipmentId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
+        currentUserId(user);
         Equipment equipment = equipmentOrThrow(equipmentId);
         enforceEquipmentAccess(equipment);
         return equipmentPictureRepository.findAllByEquipmentId(equipmentId)
                 .stream()
-                .map(picture -> toDtoWithMetadata(equipmentId, picture, currentUserId))
+                .map(picture -> toDtoWithMetadata(equipmentId, picture))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public EquipmentPictureDto getPicture(UUID pictureId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
+        currentUserId(user);
         EquipmentPicture picture = pictureOrThrow(pictureId);
         enforceEquipmentAccess(picture.getEquipment());
-        return toDtoWithMetadata(picture.getEquipment().getId(), picture, currentUserId);
+        return toDtoWithMetadata(picture.getEquipment().getId(), picture);
     }
 
     @Transactional(readOnly = true)
     public Resource downloadPicture(UUID pictureId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
+        currentUserId(user);
         EquipmentPicture picture = pictureOrThrow(pictureId);
         enforceEquipmentAccess(picture.getEquipment());
-        return fileService.download(picture.getFile().getId(), currentUserId);
+        return fileService.downloadAuthorizedFile(picture.getFile().getId());
     }
 
     @Transactional
     public void deletePicture(UUID pictureId, AuthenticatedUser user) {
-        UUID currentUserId = currentUserId(user);
+        currentUserId(user);
         EquipmentPicture picture = pictureOrThrow(pictureId);
         enforceEquipmentAccess(picture.getEquipment());
         picture.setDeleted(true);
         equipmentPictureRepository.save(picture);
-        fileService.delete(picture.getFile().getId(), currentUserId);
+        fileService.deleteAuthorizedFile(picture.getFile().getId());
     }
 
     private Equipment equipmentOrThrow(UUID equipmentId) {
@@ -139,8 +140,8 @@ public class EquipmentPictureService {
                 .orElseThrow(() -> RestException.notFound("Equipment picture not found: " + pictureId));
     }
 
-    private EquipmentPictureDto toDtoWithMetadata(UUID equipmentId, EquipmentPicture picture, UUID currentUserId) {
-        fileService.getMetadata(picture.getFile().getId(), currentUserId);
+    private EquipmentPictureDto toDtoWithMetadata(UUID equipmentId, EquipmentPicture picture) {
+        fileService.getMetadataForAuthorizedFile(picture.getFile().getId());
         return EquipmentPictureDto.from(equipmentId, picture);
     }
 

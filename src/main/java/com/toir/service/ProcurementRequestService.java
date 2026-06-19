@@ -173,6 +173,7 @@ public class ProcurementRequestService {
         p.setDepartmentId(r.departmentId());
         p.setWarehouseId(r.warehouseId());
         p.setRequiredBy(r.requiredBy());
+        p.setResponsibleId(r.responsibleId());
         p.setType(normalizeType(r.type()));
         applySourceTrace(p, r.sourceDefectId(), r.sourcePprTaskId());
         p.setStatus(ProcurementRequestStatus.DRAFT);

@@ -3,6 +3,7 @@ import com.toir.dto.user.CreateRoleUserRequest;
 import com.toir.dto.user.CreateUserRequest;
 import com.toir.dto.user.UpdateUserRequest;
 import com.toir.dto.user.UserDto;
+import com.toir.dto.user.UserFilterRequest;
 import com.toir.service.users.UserService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -26,10 +27,10 @@ public class UserController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('USER_READ')")
-    public ResponseEntity<Page<UserDto>> list(@RequestParam(required = false) String search,
+    public ResponseEntity<Page<UserDto>> list(@ModelAttribute UserFilterRequest filter,
                                               @RequestParam(defaultValue = "0") int page,
                                               @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(service.search(search, page, size));
+        return ResponseEntity.ok(service.searchWithFilters(filter, page, size));
     }
 
     @GetMapping("/{id}")

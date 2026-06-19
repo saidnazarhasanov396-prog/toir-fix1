@@ -4,11 +4,13 @@ import com.toir.dto.user.CreateRoleUserRequest;
 import com.toir.dto.user.CreateUserRequest;
 import com.toir.dto.user.UpdateUserRequest;
 import com.toir.dto.user.UserDto;
+import com.toir.dto.user.UserFilterRequest;
 import com.toir.entity.users.Role;
 import com.toir.entity.users.User;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
+import com.toir.repository.specification.UserSpecifications;
 import com.toir.repository.users.RoleRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.util.AuditBuilderService;
@@ -17,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.hibernate.Hibernate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +56,29 @@ public class UserService {
                 .collect(HashMap::new, (map, user) -> map.put(user.getId(), user), HashMap::putAll);
 
         List<UserDto> content = idsPage.getContent().stream()
+                .map(usersById::get)
+                .filter(Objects::nonNull)
+                .map(UserDto::from)
+                .toList();
+
+        return new PageImpl<>(content, idsPage.getPageable(), idsPage.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<UserDto> searchWithFilters(UserFilterRequest filter, int page, int size) {
+        var pageable = PaginationUtils.pageRequest(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"));
+        Page<User> idsPage = userRepository.findAll(UserSpecifications.byFilter(filter), pageable);
+        if (idsPage.isEmpty()) {
+            return Page.empty(idsPage.getPageable());
+        }
+
+        List<UUID> ids = idsPage.getContent().stream()
+                .map(User::getId)
+                .toList();
+        Map<UUID, User> usersById = userRepository.findAllWithRolesByIdInAndIsDeletedFalse(ids).stream()
+                .collect(HashMap::new, (map, user) -> map.put(user.getId(), user), HashMap::putAll);
+
+        List<UserDto> content = ids.stream()
                 .map(usersById::get)
                 .filter(Objects::nonNull)
                 .map(UserDto::from)

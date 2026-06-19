@@ -801,7 +801,7 @@ public class WorkOrderService {
         completeLinkedPprTask(entity);
 
         WorkOrder saved = repository.save(entity);
-        syncLinkedOnClose(saved, request.result());
+        syncLinkedOnClose(saved);
         if (!isReplacementWorkOrder(saved)) {
             equipmentStatusLifecycleService.recordWorkOrderReturn(
                     saved.getId(),
@@ -1283,9 +1283,9 @@ public class WorkOrderService {
         syncRepairRequestOnComplete(workOrder);
     }
 
-    private void syncLinkedOnClose(WorkOrder workOrder, String closeResult) {
+    private void syncLinkedOnClose(WorkOrder workOrder) {
         syncDefectOnClose(workOrder);
-        syncRepairRequestOnClose(workOrder, closeResult);
+        syncRepairRequestOnComplete(workOrder);
     }
 
     private void syncRepairRequestOnStart(WorkOrder workOrder) {
@@ -1416,38 +1416,6 @@ public class WorkOrderService {
                             AuditModule.DEFECT,
                             "Defect closed after linked work orders reached terminal state",
                             defect,
-                            saved);
-                });
-    }
-
-    private void syncRepairRequestOnClose(WorkOrder workOrder, String closeResult) {
-        if (workOrder.getRepairRequestId() == null) {
-            return;
-        }
-        repairRequestRepository.findByIdAndIsDeletedFalse(workOrder.getRepairRequestId())
-                .ifPresent(request -> {
-                    if (!allWorkOrdersTerminalForRepairRequest(request.getId())) {
-                        return;
-                    }
-                    if (!allDefectsResolvedOrClosedForRepairRequest(request.getId())) {
-                        return;
-                    }
-                    if (request.getStatus() == RequestStatus.CLOSED
-                            || request.getStatus() == RequestStatus.CANCELLED
-                            || request.getStatus() == RequestStatus.REJECTED) {
-                        return;
-                    }
-                    request.setStatus(RequestStatus.CLOSED);
-                    request.setActualCompletionAt(Instant.now());
-                    request.setCloseResult(closeResult);
-                    RepairRequest saved = repairRequestRepository.save(request);
-                    auditBuilderService.log(
-                            "repair_request",
-                            saved.getId().toString(),
-                            AuditAction.CLOSE,
-                            AuditModule.REPAIR_REQUEST,
-                            "Заявка " + saved.getNumber() + " закрыта после закрытия связанных нарядов",
-                            request,
                             saved);
                 });
     }

@@ -74,6 +74,13 @@ public class FileServiceImpl implements FileService {
 
     @Override
     @Transactional(readOnly = true)
+    public FileResponse getMetadataForAuthorizedFile(UUID fileId) {
+        UploadedFile file = findActiveFile(fileId);
+        return FileResponse.from(file);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PresignedUrlResponse getPresignedUrl(UUID fileId, UUID currentUserId) {
         UploadedFile file = findOwnedFile(fileId, currentUserId);
         return presignedUrl(file);
@@ -90,6 +97,17 @@ public class FileServiceImpl implements FileService {
     @Transactional
     public void delete(UUID fileId, UUID currentUserId) {
         UploadedFile file = findOwnedFile(fileId, currentUserId);
+        softDelete(file);
+    }
+
+    @Override
+    @Transactional
+    public void deleteAuthorizedFile(UUID fileId) {
+        UploadedFile file = findActiveFile(fileId);
+        softDelete(file);
+    }
+
+    private void softDelete(UploadedFile file) {
         s3Service.delete(file.getObjectName());
         file.setDeleted(true);
         file.setDeletedAt(LocalDateTime.now());

@@ -54,6 +54,16 @@ public class FileAssetService {
                 .map(FileAssetDto::from).toList();
     }
 
+    @Transactional(readOnly = true)
+    public FileAsset findAssetByEntity(String entityType, String entityId, UUID id) {
+        FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("File not found: " + id));
+        if (!matchesEntity(asset, entityType, entityId)) {
+            throw RestException.notFound("File not found: " + id);
+        }
+        return asset;
+    }
+
     @Transactional
     public FileAssetDto upload(MultipartFile file, String entityType, String entityId, UUID uploadedById) {
         if (file == null || file.isEmpty()) {
@@ -98,7 +108,12 @@ public class FileAssetService {
     public Resource download(UUID id) {
         FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("File not found: " + id));
-        return localFileResourceResolver.load(asset.getStoragePath());
+        return load(asset);
+    }
+
+    @Transactional(readOnly = true)
+    public Resource downloadForEntity(String entityType, String entityId, UUID id) {
+        return load(findAssetByEntity(entityType, entityId, id));
     }
 
     @Transactional
@@ -126,4 +141,13 @@ public class FileAssetService {
     }
 
 
+    private Resource load(FileAsset asset) {
+        return localFileResourceResolver.load(asset.getStoragePath());
+    }
+
+    private boolean matchesEntity(FileAsset asset, String entityType, String entityId) {
+        return asset != null
+                && java.util.Objects.equals(asset.getEntityType(), entityType)
+                && java.util.Objects.equals(asset.getEntityId(), entityId);
+    }
 }

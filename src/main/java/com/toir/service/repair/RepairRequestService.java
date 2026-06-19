@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.meter.MeterReadingRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest;
+import com.toir.dto.repairrequest.RepairRequestFilterRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.workorder.CompletionMeterSnapshotRequest;
@@ -48,6 +49,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.repair.RepairRequestTemplateActionRepository;
 import com.toir.repository.repair.RepairRequestTemplateRepository;
+import com.toir.repository.specification.RepairRequestSpecifications;
 import com.toir.repository.users.EmployeeSpecialisationRepository;
 import com.toir.repository.users.UserRepository;
 
@@ -73,6 +75,7 @@ import com.toir.dto.repairrequest.RepairRequestTemplateSummaryDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -131,8 +134,7 @@ public class RepairRequestService {
             RequestStatus.CLOSED,
             RequestStatus.CANCELLED
     );
-    private static final Set<WorkOrderStatus> TERMINAL_WORK_ORDER_STATUSES = EnumSet.of(
-            WorkOrderStatus.COMPLETED,
+    private static final Set<WorkOrderStatus> CLOSE_READY_WORK_ORDER_STATUSES = EnumSet.of(
             WorkOrderStatus.CLOSED,
             WorkOrderStatus.CANCELLED
     );
@@ -158,6 +160,19 @@ public class RepairRequestService {
                 normalizedSearch,
                 priorityStr,
                 pageable
+        );
+        return toDtoPage(resultPage);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<RepairRequestDto> search(RepairRequestFilterRequest filter, Integer page, Integer pageSize) {
+        Page<RepairRequest> resultPage = repository.findAll(
+                RepairRequestSpecifications.byFilter(filterOrEmpty(filter)),
+                PaginationUtils.pageRequest(
+                        page == null ? 0 : page,
+                        pageSize == null ? 20 : pageSize,
+                        Sort.by(Sort.Direction.DESC, "updatedAt")
+                )
         );
         return toDtoPage(resultPage);
     }
@@ -870,6 +885,33 @@ public class RepairRequestService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public RepairRequestStatsResponse getStats(RepairRequestFilterRequest filter) {
+        List<RepairRequest> requests = repository.findAll(
+                RepairRequestSpecifications.byFilter(filterOrEmpty(filter))
+        );
+        List<UUID> requestIds = requests.stream()
+                .map(RepairRequest::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        Set<UUID> requestIdsWithWorkOrders = requestIds.isEmpty()
+                ? Set.of()
+                : workOrderRepository.findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(requestIds)
+                .stream()
+                .map(WorkOrder::getRepairRequestId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        long total = requests.size();
+        long emergency = requests.stream()
+                .filter(request -> request.getPriority() == PriorityLevel.EMERGENCY)
+                .count();
+        long open = requests.stream()
+                .filter(request -> request.getStatus() == RequestStatus.OPEN)
+                .count();
+        return new RepairRequestStatsResponse(total, emergency, open, requestIdsWithWorkOrders.size());
+    }
+
     private String toSearchPattern(String search) {
         if (search == null || search.isBlank()) {
             return null;
@@ -883,6 +925,41 @@ public class RepairRequestService {
             return null;
         }
         return search.trim();
+    }
+
+    private RepairRequestFilterRequest filterOrEmpty(RepairRequestFilterRequest filter) {
+        if (filter != null) {
+            return filter;
+        }
+        return new RepairRequestFilterRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     private long safe(Long value) {
@@ -1054,8 +1131,8 @@ public class RepairRequestService {
         if (linkedWorkOrders.isEmpty()) {
             throw RestException.badRequest("Cannot close repair request without linked work order execution evidence");
         }
-        if (linkedWorkOrders.stream().anyMatch(workOrder -> !isWorkOrderTerminal(workOrder))) {
-            throw RestException.badRequest("Cannot close repair request while active linked work orders exist");
+        if (linkedWorkOrders.stream().anyMatch(workOrder -> !isWorkOrderCloseReady(workOrder))) {
+            throw RestException.badRequest("Cannot close repair request while linked work orders are not closed or cancelled");
         }
 
         List<Defect> linkedDefects = defectRepository
@@ -1065,8 +1142,8 @@ public class RepairRequestService {
         }
     }
 
-    private boolean isWorkOrderTerminal(WorkOrder workOrder) {
-        return workOrder != null && TERMINAL_WORK_ORDER_STATUSES.contains(workOrder.getStatus());
+    private boolean isWorkOrderCloseReady(WorkOrder workOrder) {
+        return workOrder != null && CLOSE_READY_WORK_ORDER_STATUSES.contains(workOrder.getStatus());
     }
 
     private boolean isDefectTerminal(Defect defect) {

@@ -14,11 +14,15 @@ public interface FileService {
 
     FileResponse getMetadata(UUID fileId, UUID currentUserId);
 
+    FileResponse getMetadataForAuthorizedFile(UUID fileId);
+
     PresignedUrlResponse getPresignedUrl(UUID fileId, UUID currentUserId);
 
     PresignedUrlResponse getPresignedUrlForAuthorizedFile(UUID fileId);
 
     void delete(UUID fileId, UUID currentUserId);
+
+    void deleteAuthorizedFile(UUID fileId);
 
     Resource download(UUID fileId, UUID currentUserId);
 
