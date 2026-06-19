@@ -24,6 +24,7 @@ public class FileValidator {
             "image/png",
             "image/jpeg",
             "image/webp",
+            "image/gif",
             "application/pdf",
             "text/plain",
             "application/msword",
@@ -33,7 +34,7 @@ public class FileValidator {
     );
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
-            "png", "jpg", "jpeg", "webp", "pdf", "txt", "doc", "docx", "xls", "xlsx"
+            "png", "jpg", "jpeg", "webp", "gif", "pdf", "txt", "doc", "docx", "xls", "xlsx"
     );
 
     private static final Set<String> BLOCKED_EXTENSIONS = Set.of(

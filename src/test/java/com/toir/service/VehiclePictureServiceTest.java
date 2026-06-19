@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.file.FileResponse;
 import com.toir.dto.file.UploadFileResponse;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.Equipment;
@@ -22,8 +23,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mock.web.MockMultipartFile;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -125,6 +128,92 @@ class VehiclePictureServiceTest {
         verify(fileService, never()).upload(any(), any(), any());
     }
 
+    @Test
+    void getPicturesUsesAuthorizedMetadataAfterVehicleScopeCheck() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        Equipment equipment = vehicleEquipment(equipmentId);
+        VehiclePicture picture = vehiclePicture(vehicleDetails(equipmentId), uploadedFile(fileId, "front.png", "image/png"));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehiclePictureRepository.findAllByEquipmentId(equipmentId)).thenReturn(List.of(picture));
+        when(fileService.getMetadataForAuthorizedFile(fileId)).thenReturn(fileResponse(fileId));
+
+        var result = service.getPictures(equipmentId, authenticatedUser());
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().downloadUrl()).isEqualTo("/api/v1/vehicles/pictures/" + picture.getId() + "/download");
+        verify(scopeAccessService).assertCanAccessEquipmentScope(null, equipment.getDepartmentId());
+        verify(fileService).getMetadataForAuthorizedFile(fileId);
+        verify(fileService, never()).getMetadata(eq(fileId), any(UUID.class));
+    }
+
+    @Test
+    void downloadPictureUsesAuthorizedFileDownloadAfterVehicleScopeCheck() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        Equipment equipment = vehicleEquipment(equipmentId);
+        VehiclePicture picture = vehiclePicture(vehicleDetails(equipmentId), uploadedFile(fileId, "front.png", "image/png"));
+        when(vehiclePictureRepository.findByIdActive(picture.getId())).thenReturn(Optional.of(picture));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(fileService.downloadAuthorizedFile(fileId)).thenReturn(new ByteArrayResource("image".getBytes()));
+
+        var resource = service.downloadPicture(picture.getId(), authenticatedUser());
+
+        assertThat(resource).isNotNull();
+        verify(scopeAccessService).assertCanAccessEquipmentScope(null, equipment.getDepartmentId());
+        verify(fileService).downloadAuthorizedFile(fileId);
+        verify(fileService, never()).download(eq(fileId), any(UUID.class));
+    }
+
+    @Test
+    void deletePictureUsesAuthorizedFileDeleteAfterVehicleScopeCheck() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        Equipment equipment = vehicleEquipment(equipmentId);
+        VehiclePicture picture = vehiclePicture(vehicleDetails(equipmentId), uploadedFile(fileId, "front.png", "image/png"));
+        when(vehiclePictureRepository.findByIdActive(picture.getId())).thenReturn(Optional.of(picture));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        service.deletePicture(picture.getId(), authenticatedUser());
+
+        assertThat(picture.isDeleted()).isTrue();
+        verify(scopeAccessService).assertCanAccessEquipmentScope(null, equipment.getDepartmentId());
+        verify(vehiclePictureRepository).save(picture);
+        verify(fileService).deleteAuthorizedFile(fileId);
+        verify(fileService, never()).delete(eq(fileId), any(UUID.class));
+    }
+
+    @Test
+    void uploadPicturesAcceptsImageJpgAliasBeforeStorage() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        Equipment equipment = vehicleEquipment(equipmentId);
+        VehicleDetails details = vehicleDetails(equipmentId);
+        UploadedFile uploadedFile = uploadedFile(fileId, "front.jpg", "image/jpeg");
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(fileService.upload(any(), eq(FileCategory.VEHICLE_PICTURE), eq(userId)))
+                .thenReturn(UploadFileResponse.builder().id(fileId).build());
+        when(uploadedFileRepository.findByIdAndDeletedFalse(fileId)).thenReturn(Optional.of(uploadedFile));
+        when(vehiclePictureRepository.saveAllAndFlush(any()))
+                .thenAnswer(invocation -> {
+                    List<VehiclePicture> pictures = invocation.getArgument(0);
+                    pictures.getFirst().setId(UUID.randomUUID());
+                    return pictures;
+                });
+
+        var result = service.uploadPictures(
+                equipmentId,
+                List.of(new MockMultipartFile("files", "front.jpg", "image/jpg", "jpg".getBytes())),
+                List.of("Front"),
+                null,
+                authenticatedUser()
+        );
+
+        assertThat(result).hasSize(1);
+        verify(fileService).upload(any(), eq(FileCategory.VEHICLE_PICTURE), eq(userId));
+    }
+
     private Equipment vehicleEquipment(UUID id) {
         Equipment equipment = new Equipment();
         equipment.setId(id);
@@ -155,8 +244,36 @@ class VehiclePictureServiceTest {
         file.setObjectName("vehicle-pictures/" + id + ".png");
         file.setContentType(contentType);
         file.setSize(123L);
+        file.setExtension("png");
+        file.setUploadedBy(UUID.randomUUID());
+        file.setCategory(FileCategory.VEHICLE_PICTURE);
         file.setDeleted(false);
         return file;
+    }
+
+    private VehiclePicture vehiclePicture(VehicleDetails details, UploadedFile file) {
+        VehiclePicture picture = new VehiclePicture();
+        picture.setId(UUID.randomUUID());
+        picture.setVehicleDetails(details);
+        picture.setFile(file);
+        picture.setPictureName("Front");
+        picture.setPictureType("INSPECTION");
+        picture.setUploadedBy(UUID.randomUUID());
+        picture.setUploadedAt(LocalDateTime.parse("2026-06-19T06:00:00"));
+        return picture;
+    }
+
+    private FileResponse fileResponse(UUID fileId) {
+        return FileResponse.builder()
+                .id(fileId)
+                .originalName("front.png")
+                .contentType("image/png")
+                .extension("png")
+                .size(123L)
+                .uploadedBy(UUID.randomUUID())
+                .category(FileCategory.VEHICLE_PICTURE)
+                .deleted(false)
+                .build();
     }
 
     private AuthenticatedUser authenticatedUser() {
