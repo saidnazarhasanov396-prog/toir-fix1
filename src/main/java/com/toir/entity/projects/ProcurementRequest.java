@@ -1,6 +1,7 @@
 package com.toir.entity.projects;
 import com.toir.entity.BaseEntity;
 import com.toir.entity.equipment.ProcurementRequestLine;
+import com.toir.enums.PriorityLevel;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 
@@ -50,6 +51,10 @@ public class ProcurementRequest extends BaseEntity {
 
     @Column(name = "responsible_id")
     private UUID responsibleId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private PriorityLevel priority = PriorityLevel.MEDIUM;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

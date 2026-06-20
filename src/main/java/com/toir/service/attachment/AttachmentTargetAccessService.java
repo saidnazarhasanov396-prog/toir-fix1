@@ -5,6 +5,7 @@ import com.toir.entity.CompletionAct;
 import com.toir.entity.StockMovement;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.AttachmentTargetType;
@@ -13,6 +14,7 @@ import com.toir.enums.FileCategory;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.CompletionActRepository;
+import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -36,6 +38,7 @@ public class AttachmentTargetAccessService {
     private final CompletionActRepository completionActRepository;
     private final ApprovalRequestRepository approvalRequestRepository;
     private final StockMovementRepository stockMovementRepository;
+    private final ProcurementRequestRepository procurementRequestRepository;
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
 
@@ -53,6 +56,7 @@ public class AttachmentTargetAccessService {
             case REPAIR_REQUEST -> assertCanAccessRepairRequest(targetId);
             case COMPLETION_ACT -> assertCanAccessCompletionAct(targetId);
             case APPROVAL -> assertCanAccessApproval(targetId);
+            case PROCUREMENT_REQUEST -> assertCanAccessProcurementRequest(targetId);
             case STOCK_MOVEMENT -> assertCanAccessStockMovement(targetId);
         }
         return targetType;
@@ -64,7 +68,7 @@ public class AttachmentTargetAccessService {
             case VEHICLE -> FileCategory.VEHICLE_DOCUMENT;
             case WORK_ORDER -> FileCategory.WORK_ORDER_DOCUMENT;
             case STOCK_MOVEMENT -> FileCategory.STOCK_MOVEMENT_DOCUMENT;
-            case REPAIR_REQUEST, COMPLETION_ACT, APPROVAL -> FileCategory.DOCUMENT;
+            case REPAIR_REQUEST, COMPLETION_ACT, APPROVAL, PROCUREMENT_REQUEST -> FileCategory.DOCUMENT;
         };
     }
 
@@ -162,5 +166,68 @@ public class AttachmentTargetAccessService {
             return;
         }
         throw new AccessDeniedException("Access denied by warehouse scope");
+    }
+
+    private void assertCanAccessProcurementRequest(UUID requestId) {
+        ProcurementRequest request = procurementRequestRepository.findByIdAndIsDeletedFalse(requestId)
+                .orElseThrow(() -> RestException.notFound("Procurement request not found: " + requestId));
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        if (hasConflictingDepartmentWarehouseScope(request)) {
+            throw new AccessDeniedException("Access denied by procurement scope");
+        }
+        if (canAccessProcurementDepartment(request)
+                || canAccessProcurementWarehouse(request)
+                || canReadRequester(request.getRequestedBy())) {
+            return;
+        }
+        throw new AccessDeniedException("Access denied by procurement scope");
+    }
+
+    private boolean hasConflictingDepartmentWarehouseScope(ProcurementRequest request) {
+        UUID departmentId = request.getDepartmentId();
+        UUID warehouseId = request.getWarehouseId();
+        if (departmentId == null || warehouseId == null) {
+            return false;
+        }
+        Warehouse warehouse = loadWarehouseOrNull(warehouseId);
+        return warehouse != null
+                && warehouse.getDepartmentId() != null
+                && !departmentId.equals(warehouse.getDepartmentId());
+    }
+
+    private boolean canAccessProcurementDepartment(ProcurementRequest request) {
+        UUID departmentId = request.getDepartmentId();
+        return departmentId != null && scopeAccessService.canAccessDepartment(departmentId);
+    }
+
+    private boolean canAccessProcurementWarehouse(ProcurementRequest request) {
+        Warehouse warehouse = loadWarehouseOrNull(request.getWarehouseId());
+        return warehouse != null
+                && ((warehouse.getDepartmentId() != null
+                && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId()))
+                || (warehouse.getResponsibleId() != null
+                && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId())));
+    }
+
+    private boolean canReadRequester(UUID requestedBy) {
+        if (requestedBy == null) {
+            return false;
+        }
+        UUID currentUserId = scopeAccessService.currentUserIdOrNull();
+        if (requestedBy.equals(currentUserId)) {
+            return true;
+        }
+        return scopeAccessService.currentEmployeeId()
+                .map(requestedBy::equals)
+                .orElse(false);
+    }
+
+    private Warehouse loadWarehouseOrNull(UUID warehouseId) {
+        if (warehouseId == null) {
+            return null;
+        }
+        return warehouseRepository.findByIdAndIsDeletedFalse(warehouseId).orElse(null);
     }
 }

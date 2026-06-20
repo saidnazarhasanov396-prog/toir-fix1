@@ -103,13 +103,7 @@ class AttachmentGroupControllerContractTest {
     void createGroupRejectsTargetWhenUserOnlyHasUnrelatedStockPermission() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
-        SecurityContextHolder.getContext().setAuthentication(
-                new TestingAuthenticationToken(
-                        new AuthenticatedUser(userId.toString(), "stock", "stock@example.com", "Stock User", null, "USER", List.of()),
-                        null,
-                        List.of(new SimpleGrantedAuthority("STOCK_RECEIVE"))
-                )
-        );
+        authenticateWithAuthorities(userId, "STOCK_RECEIVE");
 
         mockMvc.perform(multipart("/api/v1/attachments/groups")
                         .file(new MockMultipartFile("files", "front.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
@@ -119,6 +113,54 @@ class AttachmentGroupControllerContractTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(service);
+    }
+
+    @Test
+    void createGroupAllowsProcurementCreateTarget() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID groupId = UUID.randomUUID();
+        UUID firstFileId = UUID.randomUUID();
+        UUID secondFileId = UUID.randomUUID();
+        authenticateWithAuthorities(userId, "PROCUREMENT_CREATE");
+        when(service.createGroup(
+                eq("Purchase documents"),
+                eq(null),
+                eq("PROCUREMENT_REQUEST"),
+                eq(targetId),
+                eq(null),
+                eq(null),
+                any(),
+                eq(null),
+                any()
+        ))
+                .thenReturn(group(groupId, targetId, firstFileId, secondFileId, AttachmentTargetType.PROCUREMENT_REQUEST));
+
+        mockMvc.perform(multipart("/api/v1/attachments/groups")
+                        .file(new MockMultipartFile("files", "invoice.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .param("title", "Purchase documents")
+                        .param("targetType", "PROCUREMENT_REQUEST")
+                        .param("targetId", targetId.toString()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.targetType").value("PROCUREMENT_REQUEST"));
+    }
+
+    @Test
+    void listGroupsAllowsProcurementReadTarget() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID groupId = UUID.randomUUID();
+        UUID firstFileId = UUID.randomUUID();
+        UUID secondFileId = UUID.randomUUID();
+        authenticateWithAuthorities(userId, "PROCUREMENT_READ");
+        when(service.listGroups(eq("PROCUREMENT_REQUEST"), eq(targetId), any()))
+                .thenReturn(List.of(group(groupId, targetId, firstFileId, secondFileId, AttachmentTargetType.PROCUREMENT_REQUEST)));
+
+        mockMvc.perform(get("/api/v1/attachments/groups")
+                        .param("targetType", "PROCUREMENT_REQUEST")
+                        .param("targetId", targetId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].targetType").value("PROCUREMENT_REQUEST"));
     }
 
     @Test
@@ -184,11 +226,21 @@ class AttachmentGroupControllerContractTest {
     }
 
     private AttachmentGroupDto group(UUID groupId, UUID targetId, UUID firstFileId, UUID secondFileId) {
+        return group(groupId, targetId, firstFileId, secondFileId, AttachmentTargetType.EQUIPMENT);
+    }
+
+    private AttachmentGroupDto group(
+            UUID groupId,
+            UUID targetId,
+            UUID firstFileId,
+            UUID secondFileId,
+            AttachmentTargetType targetType
+    ) {
         return new AttachmentGroupDto(
                 groupId,
                 "Passport",
                 "Driver passport",
-                AttachmentTargetType.EQUIPMENT,
+                targetType,
                 targetId,
                 null,
                 null,
@@ -219,6 +271,11 @@ class AttachmentGroupControllerContractTest {
     }
 
     private void authenticate(UUID userId) {
+        authenticateWithAuthorities(userId, "EQUIPMENT_READ", "EQUIPMENT_UPDATE");
+    }
+
+    private void authenticateWithAuthorities(UUID userId, String... authorities) {
+        List<String> permissionNames = List.of(authorities);
         AuthenticatedUser user = new AuthenticatedUser(
                 userId.toString(),
                 "user",
@@ -226,16 +283,13 @@ class AttachmentGroupControllerContractTest {
                 "User",
                 null,
                 "USER",
-                List.of("EQUIPMENT_READ", "EQUIPMENT_UPDATE")
+                permissionNames
         );
         SecurityContextHolder.getContext().setAuthentication(
                 new TestingAuthenticationToken(
                         user,
                         null,
-                        List.of(
-                                new SimpleGrantedAuthority("EQUIPMENT_READ"),
-                                new SimpleGrantedAuthority("EQUIPMENT_UPDATE")
-                        )
+                        permissionNames.stream().map(SimpleGrantedAuthority::new).toList()
                 )
         );
     }

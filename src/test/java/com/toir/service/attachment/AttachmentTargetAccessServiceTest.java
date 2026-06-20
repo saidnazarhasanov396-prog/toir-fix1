@@ -2,10 +2,13 @@ package com.toir.service.attachment;
 
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
+import com.toir.entity.projects.ProcurementRequest;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.AttachmentTargetType;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.CompletionActRepository;
+import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -23,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -50,6 +54,9 @@ class AttachmentTargetAccessServiceTest {
     StockMovementRepository stockMovementRepository;
 
     @Mock
+    ProcurementRequestRepository procurementRequestRepository;
+
+    @Mock
     WarehouseRepository warehouseRepository;
 
     @Mock
@@ -66,6 +73,7 @@ class AttachmentTargetAccessServiceTest {
                 completionActRepository,
                 approvalRequestRepository,
                 stockMovementRepository,
+                procurementRequestRepository,
                 warehouseRepository,
                 scopeAccessService
         );
@@ -103,6 +111,51 @@ class AttachmentTargetAccessServiceTest {
                 .hasMessageContaining("approval scope");
     }
 
+    @Test
+    void departmentScopedUserCanAccessProcurementRequestAttachments() {
+        UUID requestId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        ProcurementRequest request = procurementRequest(departmentId, null, null);
+        when(procurementRequestRepository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+
+        assertThatCode(() -> service.assertCanAccess(AttachmentTargetType.PROCUREMENT_REQUEST, requestId))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void warehouseScopedUserCanAccessProcurementRequestAttachments() {
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID warehouseDepartmentId = UUID.randomUUID();
+        ProcurementRequest request = procurementRequest(null, warehouseId, null);
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        warehouse.setDepartmentId(warehouseDepartmentId);
+        when(procurementRequestRepository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessDepartment(warehouseDepartmentId)).thenReturn(true);
+
+        assertThatCode(() -> service.assertCanAccess(AttachmentTargetType.PROCUREMENT_REQUEST, requestId))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void forbiddenProcurementRequestAttachmentScopeThrows() {
+        UUID requestId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        ProcurementRequest request = procurementRequest(departmentId, null, null);
+        when(procurementRequestRepository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.assertCanAccess(AttachmentTargetType.PROCUREMENT_REQUEST, requestId))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("procurement scope");
+    }
+
     private ApprovalRequest approvalWithTarget(ApprovalTargetType targetType) {
         ApprovalRequest approval = new ApprovalRequest();
         approval.setRequesterId(UUID.randomUUID());
@@ -111,5 +164,14 @@ class AttachmentTargetAccessServiceTest {
         approval.setDocumentType(targetType.name());
         approval.setDocumentId(approval.getTargetId());
         return approval;
+    }
+
+    private ProcurementRequest procurementRequest(UUID departmentId, UUID warehouseId, UUID requestedBy) {
+        ProcurementRequest request = new ProcurementRequest();
+        request.setId(UUID.randomUUID());
+        request.setDepartmentId(departmentId);
+        request.setWarehouseId(warehouseId);
+        request.setRequestedBy(requestedBy);
+        return request;
     }
 }

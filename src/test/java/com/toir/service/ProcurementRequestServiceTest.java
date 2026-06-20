@@ -21,6 +21,7 @@ import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.PriorityLevel;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.StockMovementType;
@@ -208,6 +209,57 @@ class ProcurementRequestServiceTest {
         ArgumentCaptor<ProcurementRequest> saved = ArgumentCaptor.forClass(ProcurementRequest.class);
         verify(repository).save(saved.capture());
         assertThat(saved.getValue().getResponsibleId()).isEqualTo(responsibleId);
+    }
+
+    @Test
+    void creatingRequestDefaultsPriorityToMedium() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID sparePartId = UUID.randomUUID();
+        SparePart sparePart = sparePart(sparePartId);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.create(new ProcurementRequestRequest(
+                "Default priority procurement",
+                null,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                LocalDate.of(2026, 7, 15),
+                List.of(new ProcurementLineRequest(sparePartId, 2, "PCS", 10.0, null))
+        ));
+
+        assertThat(result.priority()).isEqualTo(PriorityLevel.MEDIUM);
+        ArgumentCaptor<ProcurementRequest> saved = ArgumentCaptor.forClass(ProcurementRequest.class);
+        verify(repository).save(saved.capture());
+        assertThat(saved.getValue().getPriority()).isEqualTo(PriorityLevel.MEDIUM);
+    }
+
+    @Test
+    void creatingRequestPreservesPriorityInResponse() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID sparePartId = UUID.randomUUID();
+        SparePart sparePart = sparePart(sparePartId);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.create(new ProcurementRequestRequest(
+                "Critical procurement",
+                "Urgent replacement",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                LocalDate.of(2026, 7, 15),
+                List.of(new ProcurementLineRequest(sparePartId, 1, "PCS", 50.0, "critical")),
+                ProcurementRequestType.SPARE_PART,
+                null,
+                null,
+                null,
+                PriorityLevel.CRITICAL
+        ));
+
+        assertThat(result.priority()).isEqualTo(PriorityLevel.CRITICAL);
+        ArgumentCaptor<ProcurementRequest> saved = ArgumentCaptor.forClass(ProcurementRequest.class);
+        verify(repository).save(saved.capture());
+        assertThat(saved.getValue().getPriority()).isEqualTo(PriorityLevel.CRITICAL);
     }
 
     @Test

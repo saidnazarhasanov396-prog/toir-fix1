@@ -11,6 +11,7 @@ public enum AttachmentTargetType {
     REPAIR_REQUEST,
     COMPLETION_ACT,
     APPROVAL,
+    PROCUREMENT_REQUEST,
     STOCK_MOVEMENT;
 
     public static AttachmentTargetType from(String value) {
