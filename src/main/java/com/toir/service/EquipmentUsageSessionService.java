@@ -88,7 +88,8 @@ public class EquipmentUsageSessionService {
         session.setStatus(EquipmentUsageSessionStatus.OPEN);
         applyVehicleAssignmentDeadline(equipment, session);
 
-        return EquipmentUsageSessionResponse.from(sessionRepository.save(session), operator);
+        EquipmentUsageSession saved = sessionRepository.save(session);
+        return EquipmentUsageSessionResponse.from(saved, operator, saved.getStartedAt());
     }
 
     @Transactional

@@ -5,6 +5,7 @@ import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.dto.warehouse.WarehouseStockBalanceDto;
 import com.toir.dto.warehouse.WarehouseStockDto;
 import com.toir.dto.warehouse.WarehouseStockLedgerDto;
+import com.toir.dto.warehouse.WarehouseStockReconciliationDto;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.WarehouseEquipmentItemService;
@@ -14,6 +15,7 @@ import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
+import java.util.List;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -81,6 +83,12 @@ public class WarehouseController {
                                                                       @RequestParam(defaultValue = "0") int page,
                                                                       @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(warehouseQueryService.stockLedgers(id, page, size));
+    }
+
+    @GetMapping("/{id}/stock-reconciliation")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<List<WarehouseStockReconciliationDto>> stockReconciliation(@PathVariable UUID id) {
+        return ResponseEntity.ok(warehouseQueryService.stockReconciliation(id));
     }
 
     @GetMapping("/{warehouseId}/equipment")

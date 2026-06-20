@@ -10,6 +10,9 @@ import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.LegacyStockProjectionService.StockKey;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -33,6 +36,7 @@ public class WarehouseReorderService {
     private final WarehouseRepository warehouseRepository;
     private final SparePartRepository sparePartRepository;
     private final ScopeAccessService scopeAccessService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
     @Transactional(readOnly = true)
     public Page<ReorderSuggestionDto> suggestions(UUID warehouseId, int page, int size) {
@@ -74,10 +78,13 @@ public class WarehouseReorderService {
         Map<UUID, String> warehouseNames = warehousesById.values().stream()
                 .collect(Collectors.toMap(Warehouse::getId, Warehouse::getName));
         Map<UUID, SparePart> sparePartsById = loadSparePartsById(stocks);
+        Map<StockKey, WmsStockSnapshot> snapshots = warehouseId == null
+                ? legacyStockProjectionService.currentAll()
+                : legacyStockProjectionService.currentForWarehouse(warehouseId);
 
         List<ReorderSuggestionDto> suggestions = new ArrayList<>();
         for (WarehouseStock stock : stocks) {
-            buildSuggestion(stock, warehouseNames, sparePartsById).ifPresent(suggestions::add);
+            buildSuggestion(stock, snapshots, warehouseNames, sparePartsById).ifPresent(suggestions::add);
         }
         return suggestions;
     }
@@ -112,9 +119,12 @@ public class WarehouseReorderService {
     }
 
     private Optional<ReorderSuggestionDto> buildSuggestion(WarehouseStock stock,
+                                                           Map<StockKey, WmsStockSnapshot> snapshots,
                                                            Map<UUID, String> warehouseNames,
                                                            Map<UUID, SparePart> sparePartsById) {
-        double available = stock.getAvailable();
+        WmsStockSnapshot snapshot = legacyStockProjectionService.snapshot(
+                snapshots, stock.getWarehouseId(), stock.getSparePartId());
+        double available = snapshot.availableQty().doubleValue();
         Double reorderPoint = positive(stock.getReorderPoint());
         Double stockMinQty = positive(stock.getMinQty());
         SparePart sparePart = sparePartsById.get(stock.getSparePartId());
@@ -151,7 +161,7 @@ public class WarehouseReorderService {
                 sparePartName,
                 sparePartCode,
                 sparePartUnit,
-                stock.getQuantity(),
+                snapshot.qtyOnHand().doubleValue(),
                 available,
                 effectiveMinimum,
                 reorderPoint,

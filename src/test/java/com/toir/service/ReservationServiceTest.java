@@ -12,6 +12,7 @@ import com.toir.repository.ReservationRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,6 +54,9 @@ class ReservationServiceTest {
     @Mock
     ToirStockService toirStockService;
 
+    @Mock
+    LegacyStockProjectionService legacyStockProjectionService;
+
     @InjectMocks
     ReservationService service;
 
@@ -66,7 +70,6 @@ class ReservationServiceTest {
 
         WarehouseStock stock = stock(stockId, warehouseId, sparePartId, 10, 3);
         when(stockRepository.findByIdAndIsDeletedFalse(stockId)).thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(Reservation.class)))
                 .thenAnswer(invocation -> {
                     Reservation reservation = invocation.getArgument(0);
@@ -74,6 +77,10 @@ class ReservationServiceTest {
                     return reservation;
                 });
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setReservedQty(7);
+            return stock;
+        });
 
         ReservationDto result = service.reserve(new ReservationRequest(
                 stockId,
@@ -116,6 +123,16 @@ class ReservationServiceTest {
         WarehouseStock stock = stock(stockId, UUID.randomUUID(), UUID.randomUUID(), 10, 8);
         when(stockRepository.findByIdAndIsDeletedFalse(stockId)).thenReturn(Optional.of(stock));
 
+        when(repository.save(any(Reservation.class)))
+                .thenAnswer(invocation -> {
+                    Reservation reservation = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(reservation, "id", UUID.randomUUID());
+                    return reservation;
+                });
+        org.mockito.Mockito.doThrow(RestException.badRequest(
+                        "Insufficient available stock: available=2, requested=3"))
+                .when(toirStockService).reserve(any(), any(), any(), any(), any(), any(), any(), any());
+
         assertThatThrownBy(() -> service.reserve(new ReservationRequest(
                 stockId,
                 UUID.randomUUID(),
@@ -124,10 +141,10 @@ class ReservationServiceTest {
                 3
         )))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Cannot reserve more than available");
+                .hasMessageContaining("Insufficient available stock");
 
         verify(stockRepository, never()).save(any(WarehouseStock.class));
-        verify(repository, never()).save(any(Reservation.class));
+        verify(repository).save(any(Reservation.class));
         verify(stockMovementRepository, never()).save(any(StockMovement.class));
     }
 
@@ -169,9 +186,12 @@ class ReservationServiceTest {
 
         when(repository.findByIdAndIsDeletedFalse(reservationId)).thenReturn(Optional.of(reservation));
         when(stockRepository.findByIdAndIsDeletedFalse(stockId)).thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(Reservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setReservedQty(6);
+            return stock;
+        });
 
         ReservationDto result = service.cancel(reservationId);
 
@@ -212,9 +232,13 @@ class ReservationServiceTest {
 
         when(repository.findByIdAndIsDeletedFalse(reservationId)).thenReturn(Optional.of(reservation));
         when(stockRepository.findByIdAndIsDeletedFalse(stockId)).thenReturn(Optional.of(stock));
-        when(stockRepository.save(any(WarehouseStock.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(Reservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(15);
+            stock.setReservedQty(3);
+            return stock;
+        });
 
         ReservationDto result = service.fulfill(reservationId);
 
@@ -253,12 +277,17 @@ class ReservationServiceTest {
         when(repository.findByIdAndIsDeletedFalse(reservationId)).thenReturn(Optional.of(reservation));
         when(stockRepository.findByIdAndIsDeletedFalse(stockId)).thenReturn(Optional.of(stock));
 
+        when(repository.save(any(Reservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        org.mockito.Mockito.doThrow(RestException.badRequest(
+                        "Stock reserved quantity is lower than reservation quantity: reserved=3, requested=5"))
+                .when(toirStockService).fulfillReservation(any(), any(), any(), any(), any(), any(), any(), any());
+
         assertThatThrownBy(() -> service.fulfill(reservationId))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("reserved quantity");
 
         verify(stockRepository, never()).save(any(WarehouseStock.class));
-        verify(repository, never()).save(any(Reservation.class));
+        verify(repository).save(any(Reservation.class));
         verify(stockMovementRepository, never()).save(any(StockMovement.class));
     }
 

@@ -1,6 +1,7 @@
 package com.toir.dto.warehouse;
 
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.service.warehouse.WmsStockSnapshot;
 
 import java.time.Instant;
 import java.util.List;
@@ -21,13 +22,22 @@ public record WarehouseStockDto(
     public record SparePartRef(UUID id, String code, String name) {}
 
     public static WarehouseStockDto from(WarehouseStock s) {
+        return from(s, new WmsStockSnapshot(
+                s.getWarehouseId(),
+                s.getSparePartId(),
+                java.math.BigDecimal.valueOf(s.getQuantity()),
+                java.math.BigDecimal.valueOf(s.getReservedQty())
+        ));
+    }
+
+    public static WarehouseStockDto from(WarehouseStock s, WmsStockSnapshot snapshot) {
         SparePartRef spare = s.getSparePart() != null
                 ? new SparePartRef(s.getSparePart().getId(), s.getSparePart().getCode(), s.getSparePart().getName())
                 : null;
         return new WarehouseStockDto(
                 s.getId(),
-                s.getQuantity(),
-                s.getReservedQty(),
+                snapshot.qtyOnHand().doubleValue(),
+                snapshot.qtyReserved().doubleValue(),
                 s.getMinQty(),
                 s.getMaxQty(),
                 s.getBinLocation(),

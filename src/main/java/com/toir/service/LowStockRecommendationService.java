@@ -11,6 +11,8 @@ import com.toir.repository.OperationalIssueRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,6 +38,7 @@ public class LowStockRecommendationService {
     private final SparePartRepository sparePartRepository;
     private final OperationalIssueRepository operationalIssueRepository;
     private final OperationalIssueService operationalIssueService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
     @Transactional
     public LowStockEvaluationResultDto evaluateStock(WarehouseStock stock) {
@@ -61,7 +64,8 @@ public class LowStockRecommendationService {
 
         UUID sourceId = sourceId(warehouseId, sparePartId);
         boolean hasOpenIssue = hasOpenIssue(sourceId);
-        double availableQuantity = stock.getAvailable();
+        WmsStockSnapshot snapshot = legacyStockProjectionService.current(warehouseId, sparePartId);
+        double availableQuantity = snapshot.availableQty().doubleValue();
         if (availableQuantity > triggerThreshold) {
             if (hasOpenIssue) {
                 operationalIssueService.resolveOpen(SOURCE_TYPE, sourceId, RESOLUTION_MESSAGE);
@@ -81,8 +85,8 @@ public class LowStockRecommendationService {
                 SOURCE_TYPE,
                 sourceId,
                 "Low stock: " + firstNonBlank(part.getName(), part.getCode(), sparePartId.toString()),
-                message(wh, part, stock, availableQuantity, triggerThreshold, recommendedOrderQuantity),
-                metadata(wh, part, stock, availableQuantity, triggerThreshold, recommendedOrderQuantity)
+                message(wh, part, stock, snapshot, availableQuantity, triggerThreshold, recommendedOrderQuantity),
+                metadata(wh, part, stock, snapshot, availableQuantity, triggerThreshold, recommendedOrderQuantity)
         );
         return hasOpenIssue
                 ? LowStockEvaluationResultDto.evaluatedUpdated()
@@ -174,6 +178,7 @@ public class LowStockRecommendationService {
     private String message(Warehouse warehouse,
                            SparePart sparePart,
                            WarehouseStock stock,
+                           WmsStockSnapshot snapshot,
                            double availableQuantity,
                            double triggerThreshold,
                            double recommendedOrderQuantity) {
@@ -182,8 +187,8 @@ public class LowStockRecommendationService {
                         firstNonBlank(warehouse.getName(), warehouse.getCode(), warehouse.getId().toString()),
                         sparePart.getCode(),
                         sparePart.getName(),
-                        stock.getQuantity(),
-                        stock.getReservedQty(),
+                        snapshot.qtyOnHand(),
+                        snapshot.qtyReserved(),
                         availableQuantity,
                         triggerThreshold,
                         recommendedOrderQuantity
@@ -193,6 +198,7 @@ public class LowStockRecommendationService {
     private Map<String, Object> metadata(Warehouse warehouse,
                                          SparePart sparePart,
                                          WarehouseStock stock,
+                                         WmsStockSnapshot snapshot,
                                          double availableQuantity,
                                          double triggerThreshold,
                                          double recommendedOrderQuantity) {
@@ -203,8 +209,8 @@ public class LowStockRecommendationService {
         metadata.put("sparePartName", sparePart.getName());
         metadata.put("sparePartCode", sparePart.getCode());
         metadata.put("kind", sparePart.getKind() == null ? null : sparePart.getKind().name());
-        metadata.put("quantity", stock.getQuantity());
-        metadata.put("reservedQty", stock.getReservedQty());
+        metadata.put("quantity", snapshot.qtyOnHand().doubleValue());
+        metadata.put("reservedQty", snapshot.qtyReserved().doubleValue());
         metadata.put("availableQuantity", availableQuantity);
         metadata.put("minQty", stock.getMinQty());
         metadata.put("reorderPoint", stock.getReorderPoint());

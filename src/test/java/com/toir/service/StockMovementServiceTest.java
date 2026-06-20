@@ -34,6 +34,8 @@ import com.toir.security.ScopeAccessService;
 import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -106,6 +108,9 @@ class StockMovementServiceTest {
 
     @Mock
     AttachmentGroupService attachmentGroupService;
+
+    @Mock
+    LegacyStockProjectionService legacyStockProjectionService;
 
     @InjectMocks
     StockMovementService service;
@@ -181,8 +186,8 @@ class StockMovementServiceTest {
         UUID sparePartId = UUID.randomUUID();
         WarehouseStock stock = stock(warehouseId, sparePartId, 10, 5);
 
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
+        when(legacyStockProjectionService.current(warehouseId, sparePartId))
+                .thenReturn(new WmsStockSnapshot(warehouseId, sparePartId, BigDecimal.TEN, BigDecimal.valueOf(5)));
 
         assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.ADJUSTMENT, 4)))
                 .isInstanceOf(RestException.class)
@@ -198,8 +203,12 @@ class StockMovementServiceTest {
         UUID sparePartId = UUID.randomUUID();
         WarehouseStock stock = stock(warehouseId, sparePartId, 10, 5);
 
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
+        when(legacyStockProjectionService.current(warehouseId, sparePartId))
+                .thenReturn(new WmsStockSnapshot(warehouseId, sparePartId, BigDecimal.TEN, BigDecimal.valueOf(5)));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(6);
+            return stock;
+        });
 
         when(repository.save(any(StockMovement.class)))
                 .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
@@ -226,8 +235,12 @@ class StockMovementServiceTest {
         UUID sparePartId = UUID.randomUUID();
         WarehouseStock stock = stock(warehouseId, sparePartId, 8, 3);
 
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
+        when(legacyStockProjectionService.current(warehouseId, sparePartId))
+                .thenReturn(new WmsStockSnapshot(warehouseId, sparePartId, BigDecimal.valueOf(8), BigDecimal.valueOf(3)));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(3);
+            return stock;
+        });
 
         when(repository.save(any(StockMovement.class)))
                 .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
@@ -254,8 +267,12 @@ class StockMovementServiceTest {
         UUID sparePartId = UUID.randomUUID();
         WarehouseStock stock = stock(warehouseId, sparePartId, 8, 0);
 
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
+        when(legacyStockProjectionService.current(warehouseId, sparePartId))
+                .thenReturn(new WmsStockSnapshot(warehouseId, sparePartId, BigDecimal.valueOf(8), BigDecimal.ZERO));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(13);
+            return stock;
+        });
         when(repository.save(any(StockMovement.class)))
                 .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
 
@@ -278,8 +295,10 @@ class StockMovementServiceTest {
         WarehouseStock stock = stock(warehouseId, sparePartId, 10, 0);
         LocalDate receivedAt = LocalDate.of(2026, 6, 13);
 
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(30);
+            return stock;
+        });
         when(repository.save(any(StockMovement.class)))
                 .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
 
@@ -355,8 +374,10 @@ class StockMovementServiceTest {
         WarehouseStock stock = stock(warehouseId, sparePartId, 10, 2);
         LocalDate issuedAt = LocalDate.of(2026, 6, 13);
 
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(5);
+            return stock;
+        });
         when(repository.save(any(StockMovement.class)))
                 .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
 

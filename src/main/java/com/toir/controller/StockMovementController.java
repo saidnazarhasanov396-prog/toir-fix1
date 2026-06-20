@@ -36,6 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/v1/stock-movements")
 @Tag(name = "stock-movements")
 @RequiredArgsConstructor
+@Deprecated(forRemoval = false)
 public class StockMovementController {
 
     private final StockMovementService service;

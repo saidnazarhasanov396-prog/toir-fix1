@@ -27,9 +27,14 @@ import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirement
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.OperationalIssueService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -78,13 +83,24 @@ class SparePartForecastServiceTest {
     private OperationalIssueService operationalIssueService;
     @Mock
     private ScopeAccessService scopeAccessService;
+    @Mock
+    private LegacyStockProjectionService legacyStockProjectionService;
 
     @InjectMocks
     private SparePartForecastService service;
+    private Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> wmsSnapshots;
 
     @BeforeEach
     void setUpScope() {
+        wmsSnapshots = new HashMap<>();
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        lenient().when(legacyStockProjectionService.currentAll()).thenAnswer(invocation -> wmsSnapshots);
+        lenient().when(legacyStockProjectionService.snapshot(any(), any(), any())).thenAnswer(invocation ->
+                wmsSnapshots.getOrDefault(
+                        new LegacyStockProjectionService.StockKey(invocation.getArgument(1), invocation.getArgument(2)),
+                        new WmsStockSnapshot(invocation.getArgument(1), invocation.getArgument(2),
+                                BigDecimal.ZERO, BigDecimal.ZERO)
+                ));
     }
 
     @Test
@@ -734,6 +750,11 @@ class SparePartForecastServiceTest {
         stock.setQuantity(quantity);
         stock.setReservedQty(reservedQty);
         stock.setMinQty(0);
+        wmsSnapshots.put(
+                new LegacyStockProjectionService.StockKey(warehouseId, sparePartId),
+                new WmsStockSnapshot(warehouseId, sparePartId,
+                        BigDecimal.valueOf(quantity), BigDecimal.valueOf(reservedQty))
+        );
         return stock;
     }
 

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Repository;
 
 
 @Repository
+@Deprecated(forRemoval = false)
 public interface StockMovementRepository extends JpaRepository<StockMovement, UUID> {
     @Query(value = "SELECT * FROM stock_movements WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<StockMovement> findByIdAndIsDeletedFalse(@Param("id") UUID id);

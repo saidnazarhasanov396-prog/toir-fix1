@@ -21,6 +21,8 @@ import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.service.LowStockRecommendationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.repair.RepairMaterialUsageService;
+import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,6 +57,8 @@ class MaterialUsagePbacScopeTest {
     ActualCostRepository actualCostRepository;
     CostCategoryRepository costCategoryRepository;
     WorkOrderSparePartRequirementRepository requirementRepository;
+    ToirStockService toirStockService;
+    LegacyStockProjectionService legacyStockProjectionService;
     RepairMaterialUsageService service;
 
     @BeforeEach
@@ -74,6 +78,8 @@ class MaterialUsagePbacScopeTest {
         actualCostRepository = mock(ActualCostRepository.class);
         costCategoryRepository = mock(CostCategoryRepository.class);
         requirementRepository = mock(WorkOrderSparePartRequirementRepository.class);
+        toirStockService = mock(ToirStockService.class);
+        legacyStockProjectionService = mock(LegacyStockProjectionService.class);
         service = new RepairMaterialUsageService(
                 repository,
                 stockRepository,
@@ -89,7 +95,9 @@ class MaterialUsagePbacScopeTest {
                 lowStockRecommendationService,
                 actualCostRepository,
                 costCategoryRepository,
-                requirementRepository
+                requirementRepository,
+                toirStockService,
+                legacyStockProjectionService
         );
     }
 
@@ -174,7 +182,10 @@ class MaterialUsagePbacScopeTest {
                 .thenReturn(Optional.of(warehouse(warehouseId, departmentId)));
         when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
                 .thenReturn(Optional.of(stock));
-        when(stockRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(3);
+            return stock;
+        });
         when(repository.save(any())).thenAnswer(invocation -> {
             RepairMaterialUsage usage = invocation.getArgument(0);
             usage.setId(UUID.randomUUID());

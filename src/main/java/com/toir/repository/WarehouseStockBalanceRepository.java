@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 @Repository
@@ -21,6 +22,17 @@ public interface WarehouseStockBalanceRepository extends JpaRepository<Warehouse
     Page<WarehouseStockBalance> findAllByWarehouseIdAndIsDeletedFalseOrderByUpdatedAtDesc(UUID warehouseId,
                                                                                           Pageable pageable);
 
+    List<WarehouseStockBalance> findAllByWarehouseIdAndSparePartIdAndIsDeletedFalse(
+            UUID warehouseId,
+            UUID sparePartId
+    );
+
+    List<WarehouseStockBalance> findAllByIsDeletedFalse();
+
+    List<WarehouseStockBalance> findAllByWarehouseIdAndIsDeletedFalse(UUID warehouseId);
+
+    List<WarehouseStockBalance> findAllBySparePartIdAndIsDeletedFalse(UUID sparePartId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select b
@@ -29,4 +41,75 @@ public interface WarehouseStockBalanceRepository extends JpaRepository<Warehouse
               and b.isDeleted = false
             """)
     Optional<WarehouseStockBalance> lockByIdentityKey(@Param("identityKey") String identityKey);
+
+    @Query(value = """
+            WITH legacy AS (
+                SELECT warehouse_id,
+                       spare_part_id,
+                       SUM(quantity)::numeric(19,4) AS qty_on_hand,
+                       SUM(reserved_qty)::numeric(19,4) AS qty_reserved
+                FROM warehouse_stocks
+                WHERE is_deleted = false
+                  AND warehouse_id = :warehouseId
+                GROUP BY warehouse_id, spare_part_id
+            ),
+            wms AS (
+                SELECT warehouse_id,
+                       spare_part_id,
+                       SUM(qty_on_hand)::numeric(19,4) AS qty_on_hand,
+                       SUM(qty_reserved)::numeric(19,4) AS qty_reserved
+                FROM warehouse_stock_balances
+                WHERE is_deleted = false
+                  AND warehouse_id = :warehouseId
+                GROUP BY warehouse_id, spare_part_id
+            ),
+            stock_ledger AS (
+                SELECT warehouse_id,
+                       spare_part_id,
+                       SUM(quantity)::numeric(19,4) AS quantity
+                FROM warehouse_stock_ledgers
+                WHERE is_deleted = false
+                  AND warehouse_id = :warehouseId
+                GROUP BY warehouse_id, spare_part_id
+            ),
+            reservation_ledger AS (
+                SELECT warehouse_id,
+                       spare_part_id,
+                       SUM(quantity)::numeric(19,4) AS quantity
+                FROM warehouse_reservation_ledgers
+                WHERE is_deleted = false
+                  AND warehouse_id = :warehouseId
+                GROUP BY warehouse_id, spare_part_id
+            ),
+            stock_keys AS (
+                SELECT warehouse_id, spare_part_id FROM legacy
+                UNION
+                SELECT warehouse_id, spare_part_id FROM wms
+                UNION
+                SELECT warehouse_id, spare_part_id FROM stock_ledger
+                UNION
+                SELECT warehouse_id, spare_part_id FROM reservation_ledger
+            )
+            SELECT k.warehouse_id AS "warehouseId",
+                   k.spare_part_id AS "sparePartId",
+                   (l.warehouse_id IS NOT NULL) AS "legacyPresent",
+                   (w.warehouse_id IS NOT NULL) AS "wmsPresent",
+                   COALESCE(l.qty_on_hand, 0)::numeric(19,4) AS "legacyQtyOnHand",
+                   COALESCE(l.qty_reserved, 0)::numeric(19,4) AS "legacyQtyReserved",
+                   COALESCE(w.qty_on_hand, 0)::numeric(19,4) AS "wmsQtyOnHand",
+                   COALESCE(w.qty_reserved, 0)::numeric(19,4) AS "wmsQtyReserved",
+                   COALESCE(sl.quantity, 0)::numeric(19,4) AS "stockLedgerQty",
+                   COALESCE(rl.quantity, 0)::numeric(19,4) AS "reservationLedgerQty"
+            FROM stock_keys k
+            LEFT JOIN legacy l
+                   ON l.warehouse_id = k.warehouse_id AND l.spare_part_id = k.spare_part_id
+            LEFT JOIN wms w
+                   ON w.warehouse_id = k.warehouse_id AND w.spare_part_id = k.spare_part_id
+            LEFT JOIN stock_ledger sl
+                   ON sl.warehouse_id = k.warehouse_id AND sl.spare_part_id = k.spare_part_id
+            LEFT JOIN reservation_ledger rl
+                   ON rl.warehouse_id = k.warehouse_id AND rl.spare_part_id = k.spare_part_id
+            ORDER BY k.spare_part_id
+            """, nativeQuery = true)
+    List<WarehouseStockReconciliationRow> reconcileWarehouseStock(@Param("warehouseId") UUID warehouseId);
 }

@@ -8,6 +8,8 @@ import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +20,7 @@ import org.springframework.data.domain.Page;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,6 +47,9 @@ class WarehouseReorderServiceTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    LegacyStockProjectionService legacyStockProjectionService;
+
     @InjectMocks
     WarehouseReorderService service;
 
@@ -54,6 +60,22 @@ class WarehouseReorderServiceTest {
                 .thenAnswer(invocation -> Optional.of(createWarehouse(invocation.getArgument(0), "Warehouse")));
         lenient().when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any()))
                 .thenReturn(Collections.emptyList());
+        lenient().when(legacyStockProjectionService.currentAll())
+                .thenAnswer(invocation -> snapshots(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()));
+        lenient().when(legacyStockProjectionService.currentForWarehouse(any()))
+                .thenAnswer(invocation -> snapshots(stockRepository.findAllByWarehouseIdAndIsDeletedFalse(invocation.getArgument(0))));
+        lenient().when(legacyStockProjectionService.snapshot(any(), any(), any()))
+                .thenAnswer(invocation -> ((Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot>) invocation.getArgument(0))
+                        .get(new LegacyStockProjectionService.StockKey(invocation.getArgument(1), invocation.getArgument(2))));
+    }
+
+    private Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots(List<WarehouseStock> stocks) {
+        return stocks.stream().collect(java.util.stream.Collectors.toMap(
+                stock -> new LegacyStockProjectionService.StockKey(stock.getWarehouseId(), stock.getSparePartId()),
+                stock -> new WmsStockSnapshot(stock.getWarehouseId(), stock.getSparePartId(),
+                        java.math.BigDecimal.valueOf(stock.getQuantity()),
+                        java.math.BigDecimal.valueOf(stock.getReservedQty()))
+        ));
     }
 
     @Test
@@ -79,7 +101,7 @@ class WarehouseReorderServiceTest {
         assertThat(suggestion.sparePartUnit()).isEqualTo("PCS");
         assertThat(suggestion.recommendedQuantity()).isEqualTo(20.0);
         assertThat(suggestion.urgency()).isEqualTo("CRITICAL");
-        verify(stockRepository).findAllByWarehouseIdAndIsDeletedFalse(warehouseId);
+        verify(stockRepository, times(2)).findAllByWarehouseIdAndIsDeletedFalse(warehouseId);
     }
 
     @Test
@@ -100,7 +122,7 @@ class WarehouseReorderServiceTest {
         ReorderSuggestionDto suggestion = result.getContent().getFirst();
         assertThat(suggestion.warehouseName()).isEqualTo("Central WH");
         assertThat(suggestion.sparePartName()).isEqualTo("Bearing");
-        verify(stockRepository).findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        verify(stockRepository, times(2)).findAllByIsDeletedFalseOrderByUpdatedAtDesc();
     }
 
     @Test

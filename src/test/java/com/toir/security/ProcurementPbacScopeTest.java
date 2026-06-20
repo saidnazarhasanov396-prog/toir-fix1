@@ -24,6 +24,7 @@ import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.service.LowStockRecommendationService;
 import com.toir.service.ProcurementRequestService;
 import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -98,7 +99,8 @@ class ProcurementPbacScopeTest {
                 lowStockRecommendationService,
                 actualCostRepository,
                 costCategoryRepository,
-                mock(ToirStockService.class)
+                mock(ToirStockService.class),
+                mock(LegacyStockProjectionService.class)
         );
     }
 

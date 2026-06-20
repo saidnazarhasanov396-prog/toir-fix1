@@ -33,6 +33,8 @@ import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
 import com.toir.util.PaginationUtils;
@@ -73,6 +75,7 @@ public class SparePartService {
     private final UnitOfMeasurementService unitOfMeasurementService;
     private final ScopeAccessService scopeAccessService;
     private final AuditBuilderService auditBuilderService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
     @Transactional(readOnly = true)
     public Page<SparePartDto> findAll(Integer pageSize, Integer page, String itemType, String search, UUID warehouseId) {
@@ -177,12 +180,13 @@ public class SparePartService {
                 .stream()
                 .filter(s -> s.getSparePartId() != null)
                 .collect(Collectors.groupingBy(WarehouseStock::getSparePartId));
+        var stockSnapshots = legacyStockProjectionService.currentAll();
 
         return parts
                 .map(part -> {
                     List<WarehouseStock> stocks = stocksByPart.getOrDefault(part.getId(), List.of());
-                    double currentStock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
-                    double reservedStock = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
+                    double currentStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyOnHand().doubleValue()).sum();
+                    double reservedStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyReserved().doubleValue()).sum();
                     return enrichSupplier(SparePartDto.from(
                             part,
                             currentStock,
@@ -232,8 +236,9 @@ public class SparePartService {
     public SparePartDto findById(UUID id) {
         SparePart part = getOrThrow(id);
         List<WarehouseStock> stocks = stockRepository.findAllBySparePartIdAndIsDeletedFalse(id);
-        double currentStock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
-        double reservedStock = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
+        var stockSnapshots = legacyStockProjectionService.currentForSparePart(id);
+        double currentStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyOnHand().doubleValue()).sum();
+        double reservedStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyReserved().doubleValue()).sum();
         return enrichSupplier(SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit())));
     }
 
@@ -452,7 +457,7 @@ public class SparePartService {
     private ScopedStockContext scopedStocksForPart(UUID sparePartId) {
         List<WarehouseStock> stocks = stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId);
         if (stocks.isEmpty()) {
-            return new ScopedStockContext(List.of(), Map.of());
+            return new ScopedStockContext(List.of(), Map.of(), Map.of());
         }
 
         List<UUID> warehouseIds = stocks.stream()
@@ -468,7 +473,7 @@ public class SparePartService {
         List<WarehouseStock> scopedStocks = stocks.stream()
                 .filter(stock -> canAccessWarehouse(warehouseById.get(stock.getWarehouseId())))
                 .toList();
-        return new ScopedStockContext(scopedStocks, warehouseById);
+        return new ScopedStockContext(scopedStocks, warehouseById, legacyStockProjectionService.currentForSparePart(sparePartId));
     }
 
     private List<SparePartLocationDto> locationDtos(SparePart part, ScopedStockContext context) {
@@ -485,6 +490,7 @@ public class SparePartService {
 
         return context.stocks().stream()
                 .map(stock -> {
+                    WmsStockSnapshot snapshot = snapshot(stock, context.snapshots());
                     Warehouse warehouse = context.warehouseById().get(stock.getWarehouseId());
                     UUID departmentId = warehouse == null ? null : warehouse.getDepartmentId();
                     UUID locationId = warehouse == null ? null : warehouse.getLocationId();
@@ -496,9 +502,9 @@ public class SparePartService {
                             locationId,
                             locationId == null ? null : locationNames.get(locationId),
                             stock.getBinLocation(),
-                            stock.getQuantity(),
-                            stock.getReservedQty(),
-                            stock.getAvailable(),
+                            snapshot.qtyOnHand().doubleValue(),
+                            snapshot.qtyReserved().doubleValue(),
+                            snapshot.availableQty().doubleValue(),
                             part.getUnit(),
                             stock.getMinQty(),
                             stock.getMaxQty(),
@@ -788,8 +794,16 @@ public class SparePartService {
 
     private record ScopedStockContext(
             List<WarehouseStock> stocks,
-            Map<UUID, Warehouse> warehouseById
+            Map<UUID, Warehouse> warehouseById,
+            Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots
     ) {
+    }
+
+    private WmsStockSnapshot snapshot(
+            WarehouseStock stock,
+            Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots) {
+        return legacyStockProjectionService.snapshot(
+                snapshots, stock.getWarehouseId(), stock.getSparePartId());
     }
 
     private record InventoryTransactionSummary(

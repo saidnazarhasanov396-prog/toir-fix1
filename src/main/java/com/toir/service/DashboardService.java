@@ -38,6 +38,7 @@ import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.repository.WorkOrderEquipmentTypeCountProjection;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -93,6 +94,7 @@ public class DashboardService {
     private final MaintenanceDueEventRepository maintenanceDueEventRepository;
     private final UserRepository userRepository;
     private final ScopeAccessService scopeAccessService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
 
 
@@ -167,8 +169,10 @@ public class DashboardService {
         List<WarehouseStock> allStocks = warehouseStockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(s -> departmentId == null || (whById.containsKey(s.getWarehouseId()) && departmentId.equals(whById.get(s.getWarehouseId()).getDepartmentId())))
                 .toList();
+        var stockSnapshots = legacyStockProjectionService.currentAll();
         List<WarehouseStock> lowStocks = allStocks.stream()
-                .filter(s -> s.getQuantity() < s.getMinQty())
+                .filter(s -> legacyStockProjectionService.snapshot(
+                        stockSnapshots, s.getWarehouseId(), s.getSparePartId()).availableQty().doubleValue() < s.getMinQty())
                 .toList();
 
         List<StockMovement> scopedStockMovements =
