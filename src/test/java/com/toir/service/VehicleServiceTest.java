@@ -298,6 +298,145 @@ class VehicleServiceTest {
     }
 
     @Test
+    void createVehicleCalculatesDaysOfResourceRemaining() {
+        VehicleRequest request = withEquipmentUsage(
+                fullRequest("VH-DAYS-001", "Truck Days", "INV-VH-DAYS-001", "01A166AA", null),
+                MeterType.MILEAGE_KM,
+                45_000.0,
+                0.0,
+                10.0,
+                300.0
+        );
+
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-DAYS-001")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A166AA")).thenReturn(false);
+        when(equipmentService.calculateDaysOfResourceRemaining(any(), any()))
+                .thenAnswer(invocation -> {
+                    Double limit = invocation.getArgument(0);
+                    Double usage = invocation.getArgument(1);
+                    if (limit == null || usage == null || usage <= 0) {
+                        return null;
+                    }
+                    return (long) (limit / usage);
+                });
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> {
+            VehicleDetails details = invocation.getArgument(0);
+            details.setId(UUID.randomUUID());
+            return details;
+        });
+        when(equipmentService.findById(any(UUID.class))).thenAnswer(invocation -> {
+            UUID id = invocation.getArgument(0);
+            Equipment equipment = equipment(id, "VH-DAYS-001", "Truck Days", "INV-VH-DAYS-001");
+            equipment.setAverageDailyUsage(request.averageDailyUsage());
+            equipment.setLifetimeLimitValue(request.lifetimeLimitValue());
+            equipment.setDaysOfResourceRemaining(150L);
+            return EquipmentDto.from(equipment);
+        });
+
+        service.create(request);
+
+        ArgumentCaptor<Equipment> equipmentCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(equipmentRepository).save(equipmentCaptor.capture());
+        assertThat(equipmentCaptor.getValue().getDaysOfResourceRemaining()).isEqualTo(150L);
+    }
+
+    @Test
+    void createVehicleWithoutAverageDailyUsageLeavesDaysOfResourceRemainingNull() {
+        VehicleRequest request = withEquipmentUsage(
+                fullRequest("VH-DAYS-002", "Truck Days Null", "INV-VH-DAYS-002", "01A167AA", null),
+                MeterType.MILEAGE_KM,
+                45_000.0,
+                0.0,
+                10.0,
+                null
+        );
+
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-DAYS-002")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A167AA")).thenReturn(false);
+        when(equipmentService.calculateDaysOfResourceRemaining(any(), any()))
+                .thenAnswer(invocation -> {
+                    Double limit = invocation.getArgument(0);
+                    Double usage = invocation.getArgument(1);
+                    if (limit == null || usage == null || usage <= 0) {
+                        return null;
+                    }
+                    return (long) (limit / usage);
+                });
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> {
+            VehicleDetails details = invocation.getArgument(0);
+            details.setId(UUID.randomUUID());
+            return details;
+        });
+        when(equipmentService.findById(any(UUID.class))).thenAnswer(invocation ->
+                EquipmentDto.from(equipment(invocation.getArgument(0), "VH-DAYS-002", "Truck Days Null", "INV-VH-DAYS-002")));
+
+        service.create(request);
+
+        ArgumentCaptor<Equipment> equipmentCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(equipmentRepository).save(equipmentCaptor.capture());
+        assertThat(equipmentCaptor.getValue().getDaysOfResourceRemaining()).isNull();
+    }
+
+    @Test
+    void updateVehicleRecalculatesDaysOfResourceRemaining() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-DAYS-UPD", "Truck Update Days", "INV-VH-DAYS-UPD");
+        equipment.setLifetimeLimitValue(null);
+        equipment.setAverageDailyUsage(null);
+        equipment.setDaysOfResourceRemaining(null);
+        VehicleDetails details = details(equipmentId, "01A168AA", null);
+        VehicleRequest request = withEquipmentUsage(
+                withEquipmentTypeAndAttributes(
+                        fullRequest("VH-DAYS-UPD", "Truck Update Days", "INV-VH-DAYS-UPD", "01A168AA", null),
+                        equipment.getEquipmentTypeId(),
+                        null
+                ),
+                MeterType.MILEAGE_KM,
+                60_000.0,
+                0.0,
+                10.0,
+                500.0
+        );
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(equipmentService.calculateDaysOfResourceRemaining(any(), any()))
+                .thenAnswer(invocation -> {
+                    Double limit = invocation.getArgument(0);
+                    Double usage = invocation.getArgument(1);
+                    if (limit == null || usage == null || usage <= 0) {
+                        return null;
+                    }
+                    return (long) (limit / usage);
+                });
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(equipmentId)).thenAnswer(invocation -> {
+            Equipment saved = equipment(equipmentId, "VH-DAYS-UPD", "Truck Update Days", "INV-VH-DAYS-UPD");
+            saved.setLifetimeLimitValue(request.lifetimeLimitValue());
+            saved.setAverageDailyUsage(request.averageDailyUsage());
+            saved.setDaysOfResourceRemaining(120L);
+            return EquipmentDto.from(saved);
+        });
+
+        service.update(equipmentId, request);
+
+        ArgumentCaptor<Equipment> equipmentCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(equipmentRepository).save(equipmentCaptor.capture());
+        assertThat(equipmentCaptor.getValue().getDaysOfResourceRemaining()).isEqualTo(120L);
+    }
+
+    @Test
     void createVehiclePersistsAndReturnsPlateType() {
         VehicleRequest request = withPlateType(
                 fullRequest("VH-PLATE-TYPE-001", "Truck Plate Type", "INV-VH-PLATE-TYPE-001", "95 123 ABC", null),
