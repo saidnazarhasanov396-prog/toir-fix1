@@ -120,6 +120,66 @@ class WarehouseReorderServiceTest {
     }
 
     @Test
+    void suggestionsFallsBackToSparePartMinStockWhenWarehouseThresholdIsMissing() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WarehouseStock stock = createStock(warehouseId, sparePartId, 5.0, 0.0, 0.0, null, null);
+        Warehouse warehouse = createWarehouse(warehouseId, "Central WH");
+        SparePart sparePart = createSparePart(sparePartId, "SP-MIN", "Catalog minimum part", "PCS", 5.0);
+
+        when(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(stock));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(warehouse));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(sparePart));
+
+        Page<ReorderSuggestionDto> result = service.suggestions(null, 0, 10);
+
+        assertThat(result.getContent()).hasSize(1);
+        ReorderSuggestionDto suggestion = result.getContent().getFirst();
+        assertThat(suggestion.minQty()).isEqualTo(5.0);
+        assertThat(suggestion.shortfall()).isZero();
+        assertThat(suggestion.recommendedQuantity()).isEqualTo(5.0);
+        assertThat(suggestion.urgency()).isEqualTo("WARNING");
+    }
+
+    @Test
+    void suggestionsDoesNotUseSparePartMinStockWhenAvailableIsAboveCatalogMinimum() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WarehouseStock stock = createStock(warehouseId, sparePartId, 6.0, 0.0, 0.0, null, null);
+        Warehouse warehouse = createWarehouse(warehouseId, "Central WH");
+        SparePart sparePart = createSparePart(sparePartId, "SP-OK", "Sufficient catalog part", "PCS", 5.0);
+
+        when(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(stock));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(warehouse));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(sparePart));
+
+        Page<ReorderSuggestionDto> result = service.suggestions(null, 0, 10);
+
+        assertThat(result.getContent()).isEmpty();
+    }
+
+    @Test
+    void suggestionsKeepReorderPointAndStockMinQtyPriorityOverSparePartMinStock() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID reorderPartId = UUID.randomUUID();
+        UUID stockMinPartId = UUID.randomUUID();
+        WarehouseStock reorderPointPriority = createStock(warehouseId, reorderPartId, 5.0, 0.0, 8.0, 3.0, null);
+        WarehouseStock stockMinPriority = createStock(warehouseId, stockMinPartId, 6.0, 0.0, 4.0, null, null);
+        Warehouse warehouse = createWarehouse(warehouseId, "Central WH");
+        SparePart reorderPart = createSparePart(reorderPartId, "SP-RP", "Reorder point priority", "PCS", 10.0);
+        SparePart stockMinPart = createSparePart(stockMinPartId, "SP-MQ", "Stock min priority", "PCS", 10.0);
+
+        when(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(reorderPointPriority, stockMinPriority));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(warehouse));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(reorderPart, stockMinPart));
+
+        Page<ReorderSuggestionDto> result = service.suggestions(null, 0, 10);
+
+        assertThat(result.getContent()).isEmpty();
+    }
+
+    @Test
     void suggestionsClassifiesAsWarningWhenAboveMinQtyButBelowReorderPoint() {
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
@@ -270,11 +330,16 @@ class WarehouseReorderServiceTest {
     }
 
     private SparePart createSparePart(UUID id, String code, String name, String unit) {
+        return createSparePart(id, code, name, unit, 0.0);
+    }
+
+    private SparePart createSparePart(UUID id, String code, String name, String unit, double minStock) {
         SparePart sparePart = new SparePart();
         sparePart.setId(id);
         sparePart.setCode(code);
         sparePart.setName(name);
         sparePart.setUnit(unit);
+        sparePart.setMinStock(minStock);
         return sparePart;
     }
 }

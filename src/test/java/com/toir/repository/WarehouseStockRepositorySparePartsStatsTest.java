@@ -110,6 +110,22 @@ class WarehouseStockRepositorySparePartsStatsTest {
     }
 
     @Test
+    void lowStockFallsBackToSparePartMinStockWhenWarehouseThresholdIsMissing() {
+        Warehouse warehouse = saveWarehouse("WH-034", "Warehouse");
+        SparePart atMinimum = saveSparePart("SP-034-A", "At catalog minimum", 5);
+        SparePart aboveMinimum = saveSparePart("SP-034-B", "Above catalog minimum", 5);
+        SparePart noThreshold = saveSparePart("SP-034-C", "No catalog minimum", 0);
+
+        saveStock(warehouse, atMinimum, 5, 0, 0, null);
+        saveStock(warehouse, aboveMinimum, 6, 0, 0, null);
+        saveStock(warehouse, noThreshold, 0, 0, 0, null);
+
+        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(List.of(warehouse.getId()));
+
+        assertThat(stats.getLowStockItems()).isEqualTo(1);
+    }
+
+    @Test
     void activeReservationsCountsOnlyActiveExcludingDeletedAndFinalStatuses() {
         Warehouse warehouse = saveWarehouse("WH-040", "Warehouse");
         SparePart part = saveSparePart("SP-040", "Part");
@@ -163,6 +179,10 @@ class WarehouseStockRepositorySparePartsStatsTest {
     }
 
     private SparePart saveSparePart(String code, String name) {
+        return saveSparePart(code, name, 0);
+    }
+
+    private SparePart saveSparePart(String code, String name, double minStock) {
         SparePart sparePart = new SparePart();
         sparePart.setCode(code);
         sparePart.setName(name);
@@ -170,7 +190,7 @@ class WarehouseStockRepositorySparePartsStatsTest {
         sparePart.setType(defaultSparePartType());
         sparePart.setLegacyType("OTHER");
         sparePart.setUnit("PCS");
-        sparePart.setMinStock(0);
+        sparePart.setMinStock(minStock);
         return entityManager.persistAndFlush(sparePart);
     }
 

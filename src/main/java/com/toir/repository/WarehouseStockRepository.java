@@ -92,9 +92,21 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
                     AND r.status = 'ACTIVE') AS activeReservations,
                 (SELECT COUNT(ws.id)
                    FROM warehouse_stocks ws
+                   JOIN spare_parts sp ON sp.id = ws.spare_part_id
+                    AND sp.is_deleted = false
                   WHERE ws.is_deleted = false
-                    AND COALESCE(ws.reorder_point, ws.min_qty) > 0
-                    AND (ws.quantity - ws.reserved_qty) <= COALESCE(ws.reorder_point, ws.min_qty)) AS lowStockItems,
+                    AND (CASE
+                          WHEN ws.reorder_point > 0 THEN ws.reorder_point
+                          WHEN ws.min_qty > 0 THEN ws.min_qty
+                          WHEN sp.min_stock > 0 THEN sp.min_stock
+                          ELSE NULL
+                        END) IS NOT NULL
+                    AND (ws.quantity - ws.reserved_qty) <= (CASE
+                          WHEN ws.reorder_point > 0 THEN ws.reorder_point
+                          WHEN ws.min_qty > 0 THEN ws.min_qty
+                          WHEN sp.min_stock > 0 THEN sp.min_stock
+                          ELSE NULL
+                        END)) AS lowStockItems,
                 (SELECT COALESCE(SUM(sm.quantity), 0)
                    FROM stock_movements sm
                   WHERE sm.is_deleted = false
@@ -118,10 +130,22 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
                     AND ws.warehouse_id IN (:warehouseIds)) AS activeReservations,
                 (SELECT COUNT(ws.id)
                    FROM warehouse_stocks ws
+                   JOIN spare_parts sp ON sp.id = ws.spare_part_id
+                    AND sp.is_deleted = false
                   WHERE ws.is_deleted = false
                     AND ws.warehouse_id IN (:warehouseIds)
-                    AND COALESCE(ws.reorder_point, ws.min_qty) > 0
-                    AND (ws.quantity - ws.reserved_qty) <= COALESCE(ws.reorder_point, ws.min_qty)) AS lowStockItems,
+                    AND (CASE
+                          WHEN ws.reorder_point > 0 THEN ws.reorder_point
+                          WHEN ws.min_qty > 0 THEN ws.min_qty
+                          WHEN sp.min_stock > 0 THEN sp.min_stock
+                          ELSE NULL
+                        END) IS NOT NULL
+                    AND (ws.quantity - ws.reserved_qty) <= (CASE
+                          WHEN ws.reorder_point > 0 THEN ws.reorder_point
+                          WHEN ws.min_qty > 0 THEN ws.min_qty
+                          WHEN sp.min_stock > 0 THEN sp.min_stock
+                          ELSE NULL
+                        END)) AS lowStockItems,
                 (SELECT COALESCE(SUM(sm.quantity), 0)
                    FROM stock_movements sm
                   WHERE sm.is_deleted = false

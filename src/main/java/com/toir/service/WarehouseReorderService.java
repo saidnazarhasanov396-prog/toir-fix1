@@ -115,28 +115,30 @@ public class WarehouseReorderService {
                                                            Map<UUID, String> warehouseNames,
                                                            Map<UUID, SparePart> sparePartsById) {
         double available = stock.getAvailable();
-        Double reorderPoint = stock.getReorderPoint();
-        double minQty = stock.getMinQty();
-        double trigger = reorderPoint != null ? reorderPoint : minQty;
-        if (trigger <= 0 || available > trigger) {
+        Double reorderPoint = positive(stock.getReorderPoint());
+        Double stockMinQty = positive(stock.getMinQty());
+        SparePart sparePart = sparePartsById.get(stock.getSparePartId());
+        Double sparePartMinStock = sparePart == null ? null : positive(sparePart.getMinStock());
+        Double trigger = firstNonNull(reorderPoint, stockMinQty, sparePartMinStock);
+        if (trigger == null || available > trigger) {
             return Optional.empty();
         }
 
         String urgency;
         double thresholdShortfall = Math.max(trigger - available, 0);
-        double minimumShortfall = Math.max(minQty - available, 0);
+        double minimumShortfall = stockMinQty == null ? thresholdShortfall : Math.max(stockMinQty - available, 0);
         double shortfall;
-        if (available <= minQty) {
+        if (stockMinQty != null && available <= stockMinQty) {
             shortfall = minimumShortfall;
             urgency = "CRITICAL";
         } else {
             shortfall = thresholdShortfall;
             urgency = "WARNING";
         }
-        double recommendedQuantity = recommendedQuantity(stock.getReorderQty(), reorderPoint, minQty, available, shortfall, true);
+        Double effectiveMinimum = firstNonNull(stockMinQty, sparePartMinStock);
+        double recommendedQuantity = recommendedQuantity(stock, available, effectiveMinimum, trigger, true);
 
         String warehouseName = warehouseNames.getOrDefault(stock.getWarehouseId(), "");
-        SparePart sparePart = sparePartsById.get(stock.getSparePartId());
         String sparePartName = sparePart != null ? sparePart.getName() : null;
         String sparePartCode = sparePart != null ? sparePart.getCode() : null;
         String sparePartUnit = sparePart != null ? sparePart.getUnit() : null;
@@ -151,7 +153,7 @@ public class WarehouseReorderService {
                 sparePartUnit,
                 stock.getQuantity(),
                 available,
-                minQty,
+                effectiveMinimum,
                 reorderPoint,
                 stock.getReorderQty(),
                 shortfall,
@@ -176,6 +178,45 @@ public class WarehouseReorderService {
                 ? Math.max(shortfall, reorderPoint - available)
                 : minQty - available;
         return Math.max(shortage, 0);
+    }
+
+    private double recommendedQuantity(WarehouseStock stock,
+                                       double available,
+                                       Double effectiveMinimum,
+                                       double trigger,
+                                       boolean reorderNeeded) {
+        if (!reorderNeeded) {
+            return 0;
+        }
+        Double reorderQty = positive(stock.getReorderQty());
+        if (reorderQty != null) {
+            return reorderQty;
+        }
+        Double maxQty = positive(stock.getMaxQty());
+        if (maxQty != null && maxQty > available) {
+            return Math.max(maxQty - available, 0);
+        }
+        if (effectiveMinimum != null) {
+            return Math.max(effectiveMinimum * 2 - available, 0);
+        }
+        return Math.max(trigger - available, 0);
+    }
+
+    private Double positive(Double value) {
+        return value != null && value > 0 ? value : null;
+    }
+
+    private Double positive(double value) {
+        return value > 0 ? value : null;
+    }
+
+    private <T> T firstNonNull(T first, T second) {
+        return first == null ? second : first;
+    }
+
+    private <T> T firstNonNull(T first, T second, T third) {
+        T value = firstNonNull(first, second);
+        return value == null ? third : value;
     }
 
     private void assertCanAccessWarehouseId(UUID warehouseId) {

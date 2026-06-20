@@ -93,7 +93,8 @@ public class InventoryReplenishmentRecommendationService {
                 List.of(),
                 null,
                 InventoryReplenishmentReason.LOW_STOCK,
-                reorder.urgency()
+                reorder.urgency(),
+                reorder.recommendedQuantity()
         );
     }
 
@@ -118,6 +119,7 @@ public class InventoryReplenishmentRecommendationService {
                 forecast.sources(),
                 forecast.firstDueAt(),
                 InventoryReplenishmentReason.MAINTENANCE_FORECAST,
+                null,
                 null
         );
     }
@@ -152,7 +154,8 @@ public class InventoryReplenishmentRecommendationService {
                 sources,
                 firstDueAt,
                 reason,
-                null
+                null,
+                Math.max(existing.suggestedOrderQty(), incoming.suggestedOrderQty())
         );
     }
 
@@ -172,15 +175,17 @@ public class InventoryReplenishmentRecommendationService {
                                                          List<SparePartForecastSourceDto> forecastSources,
                                                          Instant firstDueAt,
                                                          InventoryReplenishmentReason reason,
-                                                         String reorderUrgency) {
+                                                         String reorderUrgency,
+                                                         Double suggestedOrderQtyOverride) {
         double projectedBalance = availableStock - maintenanceDemandQty;
         double policyQty = positive(reorderPoint) != null ? reorderPoint : valueOrZero(minStock);
         double totalShortageQty = reason == InventoryReplenishmentReason.LOW_STOCK
-                ? reorderOnlyShortage(reorderQty, reorderPoint, minStock, availableStock)
+                ? Math.max(policyQty - availableStock, 0)
                 : Math.max(policyQty + maintenanceDemandQty - availableStock, 0);
-        double suggestedOrderQty = reason == InventoryReplenishmentReason.LOW_STOCK
-                ? totalShortageQty
-                : suggestedOrderQty(reorderQty, totalShortageQty);
+        double suggestedOrderQty = suggestedOrderQty(reorderQty, totalShortageQty);
+        if (suggestedOrderQtyOverride != null && suggestedOrderQtyOverride > suggestedOrderQty) {
+            suggestedOrderQty = suggestedOrderQtyOverride;
+        }
         NotificationSeverity severity = severity(availableStock, minStock, maintenanceDemandQty,
                 maintenanceShortageQty, totalShortageQty, reorderUrgency);
         List<SparePartForecastSourceDto> sources = forecastSources == null ? List.of() : List.copyOf(forecastSources);
@@ -235,14 +240,6 @@ public class InventoryReplenishmentRecommendationService {
         );
     }
 
-    private double reorderOnlyShortage(Double reorderQty, Double reorderPoint, Double minStock, double availableStock) {
-        if (reorderQty != null && reorderQty > 0) {
-            return reorderQty;
-        }
-        double policyQty = positive(reorderPoint) != null ? reorderPoint : valueOrZero(minStock);
-        return Math.max(policyQty - availableStock, 0);
-    }
-
     private double suggestedOrderQty(Double reorderQty, double totalShortageQty) {
         return reorderQty != null && reorderQty > 0
                 ? Math.max(reorderQty, totalShortageQty)
@@ -267,8 +264,13 @@ public class InventoryReplenishmentRecommendationService {
                                           String reorderUrgency) {
         if ("CRITICAL".equals(reorderUrgency)
                 || availableStock <= 0
-                || (minStock != null && availableStock <= minStock)
                 || (maintenanceDemandQty > 0 && maintenanceShortageQty >= maintenanceDemandQty)) {
+            return NotificationSeverity.CRITICAL;
+        }
+        if ("WARNING".equals(reorderUrgency)) {
+            return NotificationSeverity.WARNING;
+        }
+        if (minStock != null && availableStock <= minStock) {
             return NotificationSeverity.CRITICAL;
         }
         if (totalShortageQty > 0 || "WARNING".equals(reorderUrgency)) {
