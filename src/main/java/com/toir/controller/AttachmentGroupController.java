@@ -47,7 +47,7 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
-            hasAuthority('APPROVAL_UPDATE')
+            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE')
             """)
     @Operation(summary = "Create an attachment group and upload one or more files")
     public ResponseEntity<AttachmentGroupDto> createGroup(
@@ -82,7 +82,7 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
-            hasAuthority('APPROVAL_UPDATE')
+            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE')
             """)
     @Operation(summary = "Add files to an existing attachment group")
     public ResponseEntity<AttachmentGroupDto> addFiles(
@@ -101,7 +101,7 @@ public class AttachmentGroupController {
             hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
-            hasAuthority('APPROVAL_READ')
+            hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ')
             """)
     public ResponseEntity<AttachmentGroupDto> getGroup(
             @PathVariable UUID groupId,
@@ -115,7 +115,7 @@ public class AttachmentGroupController {
             hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
-            hasAuthority('APPROVAL_READ')
+            hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ')
             """)
     public ResponseEntity<List<AttachmentGroupDto>> listGroups(
             @RequestParam String targetType,
@@ -130,7 +130,7 @@ public class AttachmentGroupController {
             hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
-            hasAuthority('APPROVAL_READ')
+            hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ')
             """)
     public ResponseEntity<PresignedUrlResponse> getFilePresignedUrl(
             @PathVariable UUID groupId,
@@ -145,7 +145,7 @@ public class AttachmentGroupController {
             hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
-            hasAuthority('APPROVAL_READ')
+            hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ')
             """)
     public ResponseEntity<Resource> downloadFile(
             @PathVariable UUID groupId,
@@ -173,7 +173,7 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
-            hasAuthority('APPROVAL_UPDATE')
+            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE')
             """)
     public ResponseEntity<Void> deleteGroup(
             @PathVariable UUID groupId,
@@ -190,7 +190,7 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
-            hasAuthority('APPROVAL_UPDATE')
+            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE')
             """)
     public ResponseEntity<Void> removeFile(
             @PathVariable UUID groupId,
@@ -212,6 +212,7 @@ public class AttachmentGroupController {
             case WORK_ORDER, COMPLETION_ACT -> "WORK_ORDER_UPDATE";
             case REPAIR_REQUEST -> "REPAIR_REQUEST_UPDATE";
             case APPROVAL -> "APPROVAL_UPDATE";
+            case PROCUREMENT_REQUEST -> "PROCUREMENT_CREATE";
             case STOCK_MOVEMENT -> null;
         };
         if (requiredAuthority == null || !hasAuthority(authentication, requiredAuthority)) {

@@ -2,6 +2,7 @@ package com.toir.dto.procurement;
 
 import com.toir.entity.SparePart;
 import com.toir.entity.projects.ProcurementRequest;
+import com.toir.enums.PriorityLevel;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 
@@ -23,6 +24,7 @@ public record ProcurementRequestDto(
         UUID requestedBy,
         UUID approvedBy,
         UUID responsibleId,
+        PriorityLevel priority,
         ProcurementRequestType type,
         UUID sourceDefectId,
         String sourceDefectTitle,
@@ -65,7 +67,7 @@ public record ProcurementRequestDto(
                                  String rejectionReason,
                                  List<ProcurementRequestLineDto> lines) {
         this(id, number, title, description, departmentId, warehouseId, departmentName,
-                warehouseName, requestedBy, approvedBy, null, type, sourceDefectId,
+                warehouseName, requestedBy, approvedBy, null, PriorityLevel.MEDIUM, type, sourceDefectId,
                 sourceDefectTitle, sourcePprTaskId, sourcePprTaskTitle, status, source,
                 requiredBy, totalEstimatedCost, submittedAt, approvedAt, orderedAt,
                 receivedAt, rejectionReason, lines);
@@ -90,7 +92,7 @@ public record ProcurementRequestDto(
                                  String rejectionReason,
                                  List<ProcurementRequestLineDto> lines) {
         this(id, number, title, description, departmentId, warehouseId, null, null, requestedBy,
-                approvedBy, null, ProcurementRequestType.SPARE_PART, null, null, null, null, status, source,
+                approvedBy, null, PriorityLevel.MEDIUM, ProcurementRequestType.SPARE_PART, null, null, null, null, status, source,
                 requiredBy, totalEstimatedCost, submittedAt, approvedAt, orderedAt, receivedAt,
                 rejectionReason, lines);
     }
@@ -120,6 +122,7 @@ public record ProcurementRequestDto(
                 r.getRequestedBy(),
                 r.getApprovedBy(),
                 r.getResponsibleId(),
+                r.getPriority() == null ? PriorityLevel.MEDIUM : r.getPriority(),
                 r.getType() == null ? ProcurementRequestType.SPARE_PART : r.getType(),
                 r.getSourceDefectId(),
                 r.getSourceDefectTitle(),

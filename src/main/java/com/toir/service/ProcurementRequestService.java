@@ -28,6 +28,7 @@ import com.toir.enums.AuditModule;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.PriorityLevel;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.StockMovementSourceType;
@@ -174,6 +175,7 @@ public class ProcurementRequestService {
         p.setWarehouseId(r.warehouseId());
         p.setRequiredBy(r.requiredBy());
         p.setResponsibleId(r.responsibleId());
+        p.setPriority(normalizePriority(r.priority()));
         p.setType(normalizeType(r.type()));
         applySourceTrace(p, r.sourceDefectId(), r.sourcePprTaskId());
         p.setStatus(ProcurementRequestStatus.DRAFT);
@@ -791,6 +793,7 @@ public class ProcurementRequestService {
                 pr.setDescription("Автозаявка: пополнение запасов ниже минимального уровня");
                 pr.setWarehouseId(wh);
                 pr.setType(ProcurementRequestType.SPARE_PART);
+                pr.setPriority(PriorityLevel.MEDIUM);
                 pr.setStatus(ProcurementRequestStatus.DRAFT);
                 pr.setSource("AUTO");
                 pr.setRequiredBy(LocalDate.now(ZoneOffset.UTC).plusDays(14));
@@ -893,6 +896,10 @@ public class ProcurementRequestService {
 
     private ProcurementRequestType normalizeType(ProcurementRequestType type) {
         return type == null ? ProcurementRequestType.SPARE_PART : type;
+    }
+
+    private PriorityLevel normalizePriority(PriorityLevel priority) {
+        return priority == null ? PriorityLevel.MEDIUM : priority;
     }
 
     private ProcurementRequestType requestType(ProcurementRequest request) {
