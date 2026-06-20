@@ -137,4 +137,59 @@ class EquipmentDtoTest {
         assertThat(dto.lifetimeUnit()).isEqualTo("cycle");
         assertThat(dto.lifetimeStatus()).isEqualTo(LifetimeStatus.EXPIRING_SOON);
     }
+
+    @Test
+    void fromComputesDaysOfResourceRemainingFromLifetimeLimitAndAverageDailyUsage() {
+        Equipment equipment = new Equipment();
+        equipment.setLifetimeLimitValue(10_000.0);
+        equipment.setAverageDailyUsage(200.0);
+
+        EquipmentDto dto = EquipmentDto.from(equipment);
+
+        assertThat(dto.daysOfResourceRemaining()).isEqualTo(50L);
+    }
+
+    @Test
+    void fromComputesDaysOfResourceRemainingFromExpectedLifetimeHoursFallback() {
+        Equipment equipment = new Equipment();
+        equipment.setExpectedLifetimeHours(18_000L);
+        equipment.setAverageDailyUsage(200.0);
+
+        EquipmentDto dto = EquipmentDto.from(equipment);
+
+        assertThat(dto.lifetimeLimitValue()).isEqualTo(18_000.0);
+        assertThat(dto.daysOfResourceRemaining()).isEqualTo(90L);
+    }
+
+    @Test
+    void fromReturnsNullDaysOfResourceRemainingWhenAverageDailyUsageMissing() {
+        Equipment equipment = new Equipment();
+        equipment.setLifetimeLimitValue(10_000.0);
+
+        EquipmentDto dto = EquipmentDto.from(equipment);
+
+        assertThat(dto.daysOfResourceRemaining()).isNull();
+    }
+
+    @Test
+    void fromReturnsNullDaysOfResourceRemainingWhenAverageDailyUsageNotPositive() {
+        Equipment equipment = new Equipment();
+        equipment.setLifetimeLimitValue(10_000.0);
+        equipment.setAverageDailyUsage(0.0);
+
+        EquipmentDto dto = EquipmentDto.from(equipment);
+
+        assertThat(dto.daysOfResourceRemaining()).isNull();
+    }
+
+    @Test
+    void fromRoundsDownDaysOfResourceRemaining() {
+        Equipment equipment = new Equipment();
+        equipment.setLifetimeLimitValue(10_001.0);
+        equipment.setAverageDailyUsage(200.0);
+
+        EquipmentDto dto = EquipmentDto.from(equipment);
+
+        assertThat(dto.daysOfResourceRemaining()).isEqualTo(50L);
+    }
 }
