@@ -145,6 +145,21 @@ public class Equipment extends BaseEntity {
     @Column(name = "days_of_resource_remaining")
     private Long daysOfResourceRemaining;
 
+    @Column(name = "forecast_consumed_resource")
+    private Double forecastConsumedResource;
+
+    @Column(name = "forecast_remaining_resource")
+    private Double forecastRemainingResource;
+
+    @Column(name = "forecast_avg_usage_per_active_day")
+    private Double forecastAvgUsagePerActiveDay;
+
+    @Column(name = "forecast_remaining_active_days")
+    private Long forecastRemainingActiveDays;
+
+    @Column(name = "forecast_calculated_at")
+    private LocalDate forecastCalculatedAt;
+
     @Column(name = "lifetime_baseline_value")
     private Double lifetimeBaselineValue;
 

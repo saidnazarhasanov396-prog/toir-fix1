@@ -71,7 +71,12 @@ public record EquipmentDto(
         String lifetimeUnit,
         Double averageDailyUsage,
         ResponsibleRef responsible,
-        Long daysOfResourceRemaining
+        Long daysOfResourceRemaining,
+        Double forecastConsumedResource,
+        Double forecastRemainingResource,
+        Double forecastAvgUsagePerActiveDay,
+        Long forecastRemainingActiveDays,
+        LocalDate forecastCalculatedAt
 ) {
     public EquipmentDto(
             UUID id,
@@ -123,7 +128,7 @@ public record EquipmentDto(
                 expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, operatingDuration,
                 expectedEndDate, remainingLifetime, lifetimeStatus, hasWarranty, warrantyAttachmentId,
                 warrantyStartDate, warrantyEndDate, warrantyAttachment, passportCompleteness,
-                null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -171,7 +176,7 @@ public record EquipmentDto(
                 department, location, equipmentType, parent, passport, placement, operationStartDate,
                 expectedLifetimeMonths, expectedLifetimeYears, null, operatingDuration, expectedEndDate, remainingLifetime,
                 lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -207,7 +212,7 @@ public record EquipmentDto(
                 category, commissionedAt, null, warrantyUntil, description, averageOperatingLifeHours, department,
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null, null,
                 LifetimeStatus.UNKNOWN, false, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -411,7 +416,12 @@ public record EquipmentDto(
                 lifetimeUnit(e, lifetimeMeter),
                 e.getAverageDailyUsage(),
                 responsible,
-                e.getDaysOfResourceRemaining()
+                e.getDaysOfResourceRemaining(),
+                e.getForecastConsumedResource(),
+                e.getForecastRemainingResource(),
+                e.getForecastAvgUsagePerActiveDay(),
+                e.getForecastRemainingActiveDays(),
+                e.getForecastCalculatedAt()
         );
     }
 

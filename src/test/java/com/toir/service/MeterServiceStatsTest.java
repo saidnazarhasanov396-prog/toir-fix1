@@ -29,6 +29,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,6 +40,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,6 +65,8 @@ class MeterServiceStatsTest {
     ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     @Mock
     MaintenanceAutomationService maintenanceAutomationService;
+    @Mock
+    ForecastService forecastService;
 
     @InjectMocks
     MeterService service;
@@ -270,6 +275,133 @@ class MeterServiceStatsTest {
                         && reading.getWorkOrderId() == null
                         && reading.getDefectId() == null
         ));
+    }
+
+    @Test
+    void addReadingRecordsDailyUsageAndRecalculatesForecast() {
+        UUID meterId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Instant readAt = Instant.parse("2026-06-04T09:15:00Z");
+        LocalDate expectedDate = readAt.atZone(ZoneId.systemDefault()).toLocalDate();
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setId(meterId);
+        meter.setEquipmentId(equipmentId);
+        meter.setMeterType(MeterType.ENGINE_HOURS);
+        meter.setName("Engine hours");
+        meter.setUnit("h");
+        meter.setCurrentValue(100.0);
+        meter.setActive(true);
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setName("Pump");
+        when(meterRepository.findByIdAndIsDeletedFalse(meterId)).thenReturn(java.util.Optional.of(meter));
+        when(readingRepository.save(any(MeterReading.class))).thenAnswer(invocation -> {
+            MeterReading saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(meterRepository.save(any(EquipmentMeter.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(java.util.Optional.of(equipment));
+        when(maintenanceAutomationServiceProvider.getIfAvailable()).thenReturn(null);
+
+        service.addReading(new MeterReadingRequest(
+                meterId,
+                125.0,
+                readAt,
+                MeterSource.MANUAL,
+                null,
+                "tablet-1",
+                "shift reading"
+        ));
+
+        verify(forecastService).recordDailyUsage(equipmentId, expectedDate, 25.0);
+        verify(forecastService).recalculate(equipmentId);
+    }
+
+    @Test
+    void addReadingKeepsMeterUpdateWhenForecastFails() {
+        UUID meterId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Instant readAt = Instant.parse("2026-06-04T09:15:00Z");
+        LocalDate expectedDate = readAt.atZone(ZoneId.systemDefault()).toLocalDate();
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setId(meterId);
+        meter.setEquipmentId(equipmentId);
+        meter.setMeterType(MeterType.ENGINE_HOURS);
+        meter.setName("Engine hours");
+        meter.setUnit("h");
+        meter.setCurrentValue(100.0);
+        meter.setActive(true);
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setName("Pump");
+        when(meterRepository.findByIdAndIsDeletedFalse(meterId)).thenReturn(java.util.Optional.of(meter));
+        when(readingRepository.save(any(MeterReading.class))).thenAnswer(invocation -> {
+            MeterReading saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(meterRepository.save(any(EquipmentMeter.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(java.util.Optional.of(equipment));
+        when(maintenanceAutomationServiceProvider.getIfAvailable()).thenReturn(null);
+        doThrow(new IllegalStateException("forecast failed"))
+                .when(forecastService)
+                .recordDailyUsage(equipmentId, expectedDate, 25.0);
+
+        var result = service.addReading(new MeterReadingRequest(
+                meterId,
+                125.0,
+                readAt,
+                MeterSource.MANUAL,
+                null,
+                "tablet-1",
+                "shift reading"
+        ));
+
+        assertThat(result.value()).isEqualTo(125.0);
+        assertThat(result.delta()).isEqualTo(25.0);
+        assertThat(meter.getCurrentValue()).isEqualTo(125.0);
+        verify(forecastService).recordDailyUsage(equipmentId, expectedDate, 25.0);
+    }
+
+    @Test
+    void deleteReadingReversesDailyUsageAndRecalculatesForecast() {
+        UUID readingId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Instant readAt = Instant.parse("2026-06-04T09:15:00Z");
+        LocalDate expectedDate = readAt.atZone(ZoneId.systemDefault()).toLocalDate();
+        MeterReading reading = new MeterReading();
+        reading.setId(readingId);
+        reading.setEquipmentId(equipmentId);
+        reading.setDelta(25.0);
+        reading.setReadAt(readAt);
+        when(readingRepository.findByIdAndIsDeletedFalse(readingId)).thenReturn(java.util.Optional.of(reading));
+        when(readingRepository.save(any(MeterReading.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.deleteReading(readingId);
+
+        assertThat(reading.isDeleted()).isTrue();
+        verify(forecastService).reverseDailyUsage(equipmentId, expectedDate, 25.0);
+        verify(forecastService).recalculate(equipmentId);
+    }
+
+    @Test
+    void deleteReadingWithNullDeltaDoesNotReverseForecast() {
+        UUID readingId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        MeterReading reading = new MeterReading();
+        reading.setId(readingId);
+        reading.setEquipmentId(equipmentId);
+        reading.setDelta(null);
+        reading.setReadAt(Instant.parse("2026-06-04T09:15:00Z"));
+        when(readingRepository.findByIdAndIsDeletedFalse(readingId)).thenReturn(java.util.Optional.of(reading));
+        when(readingRepository.save(any(MeterReading.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.deleteReading(readingId);
+
+        assertThat(reading.isDeleted()).isTrue();
+        verify(forecastService, never()).reverseDailyUsage(any(), any(), any(Double.class));
+        verify(forecastService, never()).recalculate(any());
     }
 
     private MeterStatsProjection mockProjection(Long total, Long active, Long readings, Long due) {
