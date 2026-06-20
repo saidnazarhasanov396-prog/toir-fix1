@@ -264,6 +264,60 @@ class RepairRequestServiceTest {
     }
 
     @Test
+    void resolveDepartmentForWarehouseEquipmentUsesResponsibleDepartment() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID responsibleDepartmentId = UUID.randomUUID();
+        RepairRequestRequest request = createRequestWithoutDepartment(equipmentId);
+        Equipment equipment = equipment(equipmentId, null);
+        equipment.setResponsibleDepartmentId(responsibleDepartmentId);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThat(service.resolveDepartmentIdForCreate(request)).isEqualTo(responsibleDepartmentId);
+    }
+
+    @Test
+    void resolveDepartmentPrefersResponsibleDepartmentOverPhysicalDepartment() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID responsibleDepartmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, UUID.randomUUID());
+        equipment.setResponsibleDepartmentId(responsibleDepartmentId);
+        RepairRequestRequest request = new RepairRequestRequest(
+                "RR-2026-0003",
+                "Pump vibration",
+                "Excess vibration on pump",
+                null,
+                null,
+                null,
+                equipmentId,
+                null,
+                null,
+                UUID.randomUUID(),
+                PriorityLevel.HIGH,
+                CriticalityLevel.HIGH,
+                RequestSource.MANUAL,
+                null,
+                null
+        );
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThat(service.resolveDepartmentIdForCreate(request)).isEqualTo(responsibleDepartmentId);
+    }
+
+    @Test
+    void resolveDepartmentRejectsEquipmentWithoutResponsibleOrPhysicalDepartment() {
+        UUID equipmentId = UUID.randomUUID();
+        RepairRequestRequest request = createRequestWithoutDepartment(equipmentId);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId))
+                .thenReturn(Optional.of(equipment(equipmentId, null)));
+
+        assertThatThrownBy(() -> service.resolveDepartmentIdForCreate(request))
+                .hasMessageContaining("no responsible or physical department");
+    }
+
+    @Test
     void createWithDefectIdDoesNotLinkAnotherDefect() {
         UUID requestedDefectId = UUID.randomUUID();
         UUID otherDefectId = UUID.randomUUID();
@@ -1798,6 +1852,26 @@ class RepairRequestServiceTest {
         equipment.setName("Pump #1");
         equipment.setDepartmentId(departmentId);
         return equipment;
+    }
+
+    private RepairRequestRequest createRequestWithoutDepartment(UUID equipmentId) {
+        return new RepairRequestRequest(
+                "RR-2026-0003",
+                "Pump vibration",
+                "Excess vibration on pump",
+                null,
+                null,
+                null,
+                equipmentId,
+                null,
+                null,
+                UUID.randomUUID(),
+                PriorityLevel.HIGH,
+                CriticalityLevel.HIGH,
+                RequestSource.MANUAL,
+                null,
+                null
+        );
     }
 
     private Defect defect(UUID repairRequestId) {
