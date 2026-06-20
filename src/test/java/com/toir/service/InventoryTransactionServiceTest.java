@@ -32,6 +32,8 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -102,6 +104,9 @@ class InventoryTransactionServiceTest {
     @Mock
     ToirStockService toirStockService;
 
+    @Mock
+    LegacyStockProjectionService legacyStockProjectionService;
+
     InventoryTransactionService service;
 
     @BeforeEach
@@ -119,7 +124,8 @@ class InventoryTransactionServiceTest {
                 auditBuilderService,
                 lowStockRecommendationService,
                 inventoryCostService,
-                toirStockService
+                toirStockService,
+                legacyStockProjectionService
         );
     }
 
@@ -137,8 +143,10 @@ class InventoryTransactionServiceTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
         when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(responsible));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(120);
+            return stock;
+        });
         when(repository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
 
@@ -203,8 +211,10 @@ class InventoryTransactionServiceTest {
         when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(employee(responsibleId, "Jane", "Smith")));
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId, "Mechanical")));
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder(workOrderId, departmentId, "WO-1")));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(10);
+            return stock;
+        });
         when(repository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
 
@@ -267,10 +277,14 @@ class InventoryTransactionServiceTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
         when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(employee(responsibleId, "Jane", "Smith")));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(sourceWarehouseId, sparePartId))
-                .thenReturn(Optional.of(sourceStock));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(destinationWarehouseId, sparePartId))
-                .thenReturn(Optional.of(destinationStock));
+        when(legacyStockProjectionService.sync(sourceWarehouseId, sparePartId)).thenAnswer(invocation -> {
+            sourceStock.setQuantity(10);
+            return sourceStock;
+        });
+        when(legacyStockProjectionService.sync(destinationWarehouseId, sparePartId)).thenAnswer(invocation -> {
+            destinationStock.setQuantity(27);
+            return destinationStock;
+        });
         when(repository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
 
@@ -362,8 +376,12 @@ class InventoryTransactionServiceTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
         when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(employee(responsibleId, "Jane", "Smith")));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
+        when(legacyStockProjectionService.current(warehouseId, sparePartId))
+                .thenReturn(new WmsStockSnapshot(warehouseId, sparePartId, BigDecimal.valueOf(100), BigDecimal.ZERO));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(97);
+            return stock;
+        });
         when(repository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
 
@@ -407,6 +425,12 @@ class InventoryTransactionServiceTest {
                 .thenReturn(List.of(sparePart));
         when(repository.findAdjustmentsForReconciliation(true, List.of()))
                 .thenReturn(List.of(adjustment));
+        var snapshot = new WmsStockSnapshot(
+                warehouseId, sparePartId, BigDecimal.valueOf(97), BigDecimal.ZERO);
+        var snapshots = java.util.Map.of(
+                new LegacyStockProjectionService.StockKey(warehouseId, sparePartId), snapshot);
+        when(legacyStockProjectionService.currentAll()).thenReturn(snapshots);
+        when(legacyStockProjectionService.snapshot(snapshots, warehouseId, sparePartId)).thenReturn(snapshot);
 
         var result = service.reconciliation(null, null);
 
@@ -432,8 +456,10 @@ class InventoryTransactionServiceTest {
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
         when(employeeRepository.findByIdAndIsDeletedFalse(takenById)).thenReturn(Optional.of(employee(takenById, "Ali", "Valiyev")));
         when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(employee(responsibleId, "Jane", "Smith")));
-        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId))
-                .thenReturn(Optional.of(stock));
+        when(repository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        org.mockito.Mockito.doThrow(RestException.badRequest(
+                        "Insufficient available stock: available=5, requested=10"))
+                .when(toirStockService).postIssue(any(StockIssueCommand.class));
 
         assertThatThrownBy(() -> service.createIssue(new InventoryIssueRequest(
                 warehouseId,
@@ -448,11 +474,12 @@ class InventoryTransactionServiceTest {
                 "ISS-2026-0001",
                 "Too much"
         ))).isInstanceOf(RestException.class)
-                .hasMessageContaining("Cannot issue more than available");
+                .hasMessageContaining("Insufficient available stock");
 
         assertThat(stock.getQuantity()).isEqualTo(20);
-        verify(repository, never()).save(any());
+        verify(repository).save(any());
         verify(stockMovementRepository, never()).save(any());
+        verify(legacyStockProjectionService, never()).sync(any(), any());
     }
 
     @Test

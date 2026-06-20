@@ -17,6 +17,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Deprecated(forRemoval = false)
 public class StockMovement extends ActorStampedEntity {
 
     @Column(name = "warehouse_id", nullable = false)

@@ -7,8 +7,8 @@ import com.toir.enums.StockMovementType;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
-import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,8 +30,6 @@ class InventoryAnalyticsServiceTest {
     @Mock
     SparePartRepository sparePartRepository;
     @Mock
-    WarehouseStockRepository stockRepository;
-    @Mock
     StockMovementRepository movementRepository;
     @Mock
     WarehouseRepository warehouseRepository;
@@ -39,6 +37,8 @@ class InventoryAnalyticsServiceTest {
     ScopeAccessService scopeAccessService;
     @Mock
     InventoryCostService inventoryCostService;
+    @Mock
+    LegacyStockProjectionService legacyStockProjectionService;
 
     InventoryAnalyticsService service;
 
@@ -46,11 +46,11 @@ class InventoryAnalyticsServiceTest {
     void setUp() {
         service = new InventoryAnalyticsService(
                 sparePartRepository,
-                stockRepository,
                 movementRepository,
                 warehouseRepository,
                 scopeAccessService,
-                inventoryCostService
+                inventoryCostService,
+                legacyStockProjectionService
         );
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
     }

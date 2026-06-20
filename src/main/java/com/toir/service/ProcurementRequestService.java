@@ -49,6 +49,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -86,6 +87,7 @@ public class ProcurementRequestService {
     private final ActualCostRepository actualCostRepository;
     private final CostCategoryRepository costCategoryRepository;
     private final ToirStockService toirStockService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId, String search) {
@@ -462,10 +464,6 @@ public class ProcurementRequestService {
         for (ReceiptLine receiptLine : receiptLines) {
             ProcurementRequestLine line = receiptLine.line();
             double quantity = receiptLine.quantity();
-            WarehouseStock stock = findStockForReceipt(warehouseId, line.getSparePartId())
-                    .orElseGet(() -> createEmptyStock(warehouseId, line.getSparePartId()));
-            stock.setQuantity(stock.getQuantity() + quantity);
-            stockRepository.save(stock);
             line.setReceivedQuantity(line.getReceivedQuantity() + quantity);
             line.setRemainingQuantity(Math.max(0, line.getQuantity() - line.getReceivedQuantity()));
             StockMovement movement = stockMovementRepository.save(receiptMovement(request, line, quantity, receiptRequest));
@@ -473,6 +471,7 @@ public class ProcurementRequestService {
                 movementIds.add(movement.getId());
             }
             postProcurementCoreStockReceipt(request, movement, quantity);
+            WarehouseStock stock = legacyStockProjectionService.sync(warehouseId, line.getSparePartId());
             syncProcurementReceiptActualCost(request, line, quantity, movement);
             lowStockRecommendationService.evaluateStockSafely(stock);
         }
@@ -515,14 +514,6 @@ public class ProcurementRequestService {
             line.setRemainingQuantity(Math.max(0, line.getQuantity() - line.getReceivedQuantity()));
         }
         return new ReceiptResult(movementIds, equipmentIds);
-    }
-
-    private Optional<WarehouseStock> findStockForReceipt(UUID warehouseId, UUID sparePartId) {
-        Optional<WarehouseStock> locked =
-                stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId);
-        return locked.isPresent()
-                ? locked
-                : stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId);
     }
 
     private void recalculateReceiptStatus(ProcurementRequest request, List<ProcurementRequestLine> activeLines) {
@@ -612,18 +603,6 @@ public class ProcurementRequestService {
         cost.setCostDate(movement.getOccurredAt() == null ? Instant.now() : movement.getOccurredAt());
         cost.setNotes("Generated from procurement receipt %s line %s".formatted(request.getId(), line.getId()));
         actualCostRepository.save(cost);
-    }
-
-    private WarehouseStock createEmptyStock(UUID warehouseId, UUID sparePartId) {
-        SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)
-                .orElseThrow(() -> RestException.notFound("Spare part not found: " + sparePartId));
-        WarehouseStock stock = new WarehouseStock();
-        stock.setWarehouseId(warehouseId);
-        stock.setSparePart(sparePart);
-        stock.setQuantity(0);
-        stock.setReservedQty(0);
-        stock.setMinQty(0);
-        return stock;
     }
 
     private StockMovement receiptMovement(ProcurementRequest request,

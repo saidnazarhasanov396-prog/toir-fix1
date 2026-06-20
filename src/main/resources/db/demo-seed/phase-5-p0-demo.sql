@@ -1,3 +1,6 @@
+-- Explicit compatibility-projection write scope for legacy warehouse_stocks rows.
+SELECT set_config('toir.legacy_stock_projection', 'on', false);
+
 -- P0 leadership/UAT exact demo chain. Demo-only via the dev,demo-seed profile.
 -- MT-01 Operational Cockpit remains deferred and is intentionally not seeded here.
 
@@ -191,16 +194,7 @@ INSERT INTO warehouse_stocks (id, created_at, updated_at, is_deleted, warehouse_
 VALUES
 ('20000000-0000-0000-0000-000000000141', now(), now(), false, '00000000-0000-0000-0000-000000030001', '00000000-0000-0000-0000-000000040001', 26, 2, 10, 80, 12, 20, 0.25, 'P0-A-01'),
 ('20000000-0000-0000-0000-000000000142', now(), now(), false, '00000000-0000-0000-0000-000000030001', '00000000-0000-0000-0000-000000040002', 12, 1, 6, 40, 8, 12, 0.15, 'P0-A-02')
-ON CONFLICT (warehouse_id, spare_part_id) DO UPDATE
-SET quantity = GREATEST(warehouse_stocks.reserved_qty, EXCLUDED.quantity),
-    reserved_qty = LEAST(EXCLUDED.reserved_qty, GREATEST(warehouse_stocks.reserved_qty, EXCLUDED.quantity)),
-    min_qty = EXCLUDED.min_qty,
-    max_qty = EXCLUDED.max_qty,
-    reorder_point = EXCLUDED.reorder_point,
-    reorder_qty = EXCLUDED.reorder_qty,
-    avg_daily_usage = EXCLUDED.avg_daily_usage,
-    bin_location = EXCLUDED.bin_location,
-    updated_at = now();
+;
 
 INSERT INTO maintenance_budgets (id, created_at, updated_at, is_deleted, year, month, department_id, status, total_planned, total_actual)
 VALUES ('20000000-0000-0000-0000-000000000151', now(), now(), false, 2026, 6, '00000000-0000-0000-0000-00000000d002', 'APPROVED', 65000000.00, 1245000.00)
@@ -287,6 +281,76 @@ SET quantity = EXCLUDED.quantity,
     notes = EXCLUDED.notes,
     updated_at = now();
 
+-- Reconcile P0 stock overrides into the authoritative WMS core.
+INSERT INTO warehouse_stock_balances (
+    id, created_at, updated_at, is_deleted,
+    warehouse_id, spare_part_id, bin_id, lot_number, serial_number, identity_key,
+    expiry_date, qty_on_hand, qty_reserved, avg_cost, version
+)
+SELECT gen_random_uuid(), now(), now(), false,
+       ws.warehouse_id, ws.spare_part_id, NULL, NULL, NULL,
+       ws.warehouse_id::text || '|' || ws.spare_part_id::text || '|0||',
+       NULL, ws.quantity::numeric(19,4), ws.reserved_qty::numeric(19,4), NULL, 0
+FROM warehouse_stocks ws
+WHERE ws.is_deleted = false
+  AND ws.id IN (
+      '20000000-0000-0000-0000-000000000141'::uuid,
+      '20000000-0000-0000-0000-000000000142'::uuid
+  )
+ON CONFLICT (identity_key) WHERE is_deleted = false DO UPDATE
+SET qty_on_hand = EXCLUDED.qty_on_hand,
+    qty_reserved = EXCLUDED.qty_reserved,
+    updated_at = now();
+
+INSERT INTO warehouse_stock_ledgers (
+    id, created_at, updated_at, is_deleted,
+    warehouse_id, spare_part_id, bin_id, lot_number, serial_number,
+    movement_type, quantity, unit_cost, total_cost,
+    reference_type, reference_id, reference_doc_no, idempotency_key, posted_at, notes
+)
+SELECT gen_random_uuid(), now(), now(), false,
+       ws.warehouse_id, ws.spare_part_id, NULL, NULL, NULL,
+       'ADJUSTMENT_INC', ws.quantity::numeric(19,4), NULL, NULL,
+       'DEMO_SEED_OPENING', ws.id, NULL,
+       'demo-seed-opening-stock:' || ws.warehouse_id::text || ':' || ws.spare_part_id::text,
+       now(), 'P0 demo seed opening stock'
+FROM warehouse_stocks ws
+WHERE ws.is_deleted = false
+  AND ws.id IN (
+      '20000000-0000-0000-0000-000000000141'::uuid,
+      '20000000-0000-0000-0000-000000000142'::uuid
+  )
+ON CONFLICT (idempotency_key)
+    WHERE idempotency_key IS NOT NULL AND is_deleted = false
+DO UPDATE SET quantity = EXCLUDED.quantity,
+              reference_id = EXCLUDED.reference_id,
+              updated_at = now();
+
+INSERT INTO warehouse_reservation_ledgers (
+    id, created_at, updated_at, is_deleted,
+    warehouse_id, spare_part_id, bin_id, lot_number, serial_number,
+    movement_type, quantity, reference_type, reference_id, reference_doc_no,
+    idempotency_key, posted_at, notes
+)
+SELECT gen_random_uuid(), now(), now(), false,
+       ws.warehouse_id, ws.spare_part_id, NULL, NULL, NULL,
+       'RESERVE', ws.reserved_qty::numeric(19,4),
+       'DEMO_SEED_OPENING', ws.id, NULL,
+       'demo-seed-opening-reservation:' || ws.warehouse_id::text || ':' || ws.spare_part_id::text,
+       now(), 'P0 demo seed opening reservation'
+FROM warehouse_stocks ws
+WHERE ws.is_deleted = false
+  AND ws.reserved_qty > 0
+  AND ws.id IN (
+      '20000000-0000-0000-0000-000000000141'::uuid,
+      '20000000-0000-0000-0000-000000000142'::uuid
+  )
+ON CONFLICT (idempotency_key)
+    WHERE idempotency_key IS NOT NULL AND is_deleted = false
+DO UPDATE SET quantity = EXCLUDED.quantity,
+              reference_id = EXCLUDED.reference_id,
+              updated_at = now();
+
 INSERT INTO labor_entries (id, created_at, updated_at, is_deleted, work_order_id, user_id, contractor_name, work_date, hours, rate, description)
 VALUES ('20000000-0000-0000-0000-000000000341', now(), now(), false, '20000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-00000000a004', NULL, DATE '2026-05-20', 6.5, 153846.15, 'Known-cost labor source for AUTO-PUMP-A1 historical PM')
 ON CONFLICT (id) DO UPDATE
@@ -322,3 +386,5 @@ SET performed_at = EXCLUDED.performed_at,
     source = EXCLUDED.source,
     note = EXCLUDED.note,
     updated_at = now();
+
+SELECT set_config('toir.legacy_stock_projection', 'off', false);

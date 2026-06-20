@@ -1,3 +1,6 @@
+-- Explicit compatibility-projection write scope for legacy warehouse_stocks rows.
+SELECT set_config('toir.legacy_stock_projection', 'on', false);
+
 -- 05. Equipment types.
 INSERT INTO equipment_types (id, created_at, updated_at, is_deleted, code, name, name_en, name_uz, category, description)
 VALUES
@@ -40,7 +43,7 @@ VALUES
 ('00000000-0000-0000-0000-000000050001', now(), now(), false, '00000000-0000-0000-0000-000000030001', '00000000-0000-0000-0000-000000040001', 48, 4, 20, 120, 24, 60, 1.2, 'A-01-01'),
 ('00000000-0000-0000-0000-000000050002', now(), now(), false, '00000000-0000-0000-0000-000000030001', '00000000-0000-0000-0000-000000040002', 8, 0, 10, 50, 12, 24, 0.4, 'A-02-03'),
 ('00000000-0000-0000-0000-000000050003', now(), now(), false, '00000000-0000-0000-0000-000000030002', '00000000-0000-0000-0000-000000040003', 140, 10, 50, 300, 60, 120, 2.0, 'B-01-02')
-ON CONFLICT (warehouse_id, spare_part_id) DO NOTHING;
+;
 
 
 -- 17.02. Equipment types, regulations, equipment, warehouse catalog, and PPR volume.
@@ -122,7 +125,7 @@ SELECT ('00000000-0000-0000-0000-' || '00000005' || lpad(((w.wh_index * 100) + p
        chr(64 + w.wh_index) || '-' || lpad(((p.part_index - 1) / 10 + 1)::text, 2, '0') || '-' || lpad(((p.part_index - 1) % 10 + 1)::text, 2, '0')
 FROM (VALUES (1, '00000000-0000-0000-0000-000000030001'::uuid), (2, '00000000-0000-0000-0000-000000030002'::uuid), (3, '00000000-0000-0000-0000-000000030003'::uuid)) AS w(wh_index, warehouse_id)
 CROSS JOIN generate_series(1, 50) AS p(part_index)
-ON CONFLICT (warehouse_id, spare_part_id) DO NOTHING;
+;
 
 INSERT INTO ppr_plans (id, created_at, updated_at, is_deleted, code, name, start_date, end_date, status, department_id, created_by_id, approved_by_id, notes)
 VALUES
@@ -413,6 +416,75 @@ SELECT ('10000000-0000-0000-0000-' || '00000020' || lpad(gs::text, 4, '0'))::uui
        'Calibration seeded for industrial traceability'
 FROM generate_series(1, 24) AS gs
 ON CONFLICT (id) DO NOTHING;
+
+SELECT set_config('toir.legacy_stock_projection', 'off', false);
+
+-- Keep WMS core authoritative for all warehouse stock fixtures created by this phase.
+INSERT INTO warehouse_stock_balances (
+    id, created_at, updated_at, is_deleted,
+    warehouse_id, spare_part_id, bin_id, lot_number, serial_number, identity_key,
+    expiry_date, qty_on_hand, qty_reserved, avg_cost, version
+)
+SELECT gen_random_uuid(), now(), now(), false,
+       ws.warehouse_id, ws.spare_part_id, NULL, NULL, NULL,
+       ws.warehouse_id::text || '|' || ws.spare_part_id::text || '|0||',
+       NULL, ws.quantity::numeric(19,4), ws.reserved_qty::numeric(19,4), NULL, 0
+FROM warehouse_stocks ws
+JOIN warehouses w ON w.id = ws.warehouse_id
+WHERE ws.is_deleted = false
+  AND w.is_deleted = false
+  AND w.code LIKE 'NAV-WH-%'
+ON CONFLICT (identity_key) WHERE is_deleted = false DO UPDATE
+SET qty_on_hand = EXCLUDED.qty_on_hand,
+    qty_reserved = EXCLUDED.qty_reserved,
+    updated_at = now();
+
+INSERT INTO warehouse_stock_ledgers (
+    id, created_at, updated_at, is_deleted,
+    warehouse_id, spare_part_id, bin_id, lot_number, serial_number,
+    movement_type, quantity, unit_cost, total_cost,
+    reference_type, reference_id, reference_doc_no, idempotency_key, posted_at, notes
+)
+SELECT gen_random_uuid(), now(), now(), false,
+       ws.warehouse_id, ws.spare_part_id, NULL, NULL, NULL,
+       'ADJUSTMENT_INC', ws.quantity::numeric(19,4), NULL, NULL,
+       'DEMO_SEED_OPENING', ws.id, NULL,
+       'demo-seed-opening-stock:' || ws.warehouse_id::text || ':' || ws.spare_part_id::text,
+       now(), 'Demo seed opening stock'
+FROM warehouse_stocks ws
+JOIN warehouses w ON w.id = ws.warehouse_id
+WHERE ws.is_deleted = false
+  AND w.is_deleted = false
+  AND w.code LIKE 'NAV-WH-%'
+ON CONFLICT (idempotency_key)
+    WHERE idempotency_key IS NOT NULL AND is_deleted = false
+DO UPDATE SET quantity = EXCLUDED.quantity,
+              reference_id = EXCLUDED.reference_id,
+              updated_at = now();
+
+INSERT INTO warehouse_reservation_ledgers (
+    id, created_at, updated_at, is_deleted,
+    warehouse_id, spare_part_id, bin_id, lot_number, serial_number,
+    movement_type, quantity, reference_type, reference_id, reference_doc_no,
+    idempotency_key, posted_at, notes
+)
+SELECT gen_random_uuid(), now(), now(), false,
+       ws.warehouse_id, ws.spare_part_id, NULL, NULL, NULL,
+       'RESERVE', ws.reserved_qty::numeric(19,4),
+       'DEMO_SEED_OPENING', ws.id, NULL,
+       'demo-seed-opening-reservation:' || ws.warehouse_id::text || ':' || ws.spare_part_id::text,
+       now(), 'Demo seed opening reservation'
+FROM warehouse_stocks ws
+JOIN warehouses w ON w.id = ws.warehouse_id
+WHERE ws.is_deleted = false
+  AND ws.reserved_qty > 0
+  AND w.is_deleted = false
+  AND w.code LIKE 'NAV-WH-%'
+ON CONFLICT (idempotency_key)
+    WHERE idempotency_key IS NOT NULL AND is_deleted = false
+DO UPDATE SET quantity = EXCLUDED.quantity,
+              reference_id = EXCLUDED.reference_id,
+              updated_at = now();
 
 INSERT INTO materials (id, created_at, updated_at, is_deleted, code, name, kind, unit, min_stock, specification)
 SELECT ('10000000-0000-0000-0000-' || '00000021' || lpad(gs::text, 4, '0'))::uuid,

@@ -36,6 +36,8 @@ import com.toir.security.ScopeAccessService;
 import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +59,7 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@Deprecated(forRemoval = false)
 public class StockMovementService {
 
     private static final int MAX_STOCK_MOVEMENT_FILES = 25;
@@ -74,6 +77,7 @@ public class StockMovementService {
     private final UploadedFileRepository uploadedFileRepository;
     private final StockMovementFileRepository stockMovementFileRepository;
     private final AttachmentGroupService attachmentGroupService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
 
     @Transactional(readOnly = true)
@@ -126,49 +130,12 @@ public class StockMovementService {
         assertCanAccessWarehouseId(request.warehouseId());
         assertMovementHasReasonOrSource(request);
 
-        WarehouseStock stock = stockForMovement(request.warehouseId(), request.sparePartId());
-        double previousQuantity = stock.getQuantity();
-
-        switch (request.type()) {
-            case RECEIPT, RETURN -> stock.setQuantity(stock.getQuantity() + request.quantity());
-            case ISSUE -> {
-                if (stock.getAvailable() < request.quantity()) {
-                    throw RestException.badRequest("Cannot issue more than available: available="
-                            + stock.getAvailable() + ", requested=" + request.quantity());
-                }
-                stock.setQuantity(stock.getQuantity() - request.quantity());
-            }
-            case RESERVATION -> {
-                if (stock.getAvailable() < request.quantity()) {
-                    throw RestException.badRequest("Cannot reserve more than available");
-                }
-                stock.setReservedQty(stock.getReservedQty() + request.quantity());
-            }
-            case RELEASE -> {
-                if (stock.getReservedQty() < request.quantity()) {
-                    throw RestException.badRequest("Cannot release more than reserved: reserved="
-                            + stock.getReservedQty() + ", requested=" + request.quantity());
-                }
-                stock.setReservedQty(stock.getReservedQty() - request.quantity());
-            }
-            case ADJUSTMENT -> {
-                if (request.quantity() < stock.getReservedQty()) {
-                    throw RestException.badRequest("Cannot adjust quantity below reserved: reserved="
-                            + stock.getReservedQty() + ", requested=" + request.quantity());
-                }
-                stock.setQuantity(request.quantity());
-            }
-            case TRANSFER -> {
-                if (stock.getAvailable() < request.quantity()) {
-                    throw RestException.badRequest("Cannot transfer more than available");
-                }
-                stock.setQuantity(stock.getQuantity() - request.quantity());
-            }
-            case EQUIPMENT_IN -> throw RestException.badRequest(
-                    "Equipment receipts must be recorded through procurement receipt");
-        }
-        if (stock.getQuantity() < 0 || stock.getReservedQty() < 0 || stock.getAvailable() < 0) {
-            throw RestException.badRequest("Stock quantities cannot be negative");
+        WmsStockSnapshot currentStock =
+                legacyStockProjectionService.current(request.warehouseId(), request.sparePartId());
+        if (request.type() == StockMovementType.ADJUSTMENT
+                && BigDecimal.valueOf(request.quantity()).compareTo(currentStock.qtyReserved()) < 0) {
+            throw RestException.badRequest("Cannot adjust quantity below reserved: reserved="
+                    + currentStock.qtyReserved() + ", requested=" + request.quantity());
         }
 
         StockMovement movement = new StockMovement();
@@ -183,7 +150,8 @@ public class StockMovementService {
         movement.setComment(request.notes());
         movement.setSourceType(StockMovementSourceType.MANUAL);
         StockMovement saved = repository.save(movement);
-        postCoreStockMovement(saved, previousQuantity);
+        postCoreStockMovement(saved, currentStock.qtyOnHand());
+        WarehouseStock stock = legacyStockProjectionService.sync(request.warehouseId(), request.sparePartId());
 
         if (shouldEvaluateLowStock(request.type())) {
             lowStockRecommendationService.evaluateStockSafely(stock);
@@ -208,9 +176,6 @@ public class StockMovementService {
         validateOptionalUnitPrice(request.unitPrice());
         assertCanAccessWarehouseId(request.warehouseId());
 
-        WarehouseStock stock = stockForMovement(request.warehouseId(), request.sparePartId());
-        stock.setQuantity(stock.getQuantity() + request.quantity());
-
         StockMovement movement = new StockMovement();
         movement.setWarehouseId(request.warehouseId());
         movement.setSparePartId(request.sparePartId());
@@ -229,6 +194,7 @@ public class StockMovementService {
 
         StockMovement saved = repository.save(movement);
         postCoreStockReceipt(saved);
+        legacyStockProjectionService.sync(request.warehouseId(), request.sparePartId());
         auditMovement(saved);
         return StockMovementDto.from(saved);
     }
@@ -237,13 +203,6 @@ public class StockMovementService {
     public StockMovementDto issue(StockMovementIssueRequest request) {
         validatePositiveQuantity(request.quantity());
         assertCanAccessWarehouseId(request.warehouseId());
-
-        WarehouseStock stock = stockForMovement(request.warehouseId(), request.sparePartId());
-        if (stock.getAvailable() < request.quantity()) {
-            throw RestException.badRequest("Cannot issue more than available: available="
-                    + stock.getAvailable() + ", requested=" + request.quantity());
-        }
-        stock.setQuantity(stock.getQuantity() - request.quantity());
 
         StockMovement movement = new StockMovement();
         movement.setWarehouseId(request.warehouseId());
@@ -262,6 +221,7 @@ public class StockMovementService {
 
         StockMovement saved = repository.save(movement);
         postCoreStockIssue(saved);
+        WarehouseStock stock = legacyStockProjectionService.sync(request.warehouseId(), request.sparePartId());
         lowStockRecommendationService.evaluateStockSafely(stock);
         auditMovement(saved);
         return StockMovementDto.from(saved);
@@ -577,29 +537,6 @@ public class StockMovementService {
         }
     }
 
-    private java.util.Optional<WarehouseStock> findStockForMovement(UUID warehouseId, UUID sparePartId) {
-        java.util.Optional<WarehouseStock> locked =
-                stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId);
-        return locked != null && locked.isPresent()
-                ? locked
-                : stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId);
-    }
-
-    private WarehouseStock stockForMovement(UUID warehouseId, UUID sparePartId) {
-        return findStockForMovement(warehouseId, sparePartId)
-                .orElseGet(() -> {
-                    SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)
-                            .orElseThrow(() -> RestException.notFound("SparePart not found: " + sparePartId));
-                    WarehouseStock stock = new WarehouseStock();
-                    stock.setWarehouseId(warehouseId);
-                    stock.setSparePart(sparePart);
-                    stock.setQuantity(0);
-                    stock.setReservedQty(0);
-                    stock.setMinQty(0);
-                    return stockRepository.save(stock);
-                });
-    }
-
     private void postCoreStockReceipt(StockMovement saved) {
         toirStockService.postReceipt(stockReceiptCommand(
                 saved,
@@ -616,7 +553,7 @@ public class StockMovementService {
         ));
     }
 
-    private void postCoreStockMovement(StockMovement saved, double previousQuantity) {
+    private void postCoreStockMovement(StockMovement saved, BigDecimal previousQuantity) {
         switch (saved.getType()) {
             case RECEIPT -> postCoreStockIncrease(saved, StockLedgerMovementType.RECEIPT,
                     BigDecimal.valueOf(saved.getQuantity()));
@@ -627,11 +564,11 @@ public class StockMovementService {
             case TRANSFER -> postCoreStockDecrease(saved, StockLedgerMovementType.TRANSFER_OUT,
                     BigDecimal.valueOf(saved.getQuantity()));
             case ADJUSTMENT -> {
-                double delta = saved.getQuantity() - previousQuantity;
-                if (delta > 0) {
-                    postCoreStockIncrease(saved, StockLedgerMovementType.ADJUSTMENT_INC, BigDecimal.valueOf(delta));
-                } else if (delta < 0) {
-                    postCoreStockDecrease(saved, StockLedgerMovementType.ADJUSTMENT_DEC, BigDecimal.valueOf(Math.abs(delta)));
+                BigDecimal delta = BigDecimal.valueOf(saved.getQuantity()).subtract(previousQuantity);
+                if (delta.signum() > 0) {
+                    postCoreStockIncrease(saved, StockLedgerMovementType.ADJUSTMENT_INC, delta);
+                } else if (delta.signum() < 0) {
+                    postCoreStockDecrease(saved, StockLedgerMovementType.ADJUSTMENT_DEC, delta.abs());
                 }
             }
             case RESERVATION, RELEASE -> {

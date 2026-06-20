@@ -15,6 +15,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Deprecated(forRemoval = false)
 public class WarehouseStock extends BaseEntity {
 
     @Column(name = "warehouse_id", nullable = false)

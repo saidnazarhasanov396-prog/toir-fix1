@@ -2,12 +2,14 @@ package com.toir.service.warehouse;
 
 import com.toir.dto.warehouse.WarehouseStockBalanceDto;
 import com.toir.dto.warehouse.WarehouseStockLedgerDto;
+import com.toir.dto.warehouse.WarehouseStockReconciliationDto;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.repository.WarehouseStockLedgerRepository;
 import com.toir.util.PaginationUtils;
 import java.util.UUID;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -37,6 +39,14 @@ public class ToirWarehouseQueryService {
                 warehouseId,
                 PaginationUtils.pageRequest(page, size)
         ).map(WarehouseStockLedgerDto::from);
+    }
+
+    @Transactional(readOnly = true)
+    public List<WarehouseStockReconciliationDto> stockReconciliation(UUID warehouseId) {
+        requireWarehouse(warehouseId);
+        return balanceRepository.reconcileWarehouseStock(warehouseId).stream()
+                .map(WarehouseStockReconciliationDto::from)
+                .toList();
     }
 
     private void requireWarehouse(UUID warehouseId) {

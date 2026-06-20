@@ -8,6 +8,7 @@ import com.toir.dto.purchaseorder.PurchaseOrderLineRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderReceiveLineRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderReceiveRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderRequest;
+import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.InventoryTransaction;
 import com.toir.entity.PurchaseOrder;
 import com.toir.entity.PurchaseOrderLine;
@@ -32,9 +33,10 @@ import com.toir.repository.PurchaseOrderRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
-import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -62,12 +64,13 @@ public class PurchaseOrderService {
     private final SupplierService supplierService;
     private final SparePartRepository sparePartRepository;
     private final WarehouseRepository warehouseRepository;
-    private final WarehouseStockRepository stockRepository;
     private final StockMovementRepository stockMovementRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final EmployeeRepository employeeRepository;
     private final ScopeAccessService scopeAccessService;
     private final InventoryCostService inventoryCostService;
+    private final ToirStockService toirStockService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
     @Transactional
     public PurchaseOrderDto create(PurchaseOrderRequest request) {
@@ -267,13 +270,34 @@ public class PurchaseOrderService {
         line.setReceivedQuantity(line.getReceivedQuantity().add(quantity));
         line.setRemainingQuantity(line.getOrderedQuantity().subtract(line.getReceivedQuantity()));
 
-        WarehouseStock stock = stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(order.getWarehouseId(), sparePart.getId())
-                .orElseGet(() -> createStock(order.getWarehouseId(), sparePart));
-        stock.setQuantity(stock.getQuantity() + quantity.doubleValue());
-        stockRepository.save(stock);
+        StockMovement movement = stockMovementRepository.save(
+                receiptMovement(order, line, sparePart, quantity, receiptDate, documentNumber, responsible)
+        );
+        postCoreStockReceipt(order, line, movement, quantity);
+        legacyStockProjectionService.sync(order.getWarehouseId(), sparePart.getId());
         inventoryCostService.applyReceiptCost(sparePart, previousTotalQuantity, quantity, line.getUnitPrice());
-        stockMovementRepository.save(receiptMovement(order, line, sparePart, quantity, receiptDate, documentNumber, responsible));
         inventoryTransactionRepository.save(receiptTransaction(order, line, sparePart, quantity, receiptDate, documentNumber, responsible));
+    }
+
+    private void postCoreStockReceipt(PurchaseOrder order,
+                                      PurchaseOrderLine line,
+                                      StockMovement movement,
+                                      BigDecimal quantity) {
+        toirStockService.postReceipt(new StockReceiptCommand(
+                order.getWarehouseId(),
+                line.getSparePartId(),
+                null,
+                quantity,
+                line.getUnitPrice(),
+                null,
+                null,
+                null,
+                "PURCHASE_ORDER",
+                order.getId(),
+                movement.getDocumentNumber(),
+                movement.getNotes(),
+                "purchase-order-receipt:" + movement.getId()
+        ));
     }
 
     private StockMovement receiptMovement(PurchaseOrder order, PurchaseOrderLine line, SparePart sparePart, BigDecimal quantity, LocalDate receiptDate, String documentNumber, Employee responsible) {
@@ -435,21 +459,10 @@ public class PurchaseOrderService {
         throw RestException.badRequest("Supplier is required when procurement lines have no preferred supplier");
     }
 
-    private WarehouseStock createStock(UUID warehouseId, SparePart sparePart) {
-        WarehouseStock stock = new WarehouseStock();
-        stock.setWarehouseId(warehouseId);
-        stock.setSparePart(sparePart);
-        stock.setQuantity(0);
-        stock.setReservedQty(0);
-        stock.setMinQty(0);
-        return stockRepository.save(stock);
-    }
-
     private BigDecimal totalStockQuantity(UUID sparePartId) {
-        return stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId).stream()
-                .map(WarehouseStock::getQuantity)
-                .map(BigDecimal::valueOf)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return legacyStockProjectionService.totalOnHand(
+                legacyStockProjectionService.currentForSparePart(sparePartId).values()
+        );
     }
 
     private Warehouse warehouseOrThrow(UUID id) {

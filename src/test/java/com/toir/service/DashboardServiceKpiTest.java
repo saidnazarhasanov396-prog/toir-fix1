@@ -38,6 +38,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -81,6 +82,7 @@ class DashboardServiceKpiTest {
     @Mock MaintenanceDueEventRepository maintenanceDueEventRepository;
     @Mock UserRepository userRepository;
     @Mock ScopeAccessService scopeAccessService;
+    @Mock LegacyStockProjectionService legacyStockProjectionService;
 
     @InjectMocks DashboardService service;
 
@@ -97,6 +99,7 @@ class DashboardServiceKpiTest {
         when(workOrderRepository.search(any(), any(), any())).thenReturn(List.of());
         when(reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(any())).thenReturn(List.of());
         when(warehouseStockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(legacyStockProjectionService.currentAll()).thenReturn(java.util.Map.of());
         when(stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(any())).thenReturn(List.of());
         when(contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());

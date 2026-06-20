@@ -27,6 +27,8 @@ import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirementRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.service.OperationalIssueService;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -75,6 +77,7 @@ public class SparePartForecastService {
     private final OperationalIssueRepository operationalIssueRepository;
     private final OperationalIssueService operationalIssueService;
     private final ScopeAccessService scopeAccessService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
     @Transactional(readOnly = true)
     public SparePartForecastSummaryDto forecast(SparePartForecastRequest request) {
@@ -363,14 +366,17 @@ public class SparePartForecastService {
 
     private Map<StockKey, StockTotals> stockTotals(List<WarehouseStock> stocks, UUID warehouseId) {
         Map<StockKey, StockTotals> totals = new HashMap<>();
+        var snapshots = legacyStockProjectionService.currentAll();
         for (WarehouseStock stock : stocks) {
             UUID keyWarehouseId = warehouseId == null ? null : stock.getWarehouseId();
             StockKey key = new StockKey(stock.getSparePartId(), keyWarehouseId);
             StockTotals current = totals.getOrDefault(key, StockTotals.ZERO);
-            double available = Math.max(stock.getAvailable(), 0);
+            WmsStockSnapshot snapshot = legacyStockProjectionService.snapshot(
+                    snapshots, stock.getWarehouseId(), stock.getSparePartId());
+            double available = Math.max(snapshot.availableQty().doubleValue(), 0);
             totals.put(key, new StockTotals(
                     current.availableQty() + available,
-                    current.reservedQty() + stock.getReservedQty()
+                    current.reservedQty() + snapshot.qtyReserved().doubleValue()
             ));
         }
         return totals;

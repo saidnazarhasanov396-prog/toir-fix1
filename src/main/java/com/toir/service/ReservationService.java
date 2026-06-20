@@ -14,6 +14,7 @@ import com.toir.repository.ReservationRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ public class ReservationService {
     private final AuditBuilderService auditBuilderService;
     private final LowStockRecommendationService lowStockRecommendationService;
     private final ToirStockService toirStockService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
 
     @Transactional(readOnly = true)
@@ -44,33 +46,29 @@ public class ReservationService {
     public ReservationDto reserve(ReservationRequest r) {
         validatePositiveQuantity(r.quantity());
 
-        WarehouseStock stock = stockForUpdate(r.warehouseStockId())
+        WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(r.warehouseStockId())
                 .orElseThrow(() -> RestException.notFound("Stock not found: " + r.warehouseStockId()));
-        if (stock.getAvailable() < r.quantity()) {
-            throw RestException.badRequest("Cannot reserve more than available: available="
-                    + stock.getAvailable() + ", requested=" + r.quantity());
-        }
-        stock.setReservedQty(stock.getReservedQty() + r.quantity());
-        stockRepository.save(stock);
-
         Reservation reservation = new Reservation();
         reservation.setWarehouseStockId(r.warehouseStockId());
+        reservation.setWarehouseId(stock.getWarehouseId());
+        reservation.setSparePartId(stock.getSparePartId());
         reservation.setWorkOrderId(r.workOrderId());
         reservation.setRepairRequestId(r.repairRequestId());
         reservation.setReservedById(r.reservedById());
         reservation.setQuantity(r.quantity());
         Reservation saved = repository.save(reservation);
-        stockMovementRepository.save(buildMovement(stock, saved, StockMovementType.RESERVATION));
         toirStockService.reserve(
-                stock.getWarehouseId(),
-                stock.getSparePartId(),
-                null,
+                saved.getWarehouseId(),
+                saved.getSparePartId(),
+                saved.getBinId(),
                 quantity(saved.getQuantity()),
                 "RESERVATION",
                 saved.getId(),
                 null,
                 "reservation-reserve:" + saved.getId()
         );
+        stock = legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
+        stockMovementRepository.save(buildMovement(saved, StockMovementType.RESERVATION));
 
         auditBuilderService.log(
                 "reservation",
@@ -91,25 +89,23 @@ public class ReservationService {
             throw RestException.badRequest("Only active reservations can be cancelled");
         }
         validatePositiveQuantity(reservation.getQuantity());
+        hydrateCoordinates(reservation);
 
-        WarehouseStock stock = stockForUpdate(reservation.getWarehouseStockId()).orElseThrow();
-        assertReservedCanCover(stock, reservation.getQuantity());
-        stock.setReservedQty(stock.getReservedQty() - reservation.getQuantity());
-        stockRepository.save(stock);
         reservation.setStatus(ReservationStatus.CANCELLED);
 
         Reservation saved = repository.save(reservation);
-        stockMovementRepository.save(buildMovement(stock, saved, StockMovementType.RELEASE));
         toirStockService.releaseReservation(
-                stock.getWarehouseId(),
-                stock.getSparePartId(),
-                null,
+                saved.getWarehouseId(),
+                saved.getSparePartId(),
+                saved.getBinId(),
                 quantity(saved.getQuantity()),
                 "RESERVATION",
                 saved.getId(),
                 null,
                 "reservation-cancel:" + saved.getId()
         );
+        legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
+        stockMovementRepository.save(buildMovement(saved, StockMovementType.RELEASE));
 
         auditBuilderService.log(
                 "reservation",
@@ -131,31 +127,23 @@ public class ReservationService {
             throw RestException.badRequest("Only active reservations can be fulfilled");
         }
         validatePositiveQuantity(reservation.getQuantity());
+        hydrateCoordinates(reservation);
 
-        WarehouseStock stock = stockForUpdate(reservation.getWarehouseStockId()).orElseThrow();
-        if (stock.getQuantity() < reservation.getQuantity()) {
-            throw RestException.badRequest("Cannot fulfill more than stock quantity: available="
-                    + stock.getQuantity() + ", requested=" + reservation.getQuantity());
-        }
-        assertReservedCanCover(stock, reservation.getQuantity());
-        stock.setQuantity(stock.getQuantity() - reservation.getQuantity());
-        stock.setReservedQty(stock.getReservedQty() - reservation.getQuantity());
-        assertNonNegativeStock(stock);
-        stockRepository.save(stock);
         reservation.setStatus(ReservationStatus.FULFILLED);
 
         Reservation saved = repository.save(reservation);
-        stockMovementRepository.save(buildMovement(stock, saved, StockMovementType.ISSUE));
         toirStockService.fulfillReservation(
-                stock.getWarehouseId(),
-                stock.getSparePartId(),
-                null,
+                saved.getWarehouseId(),
+                saved.getSparePartId(),
+                saved.getBinId(),
                 quantity(saved.getQuantity()),
                 "RESERVATION",
                 saved.getId(),
                 null,
                 "reservation-fulfill:" + saved.getId()
         );
+        WarehouseStock stock = legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
+        stockMovementRepository.save(buildMovement(saved, StockMovementType.ISSUE));
         lowStockRecommendationService.evaluateStockSafely(stock);
 
         auditBuilderService.log(
@@ -176,34 +164,27 @@ public class ReservationService {
                 .orElseThrow(() -> RestException.notFound("Reservation not found: " + id));
     }
 
+    private void hydrateCoordinates(Reservation reservation) {
+        if (reservation.getWarehouseId() != null && reservation.getSparePartId() != null) {
+            return;
+        }
+        WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseStockId())
+                .orElseThrow(() -> RestException.notFound(
+                        "Stock not found: " + reservation.getWarehouseStockId()));
+        reservation.setWarehouseId(stock.getWarehouseId());
+        reservation.setSparePartId(stock.getSparePartId());
+    }
+
     private void validatePositiveQuantity(double quantity) {
         if (quantity <= 0) {
             throw RestException.badRequest("Quantity must be greater than 0");
         }
     }
 
-    private java.util.Optional<WarehouseStock> stockForUpdate(UUID stockId) {
-        java.util.Optional<WarehouseStock> locked = stockRepository.findByIdAndIsDeletedFalseForUpdate(stockId);
-        return locked != null && locked.isPresent() ? locked : stockRepository.findByIdAndIsDeletedFalse(stockId);
-    }
-
-    private void assertReservedCanCover(WarehouseStock stock, double quantity) {
-        if (stock.getReservedQty() < quantity) {
-            throw RestException.badRequest("Stock reserved quantity is lower than reservation quantity: reserved="
-                    + stock.getReservedQty() + ", requested=" + quantity);
-        }
-    }
-
-    private void assertNonNegativeStock(WarehouseStock stock) {
-        if (stock.getQuantity() < 0 || stock.getReservedQty() < 0 || stock.getAvailable() < 0) {
-            throw RestException.badRequest("Stock quantities cannot become negative");
-        }
-    }
-
-    private StockMovement buildMovement(WarehouseStock stock, Reservation reservation, StockMovementType type) {
+    private StockMovement buildMovement(Reservation reservation, StockMovementType type) {
         StockMovement movement = new StockMovement();
-        movement.setWarehouseId(stock.getWarehouseId());
-        movement.setSparePartId(stock.getSparePartId());
+        movement.setWarehouseId(reservation.getWarehouseId());
+        movement.setSparePartId(reservation.getSparePartId());
         movement.setWorkOrderId(reservation.getWorkOrderId());
         movement.setCreatedById(reservation.getReservedById());
         movement.setType(type);

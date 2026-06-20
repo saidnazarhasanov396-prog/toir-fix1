@@ -36,6 +36,8 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -72,6 +74,7 @@ public class InventoryTransactionService {
     private final LowStockRecommendationService lowStockRecommendationService;
     private final InventoryCostService inventoryCostService;
     private final ToirStockService toirStockService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
     @Transactional
     public InventoryReceiptDto createReceipt(InventoryReceiptRequest request) {
@@ -82,15 +85,11 @@ public class InventoryTransactionService {
         assertCanAccessWarehouse(warehouse);
         SparePart sparePart = sparePartOrThrow(request.sparePartId());
         Employee responsible = employeeOrThrow(request.responsiblePersonId(), "Responsible person");
-        WarehouseStock stock = stockForReceipt(warehouse.getId(), sparePart);
         BigDecimal previousTotalQuantity = totalStockQuantity(sparePart.getId());
 
         BigDecimal totalAmount = request.quantity().multiply(request.unitPrice());
         LocalDate transactionDate = defaultDate(request.receiptDate());
         String unit = normalizeRequiredToken(request.unit(), "unit");
-
-        stock.setQuantity(stock.getQuantity() + request.quantity().doubleValue());
-        inventoryCostService.applyReceiptCost(sparePart, previousTotalQuantity, request.quantity(), request.unitPrice());
 
         InventoryTransaction transaction = new InventoryTransaction();
         transaction.setType(InventoryTransactionType.RECEIPT);
@@ -106,6 +105,9 @@ public class InventoryTransactionService {
         transaction.setDocumentNumber(trimToNull(request.documentNumber()));
         transaction.setComment(trimToNull(request.comment()));
         InventoryTransaction saved = repository.save(transaction);
+        postCoreStockReceipt(saved);
+        legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
+        inventoryCostService.applyReceiptCost(sparePart, previousTotalQuantity, request.quantity(), request.unitPrice());
 
         StockMovement movement = new StockMovement();
         movement.setWarehouseId(warehouse.getId());
@@ -123,8 +125,6 @@ public class InventoryTransactionService {
         movement.setComment(trimToNull(request.comment()));
         movement.setNotes(trimToNull(request.comment()));
         stockMovementRepository.save(movement);
-
-        postCoreStockReceipt(saved);
 
         auditTransaction(saved, "Приход запасной части создан");
 
@@ -160,16 +160,6 @@ public class InventoryTransactionService {
         WorkOrder workOrder = workOrderOrNull(request.workOrderId());
         assertScopeForIssueReferences(department, workOrder, takenBy, responsible);
 
-        WarehouseStock stock = stockForIssue(warehouse.getId(), sparePart.getId());
-        if (stock.getAvailable() < request.quantity().doubleValue()) {
-            throw RestException.badRequest("Cannot issue more than available: available="
-                    + stock.getAvailable() + ", requested=" + request.quantity());
-        }
-        stock.setQuantity(stock.getQuantity() - request.quantity().doubleValue());
-        if (stock.getQuantity() < 0 || stock.getAvailable() < 0) {
-            throw RestException.badRequest("Stock quantities cannot be negative");
-        }
-
         LocalDate transactionDate = defaultDate(request.issueDate());
         String unit = normalizeRequiredToken(request.unit(), "unit");
 
@@ -187,6 +177,8 @@ public class InventoryTransactionService {
         transaction.setDocumentNumber(trimToNull(request.documentNumber()));
         transaction.setComment(trimToNull(request.comment()));
         InventoryTransaction saved = repository.save(transaction);
+        postCoreStockIssue(saved);
+        WarehouseStock stock = legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
 
         StockMovement movement = new StockMovement();
         movement.setWarehouseId(warehouse.getId());
@@ -203,8 +195,6 @@ public class InventoryTransactionService {
         movement.setComment(trimToNull(request.comment()));
         movement.setNotes(trimToNull(request.comment()));
         stockMovementRepository.save(movement);
-
-        postCoreStockIssue(saved);
 
         lowStockRecommendationService.evaluateStockSafely(stock);
         inventoryCostService.refreshInventoryValue(sparePart);
@@ -247,16 +237,6 @@ public class InventoryTransactionService {
         Employee responsible = employeeOrThrow(request.responsiblePersonId(), "Responsible person");
         assertScopeForEmployees(responsible);
 
-        WarehouseStock sourceStock = stockForIssue(source.getId(), sparePart.getId());
-        if (sourceStock.getAvailable() < request.quantity().doubleValue()) {
-            throw RestException.badRequest("Cannot transfer more than available: available="
-                    + sourceStock.getAvailable() + ", requested=" + request.quantity());
-        }
-        WarehouseStock destinationStock = stockForReceipt(destination.getId(), sparePart);
-        sourceStock.setQuantity(sourceStock.getQuantity() - request.quantity().doubleValue());
-        destinationStock.setQuantity(destinationStock.getQuantity() + request.quantity().doubleValue());
-        assertNonNegativeStock(sourceStock);
-
         LocalDate transactionDate = defaultDate(request.transferDate());
         String unit = normalizeRequiredToken(request.unit(), "unit");
         InventoryTransaction transaction = baseTransaction(
@@ -272,6 +252,9 @@ public class InventoryTransactionService {
         transaction.setDestinationWarehouseId(destination.getId());
         transaction.setResponsiblePersonId(responsible.getId());
         InventoryTransaction saved = repository.save(transaction);
+        postCoreStockTransfer(saved, sparePart);
+        WarehouseStock sourceStock = legacyStockProjectionService.sync(source.getId(), sparePart.getId());
+        legacyStockProjectionService.sync(destination.getId(), sparePart.getId());
 
         stockMovementRepository.save(movement(source.getId(), sparePart.getId(), StockMovementType.TRANSFER,
                 request.quantity().negate().doubleValue(), unit, transactionDate, responsible.getId(), null,
@@ -279,7 +262,6 @@ public class InventoryTransactionService {
         stockMovementRepository.save(movement(destination.getId(), sparePart.getId(), StockMovementType.TRANSFER,
                 request.quantity().doubleValue(), unit, transactionDate, responsible.getId(), null,
                 null, null, request.documentNumber(), request.comment()));
-        postCoreStockTransfer(saved, sparePart);
         lowStockRecommendationService.evaluateStockSafely(sourceStock);
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Inventory transfer created");
@@ -320,9 +302,6 @@ public class InventoryTransactionService {
             throw RestException.badRequest("Returned quantity cannot exceed previously issued quantity");
         }
 
-        WarehouseStock stock = stockForReceipt(warehouse.getId(), sparePart);
-        stock.setQuantity(stock.getQuantity() + request.quantity().doubleValue());
-
         LocalDate transactionDate = defaultDate(request.returnDate());
         String unit = normalizeRequiredToken(sparePart.getUnit(), "unit");
         InventoryTransaction transaction = baseTransaction(
@@ -340,11 +319,12 @@ public class InventoryTransactionService {
         transaction.setDepartmentId(workOrder.getDepartmentId());
         transaction.setWorkOrderId(workOrder.getId());
         InventoryTransaction saved = repository.save(transaction);
+        postCoreStockReturn(saved, sparePart);
+        legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
 
         stockMovementRepository.save(movement(warehouse.getId(), sparePart.getId(), StockMovementType.RETURN,
                 request.quantity().doubleValue(), unit, transactionDate, responsible.getId(), returnedBy.getId(),
                 workOrder.getDepartmentId(), workOrder.getId(), request.documentNumber(), request.comment()));
-        postCoreStockReturn(saved, sparePart);
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Inventory return created");
 
@@ -368,14 +348,12 @@ public class InventoryTransactionService {
         Employee responsible = employeeOrThrow(request.responsiblePersonId(), "Responsible person");
         assertScopeForEmployees(responsible);
 
-        WarehouseStock stock = stockForReceipt(warehouse.getId(), sparePart);
-        if (request.actualQuantity().doubleValue() < stock.getReservedQty()) {
+        WmsStockSnapshot currentStock = legacyStockProjectionService.current(warehouse.getId(), sparePart.getId());
+        if (request.actualQuantity().compareTo(currentStock.qtyReserved()) < 0) {
             throw RestException.badRequest("Cannot adjust quantity below reserved quantity");
         }
-        BigDecimal systemQuantity = BigDecimal.valueOf(stock.getQuantity());
+        BigDecimal systemQuantity = currentStock.qtyOnHand();
         BigDecimal variance = request.actualQuantity().subtract(systemQuantity);
-        stock.setQuantity(request.actualQuantity().doubleValue());
-        assertNonNegativeStock(stock);
 
         LocalDate transactionDate = defaultDate(request.adjustmentDate());
         String unit = normalizeRequiredToken(sparePart.getUnit(), "unit");
@@ -394,11 +372,12 @@ public class InventoryTransactionService {
         transaction.setAdjustmentReason(request.reason());
         transaction.setResponsiblePersonId(responsible.getId());
         InventoryTransaction saved = repository.save(transaction);
+        postCoreStockAdjustment(saved, sparePart);
+        WarehouseStock stock = legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
 
         stockMovementRepository.save(movement(warehouse.getId(), sparePart.getId(), StockMovementType.ADJUSTMENT,
                 variance.doubleValue(), unit, transactionDate, responsible.getId(), null,
                 null, null, request.documentNumber(), request.comment()));
-        postCoreStockAdjustment(saved, sparePart);
         lowStockRecommendationService.evaluateStockSafely(stock);
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Inventory adjustment created");
@@ -479,6 +458,7 @@ public class InventoryTransactionService {
                 .toList();
         Map<UUID, Warehouse> warehouses = warehousesById(scopedStocks.stream().map(WarehouseStock::getWarehouseId).toList());
         Map<UUID, SparePart> spareParts = sparePartsById(scopedStocks.stream().map(WarehouseStock::getSparePartId).toList());
+        var wmsSnapshots = legacyStockProjectionService.currentAll();
         Map<String, InventoryTransaction> lastAdjustmentByStock = new HashMap<>();
         for (InventoryTransaction tx : repository.findAdjustmentsForReconciliation(
                 scopeAdmin,
@@ -498,7 +478,8 @@ public class InventoryTransactionService {
                             sparePart == null ? null : sparePart.getName(),
                             stock.getWarehouseId(),
                             warehouse == null ? null : warehouse.getName(),
-                            BigDecimal.valueOf(stock.getQuantity()),
+                            legacyStockProjectionService.snapshot(
+                                    wmsSnapshots, stock.getWarehouseId(), stock.getSparePartId()).qtyOnHand(),
                             adjustment == null ? null : adjustment.getActualQuantity(),
                             adjustment == null ? null : adjustment.getVariance(),
                             adjustment == null ? null : adjustment.getTransactionDate()
@@ -650,40 +631,10 @@ public class InventoryTransactionService {
                 .toList();
     }
 
-    private WarehouseStock stockForReceipt(UUID warehouseId, SparePart sparePart) {
-        return findStockForMovement(warehouseId, sparePart.getId())
-                .orElseGet(() -> {
-                    WarehouseStock stock = new WarehouseStock();
-                    stock.setWarehouseId(warehouseId);
-                    stock.setSparePart(sparePart);
-                    stock.setQuantity(0);
-                    stock.setReservedQty(0);
-                    stock.setMinQty(0);
-                    return stockRepository.save(stock);
-                });
-    }
-
-    private WarehouseStock stockForIssue(UUID warehouseId, UUID sparePartId) {
-        return findStockForMovement(warehouseId, sparePartId)
-                .orElseThrow(() -> RestException.badRequest("No stock exists for warehouse/spare part"));
-    }
-
     private BigDecimal totalStockQuantity(UUID sparePartId) {
-        return stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId).stream()
-                .map(WarehouseStock::getQuantity)
-                .map(BigDecimal::valueOf)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    private java.util.Optional<WarehouseStock> findStockForMovement(UUID warehouseId, UUID sparePartId) {
-        java.util.Optional<WarehouseStock> locked =
-                stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalseForUpdate(warehouseId, sparePartId);
-        if (locked != null && locked.isPresent()) {
-            return locked;
-        }
-        java.util.Optional<WarehouseStock> unlocked =
-                stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId);
-        return unlocked == null ? java.util.Optional.empty() : unlocked;
+        return legacyStockProjectionService.totalOnHand(
+                legacyStockProjectionService.currentForSparePart(sparePartId).values()
+        );
     }
 
     private void postCoreStockReceipt(InventoryTransaction saved) {
@@ -868,12 +819,6 @@ public class InventoryTransactionService {
         }
         if (responsible.getDepartmentId() != null && !scopeAccessService.canAccessDepartment(responsible.getDepartmentId())) {
             throw new AccessDeniedException("Access denied by responsible employee scope");
-        }
-    }
-
-    private void assertNonNegativeStock(WarehouseStock stock) {
-        if (stock.getQuantity() < 0 || stock.getReservedQty() < 0 || stock.getAvailable() < 0) {
-            throw RestException.badRequest("Stock quantities cannot be negative");
         }
     }
 

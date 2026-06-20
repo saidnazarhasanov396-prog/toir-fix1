@@ -13,6 +13,7 @@ import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ public class WarehouseService {
     private final EmployeeRepository employeeRepository;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
 
 
@@ -43,8 +45,11 @@ public class WarehouseService {
         UUID scopedDepartmentId = scopedDepartmentId(departmentId);
         return repository.search(normalizeSearch(search), scopedDepartmentId, locationId, responsibleId, active).stream()
                 .filter(this::canAccessWarehouse)
-                .map(w -> WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(w.getId()),
-                        departmentRepository, locationRepository, employeeRepository))
+                .map(w -> {
+                    var stocks = stockRepository.findAllByWarehouseIdAndIsDeletedFalse(w.getId());
+                    return WarehouseDto.fromWithStocks(w, stocks, legacyStockProjectionService.currentForWarehouse(w.getId()),
+                            departmentRepository, locationRepository, employeeRepository);
+                })
                 .toList();
     }
 
@@ -53,15 +58,17 @@ public class WarehouseService {
         Warehouse w = getOrThrow(id);
         assertCanAccessWarehouse(w);
         return WarehouseDto.fromWithStocks(w, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(id),
+                legacyStockProjectionService.currentForWarehouse(id),
                 departmentRepository, locationRepository, employeeRepository);
     }
 
     @Transactional(readOnly = true)
     public List<WarehouseStockDto> findStocks(UUID warehouseId, String search) {
         assertCanAccessWarehouse(getOrThrow(warehouseId));
-        return stockRepository.searchByWarehouse(warehouseId, search)
-                .stream()
-                .map(WarehouseStockDto::from)
+        var snapshots = legacyStockProjectionService.currentForWarehouse(warehouseId);
+        return stockRepository.searchByWarehouse(warehouseId, search).stream()
+                .map(stock -> WarehouseStockDto.from(stock, legacyStockProjectionService.snapshot(
+                        snapshots, stock.getWarehouseId(), stock.getSparePartId())))
                 .toList();
     }
 
@@ -107,6 +114,7 @@ public class WarehouseService {
         );
 
         return WarehouseDto.fromWithStocks(updated, stockRepository.findAllByWarehouseIdAndIsDeletedFalse(id),
+                legacyStockProjectionService.currentForWarehouse(id),
                 departmentRepository, locationRepository, employeeRepository);
     }
 

@@ -8,14 +8,31 @@ import java.util.UUID;
 public record ReservationDto(
         UUID id,
         UUID warehouseStockId,
+        UUID warehouseId,
+        UUID sparePartId,
+        UUID binId,
         UUID workOrderId,
         UUID repairRequestId,
         UUID reservedById,
         double quantity,
         ReservationStatus status
 ) {
+    public ReservationDto(
+            UUID id,
+            UUID warehouseStockId,
+            UUID workOrderId,
+            UUID repairRequestId,
+            UUID reservedById,
+            double quantity,
+            ReservationStatus status
+    ) {
+        this(id, warehouseStockId, null, null, null, workOrderId, repairRequestId,
+                reservedById, quantity, status);
+    }
+
     public static ReservationDto from(Reservation r) {
-        return new ReservationDto(r.getId(), r.getWarehouseStockId(), r.getWorkOrderId(),
+        return new ReservationDto(r.getId(), r.getWarehouseStockId(), r.getWarehouseId(),
+                r.getSparePartId(), r.getBinId(), r.getWorkOrderId(),
                 r.getRepairRequestId(), r.getReservedById(), r.getQuantity(), r.getStatus());
     }
 }

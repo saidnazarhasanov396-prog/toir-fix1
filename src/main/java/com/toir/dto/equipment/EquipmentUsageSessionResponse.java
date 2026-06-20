@@ -91,7 +91,15 @@ public record EquipmentUsageSessionResponse(
     }
 
     public static EquipmentUsageSessionResponse from(EquipmentUsageSession session, Employee operator) {
-        Long overdueMinutes = overdueMinutes(session);
+        return from(session, operator, Instant.now());
+    }
+
+    public static EquipmentUsageSessionResponse from(
+            EquipmentUsageSession session,
+            Employee operator,
+            Instant evaluatedAt
+    ) {
+        Long overdueMinutes = overdueMinutes(session, evaluatedAt);
         return new EquipmentUsageSessionResponse(
                 session.getId(),
                 session.getEquipmentId(),
@@ -144,11 +152,13 @@ public record EquipmentUsageSessionResponse(
         return Duration.between(startedAt, returnedAt).toMinutes();
     }
 
-    private static Long overdueMinutes(EquipmentUsageSession session) {
+    private static Long overdueMinutes(EquipmentUsageSession session, Instant evaluatedAt) {
         if (session == null || session.getDueAt() == null) {
             return 0L;
         }
-        Instant end = session.getReturnedAt() != null ? session.getReturnedAt() : Instant.now();
+        Instant end = session.getReturnedAt() != null
+                ? session.getReturnedAt()
+                : (evaluatedAt == null ? Instant.now() : evaluatedAt);
         if (!end.isAfter(session.getDueAt())) {
             return 0L;
         }

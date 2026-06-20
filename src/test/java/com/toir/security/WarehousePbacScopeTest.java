@@ -10,6 +10,7 @@ import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.service.WarehouseService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,7 @@ class WarehousePbacScopeTest {
     EmployeeRepository employeeRepository;
     AuditBuilderService auditBuilderService;
     ScopeAccessService scopeAccessService;
+    LegacyStockProjectionService legacyStockProjectionService;
     WarehouseService service;
 
     @BeforeEach
@@ -48,6 +50,8 @@ class WarehousePbacScopeTest {
         employeeRepository = mock(EmployeeRepository.class);
         auditBuilderService = mock(AuditBuilderService.class);
         scopeAccessService = mock(ScopeAccessService.class);
+        legacyStockProjectionService = mock(LegacyStockProjectionService.class);
+        when(legacyStockProjectionService.currentForWarehouse(any())).thenReturn(java.util.Map.of());
         service = new WarehouseService(
                 repository,
                 stockRepository,
@@ -55,7 +59,8 @@ class WarehousePbacScopeTest {
                 locationRepository,
                 employeeRepository,
                 auditBuilderService,
-                scopeAccessService
+                scopeAccessService,
+                legacyStockProjectionService
         );
     }
 

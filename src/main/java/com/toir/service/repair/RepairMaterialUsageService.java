@@ -1,6 +1,7 @@
 package com.toir.service.repair;
 
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
+import com.toir.dto.warehouse.StockIssueCommand;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.maintenance.WorkOrder;
@@ -33,12 +34,15 @@ import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.LowStockRecommendationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -72,6 +76,8 @@ public class RepairMaterialUsageService {
     private final ActualCostRepository actualCostRepository;
     private final CostCategoryRepository costCategoryRepository;
     private final WorkOrderSparePartRequirementRepository requirementRepository;
+    private final ToirStockService toirStockService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
 
     @Transactional(readOnly = true)
@@ -125,13 +131,6 @@ public class RepairMaterialUsageService {
 
         WarehouseStock stock = stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(r.warehouseId(), r.sparePartId())
                 .orElseThrow(() -> RestException.notFound("No stock found for spare part in this warehouse"));
-        double available = stock.getAvailable();
-        if (r.quantity() > available) {
-            throw RestException.badRequest("Cannot write off more than available: available="
-                    + available + ", requested=" + r.quantity());
-        }
-        stock.setQuantity(stock.getQuantity() - r.quantity());
-        stockRepository.save(stock);
 
         StockMovement movement = new StockMovement();
         movement.setWarehouseId(r.warehouseId());
@@ -143,6 +142,8 @@ public class RepairMaterialUsageService {
         movement.setCreatedById(r.issuedById());
         movement.setNotes(r.notes());
         StockMovement savedMovement = stockMovementRepository.save(movement);
+        postCoreStockIssue(workOrder, savedMovement);
+        stock = legacyStockProjectionService.sync(r.warehouseId(), r.sparePartId());
         lowStockRecommendationService.evaluateStockSafely(stock);
 
         RepairMaterialUsage usage = new RepairMaterialUsage();
@@ -187,6 +188,22 @@ public class RepairMaterialUsageService {
         );
 
         return toDetailedDtos(List.of(saved)).getFirst();
+    }
+
+    private void postCoreStockIssue(WorkOrder workOrder, StockMovement movement) {
+        toirStockService.postIssue(new StockIssueCommand(
+                movement.getWarehouseId(),
+                movement.getSparePartId(),
+                null,
+                BigDecimal.valueOf(movement.getQuantity()),
+                null,
+                null,
+                "WORK_ORDER",
+                workOrder.getId(),
+                null,
+                movement.getNotes(),
+                "work-order-material-issue:" + movement.getId()
+        ));
     }
 
     private List<RepairMaterialUsageDto> findByWorkOrders(List<WorkOrder> workOrders) {

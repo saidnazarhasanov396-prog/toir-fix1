@@ -65,8 +65,10 @@ import com.toir.entity.users.User;
 import com.toir.repository.users.UserRepository;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.repository.WarehouseRepository;
-import com.toir.entity.warehouse.WarehouseStock;
-import com.toir.repository.WarehouseStockRepository;
+import com.toir.dto.warehouse.StockReceiptCommand;
+import com.toir.enums.StockLedgerMovementType;
+import com.toir.service.warehouse.ToirStockService;
+import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
@@ -81,6 +83,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
@@ -99,7 +102,8 @@ public class SampleDataSeeder implements CommandLineRunner {
     private final SparePartRepository sparePartRepository;
     private final SparePartTypeRepository sparePartTypeRepository;
     private final WarehouseRepository warehouseRepository;
-    private final WarehouseStockRepository stockRepository;
+    private final ToirStockService toirStockService;
+    private final LegacyStockProjectionService legacyStockProjectionService;
     private final RepairRequestRepository repairRequestRepository;
     private final DefectRepository defectRepository;
     private final UserRepository userRepository;
@@ -673,13 +677,24 @@ public class SampleDataSeeder implements CommandLineRunner {
     }
 
     private void seedStock(UUID warehouseId, UUID sparePartId, double qty, double minQty) {
-        com.toir.entity.SparePart sparePart = sparePartRepository.findById(sparePartId).orElseThrow();
-        WarehouseStock s = new WarehouseStock();
-        s.setWarehouseId(warehouseId);
-        s.setSparePart(sparePart);
-        s.setQuantity(qty);
-        s.setMinQty(minQty);
-        stockRepository.save(s);
+        UUID sourceId = UUID.nameUUIDFromBytes(
+                ("sample-data-opening-stock:" + warehouseId + ":" + sparePartId).getBytes(StandardCharsets.UTF_8));
+        toirStockService.postIncrease(new StockReceiptCommand(
+                warehouseId,
+                sparePartId,
+                null,
+                java.math.BigDecimal.valueOf(qty),
+                null,
+                null,
+                null,
+                null,
+                "SAMPLE_DATA_SEED",
+                sourceId,
+                null,
+                "Sample data opening stock",
+                "sample-data-opening-stock:" + warehouseId + ":" + sparePartId
+        ), StockLedgerMovementType.ADJUSTMENT_INC);
+        legacyStockProjectionService.syncWithMinQty(warehouseId, sparePartId, minQty);
     }
 
     private void seedRequest(Equipment equipment, String number, String title, PriorityLevel priority,
