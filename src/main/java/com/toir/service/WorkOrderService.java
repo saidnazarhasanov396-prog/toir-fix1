@@ -1819,19 +1819,21 @@ public class WorkOrderService {
             return null;
         }
         return equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
-                .map(Equipment::getDepartmentId)
+                .map(this::resolveEquipmentOwnerDepartmentId)
                 .orElse(null);
     }
 
     private UUID resolveEffectiveDepartmentId(WorkOrderRequest request, Equipment equipment) {
-        UUID equipmentDepartmentId = equipment.getDepartmentId();
+        UUID equipmentDepartmentId = resolveEquipmentOwnerDepartmentId(equipment);
         UUID effectiveDepartmentId = request.departmentId() == null ? equipmentDepartmentId : request.departmentId();
         if (effectiveDepartmentId == null) {
-            throw RestException.badRequest("departmentId is required because selected equipment has no department");
+            throw RestException.badRequest(
+                    "departmentId is required because selected equipment has no responsible or physical department"
+            );
         }
         if (equipmentDepartmentId != null && request.departmentId() != null
                 && !equipmentDepartmentId.equals(request.departmentId())) {
-            throw RestException.badRequest("departmentId must match selected equipment department");
+            throw RestException.badRequest("departmentId must match selected equipment responsible department");
         }
         departmentRepository.findById(effectiveDepartmentId)
                 .orElseThrow(() -> RestException.notFound("Department not found: " + effectiveDepartmentId));
@@ -1839,6 +1841,12 @@ public class WorkOrderService {
             throw RestException.forbidden("Access denied by work order department scope");
         }
         return effectiveDepartmentId;
+    }
+
+    private UUID resolveEquipmentOwnerDepartmentId(Equipment equipment) {
+        return equipment.getResponsibleDepartmentId() != null
+                ? equipment.getResponsibleDepartmentId()
+                : equipment.getDepartmentId();
     }
 
     private UUID resolveEffectiveLocationId(WorkOrderRequest request, Equipment equipment, UUID effectiveDepartmentId) {

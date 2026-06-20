@@ -192,10 +192,15 @@ public class RepairRequestService {
         }
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + request.equipmentId()));
-        if (equipment.getDepartmentId() == null) {
-            throw RestException.badRequest("departmentId is required because selected equipment has no department");
+        UUID equipmentDepartmentId = equipment.getResponsibleDepartmentId() != null
+                ? equipment.getResponsibleDepartmentId()
+                : equipment.getDepartmentId();
+        if (equipmentDepartmentId == null) {
+            throw RestException.badRequest(
+                    "departmentId is required because selected equipment has no responsible or physical department"
+            );
         }
-        return equipment.getDepartmentId();
+        return equipmentDepartmentId;
     }
 
     @Transactional
