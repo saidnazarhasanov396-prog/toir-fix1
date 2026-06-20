@@ -194,4 +194,50 @@ class InventoryReplenishmentRecommendationServiceTest {
         assertThat(forecastRow.totalShortageQty()).isZero();
         assertThat(forecastRow.severity()).isEqualTo(NotificationSeverity.INFO);
     }
+
+    @Test
+    void recommendationsUseReorderRecommendedQuantityForCatalogMinLowStockRows() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-05T00:00:00Z");
+        ReorderSuggestionDto reorder = new ReorderSuggestionDto(
+                UUID.randomUUID(),
+                warehouseId,
+                "Central warehouse",
+                sparePartId,
+                "Catalog minimum part",
+                "SP-MIN",
+                "pcs",
+                5.0,
+                5.0,
+                5.0,
+                null,
+                null,
+                0.0,
+                5.0,
+                "WARNING"
+        );
+
+        when(reorderService.allSuggestions(warehouseId)).thenReturn(List.of(reorder));
+        when(forecastService.forecast(any()))
+                .thenReturn(new SparePartForecastSummaryDto(now, now.plusSeconds(30L * 24 * 60 * 60), List.of()));
+
+        Page<InventoryReplenishmentRecommendationDto> result = service.recommendations(
+                30,
+                now,
+                null,
+                warehouseId,
+                true,
+                0,
+                20
+        );
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        InventoryReplenishmentRecommendationDto item = result.getContent().getFirst();
+        assertThat(item.reason()).isEqualTo(InventoryReplenishmentReason.LOW_STOCK);
+        assertThat(item.totalShortageQty()).isZero();
+        assertThat(item.suggestedOrderQty()).isEqualTo(5.0);
+        assertThat(item.recommendedQuantity()).isEqualTo(5.0);
+        assertThat(item.severity()).isEqualTo(NotificationSeverity.WARNING);
+    }
 }
