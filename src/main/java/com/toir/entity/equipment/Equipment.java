@@ -142,6 +142,9 @@ public class Equipment extends BaseEntity {
     @Column(name = "lifetime_limit_value")
     private Double lifetimeLimitValue;
 
+    @Column(name = "days_of_resource_remaining")
+    private Long daysOfResourceRemaining;
+
     @Column(name = "lifetime_baseline_value")
     private Double lifetimeBaselineValue;
 
