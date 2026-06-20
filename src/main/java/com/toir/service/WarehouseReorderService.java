@@ -32,6 +32,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class WarehouseReorderService {
 
+    private static final String ENTERPRISE_WAREHOUSE_NAME = "Enterprise";
+
     private final WarehouseStockRepository stockRepository;
     private final WarehouseRepository warehouseRepository;
     private final SparePartRepository sparePartRepository;
@@ -86,6 +88,9 @@ public class WarehouseReorderService {
         for (WarehouseStock stock : stocks) {
             buildSuggestion(stock, snapshots, warehouseNames, sparePartsById).ifPresent(suggestions::add);
         }
+        if (warehouseId == null && scopeAccessService.isScopeAdmin()) {
+            addCatalogOnlySuggestions(stocks, suggestions);
+        }
         return suggestions;
     }
 
@@ -116,6 +121,44 @@ public class WarehouseReorderService {
         }
         return sparePartRepository.findAllByIdInAndIsDeletedFalse(sparePartIds).stream()
                 .collect(Collectors.toMap(SparePart::getId, sparePart -> sparePart));
+    }
+
+    private void addCatalogOnlySuggestions(List<WarehouseStock> stocks,
+                                           List<ReorderSuggestionDto> suggestions) {
+        Set<UUID> stockBackedSparePartIds = stocks.stream()
+                .map(WarehouseStock::getSparePartId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+        sparePartRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(part -> !stockBackedSparePartIds.contains(part.getId()))
+                .map(this::catalogOnlySuggestion)
+                .flatMap(Optional::stream)
+                .forEach(suggestions::add);
+    }
+
+    private Optional<ReorderSuggestionDto> catalogOnlySuggestion(SparePart sparePart) {
+        Double minStock = positive(sparePart.getMinStock());
+        if (minStock == null) {
+            return Optional.empty();
+        }
+        double available = 0;
+        return Optional.of(new ReorderSuggestionDto(
+                null,
+                null,
+                ENTERPRISE_WAREHOUSE_NAME,
+                sparePart.getId(),
+                sparePart.getName(),
+                sparePart.getCode(),
+                sparePart.getUnit(),
+                0,
+                available,
+                minStock,
+                null,
+                null,
+                minStock,
+                Math.max(minStock * 2 - available, 0),
+                "CRITICAL"
+        ));
     }
 
     private Optional<ReorderSuggestionDto> buildSuggestion(WarehouseStock stock,
