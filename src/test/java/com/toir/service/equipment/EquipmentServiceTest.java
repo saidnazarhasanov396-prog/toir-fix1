@@ -1511,6 +1511,109 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void createCalculatesDaysOfResourceRemainingFromLifetimeLimitAndAverageDailyUsage() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequestWithDynamicLifetime(
+                "INV-DAYS-1",
+                departmentId,
+                45_000.0,
+                300.0
+        );
+        stubCreateFlow("INV-DAYS-1");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+
+        service.create(request);
+
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getDaysOfResourceRemaining()).isEqualTo(150L);
+    }
+
+    @Test
+    void createLeavesDaysOfResourceRemainingNullWhenLifetimeLimitValueMissing() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequestWithYearsOnly(
+                "INV-DAYS-NULL-LIMIT",
+                departmentId,
+                10,
+                300.0
+        );
+        stubCreateFlow("INV-DAYS-NULL-LIMIT");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+
+        service.create(request);
+
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getLifetimeLimitValue()).isNull();
+        assertThat(entityCaptor.getValue().getDaysOfResourceRemaining()).isNull();
+    }
+
+    @Test
+    void createLeavesDaysOfResourceRemainingNullWhenAverageDailyUsageMissing() {
+        UUID departmentId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequestWithDynamicLifetime(
+                "INV-DAYS-NULL-USAGE",
+                departmentId,
+                45_000.0,
+                null
+        );
+        stubCreateFlow("INV-DAYS-NULL-USAGE");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+
+        service.create(request);
+
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getDaysOfResourceRemaining()).isNull();
+    }
+
+    @Test
+    void updateLeavesDaysOfResourceRemainingNullWhenAverageDailyUsageNotPositive() {
+        UUID id = UUID.randomUUID();
+        Equipment existing = equipment("EQ-DAYS-ZERO");
+        existing.setId(id);
+        existing.setLifetimeLimitValue(45_000.0);
+        existing.setAverageDailyUsage(0.0);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+        EquipmentUpdateRequest request = new EquipmentUpdateRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
+        );
+
+        service.update(id, request);
+
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getDaysOfResourceRemaining()).isNull();
+    }
+
+    @Test
+    void updateLeavesDaysOfResourceRemainingNullWhenAverageDailyUsageNegative() {
+        UUID id = UUID.randomUUID();
+        Equipment existing = equipment("EQ-DAYS-NEG");
+        existing.setId(id);
+        existing.setLifetimeLimitValue(45_000.0);
+        existing.setAverageDailyUsage(-10.0);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+        EquipmentUpdateRequest request = new EquipmentUpdateRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
+        );
+
+        service.update(id, request);
+
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getDaysOfResourceRemaining()).isNull();
+    }
+
+    @Test
     void createWithoutExpectedLifetimeReturnsBadRequest() {
         UUID departmentId = UUID.randomUUID();
         EquipmentCreateRequest request = createRequestWithoutExpectedLifetime("INV-LIFE-MISSING-1", departmentId);
@@ -3219,6 +3322,102 @@ class EquipmentServiceTest {
                 null,
                 manualAttributes,
                 null
+        );
+    }
+
+    private EquipmentCreateRequest createRequestWithDynamicLifetime(
+            String inventoryNumber,
+            UUID departmentId,
+            Double lifetimeLimitValue,
+            Double averageDailyUsage
+    ) {
+        return new EquipmentCreateRequest(
+                null,
+                "Compressor",
+                inventoryNumber,
+                "TN-1",
+                "SN-1",
+                "Model X",
+                null,
+                UUID.randomUUID(),
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "ACME",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                "test",
+                null,
+                null,
+                10,
+                null,
+                null,
+                null,
+                null,
+                MeterType.MILEAGE_KM,
+                null,
+                lifetimeLimitValue,
+                0.0,
+                10.0,
+                averageDailyUsage
+        );
+    }
+
+    private EquipmentCreateRequest createRequestWithYearsOnly(
+            String inventoryNumber,
+            UUID departmentId,
+            Integer expectedLifetimeYears,
+            Double averageDailyUsage
+    ) {
+        return new EquipmentCreateRequest(
+                null,
+                "Compressor",
+                inventoryNumber,
+                "TN-1",
+                "SN-1",
+                "Model X",
+                null,
+                UUID.randomUUID(),
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "ACME",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                "test",
+                null,
+                null,
+                expectedLifetimeYears,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                averageDailyUsage
         );
     }
 

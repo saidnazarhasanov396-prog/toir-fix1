@@ -137,4 +137,23 @@ class EquipmentDtoTest {
         assertThat(dto.lifetimeUnit()).isEqualTo("cycle");
         assertThat(dto.lifetimeStatus()).isEqualTo(LifetimeStatus.EXPIRING_SOON);
     }
+
+    @Test
+    void fromIncludesPersistedDaysOfResourceRemaining() {
+        Equipment equipment = new Equipment();
+        equipment.setDaysOfResourceRemaining(150L);
+
+        EquipmentDto dto = EquipmentDto.from(equipment);
+
+        assertThat(dto.daysOfResourceRemaining()).isEqualTo(150L);
+    }
+
+    @Test
+    void fromReturnsNullDaysOfResourceRemainingWhenNotPersisted() {
+        Equipment equipment = new Equipment();
+
+        EquipmentDto dto = EquipmentDto.from(equipment);
+
+        assertThat(dto.daysOfResourceRemaining()).isNull();
+    }
 }

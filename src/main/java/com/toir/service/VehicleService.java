@@ -703,6 +703,12 @@ public class VehicleService {
         equipment.setProducedYear(request.manufactureYear());
         equipment.setAverageDailyUsage(request.averageDailyUsage());
         applyVehicleLifetime(equipment, request);
+        equipment.setDaysOfResourceRemaining(
+                equipmentService.calculateDaysOfResourceRemaining(
+                        equipment.getLifetimeLimitValue(),
+                        equipment.getAverageDailyUsage()
+                )
+        );
     }
 
     private void writeInitialLocationHistory(Equipment equipment) {
