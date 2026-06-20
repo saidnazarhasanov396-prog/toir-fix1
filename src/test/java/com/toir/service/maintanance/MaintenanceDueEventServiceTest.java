@@ -74,7 +74,8 @@ class MaintenanceDueEventServiceTest {
                 eq("MaintenanceDueEvent"),
                 eq(eventId),
                 eq("Maintenance due: cycle-1"),
-                eq("overdue by calendar")
+                eq("overdue by calendar"),
+                any()
         );
     }
 
@@ -97,7 +98,8 @@ class MaintenanceDueEventServiceTest {
                 eq("MaintenanceDueEvent"),
                 eq(eventId),
                 eq("Maintenance due: cycle-1"),
-                eq("overdue by calendar")
+                eq("overdue by calendar"),
+                any()
         );
     }
 

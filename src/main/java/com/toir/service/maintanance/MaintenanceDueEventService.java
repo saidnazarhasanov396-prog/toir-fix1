@@ -298,7 +298,12 @@ public class MaintenanceDueEventService {
                 "MaintenanceDueEvent",
                 event.getId(),
                 "Maintenance due: " + event.getCycleKey(),
-                event.getExplanation()
+                event.getExplanation(),
+                java.util.Map.of(
+                        "cycleKey", event.getCycleKey() == null ? "" : event.getCycleKey(),
+                        "explanation", event.getExplanation() == null ? "" : event.getExplanation(),
+                        "dueStatus", event.getDueStatus() == null ? "" : event.getDueStatus().name()
+                )
         );
     }
 

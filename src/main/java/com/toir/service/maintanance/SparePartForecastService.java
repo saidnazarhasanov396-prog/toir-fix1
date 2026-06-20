@@ -482,9 +482,12 @@ public class SparePartForecastService {
         metadata.put("departmentId", scope.departmentId() == null ? null : scope.departmentId().toString());
         metadata.put("sparePartId", item.sparePartId().toString());
         metadata.put("sparePartCode", item.sparePartCode());
+        metadata.put("sparePartName", item.sparePartName());
+        metadata.put("warehouseName", item.warehouseName());
         metadata.put("requiredQty", item.requiredQty());
         metadata.put("availableQty", item.availableQty());
         metadata.put("shortageQty", item.shortageQty());
+        metadata.put("unit", item.unit());
         metadata.put("sourceCount", item.sourceCount());
         return metadata;
     }

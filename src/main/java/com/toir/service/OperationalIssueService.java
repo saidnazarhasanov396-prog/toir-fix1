@@ -37,6 +37,7 @@ public class OperationalIssueService {
     private final EquipmentRepository equipmentRepository;
     private final DepartmentRepository departmentRepository;
     private final ScopeAccessService scopeAccessService;
+    private final OperationalIssueI18nService i18nService;
 
     @Transactional(readOnly = true)
     public Page<OperationalIssueDto> search(OperationalIssueStatus status,
@@ -195,7 +196,8 @@ public class OperationalIssueService {
         return page.map(issue -> OperationalIssueDto.from(
                 issue,
                 issue.getEquipmentId() == null ? null : equipmentById.get(issue.getEquipmentId()),
-                issue.getDepartmentId() == null ? null : departmentById.get(issue.getDepartmentId())
+                issue.getDepartmentId() == null ? null : departmentById.get(issue.getDepartmentId()),
+                i18nService.build(issue)
         ));
     }
 
@@ -206,7 +208,7 @@ public class OperationalIssueService {
         Department department = issue.getDepartmentId() == null
                 ? null
                 : departmentRepository.findByIdAndIsDeletedFalse(issue.getDepartmentId()).orElse(null);
-        return OperationalIssueDto.from(issue, equipment, department);
+        return OperationalIssueDto.from(issue, equipment, department, i18nService.build(issue));
     }
 
     private PageRequest pageRequest(int page, int size, String sort, String direction) {
