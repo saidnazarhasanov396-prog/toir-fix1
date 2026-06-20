@@ -70,8 +70,17 @@ public record EquipmentDto(
         Double lifetimeConsumedPercent,
         String lifetimeUnit,
         Double averageDailyUsage,
-        ResponsibleRef responsible
+        ResponsibleRef responsible,
+        Long daysOfResourceRemaining
 ) {
+    public EquipmentDto {
+        daysOfResourceRemaining = (lifetimeLimitValue != null
+                && averageDailyUsage != null
+                && averageDailyUsage > 0)
+                ? (long) (lifetimeLimitValue / averageDailyUsage)
+                : null;
+    }
+
     public EquipmentDto(
             UUID id,
             String code,
@@ -122,7 +131,7 @@ public record EquipmentDto(
                 expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, operatingDuration,
                 expectedEndDate, remainingLifetime, lifetimeStatus, hasWarranty, warrantyAttachmentId,
                 warrantyStartDate, warrantyEndDate, warrantyAttachment, passportCompleteness,
-                null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -170,7 +179,7 @@ public record EquipmentDto(
                 department, location, equipmentType, parent, passport, placement, operationStartDate,
                 expectedLifetimeMonths, expectedLifetimeYears, null, operatingDuration, expectedEndDate, remainingLifetime,
                 lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment, null,
-                null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -206,7 +215,7 @@ public record EquipmentDto(
                 category, commissionedAt, null, warrantyUntil, description, averageOperatingLifeHours, department,
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null, null,
                 LifetimeStatus.UNKNOWN, false, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -409,7 +418,8 @@ public record EquipmentDto(
                 lifetimeConsumedPercent(e, lifetimeMeter),
                 lifetimeUnit(e, lifetimeMeter),
                 e.getAverageDailyUsage(),
-                responsible
+                responsible,
+                null
         );
     }
 
