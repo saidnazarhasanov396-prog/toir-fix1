@@ -73,14 +73,6 @@ public record EquipmentDto(
         ResponsibleRef responsible,
         Long daysOfResourceRemaining
 ) {
-    public EquipmentDto {
-        daysOfResourceRemaining = (lifetimeLimitValue != null
-                && averageDailyUsage != null
-                && averageDailyUsage > 0)
-                ? (long) (lifetimeLimitValue / averageDailyUsage)
-                : null;
-    }
-
     public EquipmentDto(
             UUID id,
             String code,
@@ -419,7 +411,7 @@ public record EquipmentDto(
                 lifetimeUnit(e, lifetimeMeter),
                 e.getAverageDailyUsage(),
                 responsible,
-                null
+                e.getDaysOfResourceRemaining()
         );
     }
 

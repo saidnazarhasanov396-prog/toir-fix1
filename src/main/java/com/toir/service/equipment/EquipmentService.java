@@ -1110,6 +1110,9 @@ public class EquipmentService {
         entity.setExpectedLifetimeHours(request.expectedLifetimeHours());
         entity.setAverageDailyUsage(request.averageDailyUsage());
         applyDynamicLifetimeForCreate(entity, request);
+        entity.setDaysOfResourceRemaining(
+                calculateDaysOfResourceRemaining(entity.getLifetimeLimitValue(), entity.getAverageDailyUsage())
+        );
         entity.setAverageOperatingLifeHours(calculateAverageOperatingLifeHours(
                 request.expectedLifetimeYears(),
                 request.expectedLifetimeMonths(),
@@ -1785,6 +1788,9 @@ public class EquipmentService {
             entity.setAverageDailyUsage(request.averageDailyUsage());
         }
         applyDynamicLifetimeForUpdate(entity, request);
+        entity.setDaysOfResourceRemaining(
+                calculateDaysOfResourceRemaining(entity.getLifetimeLimitValue(), entity.getAverageDailyUsage())
+        );
         if (hasExpectedLifetimeChange(request)) {
             entity.setAverageOperatingLifeHours(calculateAverageOperatingLifeHours(
                     expectedLifetimeYears,
@@ -1806,6 +1812,13 @@ public class EquipmentService {
                 || request.lifetimeLimitValue() != null
                 || request.lifetimeBaselineValue() != null
                 || request.lifetimeWarningPercent() != null;
+    }
+
+    private Long calculateDaysOfResourceRemaining(Double lifetimeLimitValue, Double averageDailyUsage) {
+        if (lifetimeLimitValue == null || averageDailyUsage == null || averageDailyUsage <= 0) {
+            return null;
+        }
+        return (long) (lifetimeLimitValue / averageDailyUsage);
     }
 
     private Long calculateAverageOperatingLifeHours(
