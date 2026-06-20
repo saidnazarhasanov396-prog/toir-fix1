@@ -2,9 +2,14 @@ package com.toir.controller;
 
 import com.toir.dto.warehouse.InventoryReplenishmentReason;
 import com.toir.dto.warehouse.InventoryReplenishmentRecommendationDto;
+import com.toir.dto.procurement.ProcurementRequestDto;
 import com.toir.enums.NotificationSeverity;
+import com.toir.enums.PriorityLevel;
+import com.toir.enums.ProcurementRequestStatus;
+import com.toir.enums.ProcurementRequestType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.InventoryReplenishmentRecommendationService;
+import com.toir.service.ReplenishmentProcurementRequestService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -18,9 +23,12 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.http.MediaType;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.mockito.Mockito.verify;
@@ -32,11 +40,17 @@ class InventoryReplenishmentRecommendationControllerContractTest {
     @Mock
     InventoryReplenishmentRecommendationService service;
 
+    @Mock
+    ReplenishmentProcurementRequestService procurementRequestService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new InventoryReplenishmentRecommendationController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new InventoryReplenishmentRecommendationController(
+                        service,
+                        procurementRequestService
+                ))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -97,5 +111,63 @@ class InventoryReplenishmentRecommendationControllerContractTest {
                 .andExpect(jsonPath("$.totalElements").value(11));
 
         verify(service).recommendations(eq(15), eq(from), eq(to), eq(warehouseId), eq(true), eq(1), eq(10));
+    }
+
+    @Test
+    void postProcurementRequestsCreatesDraftsFromSelectedRecommendations() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        ProcurementRequestDto dto = new ProcurementRequestDto(
+                requestId,
+                "PR-2026-00001",
+                "Replenishment request - Main warehouse",
+                "Generated from replenishment recommendations",
+                null,
+                warehouseId,
+                null,
+                "Main warehouse",
+                null,
+                null,
+                null,
+                PriorityLevel.HIGH,
+                ProcurementRequestType.SPARE_PART,
+                null,
+                null,
+                null,
+                null,
+                ProcurementRequestStatus.DRAFT,
+                "AUTO",
+                LocalDate.of(2026, 7, 10),
+                0.0,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of()
+        );
+        when(procurementRequestService.createProcurementRequests(any())).thenReturn(List.of(dto));
+
+        mockMvc.perform(post("/api/v1/warehouse/replenishment-recommendations/procurement-requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "days": 30,
+                                  "onlyDeficit": true,
+                                  "items": [
+                                    {
+                                      "sparePartId": "%s",
+                                      "warehouseId": "%s"
+                                    }
+                                  ]
+                                }
+                                """.formatted(sparePartId, warehouseId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].id").value(requestId.toString()))
+                .andExpect(jsonPath("$[0].source").value("AUTO"))
+                .andExpect(jsonPath("$[0].warehouseId").value(warehouseId.toString()));
+
+        verify(procurementRequestService).createProcurementRequests(any());
     }
 }

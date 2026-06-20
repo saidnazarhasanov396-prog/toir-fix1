@@ -168,6 +168,7 @@ public class ApprovalGovernanceService {
                 "Approval SLA exceeded: " + request.getTitle(),
                 "Approval request " + request.getTitle() + " exceeded its SLA.",
                 Map.of(
+                        "approvalTitle", request.getTitle() == null ? "" : request.getTitle(),
                         "targetType", request.getTargetType() == null ? "" : request.getTargetType().name(),
                         "targetId", request.getTargetId() == null ? "" : request.getTargetId().toString(),
                         "actionType", request.getActionType() == null ? "" : request.getActionType().name()

@@ -47,6 +47,22 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
     @Query(value = """
             SELECT EXISTS(
                 SELECT 1
+                FROM procurement_requests pr
+                JOIN procurement_request_lines line ON line.request_id = pr.id
+                WHERE pr.is_deleted = false
+                  AND line.is_deleted = false
+                  AND pr.source = 'AUTO'
+                  AND pr.warehouse_id = cast(:warehouseId as uuid)
+                  AND line.spare_part_id = cast(:sparePartId as uuid)
+                  AND pr.status IN ('DRAFT', 'SUBMITTED', 'APPROVED', 'ORDERED', 'PARTIALLY_RECEIVED')
+            )
+            """, nativeQuery = true)
+    boolean existsActiveAutoForWarehouseAndSparePart(@Param("warehouseId") UUID warehouseId,
+                                                     @Param("sparePartId") UUID sparePartId);
+
+    @Query(value = """
+            SELECT EXISTS(
+                SELECT 1
                 FROM procurement_requests
                 WHERE number = cast(:number as varchar)
                   AND status IN ('ORDERED', 'PARTIALLY_RECEIVED')

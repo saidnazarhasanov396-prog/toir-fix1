@@ -113,7 +113,11 @@ public class OperationalIssueScannerService {
                         "WorkOrder",
                         item.getId(),
                         "Overdue work order " + item.getNumber(),
-                        "Planned completion " + item.getEndPlannedAt() + " has passed."
+                        "Planned completion " + item.getEndPlannedAt() + " has passed.",
+                        metadata(
+                                "workOrderNumber", item.getNumber(),
+                                "plannedCompletionAt", item.getEndPlannedAt()
+                        )
                 );
             }
         }
@@ -138,7 +142,11 @@ public class OperationalIssueScannerService {
                         "PprTask",
                         item.getId(),
                         "Overdue PPR task " + item.getCode(),
-                        "PPR task due date " + item.getDueDate() + " has passed."
+                        "PPR task due date " + item.getDueDate() + " has passed.",
+                        metadata(
+                                "pprTaskCode", item.getCode(),
+                                "dueDate", item.getDueDate()
+                        )
                 );
             }
         }
@@ -162,7 +170,11 @@ public class OperationalIssueScannerService {
                         "RepairRequest",
                         item.getId(),
                         "Overdue repair request " + item.getNumber(),
-                        "Target completion " + item.getTargetCompletionAt() + " has passed."
+                        "Target completion " + item.getTargetCompletionAt() + " has passed.",
+                        metadata(
+                                "requestNumber", item.getNumber(),
+                                "targetCompletionAt", item.getTargetCompletionAt()
+                        )
                 );
             }
         }
@@ -186,7 +198,11 @@ public class OperationalIssueScannerService {
                     "CalibrationRecord",
                     item.getId(),
                     "Overdue calibration " + nullToDash(item.getCertificateNumber()),
-                    "Next calibration due date " + item.getNextDueAt() + " has passed."
+                    "Next calibration due date " + item.getNextDueAt() + " has passed.",
+                    metadata(
+                            "certificateNumber", nullToDash(item.getCertificateNumber()),
+                            "nextDueAt", item.getNextDueAt()
+                    )
             );
         }
         return count;
@@ -212,7 +228,8 @@ public class OperationalIssueScannerService {
                             "EquipmentLifetime",
                             item.getId(),
                             "Equipment lifetime expired: " + item.getCode(),
-                            expiredLifetimeDetails(item, snapshot)
+                            expiredLifetimeDetails(item, snapshot),
+                            lifetimeMetadata(item, snapshot)
                     );
                 } else if (snapshot.remainingValue() <= snapshot.warningThreshold()) {
                     count += open(
@@ -223,7 +240,8 @@ public class OperationalIssueScannerService {
                             "EquipmentLifetime",
                             item.getId(),
                             "Equipment lifetime expiring soon: " + item.getCode(),
-                            warningLifetimeDetails(snapshot)
+                            warningLifetimeDetails(snapshot),
+                            lifetimeMetadata(item, snapshot)
                     );
                 } else {
                     issueService.resolveOpen("EquipmentLifetime", item.getId());
@@ -243,7 +261,8 @@ public class OperationalIssueScannerService {
                         "EquipmentLifetime",
                         item.getId(),
                         "Equipment lifetime expired: " + item.getCode(),
-                        "Expected lifetime ended on " + expectedEnd + "."
+                        "Expected lifetime ended on " + expectedEnd + ".",
+                        calendarLifetimeMetadata(item, expectedEnd)
                 );
             } else if (!expectedEnd.isAfter(today.plusMonths(LIFETIME_WARNING_MONTHS))) {
                 count += open(
@@ -254,7 +273,8 @@ public class OperationalIssueScannerService {
                         "EquipmentLifetime",
                         item.getId(),
                         "Equipment lifetime expiring soon: " + item.getCode(),
-                        "Expected lifetime ends on " + expectedEnd + "."
+                        "Expected lifetime ends on " + expectedEnd + ".",
+                        calendarLifetimeMetadata(item, expectedEnd)
                 );
             } else {
                 issueService.resolveOpen("EquipmentLifetime", item.getId());
@@ -387,7 +407,12 @@ public class OperationalIssueScannerService {
                     "MaintenanceDueEvent",
                     item.getId(),
                     "Maintenance due: " + item.getCycleKey(),
-                    item.getExplanation()
+                    item.getExplanation(),
+                    metadata(
+                            "cycleKey", item.getCycleKey(),
+                            "explanation", item.getExplanation(),
+                            "dueStatus", item.getDueStatus() == null ? null : item.getDueStatus().name()
+                    )
             );
         }
         return count;
@@ -415,7 +440,11 @@ public class OperationalIssueScannerService {
                         "ContractorWork",
                         item.getId(),
                         "Contractor work delay",
-                        "Linked work order " + workOrder.getNumber() + " planned completion has passed."
+                        "Linked work order " + workOrder.getNumber() + " planned completion has passed.",
+                        metadata(
+                                "workOrderNumber", workOrder.getNumber(),
+                                "plannedCompletionAt", workOrder.getEndPlannedAt()
+                        )
                 );
             }
         }
@@ -438,7 +467,12 @@ public class OperationalIssueScannerService {
                         "MaintenanceBudget",
                         item.getId(),
                         "Budget review issue " + item.getYear(),
-                        "Actual maintenance cost exceeds planned budget."
+                        "Actual maintenance cost exceeds planned budget.",
+                        metadata(
+                                "year", item.getYear(),
+                                "totalPlanned", item.getTotalPlanned(),
+                                "totalActual", item.getTotalActual()
+                        )
                 );
             }
         }
@@ -465,7 +499,11 @@ public class OperationalIssueScannerService {
                     "ApprovalRequest",
                     item.getId(),
                     "Approval escalation: " + item.getTitle(),
-                    "Approval request has been pending for more than " + APPROVAL_ESCALATION_DAYS + " days."
+                    "Approval request has been pending for more than " + APPROVAL_ESCALATION_DAYS + " days.",
+                    metadata(
+                            "approvalTitle", item.getTitle(),
+                            "ageDays", APPROVAL_ESCALATION_DAYS
+                    )
             );
         }
         return count;
@@ -488,7 +526,11 @@ public class OperationalIssueScannerService {
                     "Defect",
                     item.getId(),
                     "Inspection defect " + item.getCode(),
-                    item.getTitle()
+                    item.getTitle(),
+                    metadata(
+                            "defectCode", item.getCode(),
+                            "defectTitle", item.getTitle()
+                    )
             );
         }
         return count;
@@ -502,11 +544,75 @@ public class OperationalIssueScannerService {
                      UUID sourceId,
                      String title,
                      String message) {
+        return open(type, severity, equipmentId, departmentId, sourceType, sourceId, title, message, Map.of());
+    }
+
+    private int open(OperationalIssueType type,
+                     NotificationSeverity severity,
+                     UUID equipmentId,
+                     UUID departmentId,
+                     String sourceType,
+                     UUID sourceId,
+                     String title,
+                     String message,
+                     Map<String, Object> metadata) {
         if (sourceId == null) {
             return 0;
         }
-        issueService.openOrUpdate(type, severity, equipmentId, departmentId, sourceType, sourceId, title, message);
+        issueService.openOrUpdate(type, severity, equipmentId, departmentId, sourceType, sourceId, title, message, metadata);
         return 1;
+    }
+
+    private Map<String, Object> lifetimeMetadata(Equipment equipment, MeterLifetimeSnapshot snapshot) {
+        return metadata(
+                "equipmentCode", equipment.getCode(),
+                "equipmentName", equipment.getName(),
+                "counterType", snapshot.counterType() == null ? null : snapshot.counterType().name(),
+                "unit", snapshot.unit(),
+                "limitValue", formatLifetimeValue(snapshot.limitValue()),
+                "currentValue", formatLifetimeValue(snapshot.currentValue()),
+                "remainingValue", formatLifetimeValue(snapshot.remainingValue()),
+                "warningThreshold", formatLifetimeValue(snapshot.warningThreshold()),
+                "expectedLifetimeHours", equipment.getExpectedLifetimeHours()
+        );
+    }
+
+    private Map<String, Object> calendarLifetimeMetadata(Equipment equipment, LocalDate expectedEnd) {
+        return metadata(
+                "equipmentCode", equipment.getCode(),
+                "equipmentName", equipment.getName(),
+                "expectedEndDate", expectedEnd,
+                "expectedLifetimeMonths", effectiveLifetimeMonths(equipment)
+        );
+    }
+
+    private Map<String, Object> metadata(Object... pairs) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < pairs.length; i += 2) {
+            Object key = pairs[i];
+            Object value = pairs[i + 1];
+            if (key == null || value == null) {
+                continue;
+            }
+            metadata.put(String.valueOf(key), metadataValue(value));
+        }
+        return metadata;
+    }
+
+    private Object metadataValue(Object value) {
+        if (value instanceof Instant instant) {
+            return instant.toString();
+        }
+        if (value instanceof LocalDate date) {
+            return date.toString();
+        }
+        if (value instanceof java.time.LocalDateTime dateTime) {
+            return dateTime.toString();
+        }
+        if (value instanceof Enum<?> enumValue) {
+            return enumValue.name();
+        }
+        return value;
     }
 
     private boolean isClosed(WorkOrderStatus status) {
