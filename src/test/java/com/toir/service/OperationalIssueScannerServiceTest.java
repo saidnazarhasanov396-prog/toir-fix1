@@ -132,6 +132,7 @@ class OperationalIssueScannerServiceTest {
         workOrder.setStatus(WorkOrderStatus.IN_PROGRESS);
         workOrder.setEndPlannedAt(Instant.now().minusSeconds(60));
         when(workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(workOrder));
+        ArgumentCaptor<java.util.Map<String, Object>> metadataCaptor = ArgumentCaptor.captor();
 
         var result = service.scanAll();
 
@@ -144,8 +145,12 @@ class OperationalIssueScannerServiceTest {
                 eq("WorkOrder"),
                 eq(workOrderId),
                 eq("Overdue work order WO-1"),
-                any()
+                any(),
+                metadataCaptor.capture()
         );
+        assertThat(metadataCaptor.getValue())
+                .containsEntry("workOrderNumber", "WO-1")
+                .containsEntry("plannedCompletionAt", workOrder.getEndPlannedAt().toString());
     }
 
     @Test
@@ -167,6 +172,7 @@ class OperationalIssueScannerServiceTest {
                 eq("EquipmentLifetime"),
                 eq(equipmentId),
                 eq("Equipment lifetime expired: EQ-1"),
+                any(),
                 any()
         );
     }
@@ -196,7 +202,8 @@ class OperationalIssueScannerServiceTest {
                 eq("EquipmentLifetime"),
                 eq(equipmentId),
                 eq("Equipment lifetime expired: EQ-1"),
-                org.mockito.ArgumentMatchers.contains("Remaining lifetime hours")
+                org.mockito.ArgumentMatchers.contains("Remaining lifetime hours"),
+                any()
         );
     }
 
@@ -229,7 +236,8 @@ class OperationalIssueScannerServiceTest {
                 eq("EquipmentLifetime"),
                 eq(equipmentId),
                 eq("Equipment lifetime expiring soon: EQ-1"),
-                org.mockito.ArgumentMatchers.contains("Remaining lifetime: 900 km")
+                org.mockito.ArgumentMatchers.contains("Remaining lifetime: 900 km"),
+                any()
         );
     }
 
@@ -259,7 +267,8 @@ class OperationalIssueScannerServiceTest {
                 eq("MaintenanceDueEvent"),
                 eq(eventId),
                 eq("Maintenance due: cycle-1"),
-                eq("meter missing")
+                eq("meter missing"),
+                any()
         );
     }
 

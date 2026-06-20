@@ -29,6 +29,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -51,6 +53,7 @@ public class MeterService {
     private final AuditBuilderService auditBuilderService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
+    private final ForecastService forecastService;
 
     @Transactional(readOnly = true)
     public List<EquipmentMeterDto> listByEquipment(UUID equipmentId) {
@@ -244,6 +247,20 @@ public class MeterService {
             }
         }
 
+        try {
+            LocalDate usageDate = readAt.atZone(ZoneId.systemDefault()).toLocalDate();
+            forecastService.recordDailyUsage(meter.getEquipmentId(), usageDate, delta);
+            forecastService.recalculate(meter.getEquipmentId());
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "forecast_recalculate_after_meter_reading_failed equipmentId={} meterId={} readingId={}",
+                    meter.getEquipmentId(),
+                    meter.getId(),
+                    saved.getId(),
+                    ex
+            );
+        }
+
         return enrichReading(saved);
     }
 
@@ -320,6 +337,20 @@ public class MeterService {
                 null
         );
 
+        if (reading.getDelta() != null) {
+            try {
+                LocalDate usageDate = reading.getReadAt().atZone(ZoneId.systemDefault()).toLocalDate();
+                forecastService.reverseDailyUsage(reading.getEquipmentId(), usageDate, reading.getDelta());
+                forecastService.recalculate(reading.getEquipmentId());
+            } catch (RuntimeException ex) {
+                log.warn(
+                        "forecast_reverse_after_reading_delete_failed equipmentId={} readingId={}",
+                        reading.getEquipmentId(),
+                        reading.getId(),
+                        ex
+                );
+            }
+        }
 
     }
 
