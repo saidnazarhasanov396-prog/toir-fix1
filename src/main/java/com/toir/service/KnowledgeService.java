@@ -22,7 +22,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.PaginationUtils;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -41,7 +41,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class KnowledgeService {
 
     private final KnowledgeArticleRepository repository;
@@ -52,6 +51,23 @@ public class KnowledgeService {
     private final RepairRequestRepository repairRequestRepository;
     private final ScopeAccessService scopeAccessService;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
+
+    @Autowired
+    public KnowledgeService(KnowledgeArticleRepository repository,
+                            KnowledgeArticleLinkRepository linkRepository,
+                            EquipmentRepository equipmentRepository,
+                            DefectRepository defectRepository,
+                            WorkOrderRepository workOrderRepository,
+                            RepairRequestRepository repairRequestRepository,
+                            ScopeAccessService scopeAccessService) {
+        this.repository = repository;
+        this.linkRepository = linkRepository;
+        this.equipmentRepository = equipmentRepository;
+        this.defectRepository = defectRepository;
+        this.workOrderRepository = workOrderRepository;
+        this.repairRequestRepository = repairRequestRepository;
+        this.scopeAccessService = scopeAccessService;
+    }
 
     public KnowledgeService(KnowledgeArticleRepository repository,
                             EquipmentRepository equipmentRepository,
