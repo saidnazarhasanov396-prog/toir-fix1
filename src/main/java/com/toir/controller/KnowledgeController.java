@@ -1,8 +1,11 @@
 package com.toir.controller;
 
 import com.toir.dto.knowledge.KnowledgeArticleDto;
+import com.toir.dto.knowledge.KnowledgeArticleLinkDto;
+import com.toir.dto.knowledge.KnowledgeContextResponse;
 import com.toir.dto.knowledge.KnowledgeStatsResponse;
 import com.toir.entity.KnowledgeArticle;
+import com.toir.enums.KnowledgeTargetType;
 import com.toir.service.KnowledgeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +53,16 @@ public class KnowledgeController {
         return ResponseEntity.ok(service.getStats(equipmentId, equipmentTypeId, kind));
     }
 
+    @GetMapping("/context")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_READ')")
+    public ResponseEntity<KnowledgeContextResponse> context(
+            @RequestParam KnowledgeTargetType targetType,
+            @RequestParam UUID targetId,
+            @RequestParam(name = "size", defaultValue = "5") int size
+    ) {
+        return ResponseEntity.ok(service.context(targetType, targetId, size));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_READ')")
     public ResponseEntity<KnowledgeArticle> get(@PathVariable UUID id) {
@@ -66,6 +79,23 @@ public class KnowledgeController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_UPDATE')")
     public ResponseEntity<KnowledgeArticle> update(@PathVariable UUID id, @RequestBody KnowledgeArticle patch) {
         return ResponseEntity.ok(service.update(id, patch));
+    }
+
+    @PostMapping("/{id}/links")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_UPDATE')")
+    public ResponseEntity<KnowledgeArticleDto> link(@PathVariable UUID id, @RequestBody KnowledgeArticleLinkDto link) {
+        return ResponseEntity.ok(service.link(id, link));
+    }
+
+    @DeleteMapping("/{id}/links")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_UPDATE')")
+    public ResponseEntity<Void> unlink(
+            @PathVariable UUID id,
+            @RequestParam KnowledgeTargetType targetType,
+            @RequestParam UUID targetId
+    ) {
+        service.unlink(id, targetType, targetId);
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{id}")

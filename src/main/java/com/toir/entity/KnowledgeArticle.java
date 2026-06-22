@@ -5,6 +5,8 @@ import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import com.toir.dto.knowledge.KnowledgeArticleLinkDto;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -67,5 +69,8 @@ public class KnowledgeArticle extends BaseEntity {
 
     @Column(name = "view_count", nullable = false)
     private int viewCount = 0;
+
+    @Transient
+    private List<KnowledgeArticleLinkDto> links;
 
 }

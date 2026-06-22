@@ -1,7 +1,11 @@
 package com.toir.controller;
 
 import com.toir.dto.knowledge.KnowledgeArticleDto;
+import com.toir.dto.knowledge.KnowledgeArticleLinkDto;
+import com.toir.dto.knowledge.KnowledgeContextResponse;
+import com.toir.dto.knowledge.KnowledgeSuggestionDto;
 import com.toir.entity.KnowledgeArticle;
+import com.toir.enums.KnowledgeTargetType;
 import com.toir.exception.RestException;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.KnowledgeService;
@@ -29,6 +33,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -244,6 +249,88 @@ class KnowledgeControllerContractTest {
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Article code already exists"));
+    }
+
+    @Test
+    void contextReturnsLinkedAndSuggestedArticles() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        KnowledgeArticleLinkDto equipmentLink = new KnowledgeArticleLinkDto(
+                UUID.randomUUID(),
+                KnowledgeTargetType.EQUIPMENT,
+                equipmentId);
+        KnowledgeArticleDto linked = new KnowledgeArticleDto(
+                UUID.randomUUID(),
+                "LL-2026-0005",
+                "Linked start procedure",
+                "PROCEDURE",
+                null,
+                equipmentId,
+                null,
+                null,
+                "Problem",
+                "Cause",
+                "Solution",
+                "Preventive",
+                List.of("start"),
+                List.of(equipmentLink),
+                null,
+                0,
+                Instant.now(),
+                Instant.now(),
+                false
+        );
+        KnowledgeArticleDto suggested = dto(null, "LESSON_LEARNED", "Similar lesson");
+        when(service.context(KnowledgeTargetType.EQUIPMENT, equipmentId, 5))
+                .thenReturn(new KnowledgeContextResponse(
+                        List.of(linked),
+                        List.of(new KnowledgeSuggestionDto(
+                                suggested,
+                                60,
+                                List.of("Same equipment type")))));
+
+        mockMvc.perform(get("/api/v1/knowledge/context")
+                        .param("targetType", "EQUIPMENT")
+                        .param("targetId", equipmentId.toString())
+                        .param("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.linked[0].title").value("Linked start procedure"))
+                .andExpect(jsonPath("$.linked[0].links[0].targetType").value("EQUIPMENT"))
+                .andExpect(jsonPath("$.suggestions[0].article.title").value("Similar lesson"))
+                .andExpect(jsonPath("$.suggestions[0].score").value(60));
+    }
+
+    @Test
+    void attachExistingArticleToTarget() throws Exception {
+        UUID articleId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        KnowledgeArticleDto response = dto(null, "LESSON_LEARNED", "Attached article");
+        when(service.link(eq(articleId), any(KnowledgeArticleLinkDto.class))).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/knowledge/{id}/links", articleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetType": "REPAIR_REQUEST",
+                                  "targetId": "%s"
+                                }
+                                """.formatted(requestId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Attached article"));
+
+        verify(service).link(eq(articleId), any(KnowledgeArticleLinkDto.class));
+    }
+
+    @Test
+    void detachArticleFromTarget() throws Exception {
+        UUID articleId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/knowledge/{id}/links", articleId)
+                        .param("targetType", "WORK_ORDER")
+                        .param("targetId", workOrderId.toString()))
+                .andExpect(status().isNoContent());
+
+        verify(service).unlink(articleId, KnowledgeTargetType.WORK_ORDER, workOrderId);
     }
 
     @Test
