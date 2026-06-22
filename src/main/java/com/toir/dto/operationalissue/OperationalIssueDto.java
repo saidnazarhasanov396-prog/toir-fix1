@@ -27,9 +27,22 @@ public record OperationalIssueDto(
         String sourceType,
         UUID sourceId,
         Map<String, Object> metadata,
-        EquipmentRiskLevel equipmentRiskLevel
+        EquipmentRiskLevel equipmentRiskLevel,
+        String titleKey,
+        Map<String, Object> titleParams,
+        String messageKey,
+        Map<String, Object> messageParams
 ) {
     public static OperationalIssueDto from(OperationalIssue issue, Equipment equipment, Department department) {
+        return from(issue, equipment, department, OperationalIssueTextI18n.empty());
+    }
+
+    public static OperationalIssueDto from(
+            OperationalIssue issue,
+            Equipment equipment,
+            Department department,
+            OperationalIssueTextI18n textI18n
+    ) {
         return new OperationalIssueDto(
                 issue.getId(),
                 issue.getType(),
@@ -46,7 +59,11 @@ public record OperationalIssueDto(
                 issue.getSourceType(),
                 issue.getSourceId(),
                 issue.getMetadata(),
-                issue.getEquipmentRiskLevel()
+                issue.getEquipmentRiskLevel(),
+                textI18n == null ? null : textI18n.titleKey(),
+                textI18n == null ? Map.of() : textI18n.titleParams(),
+                textI18n == null ? null : textI18n.messageKey(),
+                textI18n == null ? Map.of() : textI18n.messageParams()
         );
     }
 }

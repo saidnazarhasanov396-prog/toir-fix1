@@ -46,6 +46,15 @@ public class InventoryReplenishmentRecommendationService {
                                                                           Boolean onlyDeficit,
                                                                           int page,
                                                                           int size) {
+        return PaginationUtils.page(recommendationRows(days, from, to, warehouseId, onlyDeficit), page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public List<InventoryReplenishmentRecommendationDto> recommendationRows(Integer days,
+                                                                            Instant from,
+                                                                            Instant to,
+                                                                            UUID warehouseId,
+                                                                            Boolean onlyDeficit) {
         boolean deficitOnly = onlyDeficit == null || Boolean.TRUE.equals(onlyDeficit);
         Map<RecommendationKey, InventoryReplenishmentRecommendationDto> rows = new LinkedHashMap<>();
 
@@ -68,10 +77,9 @@ public class InventoryReplenishmentRecommendationService {
             rows.merge(key, fromForecast(item), this::merge);
         }
 
-        List<InventoryReplenishmentRecommendationDto> content = rows.values().stream()
+        return rows.values().stream()
                 .filter(item -> include(item, deficitOnly))
                 .toList();
-        return PaginationUtils.page(content, page, size);
     }
 
     private InventoryReplenishmentRecommendationDto fromReorder(ReorderSuggestionDto reorder) {

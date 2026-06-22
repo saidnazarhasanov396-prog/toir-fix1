@@ -164,6 +164,32 @@ class WarehouseReorderServiceTest {
     }
 
     @Test
+    void suggestionsIncludesCatalogMinStockPartWithoutWarehousePolicy() {
+        UUID sparePartId = UUID.randomUUID();
+        SparePart sparePart = createSparePart(sparePartId, "SP-CATALOG", "Catalog only part", "PCS", 4.0);
+
+        when(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(sparePartRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(sparePart));
+
+        Page<ReorderSuggestionDto> result = service.suggestions(null, 0, 10);
+
+        assertThat(result.getContent()).hasSize(1);
+        ReorderSuggestionDto suggestion = result.getContent().getFirst();
+        assertThat(suggestion.stockId()).isNull();
+        assertThat(suggestion.warehouseId()).isNull();
+        assertThat(suggestion.warehouseName()).isEqualTo("Enterprise");
+        assertThat(suggestion.sparePartId()).isEqualTo(sparePartId);
+        assertThat(suggestion.sparePartName()).isEqualTo("Catalog only part");
+        assertThat(suggestion.sparePartCode()).isEqualTo("SP-CATALOG");
+        assertThat(suggestion.quantity()).isZero();
+        assertThat(suggestion.available()).isZero();
+        assertThat(suggestion.minQty()).isEqualTo(4.0);
+        assertThat(suggestion.shortfall()).isEqualTo(4.0);
+        assertThat(suggestion.recommendedQuantity()).isEqualTo(8.0);
+        assertThat(suggestion.urgency()).isEqualTo("CRITICAL");
+    }
+
+    @Test
     void suggestionsDoesNotUseSparePartMinStockWhenAvailableIsAboveCatalogMinimum() {
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();

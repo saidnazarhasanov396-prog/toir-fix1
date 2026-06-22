@@ -18,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.security.access.AccessDeniedException;
@@ -44,6 +45,9 @@ class OperationalIssueServiceTest {
 
     @Mock
     ScopeAccessService scopeAccessService;
+
+    @Spy
+    OperationalIssueI18nService i18nService = new OperationalIssueI18nService();
 
     @InjectMocks
     OperationalIssueService service;
@@ -139,6 +143,50 @@ class OperationalIssueServiceTest {
         assertThat(result.status()).isEqualTo(OperationalIssueStatus.RESOLVED);
         assertThat(result.resolvedAt()).isNotNull();
         verify(repository).save(issue);
+    }
+
+    @Test
+    void searchReturnsStructuredI18nPayloadForIssueText() {
+        UUID departmentId = UUID.randomUUID();
+        UUID issueId = UUID.randomUUID();
+        OperationalIssue issue = issue(issueId, null, departmentId);
+        issue.setType(OperationalIssueType.OVERDUE_REPAIR_REQUEST);
+        issue.setSeverity(NotificationSeverity.CRITICAL);
+        issue.setSourceType("RepairRequest");
+        issue.setTitle("Overdue repair request RR-2026-105814");
+        issue.setMessage("Target completion 2026-06-20T08:00:00Z has passed.");
+        issue.setMetadata(java.util.Map.of(
+                "requestNumber", "RR-2026-105814",
+                "targetCompletionAt", "2026-06-20T08:00:00Z"
+        ));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.search(
+                eq(null),
+                eq(OperationalIssueStatus.OPEN),
+                eq(NotificationSeverity.CRITICAL),
+                eq(OperationalIssueType.OVERDUE_REPAIR_REQUEST),
+                eq(null),
+                eq(null),
+                any()
+        )).thenReturn(new PageImpl<>(List.of(issue)));
+
+        var result = service.search(
+                OperationalIssueStatus.OPEN,
+                NotificationSeverity.CRITICAL,
+                OperationalIssueType.OVERDUE_REPAIR_REQUEST,
+                null,
+                null,
+                0,
+                20,
+                "detectedAt",
+                "desc"
+        );
+
+        var dto = result.getContent().getFirst();
+        assertThat(dto.titleKey()).isEqualTo("operationalIssues.titles.OVERDUE_REPAIR_REQUEST");
+        assertThat(dto.titleParams()).containsEntry("requestNumber", "RR-2026-105814");
+        assertThat(dto.messageKey()).isEqualTo("operationalIssues.messages.OVERDUE_REPAIR_REQUEST");
+        assertThat(dto.messageParams()).containsEntry("targetCompletionAt", "2026-06-20T08:00:00Z");
     }
 
     private OperationalIssue issue(UUID id, UUID equipmentId, UUID departmentId) {

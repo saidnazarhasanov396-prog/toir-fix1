@@ -1814,7 +1814,7 @@ public class EquipmentService {
                 || request.lifetimeWarningPercent() != null;
     }
 
-    private Long calculateDaysOfResourceRemaining(Double lifetimeLimitValue, Double averageDailyUsage) {
+    public Long calculateDaysOfResourceRemaining(Double lifetimeLimitValue, Double averageDailyUsage) {
         if (lifetimeLimitValue == null || averageDailyUsage == null || averageDailyUsage <= 0) {
             return null;
         }
