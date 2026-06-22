@@ -70,7 +70,8 @@ public class ApprovalService {
             "ACTUAL_COST",
             "DEFECT_LIST",
             "PLANNED_SHUTDOWN",
-            "REPAIR_CAMPAIGN"
+            "REPAIR_CAMPAIGN",
+            "EQUIPMENT_COMMISSIONING"
     );
 
     private final ApprovalRequestRepository requestRepository;
@@ -91,6 +92,7 @@ public class ApprovalService {
     private final ObjectProvider<RepairRequestService> repairRequestServiceProvider;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     private final ObjectProvider<MaintenanceRegulationService> maintenanceRegulationServiceProvider;
+    private final ObjectProvider<com.toir.service.equipment.EquipmentCommissioningActService> equipmentCommissioningActServiceProvider;
 
 
     @Transactional(readOnly = true)
@@ -393,6 +395,7 @@ public class ApprovalService {
             case DEFECT_LIST -> "select code as code, title as title from defect_lists where id = ? and is_deleted = false";
             case PLANNED_SHUTDOWN -> "select null as code, name as title from planned_shutdowns where id = ? and is_deleted = false";
             case REPAIR_CAMPAIGN -> "select code as code, name as title from repair_campaigns where id = ? and is_deleted = false";
+            case EQUIPMENT_COMMISSIONING -> "select act_number as code, concat('Equipment ', equipment_id) as title from equipment_commissioning_acts where id = ? and is_deleted = false";
             default -> null;
         };
     }
@@ -404,6 +407,12 @@ public class ApprovalService {
             case PROCUREMENT_REQUEST, PROCUREMENT -> procurementRequestServiceProvider.getObject().validateCanApprove(targetId);
             case REPAIR_REQUEST -> repairRequestServiceProvider.getObject().assertMeterReadingsReadyForApproval(targetId);
             case MAINTENANCE_REGULATION -> maintenanceRegulationServiceProvider.getObject().validateCanApprove(targetId);
+            case EQUIPMENT_COMMISSIONING -> {
+                if (equipmentCommissioningActServiceProvider == null) {
+                    throw RestException.conflict("Equipment commissioning approval service is unavailable");
+                }
+                equipmentCommissioningActServiceProvider.getObject().validateCanApprove(targetId);
+            }
             default -> {
             }
         }
@@ -1240,6 +1249,7 @@ public class ApprovalService {
             case DEFECT_LIST -> "DefectList";
             case PLANNED_SHUTDOWN -> "PlannedShutdown";
             case REPAIR_CAMPAIGN -> "RepairCampaign";
+            case EQUIPMENT_COMMISSIONING -> "EquipmentCommissioningAct";
             default -> "ApprovalRequest";
         };
     }

@@ -19,6 +19,7 @@ import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,7 @@ public class AttachmentTargetAccessService {
     private final ProcurementRequestRepository procurementRequestRepository;
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
+    private final EquipmentCommissioningActRepository equipmentCommissioningActRepository;
 
     public AttachmentTargetType assertCanAccess(AttachmentTargetType targetType, UUID targetId) {
         if (targetType == null) {
@@ -58,6 +60,7 @@ public class AttachmentTargetAccessService {
             case APPROVAL -> assertCanAccessApproval(targetId);
             case PROCUREMENT_REQUEST -> assertCanAccessProcurementRequest(targetId);
             case STOCK_MOVEMENT -> assertCanAccessStockMovement(targetId);
+            case EQUIPMENT_COMMISSIONING -> assertCanAccessEquipmentCommissioning(targetId);
         }
         return targetType;
     }
@@ -68,7 +71,7 @@ public class AttachmentTargetAccessService {
             case VEHICLE -> FileCategory.VEHICLE_DOCUMENT;
             case WORK_ORDER -> FileCategory.WORK_ORDER_DOCUMENT;
             case STOCK_MOVEMENT -> FileCategory.STOCK_MOVEMENT_DOCUMENT;
-            case REPAIR_REQUEST, COMPLETION_ACT, APPROVAL, PROCUREMENT_REQUEST -> FileCategory.DOCUMENT;
+            case REPAIR_REQUEST, COMPLETION_ACT, APPROVAL, PROCUREMENT_REQUEST, EQUIPMENT_COMMISSIONING -> FileCategory.DOCUMENT;
         };
     }
 
@@ -117,6 +120,15 @@ public class AttachmentTargetAccessService {
         CompletionAct act = completionActRepository.findByIdAndIsDeletedFalse(actId)
                 .orElseThrow(() -> RestException.notFound("Completion act not found: " + actId));
         assertCanAccessWorkOrder(act.getWorkOrderId());
+    }
+
+    private void assertCanAccessEquipmentCommissioning(UUID actId) {
+        if (equipmentCommissioningActRepository == null) {
+            throw RestException.notFound("Equipment commissioning act not found: " + actId);
+        }
+        var act = equipmentCommissioningActRepository.findByIdAndIsDeletedFalse(actId)
+                .orElseThrow(() -> RestException.notFound("Equipment commissioning act not found: " + actId));
+        assertCanAccessEquipment(act.getEquipmentId(), false);
     }
 
     private void assertCanAccessApproval(UUID approvalId) {

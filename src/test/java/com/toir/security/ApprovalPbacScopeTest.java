@@ -144,7 +144,8 @@ class ApprovalPbacScopeTest {
                 provider(procurementRequestService),
                 provider(repairRequestService),
                 provider(maintenanceAutomationService),
-                provider(maintenanceRegulationService)
+                provider(maintenanceRegulationService),
+                provider(mock(com.toir.service.equipment.EquipmentCommissioningActService.class))
         );
     }
 
@@ -1267,7 +1268,8 @@ class ApprovalPbacScopeTest {
                 mock(MaintenanceBudgetRepository.class),
                 mock(ActualCostRepository.class),
                 mock(FinanceScopeService.class),
-                userRepository
+                userRepository,
+                mock(com.toir.repository.equipment.EquipmentCommissioningActRepository.class)
         );
     }
 

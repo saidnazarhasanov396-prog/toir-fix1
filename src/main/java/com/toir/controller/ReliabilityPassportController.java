@@ -1,6 +1,8 @@
 package com.toir.controller;
 
 import com.toir.service.ReliabilityPassportService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.util.List;
@@ -23,17 +25,30 @@ public class ReliabilityPassportController {
     public record TopCause(String cause, int count) {}
 
     public record ReliabilityPassport(
+            @Schema(description = "Equipment identifier.")
             UUID equipmentId,
+            @Schema(description = "Equipment registry code")
             String equipmentCode,
+            @Schema(description = "Equipment registry name")
             String equipmentName,
+            @Schema(description = "Lifetime defect records excluding cancelled defects")
             int totalDefects,
+            @Schema(description = "Defects currently in OPEN, IN_ANALYSIS, or IN_PROGRESS status")
             int openDefects,
+            @Schema(description = "Reliability-impacting events in the analysis period: explicit failure downtime, "
+                    + "or repair work order/request intervals when explicit downtime is absent")
             int totalDowntimeEvents,
+            @Schema(description = "Deduplicated unavailable minutes from failure downtime and repair intervals")
             long totalDowntimeMinutes,
+            @Schema(description = "Operating hours in the analysis period divided by failure downtime event count")
             Double mtbfHours,
+            @Schema(description = "Average duration in hours of completed unplanned or emergency downtime events")
             Double mttrHours,
+            @Schema(description = "Operating time divided by observed time, as percent")
             double availabilityPct,
+            @Schema(description = "Top causes from non-cancelled defect rootCause/failureReason fields")
             List<TopCause> topRootCauses,
+            @Schema(description = "Time when this read-only passport was calculated")
             Instant generatedAt
     ) {}
 
@@ -45,6 +60,10 @@ public class ReliabilityPassportController {
     ) {}
 
     @GetMapping("/reliability-passport")
+    @Operation(summary = "List calculated reliability passports",
+            description = "Metrics use the previous 365 days, or the period since operation/commissioning start when newer. "
+                    + "UNPLANNED/EMERGENCY downtime is preferred; actual repair work-order or repair-request intervals "
+                    + "are used as fallbacks and overlapping intervals are counted once.")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<Page<ReliabilityPassport>> list(
             @RequestParam(required = false) UUID equipmentId,
@@ -56,6 +75,8 @@ public class ReliabilityPassportController {
     }
 
     @GetMapping("/reliability-passports/stats")
+    @Operation(summary = "Count equipment by calculated availability band",
+            description = "Uses the same analysis period and downtime rules as the reliability passport list.")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<ReliabilityPassportStats> stats(
             @RequestParam(required = false) UUID equipmentId,

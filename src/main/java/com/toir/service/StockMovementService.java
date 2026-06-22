@@ -502,6 +502,9 @@ public class StockMovementService {
         if (type == StockMovementType.EQUIPMENT_IN) {
             throw RestException.badRequest("Equipment receipts must be recorded through procurement receipt");
         }
+        if (type == StockMovementType.EQUIPMENT_OUT) {
+            throw RestException.badRequest("Equipment movements must be recorded through their domain workflow");
+        }
     }
 
     private void assertWorkOrderMovementUsesDomainEndpoint(StockMovementRequest request) {
@@ -574,7 +577,7 @@ public class StockMovementService {
             case RESERVATION, RELEASE -> {
                 // Reservation state is owned by ReservationService.
             }
-            case EQUIPMENT_IN -> {
+            case EQUIPMENT_IN, EQUIPMENT_OUT -> {
                 // Equipment receipts do not affect spare-part core stock balances.
             }
         }
