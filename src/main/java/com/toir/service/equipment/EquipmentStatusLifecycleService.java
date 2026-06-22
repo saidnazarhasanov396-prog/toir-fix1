@@ -164,6 +164,12 @@ public class EquipmentStatusLifecycleService {
             throw RestException.badRequest("Equipment status is required");
         }
         EquipmentStatus fromStatus = equipment.getStatus();
+        if (source == EquipmentStatusSource.MANUAL
+                && fromStatus == EquipmentStatus.STANDBY
+                && toStatus == EquipmentStatus.ACTIVE) {
+            throw RestException.conflict(
+                    "STANDBY equipment can become ACTIVE only through equipment commissioning approval");
+        }
         if (fromStatus == toStatus) {
             return recordHistory(equipment, fromStatus, toStatus, reason, source, changedBy, relatedEntityType, relatedEntityId, note);
         }

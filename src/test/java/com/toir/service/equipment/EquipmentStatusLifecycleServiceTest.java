@@ -85,19 +85,37 @@ class EquipmentStatusLifecycleServiceTest {
     @Test
     void manualStatusChange_updatesEquipmentStatus() {
         UUID equipmentId = UUID.randomUUID();
-        Equipment equipment = equipment(equipmentId, EquipmentStatus.STANDBY);
+        Equipment equipment = equipment(equipmentId, EquipmentStatus.ACTIVE);
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(historyRepository.save(any(EquipmentStatusHistory.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.changeStatusManually(
                 equipmentId,
-                new EquipmentStatusChangeRequest(EquipmentStatus.ACTIVE, "Ready for service"),
+                new EquipmentStatusChangeRequest(EquipmentStatus.OUT_OF_SERVICE, "Safety shutdown"),
                 UUID.randomUUID());
 
         ArgumentCaptor<Equipment> equipmentCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(equipmentRepository).save(equipmentCaptor.capture());
-        assertThat(equipmentCaptor.getValue().getStatus()).isEqualTo(EquipmentStatus.ACTIVE);
+        assertThat(equipmentCaptor.getValue().getStatus()).isEqualTo(EquipmentStatus.OUT_OF_SERVICE);
+    }
+
+    @Test
+    void manualStandbyToActive_requiresApprovedCommissioningAct() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, EquipmentStatus.STANDBY);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
+        assertThatThrownBy(() -> service.changeStatusManually(
+                equipmentId,
+                new EquipmentStatusChangeRequest(EquipmentStatus.ACTIVE, "Manual activation"),
+                UUID.randomUUID()))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("equipment commissioning approval");
+
+        assertThat(equipment.getStatus()).isEqualTo(EquipmentStatus.STANDBY);
+        verify(equipmentRepository, never()).save(any());
+        verify(historyRepository, never()).save(any());
     }
 
     @Test

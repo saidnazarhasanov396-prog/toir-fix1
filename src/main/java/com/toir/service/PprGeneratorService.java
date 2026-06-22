@@ -22,6 +22,7 @@ import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRe
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.service.maintanance.MaintenanceDueCalculationService;
+import com.toir.service.equipment.OperationalEquipmentPolicy;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -64,6 +65,7 @@ public class PprGeneratorService {
     private final WorkOrderService workOrderService;
     private final WorkOrderNumberService workOrderNumberService;
     private final MaintenanceDueCalculationService maintenanceDueCalculationService;
+    private final OperationalEquipmentPolicy operationalEquipmentPolicy;
     private static final Set<PlanStatus> PLAN_TASK_GENERATION_STATUSES =
             EnumSet.of(PlanStatus.DRAFT, PlanStatus.GENERATED);
     private static final Set<PlanStatus> PLAN_WORK_ORDER_GENERATION_STATUSES =
@@ -302,7 +304,9 @@ public class PprGeneratorService {
     private List<Equipment> activeEquipment(GenerationTracker tracker) {
         List<Equipment> equipment = new ArrayList<>();
         for (Equipment item : equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
-            if (item.getStatus() == EquipmentStatus.DECOMMISSIONED) {
+            if (operationalEquipmentPolicy == null
+                    ? item.getStatus() == EquipmentStatus.DECOMMISSIONED
+                    : !operationalEquipmentPolicy.isOperational(item)) {
                 tracker.skip(SkipReason.SKIP_DECOMMISSIONED_EQUIPMENT);
                 continue;
             }
