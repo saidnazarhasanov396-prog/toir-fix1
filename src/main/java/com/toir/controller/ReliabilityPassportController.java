@@ -25,7 +25,7 @@ public class ReliabilityPassportController {
     public record TopCause(String cause, int count) {}
 
     public record ReliabilityPassport(
-            @Schema(description = "Equipment identifier")
+            @Schema(description = "Equipment identifier.")
             UUID equipmentId,
             @Schema(description = "Equipment registry code")
             String equipmentCode,
