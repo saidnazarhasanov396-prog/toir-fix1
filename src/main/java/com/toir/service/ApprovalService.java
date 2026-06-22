@@ -94,32 +94,6 @@ public class ApprovalService {
     private final ObjectProvider<MaintenanceRegulationService> maintenanceRegulationServiceProvider;
     private final ObjectProvider<com.toir.service.equipment.EquipmentCommissioningActService> equipmentCommissioningActServiceProvider;
 
-    public ApprovalService(
-            ApprovalRequestRepository requestRepository,
-            ApprovalDelegateRepository delegateRepository,
-            ApprovalActionExecutor approvalActionExecutor,
-            ApprovalGovernanceService governanceService,
-            ApprovalSlaPolicyService slaPolicyService,
-            ApprovalRouteResolver routeResolver,
-            JdbcTemplate jdbcTemplate,
-            AuditBuilderService auditBuilderService,
-            ApprovalScopeService approvalScopeService,
-            ScopeAccessService scopeAccessService,
-            NotificationService notificationService,
-            UserRepository userRepository,
-            ObjectProvider<WorkOrderService> workOrderServiceProvider,
-            ObjectProvider<PprPlanService> pprPlanServiceProvider,
-            ObjectProvider<ProcurementRequestService> procurementRequestServiceProvider,
-            ObjectProvider<RepairRequestService> repairRequestServiceProvider,
-            ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider,
-            ObjectProvider<MaintenanceRegulationService> maintenanceRegulationServiceProvider) {
-        this(requestRepository, delegateRepository, approvalActionExecutor, governanceService, slaPolicyService,
-                routeResolver, jdbcTemplate, auditBuilderService, approvalScopeService, scopeAccessService,
-                notificationService, userRepository, workOrderServiceProvider, pprPlanServiceProvider,
-                procurementRequestServiceProvider, repairRequestServiceProvider, maintenanceAutomationServiceProvider,
-                maintenanceRegulationServiceProvider, null);
-    }
-
 
     @Transactional(readOnly = true)
     public List<ApprovalRequestDto> listByDocument(String documentType, UUID documentId) {

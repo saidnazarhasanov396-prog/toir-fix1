@@ -44,21 +44,6 @@ public class AttachmentTargetAccessService {
     private final ScopeAccessService scopeAccessService;
     private final EquipmentCommissioningActRepository equipmentCommissioningActRepository;
 
-    public AttachmentTargetAccessService(
-            EquipmentRepository equipmentRepository,
-            WorkOrderRepository workOrderRepository,
-            RepairRequestRepository repairRequestRepository,
-            CompletionActRepository completionActRepository,
-            ApprovalRequestRepository approvalRequestRepository,
-            StockMovementRepository stockMovementRepository,
-            ProcurementRequestRepository procurementRequestRepository,
-            WarehouseRepository warehouseRepository,
-            ScopeAccessService scopeAccessService) {
-        this(equipmentRepository, workOrderRepository, repairRequestRepository, completionActRepository,
-                approvalRequestRepository, stockMovementRepository, procurementRequestRepository, warehouseRepository,
-                scopeAccessService, null);
-    }
-
     public AttachmentTargetType assertCanAccess(AttachmentTargetType targetType, UUID targetId) {
         if (targetType == null) {
             throw RestException.badRequest("targetType is required");

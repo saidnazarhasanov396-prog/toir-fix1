@@ -13,6 +13,7 @@ import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,6 +63,9 @@ class AttachmentTargetAccessServiceTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    EquipmentCommissioningActRepository equipmentCommissioningActRepository;
+
     private AttachmentTargetAccessService service;
 
     @BeforeEach
@@ -75,7 +79,8 @@ class AttachmentTargetAccessServiceTest {
                 stockMovementRepository,
                 procurementRequestRepository,
                 warehouseRepository,
-                scopeAccessService
+                scopeAccessService,
+                equipmentCommissioningActRepository
         );
     }
 
