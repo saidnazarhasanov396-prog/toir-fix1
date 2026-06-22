@@ -1,6 +1,7 @@
 package com.toir.security;
 
 import com.toir.controller.InspectionController;
+import com.toir.dto.inspection.InspectionDashboardSummaryDto;
 import com.toir.dto.inspection.InspectionRoundDto;
 import com.toir.dto.inspection.InspectionRoundResultDto;
 import com.toir.dto.inspection.InspectionRouteDto;
@@ -18,6 +19,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -72,12 +74,16 @@ class RbacInspectionSecurityTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/inspection-rounds?page=0&size=1"))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/inspection-dashboard/summary"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
     @WithMockUser(authorities = PermissionConstants.USER_READ)
     void unrelatedPermissionCannotReadInspections() throws Exception {
         mockMvc.perform(get("/api/v1/inspection-routes"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/inspection-dashboard/summary"))
                 .andExpect(status().isForbidden());
     }
 
@@ -90,6 +96,7 @@ class RbacInspectionSecurityTest {
         when(inspectionService.getRoute(routeId)).thenReturn(routeDto(routeId));
         when(inspectionService.listRounds(null, null, null)).thenReturn(List.of(roundDto(roundId, routeId)));
         when(inspectionService.getRound(roundId)).thenReturn(roundDto(roundId, routeId));
+        when(inspectionService.getDashboardSummary(null)).thenReturn(summaryDto());
 
         mockMvc.perform(get("/api/v1/inspection-routes"))
                 .andExpect(status().isOk());
@@ -98,6 +105,8 @@ class RbacInspectionSecurityTest {
         mockMvc.perform(get("/api/v1/inspection-rounds?page=0&size=1"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/inspection-rounds/{id}", roundId))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/inspection-dashboard/summary"))
                 .andExpect(status().isOk());
     }
 
@@ -280,6 +289,21 @@ class RbacInspectionSecurityTest {
                 "bar",
                 "ok",
                 null,
+                List.of()
+        );
+    }
+
+    private InspectionDashboardSummaryDto summaryDto() {
+        return new InspectionDashboardSummaryDto(
+                Instant.parse("2026-06-22T06:00:00Z"),
+                LocalDate.parse("2026-06-22"),
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
                 List.of()
         );
     }

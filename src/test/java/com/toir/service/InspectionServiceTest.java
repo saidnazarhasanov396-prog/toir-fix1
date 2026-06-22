@@ -5,6 +5,7 @@ import com.toir.dto.inspection.InspectionRoundResultDto;
 import com.toir.dto.inspection.InspectionRoundResultRequest;
 import com.toir.dto.inspection.InspectionRouteDto;
 import com.toir.dto.inspection.InspectionRouteRequest;
+import com.toir.dto.inspection.InspectionDashboardSummaryDto;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.inspection.InspectionCheckpoint;
@@ -39,6 +40,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.List;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -135,6 +137,163 @@ class InspectionServiceTest {
                     assertThat(item.status()).isEqualTo(InspectionRoundStatus.IN_PROGRESS);
                     assertThat(item.results()).isEmpty();
                 });
+    }
+
+    @Test
+    void dashboardSummaryMarksRoutesWithoutCompletedRoundsFromCreatedAt() {
+        Instant now = Instant.parse("2026-06-22T06:00:00Z");
+        InspectionRoute route = routeWithSchedule(
+                UUID.randomUUID(),
+                "IR-DUE",
+                "Daily pump route",
+                "DAILY",
+                Instant.parse("2026-06-21T04:00:00Z"),
+                2
+        );
+        when(routeRepo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(null, true, null))
+                .thenReturn(List.of(route));
+        when(roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(null, null, null))
+                .thenReturn(List.of());
+
+        InspectionDashboardSummaryDto summary = service.getDashboardSummary(null, now);
+
+        assertThat(summary.activeRoutes()).isEqualTo(1);
+        assertThat(summary.dueToday()).isEqualTo(0);
+        assertThat(summary.overdue()).isEqualTo(1);
+        assertThat(summary.inProgress()).isZero();
+        assertThat(summary.attentionRoutes()).singleElement().satisfies(item -> {
+            assertThat(item.routeId()).isEqualTo(route.getId());
+            assertThat(item.routeCode()).isEqualTo("IR-DUE");
+            assertThat(item.checkpointsCount()).isEqualTo(2);
+            assertThat(item.nextDueAt()).isEqualTo(Instant.parse("2026-06-22T04:00:00Z"));
+            assertThat(item.state()).isEqualTo("OVERDUE");
+        });
+    }
+
+    @Test
+    void dashboardSummaryKeepsDailyRouteCompletedTodayOutOfAttention() {
+        Instant now = Instant.parse("2026-06-22T06:00:00Z");
+        UUID routeId = UUID.randomUUID();
+        InspectionRoute route = routeWithSchedule(
+                routeId,
+                "IR-OK",
+                "Daily completed route",
+                "DAILY",
+                Instant.parse("2026-06-19T05:00:00Z"),
+                1
+        );
+        InspectionRound completed = roundForRoute(
+                UUID.randomUUID(),
+                route,
+                InspectionRoundStatus.COMPLETED,
+                Instant.parse("2026-06-22T02:00:00Z"),
+                Instant.parse("2026-06-22T02:30:00Z"),
+                1,
+                0
+        );
+        when(routeRepo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(null, true, null))
+                .thenReturn(List.of(route));
+        when(roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(null, null, null))
+                .thenReturn(List.of(completed));
+
+        InspectionDashboardSummaryDto summary = service.getDashboardSummary(null, now);
+
+        assertThat(summary.activeRoutes()).isEqualTo(1);
+        assertThat(summary.completedToday()).isEqualTo(1);
+        assertThat(summary.findingsToday()).isEqualTo(1);
+        assertThat(summary.alarmsToday()).isZero();
+        assertThat(summary.overdue()).isZero();
+        assertThat(summary.dueToday()).isZero();
+        assertThat(summary.attentionRoutes()).isEmpty();
+    }
+
+    @Test
+    void dashboardSummaryCalculatesShiftWeeklyAndMonthlyNextDueTimes() {
+        Instant now = Instant.parse("2026-06-22T06:00:00Z");
+        InspectionRoute shiftRoute = routeWithSchedule(
+                UUID.randomUUID(),
+                "IR-SHIFT",
+                "Shift route",
+                "SHIFT",
+                Instant.parse("2026-06-20T00:00:00Z"),
+                1
+        );
+        InspectionRoute weeklyRoute = routeWithSchedule(
+                UUID.randomUUID(),
+                "IR-WEEK",
+                "Weekly route",
+                "WEEKLY",
+                Instant.parse("2026-06-20T00:00:00Z"),
+                1
+        );
+        InspectionRoute monthlyRoute = routeWithSchedule(
+                UUID.randomUUID(),
+                "IR-MONTH",
+                "Monthly route",
+                "MONTHLY",
+                Instant.parse("2026-06-20T00:00:00Z"),
+                1
+        );
+        when(routeRepo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(null, true, null))
+                .thenReturn(List.of(shiftRoute, weeklyRoute, monthlyRoute));
+        when(roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(null, null, null))
+                .thenReturn(List.of(
+                        roundForRoute(UUID.randomUUID(), shiftRoute, InspectionRoundStatus.COMPLETED,
+                                Instant.parse("2026-06-21T20:00:00Z"), Instant.parse("2026-06-21T21:00:00Z"), 0, 0),
+                        roundForRoute(UUID.randomUUID(), weeklyRoute, InspectionRoundStatus.COMPLETED,
+                                Instant.parse("2026-06-15T05:00:00Z"), Instant.parse("2026-06-15T05:30:00Z"), 0, 0),
+                        roundForRoute(UUID.randomUUID(), monthlyRoute, InspectionRoundStatus.COMPLETED,
+                                Instant.parse("2026-05-22T04:00:00Z"), Instant.parse("2026-05-22T04:30:00Z"), 0, 0)
+                ));
+
+        InspectionDashboardSummaryDto summary = service.getDashboardSummary(null, now);
+
+        assertThat(summary.attentionRoutes())
+                .extracting("routeCode", "nextDueAt", "state")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("IR-MONTH", Instant.parse("2026-06-21T04:30:00Z"), "OVERDUE"),
+                        org.assertj.core.groups.Tuple.tuple("IR-SHIFT", Instant.parse("2026-06-22T05:00:00Z"), "OVERDUE"),
+                        org.assertj.core.groups.Tuple.tuple("IR-WEEK", Instant.parse("2026-06-22T05:30:00Z"), "OVERDUE")
+                );
+    }
+
+    @Test
+    void dashboardSummaryCountsInProgressRoutesSeparatelyFromOverdue() {
+        Instant now = Instant.parse("2026-06-22T06:00:00Z");
+        InspectionRoute route = routeWithSchedule(
+                UUID.randomUUID(),
+                "IR-ACTIVE",
+                "Active overdue route",
+                "SHIFT",
+                Instant.parse("2026-06-21T00:00:00Z"),
+                3
+        );
+        InspectionRound activeRound = roundForRoute(
+                UUID.randomUUID(),
+                route,
+                InspectionRoundStatus.IN_PROGRESS,
+                Instant.parse("2026-06-22T05:00:00Z"),
+                null,
+                2,
+                1
+        );
+        when(routeRepo.findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(null, true, null))
+                .thenReturn(List.of(route));
+        when(roundRepo.findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(null, null, null))
+                .thenReturn(List.of(activeRound));
+
+        InspectionDashboardSummaryDto summary = service.getDashboardSummary(null, now);
+
+        assertThat(summary.inProgress()).isEqualTo(1);
+        assertThat(summary.overdue()).isZero();
+        assertThat(summary.findingsToday()).isEqualTo(2);
+        assertThat(summary.alarmsToday()).isEqualTo(1);
+        assertThat(summary.attentionRoutes()).singleElement().satisfies(item -> {
+            assertThat(item.state()).isEqualTo("IN_PROGRESS");
+            assertThat(item.activeRoundId()).isEqualTo(activeRound.getId());
+            assertThat(item.activeFindingsCount()).isEqualTo(2);
+            assertThat(item.activeAlarmCount()).isEqualTo(1);
+        });
     }
 
     @Test
@@ -485,6 +644,57 @@ class InspectionServiceTest {
 
     private InspectionRouteRequest routeRequest(String expectedUnit) {
         return routeRequest(null, expectedUnit);
+    }
+
+    private InspectionRoute routeWithSchedule(
+            UUID id,
+            String code,
+            String name,
+            String frequency,
+            Instant createdAt,
+            int checkpointCount
+    ) {
+        InspectionRoute route = new InspectionRoute();
+        ReflectionTestUtils.setField(route, "id", id);
+        ReflectionTestUtils.setField(route, "createdAt", createdAt);
+        ReflectionTestUtils.setField(route, "updatedAt", createdAt);
+        route.setCode(code);
+        route.setName(name);
+        route.setFrequency(frequency);
+        route.setTargetDurationMin(30);
+        route.setActive(true);
+        for (int i = 1; i <= checkpointCount; i++) {
+            InspectionCheckpoint checkpoint = new InspectionCheckpoint();
+            ReflectionTestUtils.setField(checkpoint, "id", UUID.randomUUID());
+            checkpoint.setRoute(route);
+            checkpoint.setOrderIndex(i);
+            checkpoint.setTitle("Checkpoint " + i);
+            route.getCheckpoints().add(checkpoint);
+        }
+        return route;
+    }
+
+    private InspectionRound roundForRoute(
+            UUID id,
+            InspectionRoute route,
+            InspectionRoundStatus status,
+            Instant startedAt,
+            Instant completedAt,
+            int findingsCount,
+            int alarmCount
+    ) {
+        InspectionRound round = new InspectionRound();
+        ReflectionTestUtils.setField(round, "id", id);
+        ReflectionTestUtils.setField(round, "createdAt", startedAt);
+        ReflectionTestUtils.setField(round, "updatedAt", completedAt != null ? completedAt : startedAt);
+        round.setRoute(route);
+        round.setStartedAt(startedAt);
+        round.setCompletedAt(completedAt);
+        round.setStatus(status);
+        round.setPerformedBy(UUID.randomUUID());
+        round.setFindingsCount(findingsCount);
+        round.setAlarmCount(alarmCount);
+        return round;
     }
 
     private InspectionRouteRequest routeRequest(String code, String expectedUnit) {
