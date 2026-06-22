@@ -128,6 +128,11 @@ public final class PermissionConstants {
     public static final String EQUIPMENT_UPDATE = "EQUIPMENT_UPDATE";
     public static final String EQUIPMENT_DELETE = "EQUIPMENT_DELETE";
     public static final String EQUIPMENT_TRANSFER = "EQUIPMENT_TRANSFER";
+    public static final String EQUIPMENT_COMMISSIONING_READ = "EQUIPMENT_COMMISSIONING_READ";
+    public static final String EQUIPMENT_COMMISSIONING_CREATE = "EQUIPMENT_COMMISSIONING_CREATE";
+    public static final String EQUIPMENT_COMMISSIONING_UPDATE = "EQUIPMENT_COMMISSIONING_UPDATE";
+    public static final String EQUIPMENT_COMMISSIONING_SUBMIT = "EQUIPMENT_COMMISSIONING_SUBMIT";
+    public static final String EQUIPMENT_COMMISSIONING_CANCEL = "EQUIPMENT_COMMISSIONING_CANCEL";
     public static final String METER_READ = "METER_READ";
     public static final String METER_CREATE = "METER_CREATE";
     public static final String METER_UPDATE = "METER_UPDATE";

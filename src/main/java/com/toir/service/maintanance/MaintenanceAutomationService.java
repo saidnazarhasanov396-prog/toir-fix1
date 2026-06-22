@@ -38,6 +38,7 @@ import com.toir.security.SecurityAccessService;
 import com.toir.service.WorkOrderNumberService;
 import com.toir.service.WorkOrderService;
 import com.toir.service.ApprovalService;
+import com.toir.service.equipment.OperationalEquipmentPolicy;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -82,12 +83,13 @@ public class MaintenanceAutomationService {
     private final SecurityAccessService securityAccessService;
     private final MaintenanceAutomationNotificationService notificationService;
     private final ObjectProvider<ApprovalService> approvalServiceProvider;
+    private final OperationalEquipmentPolicy operationalEquipmentPolicy;
 
     @Transactional
     public EvaluationResult evaluateEquipment(UUID equipmentId, MaintenanceTriggerSource source) {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
-        if (equipment.getStatus() == EquipmentStatus.DECOMMISSIONED) {
+        if (!isOperational(equipment)) {
             return new EvaluationResult(1, 0, 0, 0, 0);
         }
         List<EquipmentMaintenanceEffectiveRule> rules = effectiveRuleResolver.resolveApplicable(equipmentId);
@@ -151,7 +153,7 @@ public class MaintenanceAutomationService {
         int notifications = 0;
         int failures = 0;
         for (Equipment item : equipment) {
-            if (item.getStatus() == EquipmentStatus.DECOMMISSIONED) {
+            if (!isOperational(item)) {
                 continue;
             }
             try {
@@ -206,7 +208,7 @@ public class MaintenanceAutomationService {
         int failures = 0;
         List<Equipment> equipment = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         for (Equipment item : equipment) {
-            if (item.getStatus() == EquipmentStatus.DECOMMISSIONED) {
+            if (!isOperational(item)) {
                 continue;
             }
             try {
@@ -803,6 +805,12 @@ public class MaintenanceAutomationService {
         private static EvaluationOutcome none() {
             return new EvaluationOutcome(null, false, 0, 0, 0);
         }
+    }
+
+    private boolean isOperational(Equipment equipment) {
+        return operationalEquipmentPolicy == null
+                ? equipment != null && equipment.getStatus() != EquipmentStatus.DECOMMISSIONED
+                : operationalEquipmentPolicy.isOperational(equipment);
     }
 
     public record EvaluationResult(

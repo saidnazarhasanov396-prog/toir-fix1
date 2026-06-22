@@ -47,7 +47,8 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
-            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE')
+            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
+            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
             """)
     @Operation(summary = "Create an attachment group and upload one or more files")
     public ResponseEntity<AttachmentGroupDto> createGroup(
@@ -82,7 +83,8 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
-            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE')
+            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
+            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
             """)
     @Operation(summary = "Add files to an existing attachment group")
     public ResponseEntity<AttachmentGroupDto> addFiles(
@@ -101,7 +103,8 @@ public class AttachmentGroupController {
             hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
-            hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ')
+            hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ') or
+            hasAuthority('EQUIPMENT_COMMISSIONING_READ')
             """)
     public ResponseEntity<AttachmentGroupDto> getGroup(
             @PathVariable UUID groupId,
@@ -173,7 +176,8 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
-            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE')
+            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
+            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
             """)
     public ResponseEntity<Void> deleteGroup(
             @PathVariable UUID groupId,
@@ -190,7 +194,8 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
-            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE')
+            hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
+            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
             """)
     public ResponseEntity<Void> removeFile(
             @PathVariable UUID groupId,
@@ -214,6 +219,7 @@ public class AttachmentGroupController {
             case APPROVAL -> "APPROVAL_UPDATE";
             case PROCUREMENT_REQUEST -> "PROCUREMENT_CREATE";
             case STOCK_MOVEMENT -> null;
+            case EQUIPMENT_COMMISSIONING -> "EQUIPMENT_COMMISSIONING_UPDATE";
         };
         if (requiredAuthority == null || !hasAuthority(authentication, requiredAuthority)) {
             throw new AccessDeniedException("Access denied by attachment target permission");
