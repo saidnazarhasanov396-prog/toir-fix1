@@ -40,6 +40,8 @@ public class EquipmentCommissioningActService {
 
     private static final EnumSet<WarehouseEquipmentStatus> COMMISSIONABLE_WAREHOUSE_STATUSES =
             EnumSet.of(WarehouseEquipmentStatus.AVAILABLE, WarehouseEquipmentStatus.RESERVED);
+    private static final EnumSet<EquipmentCommissioningStatus> OPEN_ACT_STATUSES =
+            EnumSet.of(EquipmentCommissioningStatus.DRAFT, EquipmentCommissioningStatus.PENDING_APPROVAL);
 
     private final EquipmentCommissioningActRepository repository;
     private final EquipmentRepository equipmentRepository;
@@ -58,6 +60,11 @@ public class EquipmentCommissioningActService {
 
     @Transactional
     public EquipmentCommissioningActDto create(EquipmentCommissioningActRequest request) {
+        if (repository.existsByEquipmentIdAndStatusInAndIsDeletedFalse(
+                request.equipmentId(), OPEN_ACT_STATUSES)) {
+            throw RestException.conflict(
+                    "An open commissioning act already exists for equipment " + request.equipmentId());
+        }
         validateReferences(request);
         if (repository.existsByActNumberAndIsDeletedFalse(request.actNumber().trim())) {
             throw RestException.conflict("Commissioning act number already exists: " + request.actNumber());

@@ -29,6 +29,7 @@ import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.EquipmentCategory;
+import com.toir.enums.EquipmentCommissioningStatus;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentOutsideReason;
 import com.toir.enums.EquipmentStatus;
@@ -52,6 +53,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
+import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
@@ -94,6 +96,7 @@ import java.util.stream.Collectors;
 public class EquipmentService {
 
     private final EquipmentRepository repository;
+    private final EquipmentCommissioningActRepository equipmentCommissioningActRepository;
     private final DepartmentRepository departmentRepository;
     private final LocationRepository locationRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
@@ -695,6 +698,16 @@ public class EquipmentService {
         Set<UUID> currentWarehouseIds = collectIds(items, Equipment::getCurrentWarehouseId);
         Set<UUID> warrantyAttachmentIds = collectIds(items, Equipment::getWarrantyAttachmentId);
         Set<UUID> equipmentIds = items.stream().map(Equipment::getId).collect(Collectors.toSet());
+        Set<UUID> equipmentIdsWithCreatedAct = new HashSet<>(
+                equipmentCommissioningActRepository.findEquipmentIdsWithStatuses(
+                        equipmentIds,
+                        EnumSet.of(
+                                EquipmentCommissioningStatus.DRAFT,
+                                EquipmentCommissioningStatus.PENDING_APPROVAL,
+                                EquipmentCommissioningStatus.APPROVED
+                        )
+                )
+        );
 
         Map<UUID, Department> deptMap = byId(departmentRepository.findAllByIdInAndIsDeletedFalse(deptIds), Department::getId);
         Map<UUID, Employee> employeeMap = responsibleIds.isEmpty()
@@ -768,7 +781,8 @@ public class EquipmentService {
                                     valuesByEquipment.getOrDefault(e.getId(), Map.of())
                             ),
                             resolveLifetimeMeter(e, activeMetersByEquipment.getOrDefault(e.getId(), List.of())),
-                            responsibleRef
+                            responsibleRef,
+                            equipmentIdsWithCreatedAct.contains(e.getId())
                     );
                 })
                 .toList();

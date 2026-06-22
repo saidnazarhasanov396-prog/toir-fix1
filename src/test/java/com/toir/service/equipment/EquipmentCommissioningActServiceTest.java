@@ -33,6 +33,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -55,6 +56,35 @@ class EquipmentCommissioningActServiceTest {
     @Spy ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks EquipmentCommissioningActService service;
+
+    @Test
+    void creationRejectsASecondOpenActForTheSameEquipment() {
+        UUID equipmentId = UUID.randomUUID();
+        when(repository.existsByEquipmentIdAndStatusInAndIsDeletedFalse(
+                eq(equipmentId), anyCollection())).thenReturn(true);
+
+        LocalDate today = LocalDate.now();
+
+        assertThatThrownBy(() -> service.create(new EquipmentCommissioningActRequest(
+                equipmentId,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                UUID.randomUUID(),
+                "COMM-2026-003",
+                today,
+                today,
+                today,
+                null,
+                null
+        )))
+                .hasMessageContaining("open commissioning act already exists")
+                .hasMessageContaining(equipmentId.toString());
+
+        verifyNoInteractions(equipmentRepository, warehouseItemRepository);
+        verify(repository, never()).save(any());
+    }
 
     @Test
     void creationResolvesTheSuppliedWarehouseItemByItsId() {
