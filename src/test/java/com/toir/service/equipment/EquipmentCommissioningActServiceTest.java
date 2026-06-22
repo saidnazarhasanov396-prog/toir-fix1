@@ -1,9 +1,14 @@
 package com.toir.service.equipment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.dto.equipmentcommissioning.EquipmentCommissioningActDto;
+import com.toir.dto.equipmentcommissioning.EquipmentCommissioningActRequest;
+import com.toir.entity.Department;
 import com.toir.entity.StockMovement;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentCommissioningAct;
+import com.toir.entity.users.Employee;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.*;
 import com.toir.repository.*;
@@ -52,6 +57,59 @@ class EquipmentCommissioningActServiceTest {
     @InjectMocks EquipmentCommissioningActService service;
 
     @Test
+    void creationResolvesTheSuppliedWarehouseItemByItsId() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID responsibleId = UUID.randomUUID();
+
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        Department department = new Department();
+        department.setId(departmentId);
+        Employee employee = new Employee();
+        employee.setId(responsibleId);
+        employee.setActive(true);
+        WarehouseEquipmentItem item = new WarehouseEquipmentItem();
+        item.setId(itemId);
+        item.setWarehouseId(warehouseId);
+        item.setEquipmentId(equipmentId);
+        item.setStatus(WarehouseEquipmentStatus.AVAILABLE);
+        item.setActive(true);
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department));
+        when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(employee));
+        when(warehouseItemRepository.findByIdAndIsDeletedFalse(itemId)).thenReturn(Optional.of(item));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        LocalDate today = LocalDate.now();
+        EquipmentCommissioningActDto result = service.create(new EquipmentCommissioningActRequest(
+                equipmentId,
+                warehouseId,
+                itemId,
+                departmentId,
+                null,
+                responsibleId,
+                "COMM-2026-002",
+                today,
+                today,
+                today,
+                null,
+                null
+        ));
+
+        assertThat(result.warehouseItemId()).isEqualTo(itemId);
+        verify(warehouseItemRepository).findByIdAndIsDeletedFalse(itemId);
+        verify(warehouseItemRepository, never())
+                .findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(any(), any());
+    }
+
+    @Test
     void approvalAtomicallyActivatesAndMovesWarehouseEquipment() {
         UUID actId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
@@ -78,8 +136,7 @@ class EquipmentCommissioningActServiceTest {
 
         when(repository.findByIdAndIsDeletedFalse(actId)).thenReturn(Optional.of(act));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(warehouseItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
-                warehouseId, equipmentId)).thenReturn(Optional.of(item));
+        when(warehouseItemRepository.findByIdAndIsDeletedFalse(itemId)).thenReturn(Optional.of(item));
         when(stockMovementRepository.save(any())).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
             movement.setId(UUID.randomUUID());
@@ -100,6 +157,8 @@ class EquipmentCommissioningActServiceTest {
                 eq("EQUIPMENT_COMMISSIONING"), eq(actId));
         verify(maintenanceAutomationService).evaluateEquipment(
                 equipmentId, MaintenanceTriggerSource.MANUAL_RECALCULATION);
+        verify(warehouseItemRepository, never())
+                .findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(any(), any());
     }
 
     @Test
