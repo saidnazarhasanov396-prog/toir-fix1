@@ -54,22 +54,6 @@ public class ApprovalScopeService {
     private final UserRepository userRepository;
     private final EquipmentCommissioningActRepository equipmentCommissioningActRepository;
 
-    public ApprovalScopeService(
-            ScopeAccessService scopeAccessService,
-            PprPlanRepository pprPlanRepository,
-            PprTaskRepository pprTaskRepository,
-            RepairRequestRepository repairRequestRepository,
-            WorkOrderRepository workOrderRepository,
-            ProcurementRequestRepository procurementRequestRepository,
-            MaintenanceBudgetRepository maintenanceBudgetRepository,
-            ActualCostRepository actualCostRepository,
-            FinanceScopeService financeScopeService,
-            UserRepository userRepository) {
-        this(scopeAccessService, pprPlanRepository, pprTaskRepository, repairRequestRepository, workOrderRepository,
-                procurementRequestRepository, maintenanceBudgetRepository, actualCostRepository, financeScopeService,
-                userRepository, null);
-    }
-
     public boolean canReadApproval(ApprovalRequest approval) {
         if (approval == null) {
             return false;
