@@ -87,6 +87,14 @@ public class InspectionController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('INSPECTION_READ')")
     public ResponseEntity<InspectionRoundDto> getRound(@PathVariable UUID id) { return ResponseEntity.ok(service.getRound(id)); }
 
+    @GetMapping("/inspection-dashboard/summary")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('INSPECTION_READ')")
+    public ResponseEntity<InspectionDashboardSummaryDto> dashboardSummary(
+            @RequestParam(required = false) UUID departmentId
+    ) {
+        return ResponseEntity.ok(service.getDashboardSummary(departmentId));
+    }
+
     @PostMapping("/inspection-routes/{routeId}/start")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('INSPECTION_START')")
     public ResponseEntity<InspectionRoundDto> startRound(@PathVariable UUID routeId) {

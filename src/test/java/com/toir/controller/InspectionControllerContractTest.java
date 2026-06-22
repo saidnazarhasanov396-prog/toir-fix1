@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.dto.inspection.InspectionRoundDto;
+import com.toir.dto.inspection.InspectionDashboardSummaryDto;
 import com.toir.enums.InspectionRoundStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.security.SecurityScope;
@@ -14,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -90,5 +92,45 @@ class InspectionControllerContractTest {
                         .param("size", "10"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    void dashboardSummaryReturns200WithSupervisorMetrics() throws Exception {
+        UUID routeId = UUID.randomUUID();
+        when(service.getDashboardSummary(null)).thenReturn(new InspectionDashboardSummaryDto(
+                Instant.parse("2026-06-22T06:00:00Z"),
+                LocalDate.parse("2026-06-22"),
+                3,
+                1,
+                1,
+                1,
+                2,
+                4,
+                1,
+                List.of(new InspectionDashboardSummaryDto.AttentionRouteDto(
+                        routeId,
+                        "IR-001",
+                        "Pump route",
+                        null,
+                        "DAILY",
+                        5,
+                        60,
+                        Instant.parse("2026-06-20T06:00:00Z"),
+                        Instant.parse("2026-06-21T06:00:00Z"),
+                        "OVERDUE",
+                        null,
+                        0,
+                        0
+                ))
+        ));
+
+        mockMvc.perform(get("/api/v1/inspection-dashboard/summary")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeRoutes").value(3))
+                .andExpect(jsonPath("$.overdue").value(1))
+                .andExpect(jsonPath("$.attentionRoutes[0].routeId").value(routeId.toString()))
+                .andExpect(jsonPath("$.attentionRoutes[0].state").value("OVERDUE"));
     }
 }
