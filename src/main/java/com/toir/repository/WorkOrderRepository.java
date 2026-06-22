@@ -94,6 +94,15 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
             @Param("departmentId") UUID departmentId,
             @Param("equipmentId") UUID equipmentId);
 
+    @Query("""
+            select w from WorkOrder w
+            where w.isDeleted = false
+              and w.equipmentId in :equipmentIds
+            order by w.updatedAt desc
+            """)
+    List<WorkOrder> findAllByEquipmentIdInAndIsDeletedFalse(
+            @Param("equipmentIds") Collection<UUID> equipmentIds);
+
     default Page<WorkOrder> searchPaginated(WorkOrderStatus status,
             UUID departmentId,
             UUID equipmentId,

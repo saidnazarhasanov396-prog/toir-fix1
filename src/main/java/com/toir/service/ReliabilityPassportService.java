@@ -6,12 +6,19 @@ import com.toir.controller.ReliabilityPassportController.TopCause;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.DowntimeType;
+import com.toir.enums.RequestStatus;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
 import com.toir.repository.DowntimeEventRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,8 +33,10 @@ import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -42,6 +51,8 @@ public class ReliabilityPassportService {
     private final EquipmentRepository equipmentRepository;
     private final DefectRepository defectRepository;
     private final DowntimeEventRepository downtimeRepository;
+    private final WorkOrderRepository workOrderRepository;
+    private final RepairRequestRepository repairRequestRepository;
 
     @Transactional(readOnly = true)
     public Page<ReliabilityPassport> list(UUID equipmentId, String search, int page, int size) {
@@ -72,6 +83,14 @@ public class ReliabilityPassportService {
                 .findAllByEquipmentIdInAndIsDeletedFalse(ids)
                 .stream()
                 .collect(Collectors.groupingBy(DowntimeEvent::getEquipmentId));
+        Map<UUID, List<WorkOrder>> workOrdersByEquipment = workOrderRepository
+                .findAllByEquipmentIdInAndIsDeletedFalse(ids)
+                .stream()
+                .collect(Collectors.groupingBy(WorkOrder::getEquipmentId));
+        Map<UUID, List<RepairRequest>> repairRequestsByEquipment = repairRequestRepository
+                .findAllByEquipmentIdInAndIsDeletedFalse(ids)
+                .stream()
+                .collect(Collectors.groupingBy(RepairRequest::getEquipmentId));
 
         Instant now = Instant.now();
         List<ReliabilityPassport> passports = equipmentPage.getContent().stream()
@@ -79,6 +98,8 @@ public class ReliabilityPassportService {
                         eq,
                         defectsByEquipment.getOrDefault(eq.getId(), List.of()),
                         downtimesByEquipment.getOrDefault(eq.getId(), List.of()),
+                        workOrdersByEquipment.getOrDefault(eq.getId(), List.of()),
+                        repairRequestsByEquipment.getOrDefault(eq.getId(), List.of()),
                         now))
                 .toList();
 
@@ -105,6 +126,14 @@ public class ReliabilityPassportService {
                 .findAllByEquipmentIdInAndIsDeletedFalse(ids)
                 .stream()
                 .collect(Collectors.groupingBy(DowntimeEvent::getEquipmentId));
+        Map<UUID, List<WorkOrder>> workOrdersByEquipment = workOrderRepository
+                .findAllByEquipmentIdInAndIsDeletedFalse(ids)
+                .stream()
+                .collect(Collectors.groupingBy(WorkOrder::getEquipmentId));
+        Map<UUID, List<RepairRequest>> repairRequestsByEquipment = repairRequestRepository
+                .findAllByEquipmentIdInAndIsDeletedFalse(ids)
+                .stream()
+                .collect(Collectors.groupingBy(RepairRequest::getEquipmentId));
 
         Instant now = Instant.now();
         int total = 0;
@@ -115,6 +144,8 @@ public class ReliabilityPassportService {
             double availabilityPct = availabilityPct(
                     equipment,
                     downtimesByEquipment.getOrDefault(equipment.getId(), List.of()),
+                    workOrdersByEquipment.getOrDefault(equipment.getId(), List.of()),
+                    repairRequestsByEquipment.getOrDefault(equipment.getId(), List.of()),
                     now
             );
             AvailabilityBand band = bandOf(availabilityPct);
@@ -138,13 +169,17 @@ public class ReliabilityPassportService {
 
         List<Defect> defects = defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
         List<DowntimeEvent> downtimes = downtimeRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId);
+        List<WorkOrder> workOrders = workOrderRepository.search(null, null, equipmentId);
+        List<RepairRequest> repairRequests = repairRequestRepository.search(null, null, equipmentId);
 
-        return buildPassport(equipment, defects, downtimes, Instant.now());
+        return buildPassport(equipment, defects, downtimes, workOrders, repairRequests, Instant.now());
     }
 
     private ReliabilityPassport buildPassport(Equipment equipment,
                                               List<Defect> defects,
                                               List<DowntimeEvent> downtimes,
+                                              List<WorkOrder> workOrders,
+                                              List<RepairRequest> repairRequests,
                                               Instant now) {
         List<Defect> activeDefects = defects.stream()
                 .filter(d -> d.getStatus() != DefectStatus.CANCELLED)
@@ -154,22 +189,14 @@ public class ReliabilityPassportService {
                 .count();
 
         Instant periodStart = analysisPeriodStart(equipment, now);
-        List<DowntimeSlice> failureDowntimes = downtimes.stream()
-                .filter(this::isFailureDowntime)
-                .map(event -> sliceToPeriod(event, periodStart, now))
-                .filter(slice -> slice.durationMinutes() > 0)
-                .toList();
-        long totalDowntimeMinutes = 0;
-        long mttrDenominator = 0;
-        long mttrSumMinutes = 0;
-        for (DowntimeSlice slice : failureDowntimes) {
-            long minutes = slice.durationMinutes();
-            totalDowntimeMinutes += minutes;
-            if (slice.completed()) {
-                mttrSumMinutes += minutes;
-                mttrDenominator++;
-            }
-        }
+        List<DowntimeSlice> failureDowntimes =
+                reliabilityDowntimes(downtimes, workOrders, repairRequests, periodStart, now);
+        long totalDowntimeMinutes = mergedDowntimeMinutes(failureDowntimes);
+        long mttrDenominator = failureDowntimes.stream().filter(DowntimeSlice::completed).count();
+        long mttrSumMinutes = failureDowntimes.stream()
+                .filter(DowntimeSlice::completed)
+                .mapToLong(DowntimeSlice::durationMinutes)
+                .sum();
 
         Double mttrHours = mttrDenominator > 0 ? (mttrSumMinutes / 60.0) / mttrDenominator : null;
         double observedHours = Duration.between(periodStart, now).toMinutes() / 60.0;
@@ -211,14 +238,15 @@ public class ReliabilityPassportService {
         );
     }
 
-    private double availabilityPct(Equipment equipment, List<DowntimeEvent> downtimes, Instant now) {
+    private double availabilityPct(Equipment equipment,
+                                   List<DowntimeEvent> downtimes,
+                                   List<WorkOrder> workOrders,
+                                   List<RepairRequest> repairRequests,
+                                   Instant now) {
         Instant periodStart = analysisPeriodStart(equipment, now);
         double observedHours = Duration.between(periodStart, now).toMinutes() / 60.0;
-        long downtimeMinutes = downtimes.stream()
-                .filter(this::isFailureDowntime)
-                .map(event -> sliceToPeriod(event, periodStart, now))
-                .mapToLong(DowntimeSlice::durationMinutes)
-                .sum();
+        long downtimeMinutes = mergedDowntimeMinutes(
+                reliabilityDowntimes(downtimes, workOrders, repairRequests, periodStart, now));
         return availabilityPct(observedHours, downtimeMinutes);
     }
 
@@ -272,9 +300,111 @@ public class ReliabilityPassportService {
         return event.getType() == DowntimeType.UNPLANNED || event.getType() == DowntimeType.EMERGENCY;
     }
 
+    private List<DowntimeSlice> reliabilityDowntimes(List<DowntimeEvent> downtimes,
+                                                     List<WorkOrder> workOrders,
+                                                     List<RepairRequest> repairRequests,
+                                                     Instant periodStart,
+                                                     Instant periodEnd) {
+        List<DowntimeSlice> result = new java.util.ArrayList<>();
+        Set<UUID> representedWorkOrderIds = new HashSet<>();
+        Map<UUID, WorkOrder> workOrdersById = workOrders.stream()
+                .filter(workOrder -> workOrder.getId() != null)
+                .collect(Collectors.toMap(WorkOrder::getId, workOrder -> workOrder, (first, second) -> first));
+
+        downtimes.stream()
+                .filter(this::isFailureDowntime)
+                .forEach(event -> {
+                    DowntimeSlice slice = sliceToPeriod(event, periodStart, periodEnd);
+                    if (slice.durationMinutes() > 0) {
+                        result.add(slice);
+                        if (event.getWorkOrderId() != null) {
+                            representedWorkOrderIds.add(event.getWorkOrderId());
+                        }
+                    }
+                });
+
+        Set<UUID> representedRepairRequestIds = new HashSet<>();
+        representedWorkOrderIds.stream()
+                .map(workOrdersById::get)
+                .filter(java.util.Objects::nonNull)
+                .map(WorkOrder::getRepairRequestId)
+                .filter(java.util.Objects::nonNull)
+                .forEach(representedRepairRequestIds::add);
+        workOrders.stream()
+                .filter(this::isRepairWorkOrder)
+                .filter(workOrder -> workOrder.getId() == null || !representedWorkOrderIds.contains(workOrder.getId()))
+                .forEach(workOrder -> {
+                    DowntimeSlice slice = sliceToPeriod(
+                            workOrder.getStartedAt(),
+                            workOrder.getCompletedAt(),
+                            workOrder.getStatus() == WorkOrderStatus.COMPLETED
+                                    || workOrder.getStatus() == WorkOrderStatus.CLOSED,
+                            periodStart,
+                            periodEnd);
+                    if (slice.durationMinutes() > 0) {
+                        result.add(slice);
+                        if (workOrder.getRepairRequestId() != null) {
+                            representedRepairRequestIds.add(workOrder.getRepairRequestId());
+                        }
+                    }
+                });
+
+        repairRequests.stream()
+                .filter(this::isReliabilityRepairRequest)
+                .filter(request -> request.getId() == null || !representedRepairRequestIds.contains(request.getId()))
+                .map(request -> sliceToPeriod(
+                        request.getDetectedAt(),
+                        request.getActualCompletionAt(),
+                        request.getStatus() == RequestStatus.COMPLETED || request.getStatus() == RequestStatus.CLOSED,
+                        periodStart,
+                        periodEnd))
+                .filter(slice -> slice.durationMinutes() > 0)
+                .forEach(result::add);
+
+        return result;
+    }
+
+    private boolean isRepairWorkOrder(WorkOrder workOrder) {
+        return workOrder.getWorkType() == WorkType.REPAIR
+                && workOrder.getStartedAt() != null
+                && workOrder.getStatus() != WorkOrderStatus.CANCELLED;
+    }
+
+    private boolean isReliabilityRepairRequest(RepairRequest request) {
+        return request.getDetectedAt() != null
+                && request.getStatus() != RequestStatus.DRAFT
+                && request.getStatus() != RequestStatus.REJECTED
+                && request.getStatus() != RequestStatus.CANCELLED;
+    }
+
+    private long mergedDowntimeMinutes(List<DowntimeSlice> slices) {
+        List<DowntimeSlice> sorted = slices.stream()
+                .sorted(Comparator.comparing(DowntimeSlice::start))
+                .toList();
+        if (sorted.isEmpty()) {
+            return 0L;
+        }
+        long total = 0L;
+        Instant currentStart = sorted.getFirst().start();
+        Instant currentEnd = sorted.getFirst().end();
+        for (int i = 1; i < sorted.size(); i++) {
+            DowntimeSlice next = sorted.get(i);
+            if (!next.start().isAfter(currentEnd)) {
+                if (next.end().isAfter(currentEnd)) {
+                    currentEnd = next.end();
+                }
+            } else {
+                total += Duration.between(currentStart, currentEnd).toMinutes();
+                currentStart = next.start();
+                currentEnd = next.end();
+            }
+        }
+        return total + Duration.between(currentStart, currentEnd).toMinutes();
+    }
+
     private DowntimeSlice sliceToPeriod(DowntimeEvent event, Instant periodStart, Instant periodEnd) {
         if (event.getStartAt() == null) {
-            return new DowntimeSlice(0, false);
+            return DowntimeSlice.empty();
         }
 
         Instant eventEnd;
@@ -290,13 +420,31 @@ public class ReliabilityPassportService {
             completed = false;
         }
 
-        Instant overlapStart = event.getStartAt().isAfter(periodStart) ? event.getStartAt() : periodStart;
-        Instant overlapEnd = eventEnd.isBefore(periodEnd) ? eventEnd : periodEnd;
-        if (!overlapEnd.isAfter(overlapStart)) {
-            return new DowntimeSlice(0, completed);
-        }
-        return new DowntimeSlice(Duration.between(overlapStart, overlapEnd).toMinutes(), completed);
+        return sliceToPeriod(event.getStartAt(), eventEnd, completed, periodStart, periodEnd);
     }
 
-    private record DowntimeSlice(long durationMinutes, boolean completed) {}
+    private DowntimeSlice sliceToPeriod(Instant start,
+                                        Instant end,
+                                        boolean completed,
+                                        Instant periodStart,
+                                        Instant periodEnd) {
+        if (start == null) {
+            return DowntimeSlice.empty();
+        }
+        Instant effectiveEnd = end != null ? end : periodEnd;
+        Instant overlapStart = start.isAfter(periodStart) ? start : periodStart;
+        Instant overlapEnd = effectiveEnd.isBefore(periodEnd) ? effectiveEnd : periodEnd;
+        if (!overlapEnd.isAfter(overlapStart)) {
+            return DowntimeSlice.empty();
+        }
+        return new DowntimeSlice(overlapStart, overlapEnd,
+                Duration.between(overlapStart, overlapEnd).toMinutes(), completed);
+    }
+
+    private record DowntimeSlice(Instant start, Instant end, long durationMinutes, boolean completed) {
+        private static DowntimeSlice empty() {
+            Instant epoch = Instant.EPOCH;
+            return new DowntimeSlice(epoch, epoch, 0, false);
+        }
+    }
 }
