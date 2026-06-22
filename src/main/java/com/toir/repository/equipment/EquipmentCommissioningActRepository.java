@@ -9,15 +9,30 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 public interface EquipmentCommissioningActRepository extends JpaRepository<EquipmentCommissioningAct, UUID> {
     Optional<EquipmentCommissioningAct> findByIdAndIsDeletedFalse(UUID id);
     boolean existsByActNumberAndIsDeletedFalse(String actNumber);
     boolean existsByActNumberAndIdNotAndIsDeletedFalse(String actNumber, UUID id);
+    boolean existsByEquipmentIdAndStatusInAndIsDeletedFalse(
+            UUID equipmentId, Collection<EquipmentCommissioningStatus> statuses);
     boolean existsByEquipmentIdAndStatusAndIsDeletedFalse(UUID equipmentId, EquipmentCommissioningStatus status);
     Optional<EquipmentCommissioningAct> findFirstByEquipmentIdAndStatusAndIsDeletedFalseOrderByApprovedAtDesc(
             UUID equipmentId, EquipmentCommissioningStatus status);
+
+    @Query("""
+            select distinct a.equipmentId
+            from EquipmentCommissioningAct a
+            where a.isDeleted = false
+              and a.equipmentId in :equipmentIds
+              and a.status in :statuses
+            """)
+    List<UUID> findEquipmentIdsWithStatuses(
+            @Param("equipmentIds") Collection<UUID> equipmentIds,
+            @Param("statuses") Collection<EquipmentCommissioningStatus> statuses);
 
     @Query("""
             select a from EquipmentCommissioningAct a

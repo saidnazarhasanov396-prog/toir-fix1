@@ -46,4 +46,6 @@ public interface ApprovalTemplateRepository extends JpaRepository<ApprovalTempla
     List<ApprovalTemplate> findAllRules();
 
     Optional<ApprovalTemplate> findByCodeAndIsDeletedFalse(String code);
+
+    Optional<ApprovalTemplate> findByCode(String code);
 }

@@ -55,6 +55,7 @@ import com.toir.repository.EquipmentUsageSessionRepository;
 import com.toir.repository.FileAssetRepository;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.equipment.EquipmentDocumentRepository;
+import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.service.file_management.FileService;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.WarehouseRepository;
@@ -124,6 +125,9 @@ class EquipmentServiceTest {
 
     @Mock
     EquipmentRepository repository;
+
+    @Mock
+    EquipmentCommissioningActRepository equipmentCommissioningActRepository;
 
     @Mock
     DepartmentRepository departmentRepository;
@@ -309,6 +313,22 @@ class EquipmentServiceTest {
         assertThat(result.getContent()).hasSize(1);
         verify(repository).search(any(), any(), any(), any(), any(), any());
         verify(repository, never()).searchAvailableForReplacement(any(), any(), any(), anyCollection(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void equipmentDtoIndicatesWhenACommissioningActHasBeenCreated() {
+        Equipment equipment = equipment("EQ-COMMISSIONING");
+        Page<Equipment> page = new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1);
+        stubEnrichment();
+        when(repository.search(any(), any(), any(), any(), any(), any())).thenReturn(page);
+        when(equipmentCommissioningActRepository.findEquipmentIdsWithStatuses(
+                anyCollection(), anyCollection())).thenReturn(List.of(equipment.getId()));
+
+        EquipmentDto dto = service.search(
+                null, null, null, null, null, false, null, 0, 20
+        ).getContent().getFirst();
+
+        assertThat(dto.isCreatedAct()).isTrue();
     }
 
     @Test

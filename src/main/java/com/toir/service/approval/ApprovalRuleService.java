@@ -11,6 +11,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.repository.users.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -100,7 +101,13 @@ public class ApprovalRuleService {
 
     private ApprovalRuleDto saveRule(ApprovalTemplate template, ApprovalRuleDto request) {
         ApprovalActionType actionType = effectiveActionType(request.actionType());
-        template.setCode(ruleCode(request.targetType(), actionType));
+        String code = ruleCode(request.targetType(), actionType);
+        templateRepository.findByCode(code)
+                .filter(existing -> template.getId() == null || !existing.getId().equals(template.getId()))
+                .ifPresent(existing -> {
+                    throw RestException.conflict("Approval template code already exists: " + code);
+                });
+        template.setCode(code);
         template.setName(StringUtils.hasText(request.documentName())
                 ? request.documentName().trim()
                 : documentName(request.targetType()));
@@ -134,8 +141,15 @@ public class ApprovalRuleService {
                     .forEach(existing -> existing.setActive(false));
         }
 
-        ApprovalTemplate saved = templateRepository.save(template);
-        return toDto(saved, Map.of());
+        try {
+            ApprovalTemplate saved = templateRepository.saveAndFlush(template);
+            return toDto(saved, Map.of());
+        } catch (DataIntegrityViolationException ex) {
+            if (isCodeConflict(ex)) {
+                throw RestException.conflict("Approval template code already exists: " + code);
+            }
+            throw ex;
+        }
     }
 
     private Map<UUID, User> loadUsersById(List<ApprovalTemplate> templates) {
@@ -254,6 +268,19 @@ public class ApprovalRuleService {
 
     private String ruleCode(ApprovalTargetType targetType, ApprovalActionType actionType) {
         return targetType.name() + "_" + effectiveActionType(actionType).name();
+    }
+
+    private boolean isCodeConflict(DataIntegrityViolationException ex) {
+        Throwable root = ex.getMostSpecificCause();
+        String message = root != null ? root.getMessage() : ex.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("approval_templates_code_key")
+                || (normalized.contains("approval_templates")
+                && normalized.contains("duplicate")
+                && normalized.contains("code"));
     }
 
     private record RuleStep(int order, UUID approverId, String approverRole) {

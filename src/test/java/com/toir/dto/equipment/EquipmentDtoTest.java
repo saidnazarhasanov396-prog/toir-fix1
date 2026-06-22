@@ -25,6 +25,7 @@ class EquipmentDtoTest {
         EquipmentDto dto = EquipmentDto.from(equipment);
 
         assertThat(dto.category()).isEqualTo(EquipmentCategory.VEHICLE);
+        assertThat(dto.isCreatedAct()).isFalse();
     }
 
     @Test
