@@ -124,6 +124,7 @@ class ApprovalRuleServiceTest {
                 ApprovalTargetType.WORK_ORDER,
                 ApprovalActionType.APPROVE
         );
+        ReflectionTestUtils.setField(template, "id", UUID.randomUUID());
         template.getSteps().add(step(template, 1, UUID.randomUUID(), null));
 
         when(templateRepository.findFirstByTargetTypeAndActionTypeAndIsDeletedFalseOrderByCreatedAtDesc(
