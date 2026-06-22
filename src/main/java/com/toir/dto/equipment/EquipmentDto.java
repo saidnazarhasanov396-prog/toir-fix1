@@ -76,7 +76,8 @@ public record EquipmentDto(
         Double forecastRemainingResource,
         Double forecastAvgUsagePerActiveDay,
         Long forecastRemainingActiveDays,
-        LocalDate forecastCalculatedAt
+        LocalDate forecastCalculatedAt,
+        boolean isCreatedAct
 ) {
     public EquipmentDto(
             UUID id,
@@ -128,7 +129,8 @@ public record EquipmentDto(
                 expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, operatingDuration,
                 expectedEndDate, remainingLifetime, lifetimeStatus, hasWarranty, warrantyAttachmentId,
                 warrantyStartDate, warrantyEndDate, warrantyAttachment, passportCompleteness,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                false);
     }
 
     public EquipmentDto(
@@ -176,7 +178,8 @@ public record EquipmentDto(
                 department, location, equipmentType, parent, passport, placement, operationStartDate,
                 expectedLifetimeMonths, expectedLifetimeYears, null, operatingDuration, expectedEndDate, remainingLifetime,
                 lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                false);
     }
 
     public EquipmentDto(
@@ -212,7 +215,8 @@ public record EquipmentDto(
                 category, commissionedAt, null, warrantyUntil, description, averageOperatingLifeHours, department,
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null, null,
                 LifetimeStatus.UNKNOWN, false, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                false);
     }
 
     public EquipmentDto(
@@ -392,6 +396,22 @@ public record EquipmentDto(
                                     PassportCompletenessRef passportCompleteness,
                                     EquipmentMeter lifetimeMeter,
                                     ResponsibleRef responsible) {
+        return from(e, department, location, equipmentType, parent, passport, placement, warrantyAttachment,
+                passportCompleteness, lifetimeMeter, responsible, false);
+    }
+
+    public static EquipmentDto from(Equipment e,
+                                    Ref department,
+                                    Ref location,
+                                    Ref equipmentType,
+                                    Ref parent,
+                                    PassportRef passport,
+                                    PlacementRef placement,
+                                    FileAsset warrantyAttachment,
+                                    PassportCompletenessRef passportCompleteness,
+                                    EquipmentMeter lifetimeMeter,
+                                    ResponsibleRef responsible,
+                                    boolean isCreatedAct) {
         return new EquipmentDto(
                 e.getId(), e.getCode(), e.getName(), e.getInventoryNumber(), e.getTechnicalNumber(),
                 e.getSerialNumber(), e.getModel(), e.getProducedYear(), e.getEquipmentTypeId(), e.getDepartmentId(),
@@ -421,7 +441,8 @@ public record EquipmentDto(
                 e.getForecastRemainingResource(),
                 e.getForecastAvgUsagePerActiveDay(),
                 e.getForecastRemainingActiveDays(),
-                e.getForecastCalculatedAt()
+                e.getForecastCalculatedAt(),
+                isCreatedAct
         );
     }
 

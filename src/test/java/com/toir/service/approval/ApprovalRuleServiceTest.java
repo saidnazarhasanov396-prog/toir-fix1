@@ -7,15 +7,20 @@ import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.exception.RestException;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.repository.users.UserRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -124,7 +129,7 @@ class ApprovalRuleServiceTest {
                 ApprovalTargetType.WORK_ORDER,
                 ApprovalActionType.APPROVE
         )).thenReturn(java.util.Optional.of(template));
-        when(templateRepository.save(any(ApprovalTemplate.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(templateRepository.saveAndFlush(any(ApprovalTemplate.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ApprovalRuleDto saved = service.saveRule(new ApprovalRuleDto(
                 ApprovalTargetType.WORK_ORDER,
@@ -145,7 +150,57 @@ class ApprovalRuleServiceTest {
         assertThat(template.getApproverRole()).isEqualTo("MANAGER");
         assertThat(template.getSteps()).hasSize(2);
         assertThat(template.getSteps()).allSatisfy(step -> assertThat(step.getApproverId()).isNull());
-        verify(templateRepository).save(template);
+        verify(templateRepository).saveAndFlush(template);
+    }
+
+    @Test
+    void duplicateGeneratedCodeReturnsConflictBeforeInsert() {
+        ApprovalTemplate existing = template(
+                "EQUIPMENT_COMMISSIONING_APPROVE",
+                "Equipment Commissioning",
+                ApprovalTargetType.EQUIPMENT_COMMISSIONING,
+                ApprovalActionType.APPROVE
+        );
+        when(templateRepository.findByCode("EQUIPMENT_COMMISSIONING_APPROVE"))
+                .thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.saveRule(rule(
+                ApprovalTargetType.EQUIPMENT_COMMISSIONING,
+                ApprovalActionType.APPROVE
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).isEqualTo(
+                            "Approval template code already exists: EQUIPMENT_COMMISSIONING_APPROVE");
+                });
+    }
+
+    @Test
+    void concurrentDuplicateCodeViolationReturnsConflict() {
+        when(templateRepository.saveAndFlush(any(ApprovalTemplate.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "duplicate key violates unique constraint approval_templates_code_key"));
+
+        assertThatThrownBy(() -> service.saveRule(rule(
+                ApprovalTargetType.EQUIPMENT_COMMISSIONING,
+                ApprovalActionType.APPROVE
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).contains("EQUIPMENT_COMMISSIONING_APPROVE");
+                });
+    }
+
+    private ApprovalRuleDto rule(ApprovalTargetType targetType, ApprovalActionType actionType) {
+        return new ApprovalRuleDto(
+                targetType,
+                actionType,
+                "Test",
+                1,
+                List.of(new ApprovalRuleDto.Step(
+                        1, null, null, "DEPARTMENT_HEAD", ApprovalRuleDto.ApproverType.ROLE)),
+                true
+        );
     }
 
     private ApprovalTemplate template(

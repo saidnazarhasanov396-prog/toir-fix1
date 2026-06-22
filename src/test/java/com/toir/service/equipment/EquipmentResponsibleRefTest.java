@@ -19,6 +19,7 @@ import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentDocumentFileRepository;
 import com.toir.repository.equipment.EquipmentDocumentRepository;
+import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
 import com.toir.repository.equipment.EquipmentMeterRepository;
 import com.toir.repository.equipment.EquipmentPassportRepository;
@@ -56,6 +57,7 @@ import static org.mockito.Mockito.when;
 class EquipmentResponsibleRefTest {
 
     @Mock EquipmentRepository repository;
+    @Mock EquipmentCommissioningActRepository equipmentCommissioningActRepository;
     @Mock DepartmentRepository departmentRepository;
     @Mock LocationRepository locationRepository;
     @Mock EquipmentTypeRepository equipmentTypeRepository;
@@ -236,5 +238,7 @@ class EquipmentResponsibleRefTest {
         lenient().when(attributeValueRepository.findAllByEquipmentIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
         lenient().when(equipmentMeterRepository.findAllByEquipmentIdInAndActiveTrueAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
         lenient().when(employeeRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());
+        lenient().when(equipmentCommissioningActRepository.findEquipmentIdsWithStatuses(
+                anyCollection(), anyCollection())).thenReturn(List.of());
     }
 }
