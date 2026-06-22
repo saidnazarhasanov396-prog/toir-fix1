@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS equipment_commissioning_acts (
     approved_by uuid,
     rejected_at timestamptz,
     rejection_reason text,
-    warehouse_movement_id uuid REFERENCES stock_movements(id),
+    warehouse_movement_id uuid REFERENCES warehouse_stock_ledger_metadata(id),
     CONSTRAINT equipment_commissioning_status_check
         CHECK (status IN ('DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'CANCELLED')),
     CONSTRAINT equipment_commissioning_dates_check
@@ -42,24 +42,6 @@ CREATE INDEX IF NOT EXISTS idx_equipment_commissioning_equipment
 
 CREATE INDEX IF NOT EXISTS idx_equipment_commissioning_department
     ON equipment_commissioning_acts (target_department_id, status);
-
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'stock_movements_type_check'
-          AND conrelid = 'stock_movements'::regclass
-    ) THEN
-        ALTER TABLE stock_movements DROP CONSTRAINT stock_movements_type_check;
-    END IF;
-END $$;
-
-ALTER TABLE stock_movements
-    ADD CONSTRAINT stock_movements_type_check
-    CHECK (type IN (
-        'RECEIPT', 'ISSUE', 'TRANSFER', 'RESERVATION', 'RELEASE',
-        'ADJUSTMENT', 'RETURN', 'EQUIPMENT_IN', 'EQUIPMENT_OUT'
-    ));
 
 INSERT INTO approval_templates (
     code, name, target_type, route_policy, approver_role,
