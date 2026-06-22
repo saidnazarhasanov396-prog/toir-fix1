@@ -176,6 +176,35 @@ class ApprovalRuleServiceTest {
     }
 
     @Test
+    void recreatingRuleRestoresSoftDeletedTemplateWithTheSameCode() {
+        ApprovalTemplate deleted = template(
+                "EQUIPMENT_COMMISSIONING_APPROVE",
+                "Old Equipment Commissioning",
+                ApprovalTargetType.EQUIPMENT_COMMISSIONING,
+                ApprovalActionType.APPROVE
+        );
+        ReflectionTestUtils.setField(deleted, "id", UUID.randomUUID());
+        deleted.setDeleted(true);
+        deleted.setActive(false);
+        deleted.getSteps().add(step(deleted, 1, null, "OLD_ROLE"));
+
+        when(templateRepository.findByCode("EQUIPMENT_COMMISSIONING_APPROVE"))
+                .thenReturn(Optional.of(deleted));
+        when(templateRepository.saveAndFlush(deleted)).thenReturn(deleted);
+
+        ApprovalRuleDto saved = service.saveRule(rule(
+                ApprovalTargetType.EQUIPMENT_COMMISSIONING,
+                ApprovalActionType.APPROVE
+        ));
+
+        assertThat(deleted.isDeleted()).isFalse();
+        assertThat(deleted.isActive()).isTrue();
+        assertThat(saved.steps()).extracting(ApprovalRuleDto.Step::approverRole)
+                .containsExactly("DEPARTMENT_HEAD");
+        verify(templateRepository).saveAndFlush(deleted);
+    }
+
+    @Test
     void concurrentDuplicateCodeViolationReturnsConflict() {
         when(templateRepository.saveAndFlush(any(ApprovalTemplate.class)))
                 .thenThrow(new DataIntegrityViolationException(

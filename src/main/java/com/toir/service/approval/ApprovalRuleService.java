@@ -65,12 +65,20 @@ public class ApprovalRuleService {
     public ApprovalRuleDto saveRule(ApprovalRuleDto request) {
         validateRule(request);
         ApprovalActionType actionType = effectiveActionType(request.actionType());
+        String code = ruleCode(request.targetType(), actionType);
         ApprovalTemplate template = templateRepository
                 .findFirstByTargetTypeAndActionTypeAndIsDeletedFalseOrderByCreatedAtDesc(
                         request.targetType(),
                         actionType
                 )
-                .orElseGet(ApprovalTemplate::new);
+                .orElseGet(() -> templateRepository.findByCode(code)
+                        .map(existing -> {
+                            if (!existing.isDeleted()) {
+                                throw RestException.conflict("Approval template code already exists: " + code);
+                            }
+                            return existing;
+                        })
+                        .orElseGet(ApprovalTemplate::new));
 
         return saveRule(template, request);
     }
@@ -117,6 +125,7 @@ public class ApprovalRuleService {
         template.setApproverId(null);
         template.setApproverRole(normalizedRole(request.steps().getFirst().approverRole()));
         template.setActive(request.active());
+        template.setDeleted(false);
 
         template.getSteps().clear();
         request.steps().stream()
