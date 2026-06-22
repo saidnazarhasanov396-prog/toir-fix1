@@ -16,6 +16,8 @@ class EquipmentCommissioningMigrationContractTest {
 
         assertThat(sql)
                 .contains("CREATE TABLE IF NOT EXISTS equipment_commissioning_acts")
+                .contains("REFERENCES hr_employees(id)")
+                .doesNotContain("REFERENCES employees(id)")
                 .contains("'EQUIPMENT_OUT'")
                 .contains("'EQUIPMENT_COMMISSIONING'")
                 .contains("EQUIPMENT_COMMISSIONING_APPROVE");

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS equipment_commissioning_acts (
     warehouse_item_id uuid NOT NULL REFERENCES warehouse_equipment_items(id),
     target_department_id uuid NOT NULL REFERENCES departments(id),
     target_location_id uuid REFERENCES locations(id),
-    responsible_employee_id uuid NOT NULL REFERENCES employees(id),
+    responsible_employee_id uuid NOT NULL REFERENCES hr_employees(id),
     act_number varchar(255) NOT NULL,
     act_date date NOT NULL,
     commissioned_at date NOT NULL,
