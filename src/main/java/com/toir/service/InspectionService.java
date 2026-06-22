@@ -33,11 +33,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -55,6 +62,7 @@ public class InspectionService {
     private final NotificationService notificationService;
     private static final String INSPECTION_DEFECT_CODE_PREFIX = "INS-DEF-";
     private static final String INSPECTION_REPAIR_REQUEST_PREFIX = "INS-RR-";
+    private static final ZoneId INSPECTION_BUSINESS_ZONE = ZoneId.of("Asia/Tashkent");
     private static final Set<DefectStatus> OPEN_TRIAGE_DEFECT_STATUSES = EnumSet.of(
             DefectStatus.OPEN,
             DefectStatus.IN_ANALYSIS,
@@ -200,6 +208,154 @@ public class InspectionService {
         InspectionRound round = loadRound(id);
         assertCanAccessRound(round);
         return InspectionRoundDto.from(round);
+    }
+
+    @Transactional(readOnly = true)
+    public InspectionDashboardSummaryDto getDashboardSummary(UUID departmentId) {
+        return getDashboardSummary(departmentId, Instant.now());
+    }
+
+    InspectionDashboardSummaryDto getDashboardSummary(UUID departmentId, Instant now) {
+        UUID scopedDepartmentId = enforceRouteListDepartmentScope(departmentId);
+        List<InspectionRoute> routes = routeRepo
+                .findAllByDepartmentIdAndIsDeletedFalseOrderByUpdatedAtDesc(scopedDepartmentId, true, null);
+        Set<UUID> routeIds = routes.stream().map(InspectionRoute::getId).collect(Collectors.toSet());
+        List<InspectionRound> rounds = roundRepo
+                .findAllByRouteIdAndIsDeletedFalseOrderByStartedAtDesc(null, null, null)
+                .stream()
+                .filter(round -> round.getRoute() != null && routeIds.contains(round.getRoute().getId()))
+                .filter(this::canAccessRound)
+                .toList();
+
+        ZonedDateTime businessNow = now.atZone(INSPECTION_BUSINESS_ZONE);
+        LocalDate businessDate = businessNow.toLocalDate();
+        Instant businessStart = businessDate.atStartOfDay(INSPECTION_BUSINESS_ZONE).toInstant();
+        Instant nextBusinessStart = businessDate.plusDays(1).atStartOfDay(INSPECTION_BUSINESS_ZONE).toInstant();
+
+        Map<UUID, List<InspectionRound>> roundsByRouteId = rounds.stream()
+                .collect(Collectors.groupingBy(round -> round.getRoute().getId()));
+
+        int completedToday = (int) rounds.stream()
+                .filter(round -> round.getStatus() == InspectionRoundStatus.COMPLETED)
+                .filter(round -> isWithinBusinessDay(round.getCompletedAt(), businessStart, nextBusinessStart))
+                .count();
+        int findingsToday = rounds.stream()
+                .filter(round -> isWithinBusinessDay(round.getStartedAt(), businessStart, nextBusinessStart))
+                .mapToInt(InspectionRound::getFindingsCount)
+                .sum();
+        int alarmsToday = rounds.stream()
+                .filter(round -> isWithinBusinessDay(round.getStartedAt(), businessStart, nextBusinessStart))
+                .mapToInt(InspectionRound::getAlarmCount)
+                .sum();
+
+        List<InspectionDashboardSummaryDto.AttentionRouteDto> attentionRoutes = routes.stream()
+                .map(route -> buildAttentionRoute(route, roundsByRouteId.getOrDefault(route.getId(), List.of()), now, nextBusinessStart))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .sorted(Comparator
+                        .comparingInt((InspectionDashboardSummaryDto.AttentionRouteDto item) -> attentionRank(item.state()))
+                        .thenComparing(InspectionDashboardSummaryDto.AttentionRouteDto::nextDueAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(InspectionDashboardSummaryDto.AttentionRouteDto::routeCode, Comparator.nullsLast(String::compareTo)))
+                .toList();
+
+        int dueToday = (int) attentionRoutes.stream().filter(item -> "DUE_TODAY".equals(item.state())).count();
+        int overdue = (int) attentionRoutes.stream().filter(item -> "OVERDUE".equals(item.state())).count();
+        int inProgress = (int) attentionRoutes.stream().filter(item -> "IN_PROGRESS".equals(item.state())).count();
+
+        return new InspectionDashboardSummaryDto(
+                now,
+                businessDate,
+                routes.size(),
+                dueToday,
+                overdue,
+                inProgress,
+                completedToday,
+                findingsToday,
+                alarmsToday,
+                attentionRoutes
+        );
+    }
+
+    private Optional<InspectionDashboardSummaryDto.AttentionRouteDto> buildAttentionRoute(
+            InspectionRoute route,
+            List<InspectionRound> routeRounds,
+            Instant now,
+            Instant nextBusinessStart
+    ) {
+        InspectionRound activeRound = routeRounds.stream()
+                .filter(round -> round.getStatus() == InspectionRoundStatus.IN_PROGRESS)
+                .max(Comparator.comparing(InspectionRound::getStartedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                .orElse(null);
+        Instant lastCompletedAt = routeRounds.stream()
+                .filter(round -> round.getStatus() == InspectionRoundStatus.COMPLETED)
+                .map(InspectionRound::getCompletedAt)
+                .filter(completedAt -> completedAt != null)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+        Instant nextDueAt = dueAnchor(route, lastCompletedAt).plus(frequencyInterval(route.getFrequency()));
+
+        String state;
+        if (activeRound != null) {
+            state = "IN_PROGRESS";
+        } else if (nextDueAt.isBefore(now)) {
+            state = "OVERDUE";
+        } else if (nextDueAt.isBefore(nextBusinessStart)) {
+            state = "DUE_TODAY";
+        } else {
+            return Optional.empty();
+        }
+
+        return Optional.of(new InspectionDashboardSummaryDto.AttentionRouteDto(
+                route.getId(),
+                route.getCode(),
+                route.getName(),
+                route.getDepartmentId(),
+                route.getFrequency(),
+                route.getCheckpoints() == null ? 0 : route.getCheckpoints().size(),
+                route.getTargetDurationMin(),
+                lastCompletedAt,
+                nextDueAt,
+                state,
+                activeRound != null ? activeRound.getId() : null,
+                activeRound != null ? activeRound.getFindingsCount() : 0,
+                activeRound != null ? activeRound.getAlarmCount() : 0
+        ));
+    }
+
+    private Instant dueAnchor(InspectionRoute route, Instant lastCompletedAt) {
+        if (lastCompletedAt != null) {
+            return lastCompletedAt;
+        }
+        if (route.getCreatedAt() != null) {
+            return route.getCreatedAt();
+        }
+        if (route.getUpdatedAt() != null) {
+            return route.getUpdatedAt();
+        }
+        return Instant.EPOCH;
+    }
+
+    private Duration frequencyInterval(String frequency) {
+        return switch (frequency == null ? "" : frequency) {
+            case "SHIFT" -> Duration.ofHours(8);
+            case "WEEKLY" -> Duration.ofDays(7);
+            case "MONTHLY" -> Duration.ofDays(30);
+            case "DAILY" -> Duration.ofDays(1);
+            default -> Duration.ofDays(1);
+        };
+    }
+
+    private boolean isWithinBusinessDay(Instant value, Instant businessStart, Instant nextBusinessStart) {
+        return value != null && !value.isBefore(businessStart) && value.isBefore(nextBusinessStart);
+    }
+
+    private int attentionRank(String state) {
+        return switch (state) {
+            case "OVERDUE" -> 0;
+            case "DUE_TODAY" -> 1;
+            case "IN_PROGRESS" -> 2;
+            default -> 3;
+        };
     }
 
     @Transactional
