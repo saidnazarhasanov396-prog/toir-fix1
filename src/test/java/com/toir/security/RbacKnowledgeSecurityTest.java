@@ -112,7 +112,7 @@ class RbacKnowledgeSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.KNOWLEDGE_CREATE)
     void knowledgeCreateCanCreateArticle() throws Exception {
-        when(knowledgeService.create(any())).thenReturn(article(UUID.randomUUID()));
+        when(knowledgeService.create(any(KnowledgeArticle.class))).thenReturn(article(UUID.randomUUID()));
 
         mockMvc.perform(post("/api/v1/knowledge")
                         .contentType(MediaType.APPLICATION_JSON)
