@@ -31,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -153,15 +154,10 @@ public class EquipmentCommissioningActService {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(act.getEquipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + act.getEquipmentId()));
         WarehouseEquipmentItem item = warehouseItemRepository
-                .findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
-                        act.getSourceWarehouseId(), act.getEquipmentId())
-                .orElseThrow(() -> RestException.conflict("Equipment is no longer in the source warehouse"));
-        if (!item.getId().equals(act.getWarehouseItemId())) {
-            throw RestException.conflict("Source warehouse item changed after commissioning act submission");
-        }
-        if (!COMMISSIONABLE_WAREHOUSE_STATUSES.contains(item.getStatus())) {
-            throw RestException.conflict("Warehouse equipment status must be AVAILABLE or RESERVED");
-        }
+                .findByIdAndIsDeletedFalse(act.getWarehouseItemId())
+                .orElseThrow(() -> RestException.conflict(
+                        "Source warehouse item no longer exists: " + act.getWarehouseItemId()));
+        validateWarehouseItem(item, act.getSourceWarehouseId(), act.getEquipmentId());
         if (equipment.getStatus() != EquipmentStatus.STANDBY
                 || equipment.getCurrentLocationType() != EquipmentLocationType.WAREHOUSE
                 || !act.getSourceWarehouseId().equals(equipment.getCurrentWarehouseId())) {
@@ -277,16 +273,20 @@ public class EquipmentCommissioningActService {
     }
 
     private WarehouseEquipmentItem resolveWarehouseItem(EquipmentCommissioningActRequest request) {
-        WarehouseEquipmentItem item = warehouseItemRepository
-                .findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
-                        request.sourceWarehouseId(), request.equipmentId())
-                .orElseThrow(() -> RestException.conflict("Equipment is not assigned to the source warehouse"));
-        if (request.warehouseItemId() != null && !request.warehouseItemId().equals(item.getId())) {
-            throw RestException.badRequest("warehouseItemId does not match the active warehouse assignment");
+        WarehouseEquipmentItem item;
+        if (request.warehouseItemId() != null) {
+            item = warehouseItemRepository.findByIdAndIsDeletedFalse(request.warehouseItemId())
+                    .orElseThrow(() -> RestException.notFound(
+                            "Warehouse equipment item not found: " + request.warehouseItemId()));
+        } else {
+            item = warehouseItemRepository
+                    .findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
+                            request.sourceWarehouseId(), request.equipmentId())
+                    .orElseThrow(() -> RestException.conflict(
+                            "No active warehouse item found for equipment " + request.equipmentId()
+                                    + " in warehouse " + request.sourceWarehouseId()));
         }
-        if (!COMMISSIONABLE_WAREHOUSE_STATUSES.contains(item.getStatus())) {
-            throw RestException.conflict("Warehouse equipment status must be AVAILABLE or RESERVED");
-        }
+        validateWarehouseItem(item, request.sourceWarehouseId(), request.equipmentId());
         return item;
     }
 
@@ -299,12 +299,31 @@ public class EquipmentCommissioningActService {
             throw RestException.conflict("Equipment must be STANDBY in the source warehouse");
         }
         WarehouseEquipmentItem item = warehouseItemRepository
-                .findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
-                        act.getSourceWarehouseId(), act.getEquipmentId())
-                .orElseThrow(() -> RestException.conflict("Equipment is not in the source warehouse"));
-        if (!item.getId().equals(act.getWarehouseItemId())
-                || !COMMISSIONABLE_WAREHOUSE_STATUSES.contains(item.getStatus())) {
-            throw RestException.conflict("Warehouse equipment assignment is no longer commissionable");
+                .findByIdAndIsDeletedFalse(act.getWarehouseItemId())
+                .orElseThrow(() -> RestException.conflict(
+                        "Source warehouse item no longer exists: " + act.getWarehouseItemId()));
+        validateWarehouseItem(item, act.getSourceWarehouseId(), act.getEquipmentId());
+    }
+
+    private void validateWarehouseItem(WarehouseEquipmentItem item,
+                                       UUID expectedWarehouseId,
+                                       UUID expectedEquipmentId) {
+        if (!Objects.equals(item.getWarehouseId(), expectedWarehouseId)) {
+            throw RestException.conflict(
+                    "Warehouse item belongs to warehouse " + item.getWarehouseId()
+                            + ", not source warehouse " + expectedWarehouseId);
+        }
+        if (!Objects.equals(item.getEquipmentId(), expectedEquipmentId)) {
+            throw RestException.conflict(
+                    "Warehouse item belongs to equipment " + item.getEquipmentId()
+                            + ", not equipment " + expectedEquipmentId);
+        }
+        if (!item.isActive()) {
+            throw RestException.conflict("Warehouse equipment item is not active: " + item.getId());
+        }
+        if (!COMMISSIONABLE_WAREHOUSE_STATUSES.contains(item.getStatus())) {
+            throw RestException.conflict(
+                    "Warehouse equipment status must be AVAILABLE or RESERVED, but was " + item.getStatus());
         }
     }
 
