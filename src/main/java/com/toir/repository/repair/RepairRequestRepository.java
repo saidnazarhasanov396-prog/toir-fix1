@@ -49,6 +49,15 @@ public interface RepairRequestRepository extends JpaRepository<RepairRequest, UU
                                @Param("departmentId") UUID departmentId,
                                @Param("equipmentId") UUID equipmentId);
 
+    @Query("""
+            select r from RepairRequest r
+            where r.isDeleted = false
+              and r.equipmentId in :equipmentIds
+            order by r.updatedAt desc
+            """)
+    List<RepairRequest> findAllByEquipmentIdInAndIsDeletedFalse(
+            @Param("equipmentIds") Collection<UUID> equipmentIds);
+
     @Query("select r from RepairRequest r where r.isDeleted = false " +
             "and (:status is null or r.status = :status) " +
             "and (:departmentId is null or r.departmentId = :departmentId) " +

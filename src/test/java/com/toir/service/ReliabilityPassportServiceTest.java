@@ -4,11 +4,18 @@ import com.toir.controller.ReliabilityPassportController.ReliabilityPassport;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.DowntimeType;
+import com.toir.enums.RequestStatus;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkType;
 import com.toir.repository.DowntimeEventRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.repair.RepairRequestRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -35,6 +42,12 @@ class ReliabilityPassportServiceTest {
 
     @Mock
     DowntimeEventRepository downtimeRepository;
+
+    @Mock
+    WorkOrderRepository workOrderRepository;
+
+    @Mock
+    RepairRequestRepository repairRequestRepository;
 
     @InjectMocks
     ReliabilityPassportService service;
@@ -112,12 +125,89 @@ class ReliabilityPassportServiceTest {
         assertThat(result.mtbfHours()).isNotNull();
     }
 
+    @Test
+    void repairWorkOrderLowersAvailabilityWhenDowntimeEventIsMissing() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        Instant now = Instant.now();
+        Equipment equipment = equipment(equipmentId);
+        WorkOrder repair = WorkOrder.builder()
+                .equipmentId(equipmentId)
+                .repairRequestId(requestId)
+                .workType(WorkType.REPAIR)
+                .status(WorkOrderStatus.COMPLETED)
+                .startedAt(now.minus(Duration.ofHours(8)))
+                .completedAt(now.minus(Duration.ofHours(2)))
+                .build();
+        RepairRequest request = RepairRequest.builder()
+                .equipmentId(equipmentId)
+                .status(RequestStatus.CLOSED)
+                .detectedAt(now.minus(Duration.ofHours(12)))
+                .actualCompletionAt(now.minus(Duration.ofHours(1)))
+                .build();
+        request.setId(requestId);
+
+        stubPassport(equipment, List.of(), List.of(), List.of(repair), List.of(request));
+
+        ReliabilityPassport result = service.passport(equipmentId);
+
+        assertThat(result.totalDowntimeEvents()).isEqualTo(1);
+        assertThat(result.totalDowntimeMinutes()).isBetween(359L, 360L);
+        assertThat(result.mttrHours()).isBetween(359.0 / 60.0, 6.0);
+        assertThat(result.availabilityPct()).isLessThan(100.0);
+    }
+
+    @Test
+    void linkedDowntimeTakesPrecedenceOverRepairWorkOrder() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        Instant now = Instant.now();
+        Equipment equipment = equipment(equipmentId);
+        WorkOrder repair = WorkOrder.builder()
+                .equipmentId(equipmentId)
+                .repairRequestId(requestId)
+                .workType(WorkType.REPAIR)
+                .status(WorkOrderStatus.COMPLETED)
+                .startedAt(now.minus(Duration.ofHours(10)))
+                .completedAt(now.minus(Duration.ofHours(2)))
+                .build();
+        repair.setId(workOrderId);
+        DowntimeEvent downtime = downtime(now.minus(Duration.ofHours(6)), 120, DowntimeType.UNPLANNED);
+        downtime.setWorkOrderId(workOrderId);
+        RepairRequest request = RepairRequest.builder()
+                .equipmentId(equipmentId)
+                .status(RequestStatus.CLOSED)
+                .detectedAt(now.minus(Duration.ofHours(12)))
+                .actualCompletionAt(now.minus(Duration.ofHours(1)))
+                .build();
+        request.setId(requestId);
+
+        stubPassport(equipment, List.of(), List.of(downtime), List.of(repair), List.of(request));
+
+        ReliabilityPassport result = service.passport(equipmentId);
+
+        assertThat(result.totalDowntimeEvents()).isEqualTo(1);
+        assertThat(result.totalDowntimeMinutes()).isEqualTo(120);
+        assertThat(result.mttrHours()).isEqualTo(2.0);
+    }
+
     private void stubPassport(Equipment equipment, List<Defect> defects, List<DowntimeEvent> downtimes) {
+        stubPassport(equipment, defects, downtimes, List.of(), List.of());
+    }
+
+    private void stubPassport(Equipment equipment,
+                              List<Defect> defects,
+                              List<DowntimeEvent> downtimes,
+                              List<WorkOrder> workOrders,
+                              List<RepairRequest> repairRequests) {
         UUID equipmentId = equipment.getId();
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(defects);
         when(downtimeRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(equipmentId))
                 .thenReturn(downtimes);
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(workOrders);
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(repairRequests);
     }
 
     private Equipment equipment(UUID id) {

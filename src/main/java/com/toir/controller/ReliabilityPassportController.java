@@ -35,9 +35,10 @@ public class ReliabilityPassportController {
             int totalDefects,
             @Schema(description = "Defects currently in OPEN, IN_ANALYSIS, or IN_PROGRESS status")
             int openDefects,
-            @Schema(description = "Unplanned or emergency downtime events overlapping the analysis period")
+            @Schema(description = "Reliability-impacting events in the analysis period: explicit failure downtime, "
+                    + "or repair work order/request intervals when explicit downtime is absent")
             int totalDowntimeEvents,
-            @Schema(description = "Unplanned or emergency downtime minutes inside the analysis period")
+            @Schema(description = "Deduplicated unavailable minutes from failure downtime and repair intervals")
             long totalDowntimeMinutes,
             @Schema(description = "Operating hours in the analysis period divided by failure downtime event count")
             Double mtbfHours,
@@ -61,7 +62,8 @@ public class ReliabilityPassportController {
     @GetMapping("/reliability-passport")
     @Operation(summary = "List calculated reliability passports",
             description = "Metrics use the previous 365 days, or the period since operation/commissioning start when newer. "
-                    + "Only UNPLANNED and EMERGENCY downtime affects MTBF, MTTR, downtime, and availability.")
+                    + "UNPLANNED/EMERGENCY downtime is preferred; actual repair work-order or repair-request intervals "
+                    + "are used as fallbacks and overlapping intervals are counted once.")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<Page<ReliabilityPassport>> list(
             @RequestParam(required = false) UUID equipmentId,
