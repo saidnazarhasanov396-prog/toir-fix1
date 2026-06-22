@@ -17,6 +17,8 @@ import java.util.UUID;
 @Repository
 public interface WarehouseEquipmentItemRepository extends JpaRepository<WarehouseEquipmentItem, UUID> {
 
+    Optional<WarehouseEquipmentItem> findByIdAndIsDeletedFalse(UUID id);
+
     @Query(value = """
             SELECT EXISTS(
                 SELECT 1
