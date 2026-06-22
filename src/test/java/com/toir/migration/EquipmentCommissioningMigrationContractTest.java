@@ -1,5 +1,6 @@
 package com.toir.migration;
 
+import com.toir.enums.EquipmentCommissioningStatus;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -29,5 +30,9 @@ class EquipmentCommissioningMigrationContractTest {
                 .contains("CREATE TABLE warehouse_stock_ledger_metadata")
                 .contains("CREATE VIEW stock_movements AS")
                 .contains("INSTEAD OF INSERT");
+
+        for (EquipmentCommissioningStatus status : EquipmentCommissioningStatus.values()) {
+            assertThat(sql).contains("'" + status.name() + "'");
+        }
     }
 }
