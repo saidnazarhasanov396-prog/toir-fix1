@@ -127,18 +127,6 @@ public class ApprovalRuleService {
         template.setActive(request.active());
         template.setDeleted(false);
 
-        template.getSteps().clear();
-        request.steps().stream()
-                .sorted(Comparator.comparingInt(ApprovalRuleDto.Step::order))
-                .forEach(stepRequest -> {
-                    ApprovalTemplateStep step = new ApprovalTemplateStep();
-                    step.setTemplate(template);
-                    step.setStepOrder(stepRequest.order());
-                    step.setApproverId(null);
-                    step.setApproverRole(normalizedRole(stepRequest.approverRole()));
-                    template.getSteps().add(step);
-                });
-
         if (request.active()) {
             List<ApprovalTemplate> activeTemplates = templateRepository
                     .findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
@@ -151,11 +139,31 @@ public class ApprovalRuleService {
         }
 
         try {
+            template.getSteps().clear();
+            if (template.getId() != null) {
+                // Flush orphan removals before inserting replacement steps with the same order.
+                templateRepository.saveAndFlush(template);
+            }
+
+            request.steps().stream()
+                    .sorted(Comparator.comparingInt(ApprovalRuleDto.Step::order))
+                    .forEach(stepRequest -> {
+                        ApprovalTemplateStep step = new ApprovalTemplateStep();
+                        step.setTemplate(template);
+                        step.setStepOrder(stepRequest.order());
+                        step.setApproverId(null);
+                        step.setApproverRole(normalizedRole(stepRequest.approverRole()));
+                        template.getSteps().add(step);
+                    });
+
             ApprovalTemplate saved = templateRepository.saveAndFlush(template);
             return toDto(saved, Map.of());
         } catch (DataIntegrityViolationException ex) {
             if (isCodeConflict(ex)) {
                 throw RestException.conflict("Approval template code already exists: " + code);
+            }
+            if (isStepOrderConflict(ex)) {
+                throw RestException.conflict("Approval template contains duplicate step order");
             }
             throw ex;
         }
@@ -290,6 +298,15 @@ public class ApprovalRuleService {
                 || (normalized.contains("approval_templates")
                 && normalized.contains("duplicate")
                 && normalized.contains("code"));
+    }
+
+    private boolean isStepOrderConflict(DataIntegrityViolationException ex) {
+        Throwable root = ex.getMostSpecificCause();
+        String message = root != null ? root.getMessage() : ex.getMessage();
+        if (message == null) {
+            return false;
+        }
+        return message.toLowerCase(Locale.ROOT).contains("uq_approval_template_steps_order");
     }
 
     private record RuleStep(int order, UUID approverId, String approverRole) {

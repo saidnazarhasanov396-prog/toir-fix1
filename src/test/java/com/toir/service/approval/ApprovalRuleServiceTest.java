@@ -23,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -123,6 +124,7 @@ class ApprovalRuleServiceTest {
                 ApprovalTargetType.WORK_ORDER,
                 ApprovalActionType.APPROVE
         );
+        ReflectionTestUtils.setField(template, "id", UUID.randomUUID());
         template.getSteps().add(step(template, 1, UUID.randomUUID(), null));
 
         when(templateRepository.findFirstByTargetTypeAndActionTypeAndIsDeletedFalseOrderByCreatedAtDesc(
@@ -150,7 +152,7 @@ class ApprovalRuleServiceTest {
         assertThat(template.getApproverRole()).isEqualTo("MANAGER");
         assertThat(template.getSteps()).hasSize(2);
         assertThat(template.getSteps()).allSatisfy(step -> assertThat(step.getApproverId()).isNull());
-        verify(templateRepository).saveAndFlush(template);
+        verify(templateRepository, times(2)).saveAndFlush(template);
     }
 
     @Test
@@ -201,7 +203,7 @@ class ApprovalRuleServiceTest {
         assertThat(deleted.isActive()).isTrue();
         assertThat(saved.steps()).extracting(ApprovalRuleDto.Step::approverRole)
                 .containsExactly("DEPARTMENT_HEAD");
-        verify(templateRepository).saveAndFlush(deleted);
+        verify(templateRepository, times(2)).saveAndFlush(deleted);
     }
 
     @Test
@@ -217,6 +219,23 @@ class ApprovalRuleServiceTest {
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
                     assertThat(ex.getMessage()).contains("EQUIPMENT_COMMISSIONING_APPROVE");
+                });
+    }
+
+    @Test
+    void duplicateStepOrderViolationReturnsConflict() {
+        when(templateRepository.saveAndFlush(any(ApprovalTemplate.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "duplicate key violates unique constraint uq_approval_template_steps_order"));
+
+        assertThatThrownBy(() -> service.saveRule(rule(
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).isEqualTo(
+                            "Approval template contains duplicate step order");
                 });
     }
 
