@@ -314,7 +314,7 @@ public class OperationalIssueScannerService {
     }
 
     private NotificationSeverity lifecycleSeverity(EquipmentStatus status, int risk) {
-        if (status == EquipmentStatus.IN_REPAIR || status == EquipmentStatus.DECOMMISSIONED) {
+        if (status == EquipmentStatus.DECOMMISSIONED) {
             return NotificationSeverity.CRITICAL;
         }
         if (risk >= LIFECYCLE_RISK_CRITICAL_THRESHOLD) {
@@ -323,15 +323,19 @@ public class OperationalIssueScannerService {
         if (risk >= LIFECYCLE_RISK_WARNING_THRESHOLD) {
             return NotificationSeverity.WARNING;
         }
+        if (status == EquipmentStatus.IN_REPAIR) {
+            return NotificationSeverity.WARNING;
+        }
         return NotificationSeverity.INFO;
     }
 
     private EquipmentRiskLevel toEquipmentRiskLevel(EquipmentStatus status, int risk) {
-        if (status == EquipmentStatus.IN_REPAIR || status == EquipmentStatus.DECOMMISSIONED) {
+        if (status == EquipmentStatus.DECOMMISSIONED) {
             return EquipmentRiskLevel.CRITICAL;
         }
         if (risk >= LIFECYCLE_RISK_CRITICAL_THRESHOLD) return EquipmentRiskLevel.CRITICAL;
         if (risk >= LIFECYCLE_RISK_WARNING_THRESHOLD) return EquipmentRiskLevel.HIGH;
+        if (status == EquipmentStatus.IN_REPAIR) return EquipmentRiskLevel.MEDIUM;
         if (risk >= 15) return EquipmentRiskLevel.MEDIUM;
         return EquipmentRiskLevel.LOW;
     }

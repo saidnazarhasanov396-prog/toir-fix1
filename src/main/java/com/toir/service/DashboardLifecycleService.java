@@ -79,13 +79,17 @@ public class DashboardLifecycleService {
      * Status ustuvor — keyin RCM score.
      */
     private EquipmentLifecycleStage classify(Equipment eq, EquipmentRiskScore risk) {
+        int score = risk != null ? risk.riskScore() : 0;
+
         if (eq.getStatus() == EquipmentStatus.DECOMMISSIONED) {
             return EquipmentLifecycleStage.DECOMMISSIONED;
         }
         if (eq.getStatus() == EquipmentStatus.IN_REPAIR) {
+            if (score >= 60) {
+                return EquipmentLifecycleStage.HIGH_RISK;
+            }
             return EquipmentLifecycleStage.IN_REPAIR;
         }
-        int score = risk != null ? risk.riskScore() : 0;
         if (score >= 60) return EquipmentLifecycleStage.HIGH_RISK;
         if (score >= 30) return EquipmentLifecycleStage.MEDIUM_RISK;
         return EquipmentLifecycleStage.LOW_RISK;

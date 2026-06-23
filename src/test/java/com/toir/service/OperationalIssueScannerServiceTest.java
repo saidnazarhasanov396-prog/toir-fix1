@@ -273,13 +273,38 @@ class OperationalIssueScannerServiceTest {
     }
 
     @Test
-    void scanCreatesCriticalLifecycleIssueForEquipmentInRepair() {
+    void scanCreatesWarningLifecycleIssueForEquipmentInRepairWithLowRisk() {
         UUID equipmentId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, departmentId);
         equipment.setStatus(EquipmentStatus.IN_REPAIR);
         when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
         when(rcmService.computeAll()).thenReturn(List.of(riskScore(equipmentId, 10)));
+
+        service.scanAll();
+
+        verify(issueService).openOrUpdate(
+                eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
+                eq(NotificationSeverity.WARNING),
+                eq(EquipmentRiskLevel.MEDIUM),
+                eq(equipmentId),
+                eq(departmentId),
+                eq("EquipmentLifecycle"),
+                eq(equipmentId),
+                eq("Equipment lifecycle risk: EQ-1"),
+                any(),
+                org.mockito.ArgumentMatchers.<java.util.Map<String, Object>>any()
+        );
+    }
+
+    @Test
+    void scanCreatesCriticalLifecycleIssueForEquipmentInRepairWithHighRisk() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentId);
+        equipment.setStatus(EquipmentStatus.IN_REPAIR);
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(rcmService.computeAll()).thenReturn(List.of(riskScore(equipmentId, 75)));
 
         service.scanAll();
 
