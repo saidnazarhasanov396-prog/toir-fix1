@@ -6,11 +6,13 @@ import com.toir.entity.DowntimeEvent;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +38,7 @@ public class ParetoService {
     private final DefectRepository defectRepository;
     private final DowntimeEventRepository downtimeRepository;
     private final WorkOrderRepository workOrderRepository;
+    private final RepairRequestRepository repairRequestRepository;
     private final EquipmentRepository equipmentRepository;
     private final ScopeAccessService scopeAccessService;
 
@@ -44,19 +47,41 @@ public class ParetoService {
         UUID departmentId = analyticsDepartmentScope();
         Instant start = from != null ? from : Instant.EPOCH;
         Instant end = to != null ? to : Instant.now();
-        List<DowntimeEvent> events = downtimeRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(e -> !e.getStartAt().isBefore(start) && !e.getStartAt().isAfter(end))
-                .filter(e -> departmentId == null || departmentId.equals(e.getDepartmentId()))
+        List<Equipment> equipmentList = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(equipment -> departmentId == null || departmentId.equals(equipmentScopeDepartmentId(equipment)))
                 .toList();
-
-        Map<String, Double> byType = new HashMap<>();
-        for (DowntimeEvent ev : events) {
-            long minutes = eventDurationMinutes(ev);
-            if (minutes <= 0) continue;
-            String key = ev.getType() != null ? ev.getType().name() : "UNKNOWN";
-            byType.merge(key, (double) minutes, Double::sum);
+        List<UUID> equipmentIds = equipmentList.stream()
+                .map(Equipment::getId)
+                .toList();
+        if (equipmentIds.isEmpty()) {
+            return PaginationUtils.page(List.of(), page, size);
         }
-        return PaginationUtils.page(pareto(byType), page, size);
+        Map<UUID, List<DowntimeEvent>> downtimesByEquipment = downtimeRepository.findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
+                .filter(event -> event.getEquipmentId() != null)
+                .collect(java.util.stream.Collectors.groupingBy(DowntimeEvent::getEquipmentId));
+        Map<UUID, List<WorkOrder>> workOrdersByEquipment = workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
+                .filter(workOrder -> workOrder.getEquipmentId() != null)
+                .collect(java.util.stream.Collectors.groupingBy(WorkOrder::getEquipmentId));
+        Map<UUID, List<RepairRequest>> repairRequestsByEquipment = repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
+                .filter(request -> request.getEquipmentId() != null)
+                .collect(java.util.stream.Collectors.groupingBy(RepairRequest::getEquipmentId));
+
+        Map<String, Double> byCause = new HashMap<>();
+        for (Equipment equipment : equipmentList) {
+            List<ReliabilityDowntimeCalculator.DowntimeSlice> slices = ReliabilityDowntimeCalculator.failureDowntimes(
+                    downtimesByEquipment.getOrDefault(equipment.getId(), List.of()),
+                    workOrdersByEquipment.getOrDefault(equipment.getId(), List.of()),
+                    repairRequestsByEquipment.getOrDefault(equipment.getId(), List.of()),
+                    start,
+                    end);
+            for (ReliabilityDowntimeCalculator.DowntimeSlice slice : slices) {
+                long minutes = slice.durationMinutes();
+                if (minutes <= 0) continue;
+                String key = slice.causeKey() != null ? slice.causeKey() : "UNKNOWN";
+                byCause.merge(key, (double) minutes, Double::sum);
+            }
+        }
+        return PaginationUtils.page(pareto(byCause), page, size);
     }
 
     @Transactional(readOnly = true)
@@ -171,6 +196,12 @@ public class ParetoService {
 
     private boolean isEquipmentInDepartment(Map<UUID, Equipment> equipmentById, UUID equipmentId, UUID departmentId) {
         Equipment equipment = equipmentById.get(equipmentId);
-        return equipment != null && departmentId.equals(equipment.getDepartmentId());
+        return equipment != null && departmentId.equals(equipmentScopeDepartmentId(equipment));
+    }
+
+    private UUID equipmentScopeDepartmentId(Equipment equipment) {
+        return equipment.getResponsibleDepartmentId() != null
+                ? equipment.getResponsibleDepartmentId()
+                : equipment.getDepartmentId();
     }
 }

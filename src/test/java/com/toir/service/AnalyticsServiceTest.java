@@ -1,6 +1,8 @@
 package com.toir.service;
 
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
+import com.toir.dto.analytics.AnalyticsOverview;
+import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.ReliabilityMetric;
 import com.toir.entity.defects.Defect;
@@ -10,6 +12,7 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.DowntimeType;
+import com.toir.enums.RequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.PprTaskRepository;
@@ -30,12 +33,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.data.Offset.offset;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
@@ -236,14 +241,63 @@ class AnalyticsServiceTest {
         assertThat(response.events()).isNotNull().isEmpty();
     }
 
+    @Test
+    void overviewUsesRepairRequestsAsFailureDowntimeWhenExplicitDowntimeEventsAreMissing() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Instant now = Instant.now();
+        Equipment equipment = equipment(equipmentId, departmentId);
+        equipment.setCreatedAt(now.minus(Duration.ofHours(100)));
+        Department department = new Department();
+        department.setId(departmentId);
+        department.setCode("ENT-002");
+        department.setName("Tenzorsoft");
+        RepairRequest completedFailure = RepairRequest.builder()
+                .equipmentId(equipmentId)
+                .departmentId(departmentId)
+                .status(RequestStatus.CLOSED)
+                .detectedAt(now.minus(Duration.ofHours(10)))
+                .actualCompletionAt(now.minus(Duration.ofHours(5)))
+                .build();
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(completedFailure));
+        when(workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(department));
+
+        AnalyticsOverview overview = service.overview();
+
+        assertThat(overview.kpis().downtimeHoursTotal()).isEqualTo(5.0);
+        assertThat(overview.kpis().mttrAverage()).isCloseTo(5.0, offset(0.02));
+        assertThat(overview.kpis().mtbfAverage()).isCloseTo(95.0, offset(0.05));
+        assertThat(overview.downtimeByDepartment()).singleElement().satisfies(row -> {
+            assertThat(row.departmentId()).isEqualTo(departmentId);
+            assertThat(row.departmentName()).isEqualTo("Tenzorsoft");
+            assertThat(row.downtimeMinutes()).isEqualTo(300);
+        });
+        assertThat(overview.reliabilitySnapshot()).singleElement().satisfies(row -> {
+            assertThat(row.equipmentId()).isEqualTo(equipmentId);
+            assertThat(row.mtbfHours()).isCloseTo(95.0, offset(0.05));
+            assertThat(row.mttrHours()).isCloseTo(5.0, offset(0.02));
+        });
+    }
+
     private Equipment equipment(UUID id) {
+        return equipment(id, UUID.randomUUID());
+    }
+
+    private Equipment equipment(UUID id, UUID departmentId) {
         Equipment equipment = new Equipment();
         equipment.setId(id);
         equipment.setCode("EQ-2026-0009");
         equipment.setName("Line Motor");
         equipment.setInventoryNumber("INV-300");
         equipment.setEquipmentTypeId(UUID.randomUUID());
-        equipment.setDepartmentId(UUID.randomUUID());
+        equipment.setDepartmentId(departmentId);
         equipment.setStatus(EquipmentStatus.ACTIVE);
         equipment.setCategory(EquipmentCategory.PRODUCTION_EQUIPMENT);
         return equipment;

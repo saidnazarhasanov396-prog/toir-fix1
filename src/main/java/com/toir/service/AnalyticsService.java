@@ -38,7 +38,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -65,8 +67,12 @@ public class AnalyticsService {
     @Transactional
     public AnalyticsOverview overview() {
         UUID departmentId = analyticsDepartmentScope();
-        Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+        List<Equipment> allEquipment = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        Map<UUID, Equipment> equipById = allEquipment.stream()
                 .collect(Collectors.toMap(Equipment::getId, e -> e));
+        List<Equipment> scopedEquipment = allEquipment.stream()
+                .filter(e -> departmentId == null || departmentId.equals(equipmentScopeDepartmentId(e)))
+                .toList();
 
         List<RepairRequest> allRequests = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(r -> departmentId == null || departmentId.equals(r.getDepartmentId()))
@@ -81,10 +87,44 @@ public class AnalyticsService {
                 .filter(d -> departmentId == null || isEquipmentInDepartment(equipById, d.getEquipmentId(), departmentId))
                 .toList();
         List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(m -> m.getEquipmentId() != null)
                 .filter(m -> departmentId == null || isEquipmentInDepartment(equipById, m.getEquipmentId(), departmentId))
                 .toList();
         List<com.toir.entity.PprTask> allPprTasks = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(t -> departmentId == null || isEquipmentInDepartment(equipById, t.getEquipmentId(), departmentId))
+                .toList();
+
+        Map<UUID, List<RepairRequest>> requestsByEquipment = allRequests.stream()
+                .filter(r -> r.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(RepairRequest::getEquipmentId));
+        Map<UUID, List<WorkOrder>> workOrdersByEquipment = allWorkOrders.stream()
+                .filter(w -> w.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(WorkOrder::getEquipmentId));
+        Map<UUID, List<DowntimeEvent>> downtimesByEquipment = allDowntimes.stream()
+                .filter(d -> d.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(DowntimeEvent::getEquipmentId));
+        Instant now = Instant.now();
+        Map<UUID, ReliabilityDowntimeCalculator.EquipmentReliability> calculatedReliabilityByEquipment =
+                scopedEquipment.stream()
+                        .collect(Collectors.toMap(
+                                Equipment::getId,
+                                equipment -> ReliabilityDowntimeCalculator.calculate(
+                                        equipment,
+                                        downtimesByEquipment.getOrDefault(equipment.getId(), List.of()),
+                                        workOrdersByEquipment.getOrDefault(equipment.getId(), List.of()),
+                                        requestsByEquipment.getOrDefault(equipment.getId(), List.of()),
+                                        now)));
+        Map<UUID, ReliabilityMetric> latestMetricsByEquipment = allMetrics.stream()
+                .collect(Collectors.toMap(
+                        ReliabilityMetric::getEquipmentId,
+                        metric -> metric,
+                        this::latestReliabilityMetric));
+        List<ReliabilityView> reliabilityRows = scopedEquipment.stream()
+                .map(equipment -> reliabilityView(
+                        equipment,
+                        latestMetricsByEquipment.get(equipment.getId()),
+                        calculatedReliabilityByEquipment.get(equipment.getId())))
+                .filter(ReliabilityView::hasReliabilityValue)
                 .toList();
 
         long openRequests = allRequests.stream()
@@ -104,9 +144,9 @@ public class AnalyticsService {
 
         Totals totals = new Totals(openRequests, emergencyRequests, closedWorkOrders, activeDefects);
 
-        double mtbfAvg = allMetrics.stream().map(ReliabilityMetric::getMtbfHours)
+        double mtbfAvg = reliabilityRows.stream().map(ReliabilityView::mtbfHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
-        double mttrAvg = allMetrics.stream().map(ReliabilityMetric::getMttrHours)
+        double mttrAvg = reliabilityRows.stream().map(ReliabilityView::mttrHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
 
         long totalWO = allWorkOrders.size();
@@ -115,8 +155,8 @@ public class AnalyticsService {
                 .count();
         double unplannedShare = totalWO > 0 ? (double) unplannedWO / totalWO * 100 : 0;
 
-        double downtimeHoursTotal = allDowntimes.stream()
-                .mapToLong(IndustrialKpiAggregations::downtimeMinutes)
+        double downtimeHoursTotal = calculatedReliabilityByEquipment.values().stream()
+                .mapToLong(ReliabilityDowntimeCalculator.EquipmentReliability::totalDowntimeMinutes)
                 .sum() / 60.0;
 
         // Reaction = detectedAt → first status transition to IN_PROGRESS (approx: createdAt→now for IN_PROGRESS)
@@ -151,8 +191,8 @@ public class AnalyticsService {
                 avgReactionHours, avgResolutionHours, pprCompletionRate, overdueWorkShare);
 
         List<FailureReasonRow> topFailureReasons = allDefects.stream()
-                .filter(d -> d.getFailureReason() != null && !d.getFailureReason().isBlank())
-                .collect(Collectors.groupingBy(Defect::getFailureReason, Collectors.counting()))
+                .filter(d -> d.getStatus() != DefectStatus.CANCELLED)
+                .collect(Collectors.groupingBy(this::failureReasonKey, Collectors.counting()))
                 .entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                 .limit(10)
@@ -162,12 +202,8 @@ public class AnalyticsService {
         Map<UUID, Department> deptById = departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(Department::getId, d -> d));
 
-        List<DowntimeByDepartmentRow> downtimeByDept = allDowntimes.stream()
-                .filter(d -> d.getDurationMinutes() != null)
-                .collect(Collectors.groupingBy(
-                        DowntimeEvent::getDepartmentId,
-                        Collectors.summingLong(DowntimeEvent::getDurationMinutes)))
-                .entrySet().stream()
+        Map<UUID, Long> downtimeMinutesByDepartment = downtimeMinutesByDepartment(scopedEquipment, calculatedReliabilityByEquipment);
+        List<DowntimeByDepartmentRow> downtimeByDept = downtimeMinutesByDepartment.entrySet().stream()
                 .sorted(Map.Entry.<UUID, Long>comparingByValue().reversed())
                 .limit(10)
                 .map(e -> {
@@ -179,21 +215,15 @@ public class AnalyticsService {
                 })
                 .toList();
 
-        List<ReliabilitySnapshotRow> reliabilitySnapshot = allMetrics.stream()
-                .collect(Collectors.toMap(
-                        ReliabilityMetric::getEquipmentId,
-                        m -> m,
-                        (a, b) -> a.getMetricDate().isAfter(b.getMetricDate()) ? a : b))
-                .values().stream()
+        List<ReliabilitySnapshotRow> reliabilitySnapshot = reliabilityRows.stream()
                 .limit(10)
-                .map(m -> {
-                    Equipment eq = equipById.get(m.getEquipmentId());
-                    return new ReliabilitySnapshotRow(
-                            m.getEquipmentId(),
-                            eq != null ? eq.getCode() : "—",
-                            eq != null ? eq.getName() : "—",
-                            m.getMtbfHours(), m.getMttrHours(), m.getAvailability());
-                })
+                .map(row -> new ReliabilitySnapshotRow(
+                        row.equipmentId(),
+                        row.equipmentCode(),
+                        row.equipmentName(),
+                        row.mtbfHours(),
+                        row.mttrHours(),
+                        row.availability()))
                 .toList();
 
         List<RepeatedDefectsRow> repeatedDefects = allDefects.stream()
@@ -409,6 +439,82 @@ public class AnalyticsService {
                 .toList();
     }
 
+    private ReliabilityMetric latestReliabilityMetric(ReliabilityMetric first, ReliabilityMetric second) {
+        if (first.getMetricDate() == null) {
+            return second;
+        }
+        if (second.getMetricDate() == null) {
+            return first;
+        }
+        return first.getMetricDate().isAfter(second.getMetricDate()) ? first : second;
+    }
+
+    private ReliabilityView reliabilityView(Equipment equipment,
+                                            ReliabilityMetric storedMetric,
+                                            ReliabilityDowntimeCalculator.EquipmentReliability calculated) {
+        boolean hasCalculatedFailures = calculated != null && calculated.failureEvents() > 0;
+        Double mtbfHours = storedMetric != null && storedMetric.getMtbfHours() != null
+                ? storedMetric.getMtbfHours()
+                : (hasCalculatedFailures ? calculated.mtbfHours() : null);
+        Double mttrHours = storedMetric != null && storedMetric.getMttrHours() != null
+                ? storedMetric.getMttrHours()
+                : (hasCalculatedFailures ? calculated.mttrHours() : null);
+        Double availability = storedMetric != null && storedMetric.getAvailability() != null
+                ? storedMetric.getAvailability()
+                : (hasCalculatedFailures ? calculated.availabilityPct() : null);
+        return new ReliabilityView(
+                equipment.getId(),
+                equipment.getCode() != null ? equipment.getCode() : "—",
+                equipment.getName() != null ? equipment.getName() : "—",
+                mtbfHours,
+                mttrHours,
+                availability
+        );
+    }
+
+    private Map<UUID, Long> downtimeMinutesByDepartment(
+            List<Equipment> equipmentList,
+            Map<UUID, ReliabilityDowntimeCalculator.EquipmentReliability> reliabilityByEquipment) {
+        Map<UUID, Long> result = new HashMap<>();
+        for (Equipment equipment : equipmentList) {
+            ReliabilityDowntimeCalculator.EquipmentReliability reliability = reliabilityByEquipment.get(equipment.getId());
+            if (reliability == null || reliability.failureSlices().isEmpty()) {
+                continue;
+            }
+            Map<UUID, List<ReliabilityDowntimeCalculator.DowntimeSlice>> slicesByDepartment = new HashMap<>();
+            for (ReliabilityDowntimeCalculator.DowntimeSlice slice : reliability.failureSlices()) {
+                UUID departmentId = slice.departmentId() != null
+                        ? slice.departmentId()
+                        : equipmentScopeDepartmentId(equipment);
+                if (departmentId == null) {
+                    continue;
+                }
+                slicesByDepartment.computeIfAbsent(departmentId, ignored -> new java.util.ArrayList<>()).add(slice);
+            }
+            slicesByDepartment.forEach((deptId, slices) -> {
+                long minutes = ReliabilityDowntimeCalculator.mergedDowntimeMinutes(slices);
+                if (minutes > 0) {
+                    result.merge(deptId, minutes, Long::sum);
+                }
+            });
+        }
+        return result;
+    }
+
+    private String failureReasonKey(Defect defect) {
+        if (hasText(defect.getFailureReason())) {
+            return defect.getFailureReason();
+        }
+        if (hasText(defect.getRootCause())) {
+            return defect.getRootCause();
+        }
+        return "UNKNOWN";
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
     private UUID analyticsDepartmentScope() {
         if (scopeAccessService.isScopeAdmin()) {
             return null;
@@ -472,5 +578,16 @@ public class AnalyticsService {
                 equipmentScopeDepartmentId(equipment),
                 reason
         );
+    }
+
+    private record ReliabilityView(UUID equipmentId,
+                                   String equipmentCode,
+                                   String equipmentName,
+                                   Double mtbfHours,
+                                   Double mttrHours,
+                                   Double availability) {
+        private boolean hasReliabilityValue() {
+            return mtbfHours != null || mttrHours != null || availability != null;
+        }
     }
 }
