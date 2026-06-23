@@ -169,6 +169,8 @@ public class BudgetSummaryController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) UUID costCategoryId,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID contractorId,
             @RequestParam(required = false) String dateFrom,
             @RequestParam(required = false) String dateTo,
             @RequestParam(required = false) UUID actualCostId,
@@ -179,6 +181,10 @@ public class BudgetSummaryController {
                 null,
                 null,
                 costCategoryId,
+                departmentId,
+                contractorId,
+                null,
+                null,
                 parseDateStart(dateFrom),
                 parseDateEnd(dateTo),
                 actualCostId,
@@ -192,6 +198,19 @@ public class BudgetSummaryController {
         ));
     }
 
+    public ResponseEntity<PageResponseWithSummary<ActualCostReviewItem, ActualCostRegisterSummary>> actualCostRegister(
+            int page,
+            int size,
+            String search,
+            String status,
+            UUID costCategoryId,
+            String dateFrom,
+            String dateTo,
+            UUID actualCostId,
+            String actualCostIds) {
+        return actualCostRegister(page, size, search, status, costCategoryId, null, null, dateFrom, dateTo, actualCostId, actualCostIds);
+    }
+
     @GetMapping("/actual-costs/review-queue")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ')")
     public ResponseEntity<PageResponse<ActualCostReviewItem>> reviewQueue(
@@ -200,7 +219,12 @@ public class BudgetSummaryController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Boolean overdueOnly,
+            @RequestParam(required = false) Boolean myQueue,
+            @RequestParam(required = false) String attentionMode,
+            @RequestParam(required = false) Integer reminderWindowHours,
             @RequestParam(required = false) String approvalRoleCode,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID contractorId,
             @RequestParam(required = false) UUID actualCostId,
             @RequestParam(required = false) String actualCostIds) {
         List<ActualCostReviewItem> pending = filterReviewItems(
@@ -209,6 +233,10 @@ public class BudgetSummaryController {
                 Boolean.TRUE.equals(overdueOnly),
                 approvalRoleCode,
                 null,
+                departmentId,
+                contractorId,
+                attentionMode,
+                reminderWindowHours,
                 null,
                 null,
                 actualCostId,
@@ -260,8 +288,20 @@ public class BudgetSummaryController {
     public ResponseEntity<PageResponseWithSummary<ActualCostReviewActivityItem, ActualCostReviewActivitySummary>> reviewActivity(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
-            @RequestParam(required = false) String search) {
-        List<ActualCostReviewActivityItem> events = actualCostReviewFacadeService.activity(search);
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String eventGroup,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String roleCode,
+            @RequestParam(required = false) UUID actualCostId,
+            @RequestParam(required = false) String actualCostIds) {
+        List<ActualCostReviewActivityItem> events = filterActivityItems(
+                actualCostReviewFacadeService.activity(search),
+                eventGroup,
+                departmentId,
+                roleCode,
+                actualCostId,
+                actualCostIds
+        );
         return ResponseEntity.ok(PageResponseWithSummary.of(
                 events,
                 page,
@@ -275,8 +315,18 @@ public class BudgetSummaryController {
     public ResponseEntity<PageResponseWithSummary<ActualCostReviewHandoverItem, ActualCostHandoverSummary>> handovers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
-            @RequestParam(required = false) String search) {
-        List<ActualCostReviewHandoverItem> handovers = actualCostReviewFacadeService.handovers(search);
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String approvalRoleCode,
+            @RequestParam(required = false) UUID actualCostId,
+            @RequestParam(required = false) String actualCostIds) {
+        List<ActualCostReviewHandoverItem> handovers = filterHandoverItems(
+                actualCostReviewFacadeService.handovers(search),
+                departmentId,
+                approvalRoleCode,
+                actualCostId,
+                actualCostIds
+        );
         return ResponseEntity.ok(PageResponseWithSummary.of(
                 handovers,
                 page,
@@ -361,6 +411,10 @@ public class BudgetSummaryController {
                                                          Boolean overdueOnly,
                                                          String approvalRoleCode,
                                                          UUID costCategoryId,
+                                                         UUID departmentId,
+                                                         UUID contractorId,
+                                                         String attentionMode,
+                                                         Integer reminderWindowHours,
                                                          Instant dateFrom,
                                                          Instant dateTo,
                                                          UUID actualCostId,
@@ -373,10 +427,106 @@ public class BudgetSummaryController {
                 .filter(item -> approvalRoleCode == null || approvalRoleCode.isBlank()
                         || approvalRoleCode.equalsIgnoreCase(item.approvalRoleCode()))
                 .filter(item -> costCategoryId == null || costCategoryId.equals(item.costCategoryId()))
+                .filter(item -> departmentId == null || matchesDepartment(item.department(), item.workOrder(), departmentId))
+                .filter(item -> contractorId == null || contractorId.equals(contractorId(item)))
+                .filter(item -> matchesAttention(item, attentionMode, reminderWindowHours))
                 .filter(item -> dateFrom == null || item.costDate() == null || !item.costDate().isBefore(dateFrom))
                 .filter(item -> dateTo == null || item.costDate() == null || item.costDate().isBefore(dateTo))
                 .filter(item -> scopedIds.isEmpty() || scopedIds.contains(item.id()))
                 .toList();
+    }
+
+    private List<ActualCostReviewActivityItem> filterActivityItems(List<ActualCostReviewActivityItem> items,
+                                                                   String eventGroup,
+                                                                   UUID departmentId,
+                                                                   String roleCode,
+                                                                   UUID actualCostId,
+                                                                   String actualCostIds) {
+        Set<UUID> scopedIds = parseActualCostIds(actualCostId, actualCostIds);
+        return items.stream()
+                .filter(item -> eventGroup == null || eventGroup.isBlank() || eventGroup.equalsIgnoreCase(item.eventGroup()))
+                .filter(item -> departmentId == null || matchesDepartment(item.department(), item.workOrder(), departmentId))
+                .filter(item -> roleCode == null || roleCode.isBlank()
+                        || roleCode.equalsIgnoreCase(item.recipientRoleCode())
+                        || roleCode.equalsIgnoreCase(item.approvalRoleCode()))
+                .filter(item -> scopedIds.isEmpty() || scopedIds.contains(item.actualCostId()))
+                .toList();
+    }
+
+    private List<ActualCostReviewHandoverItem> filterHandoverItems(List<ActualCostReviewHandoverItem> items,
+                                                                  UUID departmentId,
+                                                                  String approvalRoleCode,
+                                                                  UUID actualCostId,
+                                                                  String actualCostIds) {
+        Set<UUID> scopedIds = parseActualCostIds(actualCostId, actualCostIds);
+        return items.stream()
+                .filter(item -> departmentId == null || matchesDepartment(item.department(), item.workOrder(), departmentId))
+                .filter(item -> approvalRoleCode == null || approvalRoleCode.isBlank()
+                        || approvalRoleCode.equalsIgnoreCase(item.nextApprovalRoleCode())
+                        || approvalRoleCode.equalsIgnoreCase(item.previousApprovalRoleCode()))
+                .filter(item -> scopedIds.isEmpty() || scopedIds.contains(item.actualCostId()))
+                .toList();
+    }
+
+    private boolean matchesAttention(ActualCostReviewItem item, String attentionMode, Integer reminderWindowHours) {
+        if (attentionMode == null || attentionMode.isBlank() || "ALL".equalsIgnoreCase(attentionMode)) {
+            return true;
+        }
+        if ("OVERDUE".equalsIgnoreCase(attentionMode)) {
+            return item.isOverdue();
+        }
+        if ("DUE_SOON".equalsIgnoreCase(attentionMode)) {
+            int reminderWindow = reminderWindowHours != null ? reminderWindowHours : 4;
+            return !item.isOverdue() && item.hoursToOverdue() <= reminderWindow;
+        }
+        return true;
+    }
+
+    private boolean matchesDepartment(Object department, Object workOrder, UUID departmentId) {
+        UUID directDepartmentId = objectId(department);
+        if (departmentId.equals(directDepartmentId)) {
+            return true;
+        }
+        Object workOrderDepartment = objectProperty(workOrder, "department");
+        return departmentId.equals(objectId(workOrderDepartment));
+    }
+
+    private UUID contractorId(ActualCostReviewItem item) {
+        Object contractorWork = item.contractorWork();
+        Object contractor = objectProperty(contractorWork, "contractor");
+        return objectId(contractor);
+    }
+
+    private UUID objectId(Object value) {
+        if (value instanceof UUID id) {
+            return id;
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return UUID.fromString(text);
+            } catch (IllegalArgumentException ignored) {
+                return null;
+            }
+        }
+        Object nestedId = objectProperty(value, "id");
+        if (nestedId == value) {
+            return null;
+        }
+        return objectId(nestedId);
+    }
+
+    private Object objectProperty(Object value, String name) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Map<?, ?> map) {
+            return map.get(name);
+        }
+        try {
+            return value.getClass().getMethod(name).invoke(value);
+        } catch (ReflectiveOperationException | SecurityException ex) {
+            return null;
+        }
     }
 
     private Set<UUID> parseActualCostIds(UUID actualCostId, String actualCostIds) {

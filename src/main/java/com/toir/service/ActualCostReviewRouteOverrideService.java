@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideCreateRequest;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideFilter;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideResponseDto;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.ActualCostReviewRouteOverride;
@@ -30,6 +31,29 @@ public class ActualCostReviewRouteOverrideService {
     public List<ActualCostReviewRouteOverrideResponseDto> findActive() {
         return financeScopeService.filterRouteOverrides(repository.findAllByActiveTrueAndIsDeletedFalse()).stream()
                 .map(this::toListResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ActualCostReviewRouteOverrideResponseDto> findAll(ActualCostReviewRouteOverrideFilter filter) {
+        ActualCostReviewRouteOverrideFilter safeFilter = filter != null
+                ? filter
+                : new ActualCostReviewRouteOverrideFilter(true, null, null, null, null);
+        List<ActualCostReviewRouteOverride> overrides = Boolean.FALSE.equals(safeFilter.activeOnly())
+                ? repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()
+                : repository.findAllByActiveTrueAndIsDeletedFalse();
+        return financeScopeService.filterRouteOverrides(overrides).stream()
+                .map(this::toListResponse)
+                .filter(item -> safeFilter.departmentId() == null || safeFilter.departmentId().equals(item.departmentId())
+                        || (item.department() != null && safeFilter.departmentId().equals(item.department().id()))
+                        || (item.actualCost() != null
+                        && item.actualCost().department() != null
+                        && safeFilter.departmentId().equals(item.actualCost().department().id())))
+                .filter(item -> safeFilter.approvalRoleCode() == null || safeFilter.approvalRoleCode().isBlank()
+                        || safeFilter.approvalRoleCode().equalsIgnoreCase(item.approvalRoleCode()))
+                .filter(item -> safeFilter.actualCostIds() == null || safeFilter.actualCostIds().isEmpty()
+                        || (item.actualCost() != null && safeFilter.actualCostIds().contains(item.actualCost().id())))
+                .filter(item -> matchesSearch(item, safeFilter.search()))
                 .toList();
     }
 
@@ -131,5 +155,24 @@ public class ActualCostReviewRouteOverrideService {
                 .findByIdAndIsDeletedFalse(override.getActualCostId())
                 .orElse(null);
         return responseMapper.toResponse(override, actualCost);
+    }
+
+    private boolean matchesSearch(ActualCostReviewRouteOverrideResponseDto item, String search) {
+        if (search == null || search.isBlank()) {
+            return true;
+        }
+        String lower = search.toLowerCase();
+        return contains(item.id(), lower)
+                || contains(item.comment(), lower)
+                || contains(item.approvalRoleCode(), lower)
+                || contains(item.escalationRoleCode(), lower)
+                || contains(item.department() != null ? item.department().code() : null, lower)
+                || contains(item.department() != null ? item.department().name() : null, lower)
+                || contains(item.actualCost() != null ? item.actualCost().id() : null, lower)
+                || contains(item.actualCost() != null ? item.actualCost().notes() : null, lower);
+    }
+
+    private boolean contains(Object value, String lowerSearch) {
+        return value != null && value.toString().toLowerCase().contains(lowerSearch);
     }
 }

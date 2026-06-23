@@ -1,5 +1,8 @@
 package com.toir.controller;
 
+import com.toir.dto.common.PageResponseWithSummary;
+import com.toir.dto.notification.FinancialReviewInboxFilter;
+import com.toir.dto.notification.FinancialReviewInboxSummary;
 import com.toir.dto.notification.NotificationDto;
 import com.toir.dto.notification.NotificationSummaryDto;
 import com.toir.dto.sla.SlaRuleDto;
@@ -269,6 +272,50 @@ class NotificationControllerContractTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"comment\":\"Seen\"}"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void financialReviewInboxForwardsFrontendFilters() throws Exception {
+        UUID currentUserId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        authenticate(currentUserId, "SYSTEM_ADMIN", List.of("*"));
+        FinancialReviewInboxFilter expectedFilter = new FinancialReviewInboxFilter(
+                "pump",
+                "DUE_SOON",
+                departmentId,
+                "FINANCE_MANAGER",
+                "UNACKNOWLEDGED",
+                true
+        );
+        when(notificationFacadeService.financialReviewInbox(
+                eq(currentUserId),
+                eq(2),
+                eq(25),
+                eq(expectedFilter)
+        )).thenReturn(PageResponseWithSummary.of(
+                List.of(),
+                2,
+                25,
+                new FinancialReviewInboxSummary(0, 0, 0, 0, 0, 0)
+        ));
+
+        mockMvc.perform(get("/api/v1/notifications/financial-review-inbox")
+                        .param("page", "2")
+                        .param("size", "25")
+                        .param("search", "pump")
+                        .param("kind", "DUE_SOON")
+                        .param("departmentId", departmentId.toString())
+                        .param("recipientRoleCode", "FINANCE_MANAGER")
+                        .param("acknowledgementMode", "UNACKNOWLEDGED")
+                        .param("unreadOnly", "true"))
+                .andExpect(status().isOk());
+
+        verify(notificationFacadeService).financialReviewInbox(
+                currentUserId,
+                2,
+                25,
+                expectedFilter
+        );
     }
 
     private void authenticate(UUID userId, String primaryRoleCode, List<String> permissions) {

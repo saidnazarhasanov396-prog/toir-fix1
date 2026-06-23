@@ -9,15 +9,23 @@ import com.toir.dto.budget.ActualCostReviewActivitySummary;
 import com.toir.dto.budget.BudgetSummaryResponse;
 import com.toir.dto.financialreview.*;
 import com.toir.dto.notification.NotificationDto;
+import com.toir.entity.Department;
+import com.toir.entity.contractors.ContractorWork;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.ActualCostReviewEvent;
 import com.toir.entity.projects.ActualCostReviewRouteOverride;
+import com.toir.entity.projects.CostCategory;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.NotificationSeverity;
 import com.toir.exception.RestException;
+import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.actualCost.ActualCostReviewRouteOverrideRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.util.CsvWriter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -48,6 +56,10 @@ public class ActualCostReviewFacadeService {
     private final ActualCostReviewRouteOverrideService routeOverrideService;
     private final ActualCostReviewRouteOverrideRepository routeOverrideRepository;
     private final ActualCostReviewEventRepository eventRepository;
+    private final WorkOrderRepository workOrderRepository;
+    private final ContractorWorkRepository contractorWorkRepository;
+    private final DepartmentRepository departmentRepository;
+    private final CostCategoryRepository costCategoryRepository;
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewItem> reviewQueue(String search) {
@@ -125,14 +137,31 @@ public class ActualCostReviewFacadeService {
                         entry.getValue().stream().mapToDouble(ActualCostReviewHandoverItem::amount).sum()
                 ))
                 .toList();
+        List<ActualCostHandoverSummary.DepartmentRow> byDepartment = items.stream()
+                .filter(item -> objectId(item.department()) != null)
+                .collect(Collectors.groupingBy(item -> objectId(item.department()), LinkedHashMap::new, Collectors.toList()))
+                .entrySet().stream()
+                .map(entry -> {
+                    Object department = entry.getValue().getFirst().department();
+                    return new ActualCostHandoverSummary.DepartmentRow(
+                            new BudgetSummaryResponse.CategoryRef(
+                                    entry.getKey(),
+                                    objectText(department, "code"),
+                                    objectText(department, "name")
+                            ),
+                            entry.getValue().size(),
+                            entry.getValue().stream().mapToDouble(ActualCostReviewHandoverItem::amount).sum()
+                    );
+                })
+                .toList();
         return new ActualCostHandoverSummary(
                 items.size(),
                 (int) items.stream().map(ActualCostReviewHandoverItem::actualCostId).distinct().count(),
-                0,
+                byDepartment.size(),
                 (int) items.stream().map(ActualCostReviewHandoverItem::nextApprovalRoleCode).filter(Objects::nonNull).distinct().count(),
                 (int) items.stream().map(ActualCostReviewHandoverItem::actorName).filter(Objects::nonNull).distinct().count(),
                 byTargetRole,
-                List.of()
+                byDepartment
         );
     }
 
@@ -334,6 +363,7 @@ public class ActualCostReviewFacadeService {
         ActualCostReviewRouteOverride activeOverride = routeOverrideRepository
                 .findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(cost.getId())
                 .orElse(null);
+        ActualCostContext context = resolveContext(cost, activeOverride);
         int ageHours = ageHours(cost);
         int threshold = activeOverride != null ? activeOverride.getThresholdHours() : DEFAULT_THRESHOLD_HOURS;
         boolean overdue = ageHours >= threshold;
@@ -355,12 +385,12 @@ public class ActualCostReviewFacadeService {
                 null,
                 cost.getReviewedById() != null ? new ActualCostReviewItem.UserRef(cost.getReviewedById(), null) : null,
                 cost.getReviewComment(),
-                null,
-                cost.getWorkOrderId() != null ? new ActualCostReviewItem.WorkOrderRef(cost.getWorkOrderId(), "", "", null) : null,
+                toContractorWorkRef(context.contractorWork(), context.workOrder()),
+                toWorkOrderRef(context.workOrder(), context.department()),
                 cost.getRepairRequestId() != null ? new ActualCostReviewItem.RepairRequestRef(cost.getRepairRequestId(), "") : null,
                 cost.getBudgetLineId() != null ? new ActualCostReviewItem.BudgetLineRef(cost.getBudgetLineId(), null, null, null) : null,
-                null,
-                cost.getCostCategoryId() != null ? new ActualCostReviewItem.Ref(cost.getCostCategoryId(), "", "") : null,
+                toDepartmentRef(context.department()),
+                toCostCategoryRef(context.costCategory()),
                 ageHours,
                 overdue,
                 "/financial-review/history/" + cost.getId(),
@@ -381,6 +411,7 @@ public class ActualCostReviewFacadeService {
     }
 
     private ActualCostReviewActivityItem toActivityItem(ActualCostReviewEvent event, ActualCost cost) {
+        ActualCostContext context = cost != null ? resolveContext(cost, null) : ActualCostContext.empty();
         return new ActualCostReviewActivityItem(
                 event.getId(),
                 event.getSource(),
@@ -402,26 +433,27 @@ public class ActualCostReviewFacadeService {
                 null,
                 event.getSeverity(),
                 event.getStatus(),
-                null,
-                null,
-                null,
-                null,
+                toDepartmentRef(context.department()),
+                toContractorRef(context.contractorWork()),
+                toContractorWorkRef(context.contractorWork(), context.workOrder()),
+                toWorkOrderRef(context.workOrder(), context.department()),
                 "/financial-review/history/" + event.getActualCostId(),
                 "/financial-review?actualCostId=" + event.getActualCostId()
         );
     }
 
     private ActualCostReviewHandoverItem toHandoverItem(ActualCostReviewEvent event, ActualCost cost) {
+        ActualCostContext context = cost != null ? resolveContext(cost, null) : ActualCostContext.empty();
         return new ActualCostReviewHandoverItem(
                 event.getId(),
                 event.getOccurredAt(),
                 event.getActualCostId(),
                 cost != null && cost.getStatus() != null ? cost.getStatus().name() : event.getStatus(),
                 cost != null ? cost.getAmount() : 0,
-                null,
-                null,
-                null,
-                null,
+                toDepartmentRef(context.department()),
+                toContractorRef(context.contractorWork()),
+                toContractorWorkRef(context.contractorWork(), context.workOrder()),
+                toWorkOrderRef(context.workOrder(), context.department()),
                 null,
                 event.getNotificationId(),
                 event.getPreviousApprovalRoleCode(),
@@ -512,6 +544,40 @@ public class ActualCostReviewFacadeService {
         return value != null && value.toString().toLowerCase().contains(lowerSearch);
     }
 
+    private UUID objectId(Object value) {
+        Object id = objectProperty(value, "id");
+        if (id instanceof UUID uuid) {
+            return uuid;
+        }
+        if (id instanceof String text && !text.isBlank()) {
+            try {
+                return UUID.fromString(text);
+            } catch (IllegalArgumentException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private String objectText(Object value, String property) {
+        Object result = objectProperty(value, property);
+        return result != null ? result.toString() : "";
+    }
+
+    private Object objectProperty(Object value, String name) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Map<?, ?> map) {
+            return map.get(name);
+        }
+        try {
+            return value.getClass().getMethod(name).invoke(value);
+        } catch (ReflectiveOperationException | SecurityException ex) {
+            return null;
+        }
+    }
+
     private int ageHours(ActualCost cost) {
         Instant from = cost.getCreatedAt() != null ? cost.getCreatedAt() : cost.getCostDate();
         if (from == null) {
@@ -546,7 +612,101 @@ public class ActualCostReviewFacadeService {
         return "/financial-review?actualCostId=" + cost.getId();
     }
 
+    private ActualCostContext resolveContext(ActualCost cost, ActualCostReviewRouteOverride activeOverride) {
+        ContractorWork contractorWork = cost.getContractorWorkId() != null
+                ? contractorWorkRepository.findByIdAndIsDeletedFalse(cost.getContractorWorkId()).orElse(null)
+                : null;
+        WorkOrder workOrder = resolveWorkOrder(cost, contractorWork);
+        Department department = resolveDepartment(activeOverride, workOrder);
+        CostCategory costCategory = cost.getCostCategoryId() != null
+                ? costCategoryRepository.findByIdAndIsDeletedFalse(cost.getCostCategoryId()).orElse(null)
+                : null;
+        return new ActualCostContext(workOrder, contractorWork, department, costCategory);
+    }
+
+    private WorkOrder resolveWorkOrder(ActualCost cost, ContractorWork contractorWork) {
+        if (cost.getWorkOrderId() != null) {
+            return workOrderRepository.findByIdAndIsDeletedFalse(cost.getWorkOrderId()).orElse(null);
+        }
+        if (contractorWork != null && contractorWork.getWorkOrderId() != null) {
+            return workOrderRepository.findByIdAndIsDeletedFalse(contractorWork.getWorkOrderId()).orElse(null);
+        }
+        return null;
+    }
+
+    private Department resolveDepartment(ActualCostReviewRouteOverride activeOverride, WorkOrder workOrder) {
+        if (activeOverride != null && activeOverride.getDepartmentId() != null) {
+            return departmentRepository.findByIdAndIsDeletedFalse(activeOverride.getDepartmentId()).orElse(null);
+        }
+        if (workOrder != null && workOrder.getDepartmentId() != null) {
+            return departmentRepository.findByIdAndIsDeletedFalse(workOrder.getDepartmentId()).orElse(null);
+        }
+        return null;
+    }
+
+    private ActualCostReviewItem.Ref toDepartmentRef(Department department) {
+        if (department == null) {
+            return null;
+        }
+        return new ActualCostReviewItem.Ref(department.getId(), safeText(department.getCode()), safeText(department.getName()));
+    }
+
+    private ActualCostReviewItem.Ref toCostCategoryRef(CostCategory costCategory) {
+        if (costCategory == null) {
+            return null;
+        }
+        return new ActualCostReviewItem.Ref(costCategory.getId(), safeText(costCategory.getCode()), safeText(costCategory.getName()));
+    }
+
+    private ActualCostReviewItem.Ref toContractorRef(ContractorWork contractorWork) {
+        if (contractorWork == null || contractorWork.getContractorId() == null) {
+            return null;
+        }
+        return new ActualCostReviewItem.Ref(contractorWork.getContractorId(), "", "");
+    }
+
+    private ActualCostReviewItem.WorkOrderRef toWorkOrderRef(WorkOrder workOrder, Department department) {
+        if (workOrder == null) {
+            return null;
+        }
+        return new ActualCostReviewItem.WorkOrderRef(
+                workOrder.getId(),
+                safeText(workOrder.getNumber()),
+                safeText(workOrder.getTitle()),
+                toDepartmentRef(department)
+        );
+    }
+
+    private ActualCostReviewItem.ContractorWorkRef toContractorWorkRef(ContractorWork contractorWork, WorkOrder workOrder) {
+        if (contractorWork == null) {
+            return null;
+        }
+        return new ActualCostReviewItem.ContractorWorkRef(
+                contractorWork.getId(),
+                safeText(contractorWork.getDescription()),
+                contractorWork.getStatus() != null ? contractorWork.getStatus().name() : null,
+                contractorWork.getCost(),
+                toContractorRef(contractorWork),
+                toWorkOrderRef(workOrder, null)
+        );
+    }
+
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private String safeText(String value) {
+        return value != null ? value : "";
+    }
+
+    private record ActualCostContext(
+            WorkOrder workOrder,
+            ContractorWork contractorWork,
+            Department department,
+            CostCategory costCategory
+    ) {
+        static ActualCostContext empty() {
+            return new ActualCostContext(null, null, null, null);
+        }
     }
 }

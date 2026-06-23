@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideCreateRequest;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideFilter;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideRegistrySummary;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideResponseDto;
 import com.toir.dto.common.PageResponseWithSummary;
@@ -24,8 +25,10 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -41,8 +44,23 @@ public class ActualCostReviewRouteOverrideController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('FINANCE_ROUTE_OVERRIDE_READ')")
     public ResponseEntity<PageResponseWithSummary<ActualCostReviewRouteOverrideResponseDto, ActualCostReviewRouteOverrideRegistrySummary>> list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        List<ActualCostReviewRouteOverrideResponseDto> items = service.findActive();
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Boolean activeOnly,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String approvalRoleCode,
+            @RequestParam(required = false) UUID actualCostId,
+            @RequestParam(required = false) String actualCostIds,
+            @RequestParam(required = false) String search) {
+        ActualCostReviewRouteOverrideFilter filter = new ActualCostReviewRouteOverrideFilter(
+                activeOnly,
+                departmentId,
+                approvalRoleCode,
+                parseActualCostIds(actualCostId, actualCostIds),
+                search
+        );
+        List<ActualCostReviewRouteOverrideResponseDto> items = filter.hasOnlyDefaultActiveFilter()
+                ? service.findActive()
+                : service.findAll(filter);
         return ResponseEntity.ok(PageResponseWithSummary.of(items, page, size, summary(items)));
     }
 
@@ -69,8 +87,23 @@ public class ActualCostReviewRouteOverrideController {
 
     @GetMapping(value = "/export", produces = "text/csv;charset=UTF-8")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('FINANCE_ROUTE_OVERRIDE_READ')")
-    public ResponseEntity<String> export() {
-        List<ActualCostReviewRouteOverrideResponseDto> items = service.findActive();
+    public ResponseEntity<String> export(
+            @RequestParam(required = false) Boolean activeOnly,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String approvalRoleCode,
+            @RequestParam(required = false) UUID actualCostId,
+            @RequestParam(required = false) String actualCostIds,
+            @RequestParam(required = false) String search) {
+        ActualCostReviewRouteOverrideFilter filter = new ActualCostReviewRouteOverrideFilter(
+                activeOnly,
+                departmentId,
+                approvalRoleCode,
+                parseActualCostIds(actualCostId, actualCostIds),
+                search
+        );
+        List<ActualCostReviewRouteOverrideResponseDto> items = filter.hasOnlyDefaultActiveFilter()
+                ? service.findActive()
+                : service.findAll(filter);
         String csv = CsvWriter.build(
                 List.of("id", "actualCostId", "approvalRoleCode", "escalationRoleCode", "thresholdHours", "isActive"),
                 items,
@@ -161,6 +194,21 @@ public class ActualCostReviewRouteOverrideController {
                 uniqueActualCosts,
                 uniqueDepartments
         );
+    }
+
+    private Set<UUID> parseActualCostIds(UUID actualCostId, String actualCostIds) {
+        Set<UUID> ids = new LinkedHashSet<>();
+        if (actualCostId != null) {
+            ids.add(actualCostId);
+        }
+        if (actualCostIds != null && !actualCostIds.isBlank()) {
+            for (String rawId : actualCostIds.split(",")) {
+                if (!rawId.isBlank()) {
+                    ids.add(UUID.fromString(rawId.trim()));
+                }
+            }
+        }
+        return ids;
     }
 
     public record BulkApplyRequest(

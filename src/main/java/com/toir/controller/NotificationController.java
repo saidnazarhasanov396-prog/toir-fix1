@@ -3,6 +3,7 @@ import com.toir.dto.common.PageResponseWithSummary;
 import com.toir.dto.notification.BulkFinancialReviewInboxAcknowledgementResponse;
 import com.toir.dto.notification.BulkNotificationReadResponse;
 import com.toir.dto.notification.FinancialReviewInboxAcknowledgementResponse;
+import com.toir.dto.notification.FinancialReviewInboxFilter;
 import com.toir.dto.notification.FinancialReviewInboxItem;
 import com.toir.dto.notification.FinancialReviewInboxSummary;
 import com.toir.dto.notification.NotificationDispatchResponse;
@@ -96,18 +97,46 @@ public class NotificationController {
             @CurrentUser AuthenticatedUser user,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String kind,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String recipientRoleCode,
+            @RequestParam(required = false) String acknowledgementMode,
+            @RequestParam(required = false) Boolean unreadOnly) {
         UUID target = user != null ? UUID.fromString(user.id()) : null;
-        return ResponseEntity.ok(notificationFacadeService.financialReviewInbox(target, page, size, search));
+        FinancialReviewInboxFilter filter = new FinancialReviewInboxFilter(
+                search,
+                kind,
+                departmentId,
+                recipientRoleCode,
+                acknowledgementMode,
+                unreadOnly
+        );
+        if (filter.hasOnlySearch()) {
+            return ResponseEntity.ok(notificationFacadeService.financialReviewInbox(target, page, size, search));
+        }
+        return ResponseEntity.ok(notificationFacadeService.financialReviewInbox(target, page, size, filter));
     }
 
     @GetMapping(value = "/financial-review-inbox/export", produces = "text/csv;charset=UTF-8")
     @PreAuthorize(FINANCIAL_REVIEW_INBOX_AUTH)
     public ResponseEntity<String> exportFinancialReviewInbox(
             @CurrentUser AuthenticatedUser user,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String kind,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String recipientRoleCode,
+            @RequestParam(required = false) String acknowledgementMode,
+            @RequestParam(required = false) Boolean unreadOnly) {
         UUID target = user != null ? UUID.fromString(user.id()) : null;
-        String csv = notificationFacadeService.financialReviewInboxCsv(target, search);
+        String csv = notificationFacadeService.financialReviewInboxCsv(target, new FinancialReviewInboxFilter(
+                search,
+                kind,
+                departmentId,
+                recipientRoleCode,
+                acknowledgementMode,
+                unreadOnly
+        ));
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"financial-review-inbox.csv\"")

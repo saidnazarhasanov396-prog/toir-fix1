@@ -12,9 +12,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -119,5 +122,31 @@ class FinancialReviewOverrideControllerContractTest {
         mockMvc.perform(get("/api/v1/budgets/actual-costs/review-route-overrides/by-actual-cost/{actualCostId}", "not-a-uuid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    void overridesRegistryForwardsFrontendFilters() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID actualCostId = UUID.randomUUID();
+        ActualCostReviewRouteOverrideFilter expectedFilter = new ActualCostReviewRouteOverrideFilter(
+                false,
+                departmentId,
+                "FINANCE_MANAGER",
+                Set.of(actualCostId),
+                "pump"
+        );
+        when(service.findAll(any(ActualCostReviewRouteOverrideFilter.class))).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/budgets/actual-costs/review-route-overrides")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("activeOnly", "false")
+                        .param("departmentId", departmentId.toString())
+                        .param("approvalRoleCode", "FINANCE_MANAGER")
+                        .param("actualCostId", actualCostId.toString())
+                        .param("search", "pump"))
+                .andExpect(status().isOk());
+
+        verify(service).findAll(eq(expectedFilter));
     }
 }

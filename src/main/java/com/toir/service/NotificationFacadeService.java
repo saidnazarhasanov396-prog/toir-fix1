@@ -4,6 +4,7 @@ import com.toir.dto.common.PageResponseWithSummary;
 import com.toir.dto.notification.BulkFinancialReviewInboxAcknowledgementResponse;
 import com.toir.dto.notification.BulkNotificationReadResponse;
 import com.toir.dto.notification.FinancialReviewInboxAcknowledgementResponse;
+import com.toir.dto.notification.FinancialReviewInboxFilter;
 import com.toir.dto.notification.FinancialReviewInboxItem;
 import com.toir.dto.notification.FinancialReviewInboxSummary;
 import com.toir.dto.notification.NotificationDispatchResponse;
@@ -69,13 +70,20 @@ public class NotificationFacadeService {
     public PageResponseWithSummary<FinancialReviewInboxItem, FinancialReviewInboxSummary> financialReviewInbox(
             UUID recipientId, int page, int size, String search
     ) {
+        return financialReviewInbox(recipientId, page, size, new FinancialReviewInboxFilter(search, null, null, null, null, null));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponseWithSummary<FinancialReviewInboxItem, FinancialReviewInboxSummary> financialReviewInbox(
+            UUID recipientId, int page, int size, FinancialReviewInboxFilter filter
+    ) {
+        FinancialReviewInboxFilter safeFilter = filter != null
+                ? filter
+                : new FinancialReviewInboxFilter(null, null, null, null, null, null);
         List<NotificationDto> notifications = recipientId != null
                 ? notificationService.findForUser(recipientId).stream()
                 .filter(n -> n.entityType() != null && n.entityType().toUpperCase().contains("COST"))
-                .filter(n -> search == null || search.isBlank()
-                        || containsIgnoreCase(n.title(), search)
-                        || containsIgnoreCase(n.message(), search)
-                        || containsIgnoreCase(n.entityType(), search))
+                .filter(n -> matchesFinancialReviewInboxFilter(n, safeFilter))
                 .toList()
                 : List.of();
 
@@ -103,7 +111,12 @@ public class NotificationFacadeService {
 
     @Transactional(readOnly = true)
     public String financialReviewInboxCsv(UUID recipientId, String search) {
-        List<FinancialReviewInboxItem> items = financialReviewInbox(recipientId, 0, Integer.MAX_VALUE, search).content();
+        return financialReviewInboxCsv(recipientId, new FinancialReviewInboxFilter(search, null, null, null, null, null));
+    }
+
+    @Transactional(readOnly = true)
+    public String financialReviewInboxCsv(UUID recipientId, FinancialReviewInboxFilter filter) {
+        List<FinancialReviewInboxItem> items = financialReviewInbox(recipientId, 0, Integer.MAX_VALUE, filter).content();
         return CsvWriter.build(
                 List.of("id", "title", "severity", "status", "entityType", "entityId", "acknowledgedAt"),
                 items,
@@ -172,8 +185,32 @@ public class NotificationFacadeService {
         return value != null && value.toLowerCase().contains(search.toLowerCase());
     }
 
+    private boolean matchesFinancialReviewInboxFilter(NotificationDto notification, FinancialReviewInboxFilter filter) {
+        if (hasText(filter.search())
+                && !containsIgnoreCase(notification.title(), filter.search())
+                && !containsIgnoreCase(notification.message(), filter.search())
+                && !containsIgnoreCase(notification.entityType(), filter.search())
+                && !containsIgnoreCase(notification.entityId(), filter.search())) {
+            return false;
+        }
+        if (hasText(filter.kind()) && !filter.kind().equalsIgnoreCase(kind(notification))) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(filter.unreadOnly()) && notification.status() == NotificationStatus.READ) {
+            return false;
+        }
+        if ("ACKNOWLEDGED".equalsIgnoreCase(filter.acknowledgementMode()) && notification.acknowledgedAt() == null) {
+            return false;
+        }
+        if ("UNACKNOWLEDGED".equalsIgnoreCase(filter.acknowledgementMode()) && notification.acknowledgedAt() != null) {
+            return false;
+        }
+        // Notification rows do not currently persist financial review department/role metadata.
+        // Keep these params accepted at the API boundary without hiding records that cannot be enriched yet.
+        return true;
+    }
+
     private FinancialReviewInboxItem toFinancialReviewInboxItem(NotificationDto notification) {
-        String kind = notification.severity() == NotificationSeverity.CRITICAL ? "OVERDUE" : "DUE_SOON";
         return new FinancialReviewInboxItem(
                 notification.id(),
                 notification.recipientId(),
@@ -186,7 +223,7 @@ public class NotificationFacadeService {
                 notification.entityId(),
                 notification.readAt(),
                 notification.createdAt(),
-                kind,
+                kind(notification),
                 null,
                 null,
                 null,
@@ -207,5 +244,13 @@ public class NotificationFacadeService {
             return "/financial-review";
         }
         return "/financial-review?actualCostId=" + notification.entityId();
+    }
+
+    private String kind(NotificationDto notification) {
+        return notification.severity() == NotificationSeverity.CRITICAL ? "OVERDUE" : "DUE_SOON";
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }
