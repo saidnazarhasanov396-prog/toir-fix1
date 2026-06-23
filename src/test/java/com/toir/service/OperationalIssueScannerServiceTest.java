@@ -323,6 +323,31 @@ class OperationalIssueScannerServiceTest {
     }
 
     @Test
+    void scanCreatesCriticalLifecycleIssueForDecommissionedEquipmentRegardlessOfRisk() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, departmentId);
+        equipment.setStatus(EquipmentStatus.DECOMMISSIONED);
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(rcmService.computeAll()).thenReturn(List.of(riskScore(equipmentId, 0)));
+
+        service.scanAll();
+
+        verify(issueService).openOrUpdate(
+                eq(OperationalIssueType.EQUIPMENT_LIFECYCLE),
+                eq(NotificationSeverity.CRITICAL),
+                eq(EquipmentRiskLevel.CRITICAL),
+                eq(equipmentId),
+                eq(departmentId),
+                eq("EquipmentLifecycle"),
+                eq(equipmentId),
+                eq("Equipment lifecycle risk: EQ-1"),
+                any(),
+                org.mockito.ArgumentMatchers.<java.util.Map<String, Object>>any()
+        );
+    }
+
+    @Test
     void scanCreatesCriticalLifecycleIssueForHighRiskScore() {
         UUID equipmentId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();

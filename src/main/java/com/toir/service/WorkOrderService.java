@@ -224,8 +224,9 @@ public class WorkOrderService {
                                      int pageSize, String search) {
         var pageable = PaginationUtils.pageRequest(page, pageSize);
         String normalizedSearch = normalizeSearch(search);
+        String statusStr = status == null ? null : status.name();
         Page<WorkOrder> resultPage = repository.searchPaginated(
-                status,
+                statusStr,
                 departmentId,
                 equipmentId,
                 normalizedSearch,
@@ -239,8 +240,9 @@ public class WorkOrderService {
         var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
         var nativeQueryPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         String normalizedSearch = normalizeSearch(search);
+        String statusStr = status == null ? null : status.name();
         Page<WorkOrder> resultPage = repository.searchPaginated(
-                status,
+                statusStr,
                 departmentId,
                 equipmentId,
                 normalizedSearch,
@@ -255,8 +257,9 @@ public class WorkOrderService {
                                      int pageSize, String search, Instant plannedFrom, Instant plannedTo) {
         var pageable = PaginationUtils.pageRequest(page, pageSize);
         String normalizedSearch = normalizeSearch(search);
+        String statusStr = status == null ? null : status.name();
         Page<WorkOrder> resultPage = repository.searchPaginated(
-                status,
+                statusStr,
                 departmentId,
                 equipmentId,
                 normalizedSearch,
@@ -279,11 +282,12 @@ public class WorkOrderService {
         }
 
         String normalizedSearch = normalizeSearch(search);
+        String statusStr = status == null ? null : status.name();
         if (month == null) {
             Instant from = LocalDate.of(year, 1, 1).atStartOfDay(CALENDAR_ZONE).toInstant();
             Instant to = LocalDate.of(year + 1, 1, 1).atStartOfDay(CALENDAR_ZONE).toInstant();
             List<WorkOrderCalendarBucketProjection> rows = repository.getWorkOrderCalendarMonthBuckets(
-                    status,
+                    statusStr,
                     departmentId,
                     equipmentId,
                     normalizedSearch,
@@ -307,7 +311,7 @@ public class WorkOrderService {
         Instant from = targetMonth.atDay(1).atStartOfDay(CALENDAR_ZONE).toInstant();
         Instant to = targetMonth.plusMonths(1).atDay(1).atStartOfDay(CALENDAR_ZONE).toInstant();
         List<WorkOrderCalendarBucketProjection> rows = repository.getWorkOrderCalendarDayBuckets(
-                status,
+                statusStr,
                 departmentId,
                 equipmentId,
                 normalizedSearch,

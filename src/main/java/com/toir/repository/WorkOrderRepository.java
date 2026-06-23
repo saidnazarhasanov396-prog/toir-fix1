@@ -103,7 +103,7 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
     List<WorkOrder> findAllByEquipmentIdInAndIsDeletedFalse(
             @Param("equipmentIds") Collection<UUID> equipmentIds);
 
-    default Page<WorkOrder> searchPaginated(WorkOrderStatus status,
+    default Page<WorkOrder> searchPaginated(String status,
             UUID departmentId,
             UUID equipmentId,
             String search,
@@ -186,7 +186,7 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
                     or lower(coalesce(to_jsonb(w)->>'result', '')) like lower(concat('%', cast(:search as varchar), '%'))
                     or lower(coalesce(to_jsonb(w)->>'closure_notes', '')) like lower(concat('%', cast(:search as varchar), '%'))
                 )""")
-    Page<WorkOrder> searchPaginated(@Param("status") WorkOrderStatus status,
+    Page<WorkOrder> searchPaginated(@Param("status") String status,
             @Param("departmentId") UUID departmentId,
             @Param("equipmentId") UUID equipmentId,
             @Param("search") String search,
@@ -221,7 +221,7 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
             order by bucketNumber
             """)
     List<WorkOrderCalendarBucketProjection> getWorkOrderCalendarMonthBuckets(
-            @Param("status") WorkOrderStatus status,
+            @Param("status") String status,
             @Param("departmentId") UUID departmentId,
             @Param("equipmentId") UUID equipmentId,
             @Param("search") String search,
@@ -255,7 +255,7 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID> {
             order by bucketDate
             """)
     List<WorkOrderCalendarBucketProjection> getWorkOrderCalendarDayBuckets(
-            @Param("status") WorkOrderStatus status,
+            @Param("status") String status,
             @Param("departmentId") UUID departmentId,
             @Param("equipmentId") UUID equipmentId,
             @Param("search") String search,
