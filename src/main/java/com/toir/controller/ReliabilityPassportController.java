@@ -68,10 +68,11 @@ public class ReliabilityPassportController {
     public ResponseEntity<Page<ReliabilityPassport>> list(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) String availability,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, page, size));
+        return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, availability, page, size));
     }
 
     @GetMapping("/reliability-passports/stats")
