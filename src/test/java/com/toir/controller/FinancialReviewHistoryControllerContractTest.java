@@ -6,10 +6,12 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.FinanceScopeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +47,9 @@ class FinancialReviewHistoryControllerContractTest {
     CostCategoryRepository costCategoryRepository;
 
     @Mock
+    DepartmentRepository departmentRepository;
+
+    @Mock
     UserRepository userRepository;
 
     @Mock
@@ -52,6 +57,9 @@ class FinancialReviewHistoryControllerContractTest {
 
     @Mock
     FinanceScopeService financeScopeService;
+
+    @Mock
+    ActualCostReviewFacadeService actualCostReviewFacadeService;
 
     private MockMvc mockMvc;
 
@@ -62,9 +70,11 @@ class FinancialReviewHistoryControllerContractTest {
                 lineRepository,
                 actualCostRepository,
                 costCategoryRepository,
+                departmentRepository,
                 userRepository,
                 employeeRepository,
-                financeScopeService
+                financeScopeService,
+                actualCostReviewFacadeService
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())

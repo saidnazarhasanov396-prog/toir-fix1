@@ -358,6 +358,48 @@ SELECT ('10000000-0000-0000-0000-' || '00000049' || lpad(gs::text, 4, '0'))::uui
 FROM generate_series(1, 32) AS gs
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO notifications (id, created_at, updated_at, is_deleted, recipient_id, channel, title, message, severity, status, entity_type, entity_id, read_at)
+SELECT ('10000000-0000-0000-0000-' || '0000004f' || lpad((target.recipient_rank * 100 + item.item_rank)::text, 4, '0'))::uuid,
+       now(), now(), false,
+       target.recipient_id,
+       'WEB',
+       'Finance review inbox actual cost #' || item.item_rank,
+       item.message,
+       item.severity,
+       item.status,
+       'ACTUAL_COST',
+       item.actual_cost_id::text,
+       CASE WHEN item.status = 'READ' THEN now() - interval '2 hours' ELSE NULL END
+FROM (VALUES
+    (1, '00000000-0000-0000-0000-0000000b0205'::uuid, 'CRITICAL', 'SENT', 'Finance review inbox actual cost awaiting overdue approval'),
+    (2, '00000000-0000-0000-0000-0000000b0209'::uuid, 'WARNING', 'PENDING', 'Finance review inbox actual cost due soon for handover'),
+    (3, '00000000-0000-0000-0000-0000000b0213'::uuid, 'INFO', 'PENDING', 'Finance review inbox actual cost pending normal review')
+) AS item(item_rank, actual_cost_id, severity, status, message)
+CROSS JOIN (
+    SELECT target.recipient_rank, u.id AS recipient_id
+    FROM (VALUES
+        (1, 'admin'),
+        (2, 'NAV-economist'),
+        (3, 'NAV-director')
+    ) AS target(recipient_rank, username)
+    JOIN users u ON u.username = target.username AND u.is_deleted = false
+) AS target
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO actual_cost_review_events (
+    id, created_at, updated_at, is_deleted, actual_cost_id, notification_id, route_override_id, actor_user_id,
+    source, event_group, event_code, title, description, severity, status,
+    previous_approval_role_code, next_approval_role_code, previous_escalation_role_code, next_escalation_role_code,
+    previous_threshold_hours, next_threshold_hours, handover_comment, acknowledgement_comment, occurred_at
+)
+VALUES
+('10000000-0000-0000-0000-000000500001', now(), now(), false, '00000000-0000-0000-0000-0000000b0202', NULL, NULL, '00000000-0000-0000-0000-00000000a008', 'SYSTEM', 'REVIEW', 'APPROVED', 'Actual cost approved', 'Approved within industrial finance route', NULL, 'APPROVED', NULL, 'ECONOMIST', NULL, NULL, NULL, 24, NULL, NULL, now() - interval '9 days'),
+('10000000-0000-0000-0000-000000500002', now(), now(), false, '00000000-0000-0000-0000-0000000b0203', NULL, NULL, '00000000-0000-0000-0000-00000000a008', 'SYSTEM', 'REVIEW', 'REJECTED', 'Actual cost rejected', 'Rejected pending corrected invoice', 'WARNING', 'REJECTED', 'ECONOMIST', 'CHIEF_MECHANIC', NULL, NULL, 24, 24, NULL, NULL, now() - interval '8 days'),
+('10000000-0000-0000-0000-000000500003', now(), now(), false, '00000000-0000-0000-0000-0000000b0205', NULL, NULL, NULL, 'SYSTEM', 'SLA', 'OVERDUE', 'Actual cost review overdue', 'Pending actual cost exceeded the configured financial review SLA', 'CRITICAL', 'PENDING', 'ECONOMIST', 'CHIEF_MECHANIC', NULL, 'TECHNICAL_DIRECTOR', 24, 12, NULL, NULL, now() - interval '30 hours'),
+('10000000-0000-0000-0000-000000500004', now(), now(), false, '00000000-0000-0000-0000-0000000b0205', NULL, '10000000-0000-0000-0000-000000450005', '00000000-0000-0000-0000-00000000a001', 'SYSTEM', 'ROUTE', 'OVERRIDE_APPLIED', 'Actual cost route override applied', 'Manual override applied for high-value actual cost review', NULL, 'ACTIVE', 'ECONOMIST', 'TECHNICAL_DIRECTOR', 'CHIEF_MECHANIC', 'SYSTEM_ADMIN', 24, 13, NULL, NULL, now() - interval '26 hours'),
+('10000000-0000-0000-0000-000000500005', now(), now(), false, '00000000-0000-0000-0000-0000000b0209', NULL, '10000000-0000-0000-0000-000000450009', '00000000-0000-0000-0000-00000000a001', 'SYSTEM', 'ROUTE', 'HANDOVER', 'Actual cost review handed over', 'SLA signal transferred from economist route to technical director', 'WARNING', 'PENDING', 'ECONOMIST', 'TECHNICAL_DIRECTOR', 'CHIEF_MECHANIC', 'SYSTEM_ADMIN', 24, 17, 'Demo overdue financial review reassignment', 'Demo acknowledgement for finance review inbox', now() - interval '22 hours')
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO audit_logs (id, created_at, is_deleted, user_id, module, action, entity_type, entity_id, message, ip_address, user_agent)
 SELECT ('10000000-0000-0000-0000-' || '0000004a' || lpad(gs::text, 4, '0'))::uuid,
        now() - ((gs % 14) || ' hours')::interval,

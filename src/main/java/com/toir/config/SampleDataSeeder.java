@@ -1,7 +1,9 @@
 package com.toir.config;
 
 import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.ActualCostReviewEvent;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.enums.ActualCostStatus;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -119,6 +121,7 @@ public class SampleDataSeeder implements CommandLineRunner {
     private final MaintenanceBudgetRepository budgetRepository;
     private final BudgetLineRepository budgetLineRepository;
     private final ActualCostRepository actualCostRepository;
+    private final ActualCostReviewEventRepository actualCostReviewEventRepository;
     private final NotificationRepository notificationRepository;
     private final StockMovementRepository stockMovementRepository;
     private final DefectListRepository defectListRepository;
@@ -549,8 +552,70 @@ public class SampleDataSeeder implements CommandLineRunner {
                 ac.setReviewedAt(now.minus(i * 3L, ChronoUnit.DAYS).plus(1, ChronoUnit.DAYS));
                 ac.setReviewComment("Утверждено автоматически в демо-режиме");
             }
-            actualCostRepository.save(ac);
+            ac = actualCostRepository.save(ac);
+            if (i < 5) {
+                seedActualCostReviewEvent(
+                        ac,
+                        "REVIEW",
+                        "APPROVED",
+                        "Actual cost approved",
+                        ac.getReviewComment(),
+                        null,
+                        ac.getStatus().name(),
+                        ac.getReviewedAt() != null ? ac.getReviewedAt() : ac.getCostDate()
+                );
+            } else {
+                seedActualCostReviewEvent(
+                        ac,
+                        "SLA",
+                        i == 5 ? "OVERDUE" : "DUE_SOON",
+                        i == 5 ? "Actual cost review overdue" : "Actual cost review due soon",
+                        ac.getNotes(),
+                        i == 5 ? NotificationSeverity.WARNING.name() : NotificationSeverity.INFO.name(),
+                        ac.getStatus().name(),
+                        ac.getCostDate()
+                );
+                if (i == 5) {
+                    seedActualCostHandoverEvent(ac);
+                }
+            }
         }
+    }
+
+    private void seedActualCostReviewEvent(ActualCost actualCost, String eventGroup, String eventCode,
+                                           String title, String description, String severity, String status,
+                                           Instant occurredAt) {
+        ActualCostReviewEvent event = new ActualCostReviewEvent();
+        event.setActualCostId(actualCost.getId());
+        event.setActorUserId(actualCost.getReviewedById());
+        event.setSource("SYSTEM");
+        event.setEventGroup(eventGroup);
+        event.setEventCode(eventCode);
+        event.setTitle(title);
+        event.setDescription(description);
+        event.setSeverity(severity);
+        event.setStatus(status);
+        event.setOccurredAt(occurredAt != null ? occurredAt : Instant.now());
+        actualCostReviewEventRepository.save(event);
+    }
+
+    private void seedActualCostHandoverEvent(ActualCost actualCost) {
+        ActualCostReviewEvent event = new ActualCostReviewEvent();
+        event.setActualCostId(actualCost.getId());
+        event.setSource("SYSTEM");
+        event.setEventGroup("ROUTE");
+        event.setEventCode("HANDOVER");
+        event.setTitle("Actual cost review handed over");
+        event.setDescription("Demo SLA handover to chief accountant");
+        event.setStatus(actualCost.getStatus().name());
+        event.setPreviousApprovalRoleCode("FINANCE_MANAGER");
+        event.setNextApprovalRoleCode("CHIEF_ACCOUNTANT");
+        event.setPreviousThresholdHours(24);
+        event.setNextThresholdHours(12);
+        event.setHandoverComment("Demo overdue financial review reassignment");
+        event.setAcknowledgementComment("Demo acknowledgement");
+        event.setOccurredAt(actualCost.getCostDate().plus(1, ChronoUnit.DAYS));
+        actualCostReviewEventRepository.save(event);
     }
 
     private void seedBudgetLine(MaintenanceBudget budget, UUID categoryId, String description,
@@ -604,12 +669,29 @@ public class SampleDataSeeder implements CommandLineRunner {
                 NotificationSeverity.WARNING, "PprTask");
         seedNotification(admin, "Низкий остаток запчастей", "SP-SEAL-AMM1: 8 шт (мин 10)",
                 NotificationSeverity.WARNING, "WarehouseStock");
-        seedNotification(admin, "ActualCost на согласовании", "3 записи фактических затрат ждут согласования",
-                NotificationSeverity.INFO, "ActualCost");
+        List<ActualCost> pendingActualCosts = actualCostRepository
+                .findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING).stream()
+                .limit(3)
+                .toList();
+        for (ActualCost actualCost : pendingActualCosts) {
+            seedNotification(
+                    admin,
+                    "ActualCost на согласовании",
+                    "Фактические затраты " + actualCost.getId() + " ждут финансового согласования",
+                    NotificationSeverity.WARNING,
+                    "ActualCost",
+                    actualCost.getId().toString()
+            );
+        }
     }
 
     private void seedNotification(UUID recipient, String title, String message,
                                   NotificationSeverity severity, String entityType) {
+        seedNotification(recipient, title, message, severity, entityType, null);
+    }
+
+    private void seedNotification(UUID recipient, String title, String message,
+                                  NotificationSeverity severity, String entityType, String entityId) {
         Notification n = new Notification();
         n.setRecipientId(recipient);
         n.setTitle(title);
@@ -618,6 +700,7 @@ public class SampleDataSeeder implements CommandLineRunner {
         n.setStatus(NotificationStatus.SENT);
         n.setSeverity(severity);
         n.setEntityType(entityType);
+        n.setEntityId(entityId);
         notificationRepository.save(n);
     }
 

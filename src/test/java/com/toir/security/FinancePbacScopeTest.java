@@ -1,16 +1,20 @@
 package com.toir.security;
 
 import com.toir.controller.BudgetSummaryController;
+import com.toir.dto.budget.ActualCostRegisterSummary;
+import com.toir.dto.financialreview.ActualCostReviewItem;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.ActualCostStatus;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.FinanceScopeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,9 +38,11 @@ class FinancePbacScopeTest {
     BudgetLineRepository lineRepository;
     ActualCostRepository actualCostRepository;
     CostCategoryRepository costCategoryRepository;
+    DepartmentRepository departmentRepository;
     UserRepository userRepository;
     EmployeeRepository employeeRepository;
     FinanceScopeService financeScopeService;
+    ActualCostReviewFacadeService actualCostReviewFacadeService;
     BudgetSummaryController controller;
 
     @BeforeEach
@@ -45,17 +51,21 @@ class FinancePbacScopeTest {
         lineRepository = mock(BudgetLineRepository.class);
         actualCostRepository = mock(ActualCostRepository.class);
         costCategoryRepository = mock(CostCategoryRepository.class);
+        departmentRepository = mock(DepartmentRepository.class);
         userRepository = mock(UserRepository.class);
         employeeRepository = mock(EmployeeRepository.class);
         financeScopeService = mock(FinanceScopeService.class);
+        actualCostReviewFacadeService = mock(ActualCostReviewFacadeService.class);
         controller = new BudgetSummaryController(
                 budgetRepository,
                 lineRepository,
                 actualCostRepository,
                 costCategoryRepository,
+                departmentRepository,
                 userRepository,
                 employeeRepository,
-                financeScopeService
+                financeScopeService,
+                actualCostReviewFacadeService
         );
     }
 
@@ -70,6 +80,7 @@ class FinancePbacScopeTest {
         when(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
                 .thenReturn(List.of(allowedLine, forbiddenLine));
         when(costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
         when(financeScopeService.filterBudgets(any())).thenReturn(List.of(allowedBudget));
         when(financeScopeService.filterBudgetLines(any())).thenReturn(List.of(allowedLine));
 
@@ -83,12 +94,11 @@ class FinancePbacScopeTest {
     @Test
     void actualCostRegisterUsesScopedActualCosts() {
         ActualCost allowed = actualCost(UUID.randomUUID());
-        ActualCost forbidden = actualCost(UUID.randomUUID());
-        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
-                .thenReturn(List.of(allowed, forbidden));
-        when(financeScopeService.filterActualCosts(any())).thenReturn(List.of(allowed));
+        ActualCostReviewItem item = reviewItem(allowed);
+        when(actualCostReviewFacadeService.actualCostRegister(null)).thenReturn(List.of(item));
+        when(actualCostReviewFacadeService.registerSummary(List.of(item))).thenReturn(registerSummary(List.of(item)));
 
-        var response = controller.actualCostRegister(0, 20);
+        var response = controller.actualCostRegister(0, 20, null, null, null, null, null, null, null);
 
         assertThat(response.getBody().content()).hasSize(1);
         assertThat(response.getBody().content().getFirst().id()).isEqualTo(allowed.getId());
@@ -136,5 +146,61 @@ class FinancePbacScopeTest {
         actualCost.setAmount(100);
         actualCost.setCostDate(Instant.parse("2026-05-01T00:00:00Z"));
         return actualCost;
+    }
+
+    private ActualCostReviewItem reviewItem(ActualCost actualCost) {
+        return new ActualCostReviewItem(
+                actualCost.getId(),
+                actualCost.getWorkOrderId(),
+                actualCost.getRepairRequestId(),
+                actualCost.getContractorWorkId(),
+                actualCost.getCostCategoryId(),
+                actualCost.getStatus().name(),
+                actualCost.getAmount(),
+                actualCost.getCostDate(),
+                actualCost.getNotes(),
+                actualCost.getReviewedAt(),
+                actualCost.getReviewedById(),
+                null,
+                null,
+                actualCost.getReviewComment(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                actualCost.getCostCategoryId() != null
+                        ? new ActualCostReviewItem.Ref(actualCost.getCostCategoryId(), "", "")
+                        : null,
+                0,
+                false,
+                "/financial-review/history/" + actualCost.getId(),
+                null,
+                "FINANCE_MANAGER",
+                null,
+                24,
+                "RULE",
+                null,
+                actualCost.getStatus() == ActualCostStatus.PENDING,
+                null,
+                "FINANCE_MANAGER",
+                "GENERAL",
+                "/budgets?actualCostId=" + actualCost.getId(),
+                "/financial-review?actualCostId=" + actualCost.getId(),
+                "/financial-review?actualCostId=" + actualCost.getId()
+        );
+    }
+
+    private ActualCostRegisterSummary registerSummary(List<ActualCostReviewItem> items) {
+        return new ActualCostRegisterSummary(
+                items.stream().mapToDouble(ActualCostReviewItem::amount).sum(),
+                items.stream().filter(item -> "APPROVED".equals(item.status())).mapToDouble(ActualCostReviewItem::amount).sum(),
+                items.stream().filter(item -> "PENDING".equals(item.status())).mapToDouble(ActualCostReviewItem::amount).sum(),
+                items.stream().filter(item -> "REJECTED".equals(item.status())).mapToDouble(ActualCostReviewItem::amount).sum(),
+                items.size(),
+                items.stream().filter(item -> "APPROVED".equals(item.status())).count(),
+                items.stream().filter(item -> "PENDING".equals(item.status())).count(),
+                items.stream().filter(item -> "REJECTED".equals(item.status())).count()
+        );
     }
 }

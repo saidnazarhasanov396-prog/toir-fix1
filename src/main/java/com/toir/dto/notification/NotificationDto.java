@@ -21,8 +21,27 @@ public record NotificationDto(
         String entityType,
         String entityId,
         Instant readAt,
-        Instant createdAt
+        Instant createdAt,
+        Instant acknowledgedAt,
+        UUID acknowledgedById,
+        String acknowledgementComment
 ) {
+    public NotificationDto(
+            UUID id,
+            @NotNull UUID recipientId,
+            @NotBlank String title,
+            @NotBlank String message,
+            NotificationChannel channel,
+            NotificationStatus status,
+            NotificationSeverity severity,
+            String entityType,
+            String entityId,
+            Instant readAt,
+            Instant createdAt
+    ) {
+        this(id, recipientId, title, message, channel, status, severity, entityType, entityId, readAt, createdAt, null, null, null);
+    }
+
     public NotificationDto(
             UUID id,
             @NotNull UUID recipientId,
@@ -35,7 +54,7 @@ public record NotificationDto(
             String entityId,
             Instant readAt
     ) {
-        this(id, recipientId, title, message, channel, status, severity, entityType, entityId, readAt, null);
+        this(id, recipientId, title, message, channel, status, severity, entityType, entityId, readAt, null, null, null, null);
     }
 
     public NotificationDto {
@@ -47,6 +66,6 @@ public record NotificationDto(
     public static NotificationDto from(Notification n) {
         return new NotificationDto(n.getId(), n.getRecipientId(), n.getTitle(), n.getMessage(),
                 n.getChannel(), n.getStatus(), n.getSeverity(), n.getEntityType(), n.getEntityId(), n.getReadAt(),
-                n.getCreatedAt());
+                n.getCreatedAt(), n.getAcknowledgedAt(), n.getAcknowledgedById(), n.getAcknowledgementComment());
     }
 }
