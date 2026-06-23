@@ -410,7 +410,7 @@ class OperationalIssueScannerServiceTest {
 
     private EquipmentRiskScore riskScore(UUID equipmentId, int risk) {
         return new EquipmentRiskScore(
-                equipmentId, "EQ-1", "Pump", "A",
+                equipmentId, "EQ-1", "Pump", "A", "Critical",
                 15, risk / 15, risk, 1,
                 2L, 3000.0, 12.0
         );

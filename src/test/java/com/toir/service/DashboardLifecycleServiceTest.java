@@ -278,7 +278,7 @@ class DashboardLifecycleServiceTest {
     private EquipmentRiskScore riskScore(UUID equipmentId, int score) {
         return new EquipmentRiskScore(
                 equipmentId, "EQ-001", "Test Equipment",
-                "A", 10, score / 10, score, 1, 2, 5000, 10
+                "A", "Critical", 10, score / 10, score, 1, 2, 5000, 10
         );
     }
 }

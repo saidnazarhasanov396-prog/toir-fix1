@@ -1,6 +1,8 @@
 package com.toir.service;
 
+import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.entity.RcmSnapshot;
+import com.toir.entity.equipment.CriticalityClass;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
@@ -48,6 +50,33 @@ class RcmServiceTest {
 
     @InjectMocks
     RcmService service;
+
+    @Test
+    void riskScoresIncludeCriticalityClassCodeAndName() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID criticalityClassId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setCriticalityClassId(criticalityClassId);
+
+        CriticalityClass criticalityClass = new CriticalityClass();
+        criticalityClass.setId(criticalityClassId);
+        criticalityClass.setCode("CRIT-HIGH");
+        criticalityClass.setName("High criticality");
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(criticalityClass));
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+
+        List<EquipmentRiskScore> scores = service.computeAll();
+
+        assertThat(scores).singleElement()
+                .satisfies(score -> {
+                    assertThat(score.criticalityClass()).isEqualTo("CRIT-HIGH");
+                    assertThat(score.criticalityClassName()).isEqualTo("High criticality");
+                });
+    }
 
     @Test
     void getHistoryUnknownEquipmentReturns404() {

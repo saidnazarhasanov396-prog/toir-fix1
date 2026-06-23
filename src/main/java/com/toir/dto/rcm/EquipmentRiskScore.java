@@ -12,6 +12,7 @@ public record EquipmentRiskScore(
         String equipmentCode,
         String equipmentName,
         String criticalityClass,
+        String criticalityClassName,
         /** Суммарный consequence 0..20 — из impact-полей CriticalityClass. */
         int consequence,
         /** Частота отказов на основании defect history + MTBF, 0..5. */
