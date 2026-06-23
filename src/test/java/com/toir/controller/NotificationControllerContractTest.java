@@ -20,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -248,6 +249,26 @@ class NotificationControllerContractTest {
         mockMvc.perform(post("/api/v1/notifications/{id}/read", notificationId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(NotificationStatus.READ.name()));
+    }
+
+    @Test
+    void financialReviewInboxBulkReadRouteExists() throws Exception {
+        authenticate(UUID.randomUUID(), "SYSTEM_ADMIN", List.of("*"));
+
+        mockMvc.perform(post("/api/v1/notifications/financial-review-inbox/bulk-read")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ids\":[]}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void financialReviewInboxAcknowledgeRouteExists() throws Exception {
+        authenticate(UUID.randomUUID(), "SYSTEM_ADMIN", List.of("*"));
+
+        mockMvc.perform(post("/api/v1/notifications/financial-review-inbox/{id}/acknowledge", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"Seen\"}"))
+                .andExpect(status().isOk());
     }
 
     private void authenticate(UUID userId, String primaryRoleCode, List<String> permissions) {

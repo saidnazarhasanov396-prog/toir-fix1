@@ -2,14 +2,18 @@ package com.toir.controller;
 
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.users.User;
+import com.toir.dto.budget.ActualCostRegisterSummary;
+import com.toir.dto.financialreview.ActualCostReviewItem;
 import com.toir.enums.ActualCostStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.FinanceScopeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,6 +52,9 @@ class BudgetSummaryControllerContractTest {
     CostCategoryRepository costCategoryRepository;
 
     @Mock
+    DepartmentRepository departmentRepository;
+
+    @Mock
     UserRepository userRepository;
 
     @Mock
@@ -55,6 +62,9 @@ class BudgetSummaryControllerContractTest {
 
     @Mock
     FinanceScopeService financeScopeService;
+
+    @Mock
+    ActualCostReviewFacadeService actualCostReviewFacadeService;
 
     private MockMvc mockMvc;
 
@@ -65,9 +75,11 @@ class BudgetSummaryControllerContractTest {
                         lineRepository,
                         actualCostRepository,
                         costCategoryRepository,
+                        departmentRepository,
                         userRepository,
                         employeeRepository,
-                        financeScopeService))
+                        financeScopeService,
+                        actualCostReviewFacadeService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -86,10 +98,9 @@ class BudgetSummaryControllerContractTest {
         ReflectionTestUtils.setField(reviewer, "id", reviewerId);
         reviewer.setFullName("Finance Reviewer");
 
-        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(actualCost));
-        when(financeScopeService.filterActualCosts(List.of(actualCost))).thenReturn(List.of(actualCost));
-        when(userRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(reviewer));
-        when(employeeRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+        ActualCostReviewItem item = reviewItem(actualCost, "Finance Reviewer");
+        when(actualCostReviewFacadeService.actualCostRegister(null)).thenReturn(List.of(item));
+        when(actualCostReviewFacadeService.registerSummary(List.of(item))).thenReturn(registerSummary(List.of(item)));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/register"))
                 .andExpect(status().isOk())
@@ -106,8 +117,9 @@ class BudgetSummaryControllerContractTest {
         UUID actualCostId = UUID.randomUUID();
         ActualCost actualCost = actualCost(actualCostId);
 
-        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(actualCost));
-        when(financeScopeService.filterActualCosts(List.of(actualCost))).thenReturn(List.of(actualCost));
+        ActualCostReviewItem item = reviewItem(actualCost, null);
+        when(actualCostReviewFacadeService.actualCostRegister(null)).thenReturn(List.of(item));
+        when(actualCostReviewFacadeService.registerSummary(List.of(item))).thenReturn(registerSummary(List.of(item)));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/register"))
                 .andExpect(status().isOk())
@@ -120,8 +132,9 @@ class BudgetSummaryControllerContractTest {
 
     @Test
     void reviewActivityWithoutUuidShouldReturnStableEmptyResponse() throws Exception {
-        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null)).thenReturn(List.of());
-        when(financeScopeService.filterActualCosts(List.of())).thenReturn(List.of());
+        when(actualCostReviewFacadeService.activity(null)).thenReturn(List.of());
+        when(actualCostReviewFacadeService.activitySummary(List.of()))
+                .thenReturn(new com.toir.dto.budget.ActualCostReviewActivitySummary(0, 0, 0, 0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/review-activity"))
                 .andExpect(status().isOk())
@@ -129,12 +142,14 @@ class BudgetSummaryControllerContractTest {
                 .andExpect(jsonPath("$.content").isEmpty())
                 .andExpect(jsonPath("$.summary.total").value(0))
                 .andExpect(jsonPath("$.summary.affectedActualCosts").value(0));
-
-        verify(actualCostRepository).findAllByFiltersOrderByUpdatedAtDesc(null, null);
     }
 
     @Test
     void handoversWithoutUuidShouldReturnStableEmptyResponse() throws Exception {
+        when(actualCostReviewFacadeService.handovers(null)).thenReturn(List.of());
+        when(actualCostReviewFacadeService.handoverSummary(List.of()))
+                .thenReturn(new com.toir.dto.budget.ActualCostHandoverSummary(0, 0, 0, 0, 0, List.of(), List.of()));
+
         mockMvc.perform(get("/api/v1/budgets/actual-costs/handovers"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
@@ -153,5 +168,61 @@ class BudgetSummaryControllerContractTest {
         actualCost.setCostDate(Instant.parse("2026-05-26T09:00:00Z"));
         actualCost.setNotes("Existing notes");
         return actualCost;
+    }
+
+    private ActualCostReviewItem reviewItem(ActualCost actualCost, String reviewedByName) {
+        return new ActualCostReviewItem(
+                actualCost.getId(),
+                actualCost.getWorkOrderId(),
+                actualCost.getRepairRequestId(),
+                actualCost.getContractorWorkId(),
+                actualCost.getCostCategoryId(),
+                actualCost.getStatus().name(),
+                actualCost.getAmount(),
+                actualCost.getCostDate(),
+                actualCost.getNotes(),
+                actualCost.getReviewedAt(),
+                actualCost.getReviewedById(),
+                reviewedByName,
+                actualCost.getReviewedById() != null
+                        ? new ActualCostReviewItem.UserRef(actualCost.getReviewedById(), reviewedByName)
+                        : null,
+                actualCost.getReviewComment(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                new ActualCostReviewItem.Ref(actualCost.getCostCategoryId(), "", ""),
+                0,
+                false,
+                "/financial-review/history/" + actualCost.getId(),
+                null,
+                "FINANCE_MANAGER",
+                null,
+                24,
+                "RULE",
+                null,
+                actualCost.getStatus() == ActualCostStatus.PENDING,
+                null,
+                "FINANCE_MANAGER",
+                "GENERAL",
+                "/budgets?actualCostId=" + actualCost.getId(),
+                "/financial-review?actualCostId=" + actualCost.getId(),
+                "/financial-review?actualCostId=" + actualCost.getId()
+        );
+    }
+
+    private ActualCostRegisterSummary registerSummary(List<ActualCostReviewItem> items) {
+        return new ActualCostRegisterSummary(
+                items.stream().mapToDouble(ActualCostReviewItem::amount).sum(),
+                items.stream().filter(item -> "APPROVED".equals(item.status())).mapToDouble(ActualCostReviewItem::amount).sum(),
+                items.stream().filter(item -> "PENDING".equals(item.status())).mapToDouble(ActualCostReviewItem::amount).sum(),
+                items.stream().filter(item -> "REJECTED".equals(item.status())).mapToDouble(ActualCostReviewItem::amount).sum(),
+                items.size(),
+                items.stream().filter(item -> "APPROVED".equals(item.status())).count(),
+                items.stream().filter(item -> "PENDING".equals(item.status())).count(),
+                items.stream().filter(item -> "REJECTED".equals(item.status())).count()
+        );
     }
 }

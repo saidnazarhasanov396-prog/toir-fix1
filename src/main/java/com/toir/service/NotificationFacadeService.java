@@ -1,6 +1,10 @@
 package com.toir.service;
 
 import com.toir.dto.common.PageResponseWithSummary;
+import com.toir.dto.notification.BulkFinancialReviewInboxAcknowledgementResponse;
+import com.toir.dto.notification.BulkNotificationReadResponse;
+import com.toir.dto.notification.FinancialReviewInboxAcknowledgementResponse;
+import com.toir.dto.notification.FinancialReviewInboxItem;
 import com.toir.dto.notification.FinancialReviewInboxSummary;
 import com.toir.dto.notification.NotificationDispatchResponse;
 import com.toir.dto.notification.NotificationDto;
@@ -9,6 +13,7 @@ import com.toir.dto.notification.NotificationSummaryDto;
 import com.toir.dto.sla.SlaRuleDto;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.NotificationStatus;
+import com.toir.util.CsvWriter;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -61,10 +66,10 @@ public class NotificationFacadeService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponseWithSummary<NotificationDto, FinancialReviewInboxSummary> financialReviewInbox(
+    public PageResponseWithSummary<FinancialReviewInboxItem, FinancialReviewInboxSummary> financialReviewInbox(
             UUID recipientId, int page, int size, String search
     ) {
-        List<NotificationDto> items = recipientId != null
+        List<NotificationDto> notifications = recipientId != null
                 ? notificationService.findForUser(recipientId).stream()
                 .filter(n -> n.entityType() != null && n.entityType().toUpperCase().contains("COST"))
                 .filter(n -> search == null || search.isBlank()
@@ -74,9 +79,12 @@ public class NotificationFacadeService {
                 .toList()
                 : List.of();
 
-        long read = items.stream().filter(n -> n.status() == NotificationStatus.READ).count();
-        long dueSoon = items.stream().filter(n -> n.severity() == NotificationSeverity.WARNING).count();
-        long overdue = items.stream().filter(n -> n.severity() == NotificationSeverity.CRITICAL).count();
+        List<FinancialReviewInboxItem> items = notifications.stream().map(this::toFinancialReviewInboxItem).toList();
+
+        long read = notifications.stream().filter(n -> n.status() == NotificationStatus.READ).count();
+        long dueSoon = notifications.stream().filter(n -> n.severity() == NotificationSeverity.WARNING).count();
+        long overdue = notifications.stream().filter(n -> n.severity() == NotificationSeverity.CRITICAL).count();
+        long acknowledged = notifications.stream().filter(n -> n.acknowledgedAt() != null).count();
 
         return PageResponseWithSummary.of(
                 items,
@@ -87,10 +95,57 @@ public class NotificationFacadeService {
                         items.size() - read,
                         dueSoon,
                         overdue,
-                        read,
-                        items.size() - read
+                        acknowledged,
+                        items.size() - acknowledged
                 )
         );
+    }
+
+    @Transactional(readOnly = true)
+    public String financialReviewInboxCsv(UUID recipientId, String search) {
+        List<FinancialReviewInboxItem> items = financialReviewInbox(recipientId, 0, Integer.MAX_VALUE, search).content();
+        return CsvWriter.build(
+                List.of("id", "title", "severity", "status", "entityType", "entityId", "acknowledgedAt"),
+                items,
+                List.of(
+                        FinancialReviewInboxItem::id,
+                        FinancialReviewInboxItem::title,
+                        FinancialReviewInboxItem::severity,
+                        FinancialReviewInboxItem::status,
+                        FinancialReviewInboxItem::entityType,
+                        FinancialReviewInboxItem::entityId,
+                        FinancialReviewInboxItem::acknowledgedAt
+                )
+        );
+    }
+
+    @Transactional
+    public BulkNotificationReadResponse bulkMarkFinancialReviewInboxRead(
+            List<UUID> ids,
+            UUID currentUserId,
+            boolean scopeAdmin
+    ) {
+        return notificationService.bulkMarkRead(ids, currentUserId, scopeAdmin);
+    }
+
+    @Transactional
+    public FinancialReviewInboxAcknowledgementResponse acknowledgeFinancialReviewInbox(
+            UUID id,
+            UUID currentUserId,
+            boolean scopeAdmin,
+            String comment
+    ) {
+        return notificationService.acknowledge(id, currentUserId, scopeAdmin, comment);
+    }
+
+    @Transactional
+    public BulkFinancialReviewInboxAcknowledgementResponse bulkAcknowledgeFinancialReviewInbox(
+            List<UUID> ids,
+            UUID currentUserId,
+            boolean scopeAdmin,
+            String comment
+    ) {
+        return notificationService.bulkAcknowledge(ids, currentUserId, scopeAdmin, comment);
     }
 
     @Transactional(readOnly = true)
@@ -115,5 +170,42 @@ public class NotificationFacadeService {
 
     private boolean containsIgnoreCase(String value, String search) {
         return value != null && value.toLowerCase().contains(search.toLowerCase());
+    }
+
+    private FinancialReviewInboxItem toFinancialReviewInboxItem(NotificationDto notification) {
+        String kind = notification.severity() == NotificationSeverity.CRITICAL ? "OVERDUE" : "DUE_SOON";
+        return new FinancialReviewInboxItem(
+                notification.id(),
+                notification.recipientId(),
+                notification.title(),
+                notification.message(),
+                notification.channel(),
+                notification.status(),
+                notification.severity(),
+                notification.entityType(),
+                notification.entityId(),
+                notification.readAt(),
+                notification.createdAt(),
+                kind,
+                null,
+                null,
+                null,
+                null,
+                null,
+                actionPath(notification),
+                notification.acknowledgedAt() != null,
+                notification.acknowledgedAt(),
+                notification.acknowledgedById() != null
+                        ? new FinancialReviewInboxItem.UserRef(notification.acknowledgedById(), "", "")
+                        : null,
+                notification.acknowledgementComment()
+        );
+    }
+
+    private String actionPath(NotificationDto notification) {
+        if (notification.entityId() == null || notification.entityId().isBlank()) {
+            return "/financial-review";
+        }
+        return "/financial-review?actualCostId=" + notification.entityId();
     }
 }

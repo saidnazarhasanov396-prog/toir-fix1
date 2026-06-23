@@ -101,6 +101,31 @@ public class ActualCostReviewRouteOverrideService {
         return ActualCostReviewRouteOverrideDto.from(o);
     }
 
+    @Transactional
+    public List<UUID> deactivateActiveForActualCost(UUID actualCostId, UUID userId, String comment) {
+        if (comment == null || comment.isBlank()) {
+            throw RestException.badRequest("Deactivation comment is required");
+        }
+        ActualCost actualCost = actualCostRepository.findByIdAndIsDeletedFalse(actualCostId)
+                .orElseThrow(() -> RestException.notFound("Actual cost not found"));
+        financeScopeService.assertCanReadActualCost(actualCost);
+        return repository.findAllByActualCostIdAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId).stream()
+                .filter(ActualCostReviewRouteOverride::isActive)
+                .peek(override -> {
+                    financeScopeService.assertCanAccessRouteOverride(override);
+                    override.setActive(false);
+                    override.setDeactivatedAt(Instant.now());
+                    override.setDeactivatedById(userId);
+                    override.setDeactivationComment(comment);
+                })
+                .map(ActualCostReviewRouteOverride::getId)
+                .toList();
+    }
+
+    public ActualCostReviewRouteOverrideResponseDto toResponse(ActualCostReviewRouteOverride override, ActualCost actualCost) {
+        return responseMapper.toResponse(override, actualCost);
+    }
+
     private ActualCostReviewRouteOverrideResponseDto toListResponse(ActualCostReviewRouteOverride override) {
         ActualCost actualCost = actualCostRepository
                 .findByIdAndIsDeletedFalse(override.getActualCostId())

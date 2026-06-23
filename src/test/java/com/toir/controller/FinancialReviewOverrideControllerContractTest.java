@@ -48,6 +48,19 @@ class FinancialReviewOverrideControllerContractTest {
     }
 
     @Test
+    void overridesRegistryReturnsSummaryForFrontendMetrics() throws Exception {
+        when(service.findActive()).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/budgets/actual-costs/review-route-overrides")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.total").value(0))
+                .andExpect(jsonPath("$.summary.active").value(0))
+                .andExpect(jsonPath("$.summary.uniqueActualCosts").value(0));
+    }
+
+    @Test
     void overridesWithPartialNestedDataReturns200StableContract() throws Exception {
         UUID overrideId = UUID.randomUUID();
         UUID actualCostId = UUID.randomUUID();

@@ -10,6 +10,9 @@ import com.toir.enums.UserStatus;
 import com.toir.repository.NotificationRepository;
 
 import com.toir.exception.RestException;
+import com.toir.dto.notification.BulkFinancialReviewInboxAcknowledgementResponse;
+import com.toir.dto.notification.BulkNotificationReadResponse;
+import com.toir.dto.notification.FinancialReviewInboxAcknowledgementResponse;
 import com.toir.dto.notification.NotificationDto;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
@@ -25,6 +28,7 @@ import org.springframework.util.StringUtils;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -59,6 +63,11 @@ public class NotificationService {
         return repository.countByRecipientIdAndStatusAndIsDeletedFalse(recipientId, NotificationStatus.SENT);
     }
 
+    @Transactional(readOnly = true)
+    public NotificationDto findById(UUID id, UUID currentUserId, boolean scopeAdmin) {
+        return NotificationDto.from(findScoped(id, currentUserId, scopeAdmin));
+    }
+
     @Transactional
     public NotificationDto send(NotificationDto r) {
         Notification n = new Notification();
@@ -82,14 +91,80 @@ public class NotificationService {
 
     @Transactional
     public NotificationDto markRead(UUID id, UUID currentUserId, boolean scopeAdmin) {
-        Notification n = repository.findByIdAndIsDeletedFalse(id)
-                .orElseThrow(() -> RestException.notFound("Notification not found: " + id));
-        if (!scopeAdmin && (currentUserId == null || !currentUserId.equals(n.getRecipientId()))) {
-            throw new AccessDeniedException("Access denied by notification recipient scope");
-        }
+        Notification n = findScoped(id, currentUserId, scopeAdmin);
         n.setStatus(NotificationStatus.READ);
         n.setReadAt(Instant.now());
         return NotificationDto.from(n);
+    }
+
+    @Transactional
+    public BulkNotificationReadResponse bulkMarkRead(List<UUID> ids, UUID currentUserId, boolean scopeAdmin) {
+        List<UUID> safeIds = ids != null ? ids : List.of();
+        List<UUID> updatedIds = new ArrayList<>();
+        List<BulkNotificationReadResponse.Failure> failures = new ArrayList<>();
+        for (UUID id : safeIds) {
+            try {
+                markRead(id, currentUserId, scopeAdmin);
+                updatedIds.add(id);
+            } catch (RuntimeException ex) {
+                failures.add(new BulkNotificationReadResponse.Failure(id, ex.getMessage()));
+            }
+        }
+        return new BulkNotificationReadResponse(safeIds.size(), updatedIds.size(), failures.size(), updatedIds, failures);
+    }
+
+    @Transactional
+    public FinancialReviewInboxAcknowledgementResponse acknowledge(
+            UUID id,
+            UUID currentUserId,
+            boolean scopeAdmin,
+            String comment
+    ) {
+        Notification n = findScoped(id, currentUserId, scopeAdmin);
+        boolean markedRead = n.getStatus() != NotificationStatus.READ;
+        n.setStatus(NotificationStatus.READ);
+        if (n.getReadAt() == null) {
+            n.setReadAt(Instant.now());
+        }
+        n.setAcknowledgedAt(Instant.now());
+        n.setAcknowledgedById(currentUserId);
+        n.setAcknowledgementComment(comment == null ? "" : comment.trim());
+        return new FinancialReviewInboxAcknowledgementResponse(
+                n.getId(),
+                n.getAcknowledgedAt(),
+                n.getAcknowledgementComment(),
+                markedRead
+        );
+    }
+
+    @Transactional
+    public BulkFinancialReviewInboxAcknowledgementResponse bulkAcknowledge(
+            List<UUID> ids,
+            UUID currentUserId,
+            boolean scopeAdmin,
+            String comment
+    ) {
+        List<UUID> safeIds = ids != null ? ids : List.of();
+        List<BulkFinancialReviewInboxAcknowledgementResponse.Acknowledgement> acknowledgements = new ArrayList<>();
+        List<BulkFinancialReviewInboxAcknowledgementResponse.Failure> failures = new ArrayList<>();
+        for (UUID id : safeIds) {
+            try {
+                FinancialReviewInboxAcknowledgementResponse response = acknowledge(id, currentUserId, scopeAdmin, comment);
+                acknowledgements.add(new BulkFinancialReviewInboxAcknowledgementResponse.Acknowledgement(
+                        response.id(),
+                        response.markedRead()
+                ));
+            } catch (RuntimeException ex) {
+                failures.add(new BulkFinancialReviewInboxAcknowledgementResponse.Failure(id, ex.getMessage()));
+            }
+        }
+        return new BulkFinancialReviewInboxAcknowledgementResponse(
+                safeIds.size(),
+                acknowledgements.size(),
+                failures.size(),
+                acknowledgements,
+                failures
+        );
     }
 
     @Transactional
@@ -163,6 +238,15 @@ public class NotificationService {
                 .map(userId -> notifyUser(userId, title, message, severity, entityType, entityId))
                 .flatMap(Optional::stream)
                 .toList();
+    }
+
+    private Notification findScoped(UUID id, UUID currentUserId, boolean scopeAdmin) {
+        Notification n = repository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Notification not found: " + id));
+        if (!scopeAdmin && (currentUserId == null || !currentUserId.equals(n.getRecipientId()))) {
+            throw new AccessDeniedException("Access denied by notification recipient scope");
+        }
+        return n;
     }
 
     private boolean isDuplicateOpen(UUID recipientId, String title, String entityType, String entityId) {
