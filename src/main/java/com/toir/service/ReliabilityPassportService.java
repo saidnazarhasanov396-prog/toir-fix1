@@ -9,10 +9,6 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.DefectStatus;
-import com.toir.enums.DowntimeType;
-import com.toir.enums.RequestStatus;
-import com.toir.enums.WorkOrderStatus;
-import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -26,17 +22,12 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -44,7 +35,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ReliabilityPassportService {
 
-    private static final Duration ANALYSIS_PERIOD = Duration.ofDays(365);
     private static final EnumSet<DefectStatus> OPEN_DEFECT_STATUSES =
             EnumSet.of(DefectStatus.OPEN, DefectStatus.IN_ANALYSIS, DefectStatus.IN_PROGRESS);
 
@@ -209,24 +199,8 @@ public class ReliabilityPassportService {
                 .filter(d -> OPEN_DEFECT_STATUSES.contains(d.getStatus()))
                 .count();
 
-        Instant periodStart = analysisPeriodStart(equipment, now);
-        List<DowntimeSlice> failureDowntimes =
-                reliabilityDowntimes(downtimes, workOrders, repairRequests, periodStart, now);
-        long totalDowntimeMinutes = mergedDowntimeMinutes(failureDowntimes);
-        long mttrDenominator = failureDowntimes.stream().filter(DowntimeSlice::completed).count();
-        long mttrSumMinutes = failureDowntimes.stream()
-                .filter(DowntimeSlice::completed)
-                .mapToLong(DowntimeSlice::durationMinutes)
-                .sum();
-
-        Double mttrHours = mttrDenominator > 0 ? (mttrSumMinutes / 60.0) / mttrDenominator : null;
-        double observedHours = Duration.between(periodStart, now).toMinutes() / 60.0;
-        double uptimeHours = Math.max(observedHours - totalDowntimeMinutes / 60.0, 0.0);
-        Double mtbfHours = failureDowntimes.isEmpty()
-                ? null
-                : uptimeHours / failureDowntimes.size();
-
-        double availabilityPct = availabilityPct(observedHours, totalDowntimeMinutes);
+        ReliabilityDowntimeCalculator.EquipmentReliability reliability =
+                ReliabilityDowntimeCalculator.calculate(equipment, downtimes, workOrders, repairRequests, now);
 
         Map<String, Integer> causes = new HashMap<>();
         for (Defect d : activeDefects) {
@@ -249,11 +223,11 @@ public class ReliabilityPassportService {
                 equipment.getName(),
                 activeDefects.size(),
                 openDefects,
-                failureDowntimes.size(),
-                totalDowntimeMinutes,
-                mtbfHours,
-                mttrHours,
-                availabilityPct,
+                reliability.failureEvents(),
+                reliability.totalDowntimeMinutes(),
+                reliability.mtbfHours(),
+                reliability.mttrHours(),
+                reliability.availabilityPct(),
                 topCauses,
                 now
         );
@@ -264,34 +238,8 @@ public class ReliabilityPassportService {
                                    List<WorkOrder> workOrders,
                                    List<RepairRequest> repairRequests,
                                    Instant now) {
-        Instant periodStart = analysisPeriodStart(equipment, now);
-        double observedHours = Duration.between(periodStart, now).toMinutes() / 60.0;
-        long downtimeMinutes = mergedDowntimeMinutes(
-                reliabilityDowntimes(downtimes, workOrders, repairRequests, periodStart, now));
-        return availabilityPct(observedHours, downtimeMinutes);
-    }
-
-    private double availabilityPct(double observedHours, long downtimeMinutes) {
-        if (observedHours <= 0) {
-            return 100.0;
-        }
-        double uptimeHours = Math.max(observedHours - downtimeMinutes / 60.0, 0.0);
-        return uptimeHours / observedHours * 100.0;
-    }
-
-    private Instant analysisPeriodStart(Equipment equipment, Instant now) {
-        Instant horizon = now.minus(ANALYSIS_PERIOD);
-        LocalDate serviceStart = equipment.getOperationStartDate() != null
-                ? equipment.getOperationStartDate()
-                : equipment.getCommissionedAt();
-        if (serviceStart == null) {
-            return horizon;
-        }
-        Instant serviceStartInstant = serviceStart.atStartOfDay(ZoneOffset.UTC).toInstant();
-        if (serviceStartInstant.isAfter(now)) {
-            return now;
-        }
-        return serviceStartInstant.isAfter(horizon) ? serviceStartInstant : horizon;
+        return ReliabilityDowntimeCalculator.calculate(equipment, downtimes, workOrders, repairRequests, now)
+                .availabilityPct();
     }
 
     private AvailabilityBand bandOf(double availabilityPct) {
@@ -317,155 +265,4 @@ public class ReliabilityPassportService {
         HIGH, MEDIUM, LOW
     }
 
-    private boolean isFailureDowntime(DowntimeEvent event) {
-        return event.getType() == DowntimeType.UNPLANNED || event.getType() == DowntimeType.EMERGENCY;
-    }
-
-    private List<DowntimeSlice> reliabilityDowntimes(List<DowntimeEvent> downtimes,
-                                                     List<WorkOrder> workOrders,
-                                                     List<RepairRequest> repairRequests,
-                                                     Instant periodStart,
-                                                     Instant periodEnd) {
-        List<DowntimeSlice> result = new java.util.ArrayList<>();
-        Set<UUID> representedWorkOrderIds = new HashSet<>();
-        Map<UUID, WorkOrder> workOrdersById = workOrders.stream()
-                .filter(workOrder -> workOrder.getId() != null)
-                .collect(Collectors.toMap(WorkOrder::getId, workOrder -> workOrder, (first, second) -> first));
-
-        downtimes.stream()
-                .filter(this::isFailureDowntime)
-                .forEach(event -> {
-                    DowntimeSlice slice = sliceToPeriod(event, periodStart, periodEnd);
-                    if (slice.durationMinutes() > 0) {
-                        result.add(slice);
-                        if (event.getWorkOrderId() != null) {
-                            representedWorkOrderIds.add(event.getWorkOrderId());
-                        }
-                    }
-                });
-
-        Set<UUID> representedRepairRequestIds = new HashSet<>();
-        representedWorkOrderIds.stream()
-                .map(workOrdersById::get)
-                .filter(java.util.Objects::nonNull)
-                .map(WorkOrder::getRepairRequestId)
-                .filter(java.util.Objects::nonNull)
-                .forEach(representedRepairRequestIds::add);
-        workOrders.stream()
-                .filter(this::isRepairWorkOrder)
-                .filter(workOrder -> workOrder.getId() == null || !representedWorkOrderIds.contains(workOrder.getId()))
-                .forEach(workOrder -> {
-                    DowntimeSlice slice = sliceToPeriod(
-                            workOrder.getStartedAt(),
-                            workOrder.getCompletedAt(),
-                            workOrder.getStatus() == WorkOrderStatus.COMPLETED
-                                    || workOrder.getStatus() == WorkOrderStatus.CLOSED,
-                            periodStart,
-                            periodEnd);
-                    if (slice.durationMinutes() > 0) {
-                        result.add(slice);
-                        if (workOrder.getRepairRequestId() != null) {
-                            representedRepairRequestIds.add(workOrder.getRepairRequestId());
-                        }
-                    }
-                });
-
-        repairRequests.stream()
-                .filter(this::isReliabilityRepairRequest)
-                .filter(request -> request.getId() == null || !representedRepairRequestIds.contains(request.getId()))
-                .map(request -> sliceToPeriod(
-                        request.getDetectedAt(),
-                        request.getActualCompletionAt(),
-                        request.getStatus() == RequestStatus.COMPLETED || request.getStatus() == RequestStatus.CLOSED,
-                        periodStart,
-                        periodEnd))
-                .filter(slice -> slice.durationMinutes() > 0)
-                .forEach(result::add);
-
-        return result;
-    }
-
-    private boolean isRepairWorkOrder(WorkOrder workOrder) {
-        return workOrder.getWorkType() == WorkType.REPAIR
-                && workOrder.getStartedAt() != null
-                && workOrder.getStatus() != WorkOrderStatus.CANCELLED;
-    }
-
-    private boolean isReliabilityRepairRequest(RepairRequest request) {
-        return request.getDetectedAt() != null
-                && request.getStatus() != RequestStatus.DRAFT
-                && request.getStatus() != RequestStatus.REJECTED
-                && request.getStatus() != RequestStatus.CANCELLED;
-    }
-
-    private long mergedDowntimeMinutes(List<DowntimeSlice> slices) {
-        List<DowntimeSlice> sorted = slices.stream()
-                .sorted(Comparator.comparing(DowntimeSlice::start))
-                .toList();
-        if (sorted.isEmpty()) {
-            return 0L;
-        }
-        long total = 0L;
-        Instant currentStart = sorted.getFirst().start();
-        Instant currentEnd = sorted.getFirst().end();
-        for (int i = 1; i < sorted.size(); i++) {
-            DowntimeSlice next = sorted.get(i);
-            if (!next.start().isAfter(currentEnd)) {
-                if (next.end().isAfter(currentEnd)) {
-                    currentEnd = next.end();
-                }
-            } else {
-                total += Duration.between(currentStart, currentEnd).toMinutes();
-                currentStart = next.start();
-                currentEnd = next.end();
-            }
-        }
-        return total + Duration.between(currentStart, currentEnd).toMinutes();
-    }
-
-    private DowntimeSlice sliceToPeriod(DowntimeEvent event, Instant periodStart, Instant periodEnd) {
-        if (event.getStartAt() == null) {
-            return DowntimeSlice.empty();
-        }
-
-        Instant eventEnd;
-        boolean completed;
-        if (event.getEndAt() != null) {
-            eventEnd = event.getEndAt();
-            completed = true;
-        } else if (event.getDurationMinutes() != null) {
-            eventEnd = event.getStartAt().plus(Duration.ofMinutes(Math.max(event.getDurationMinutes(), 0)));
-            completed = true;
-        } else {
-            eventEnd = periodEnd;
-            completed = false;
-        }
-
-        return sliceToPeriod(event.getStartAt(), eventEnd, completed, periodStart, periodEnd);
-    }
-
-    private DowntimeSlice sliceToPeriod(Instant start,
-                                        Instant end,
-                                        boolean completed,
-                                        Instant periodStart,
-                                        Instant periodEnd) {
-        if (start == null) {
-            return DowntimeSlice.empty();
-        }
-        Instant effectiveEnd = end != null ? end : periodEnd;
-        Instant overlapStart = start.isAfter(periodStart) ? start : periodStart;
-        Instant overlapEnd = effectiveEnd.isBefore(periodEnd) ? effectiveEnd : periodEnd;
-        if (!overlapEnd.isAfter(overlapStart)) {
-            return DowntimeSlice.empty();
-        }
-        return new DowntimeSlice(overlapStart, overlapEnd,
-                Duration.between(overlapStart, overlapEnd).toMinutes(), completed);
-    }
-
-    private record DowntimeSlice(Instant start, Instant end, long durationMinutes, boolean completed) {
-        private static DowntimeSlice empty() {
-            Instant epoch = Instant.EPOCH;
-            return new DowntimeSlice(epoch, epoch, 0, false);
-        }
-    }
 }

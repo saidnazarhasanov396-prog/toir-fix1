@@ -279,6 +279,7 @@ class ReliabilityPassportServiceTest {
                 .operationStartDate(operationStartDate)
                 .build();
         equipment.setId(id);
+        equipment.setCreatedAt(Instant.now().minus(Duration.ofDays(365)));
         return equipment;
     }
 

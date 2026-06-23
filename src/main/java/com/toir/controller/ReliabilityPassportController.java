@@ -61,7 +61,7 @@ public class ReliabilityPassportController {
 
     @GetMapping("/reliability-passport")
     @Operation(summary = "List calculated reliability passports",
-            description = "Metrics use the previous 365 days, or the period since operation/commissioning start when newer. "
+            description = "Metrics use the period from operation start, commissioning, or equipment creation until now. "
                     + "UNPLANNED/EMERGENCY downtime is preferred; actual repair work-order or repair-request intervals "
                     + "are used as fallbacks and overlapping intervals are counted once.")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
