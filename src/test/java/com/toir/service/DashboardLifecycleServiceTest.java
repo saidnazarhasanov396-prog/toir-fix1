@@ -48,16 +48,32 @@ class DashboardLifecycleServiceTest {
     }
 
     @Test
-    void inRepairStatus_returnsInRepair() {
+    void inRepairStatusWithLowRisk_returnsInRepair() {
         UUID id = UUID.randomUUID();
         Equipment eq = equipment(id, EquipmentStatus.IN_REPAIR);
 
-        mockData(List.of(eq), List.of(riskScore(id, 80)));
+        mockData(List.of(eq), List.of(riskScore(id, 0)));
 
         EquipmentLifecycleSummaryResponse result = service.getLifecycleSummary();
 
         assertThat(result.inRepairCount()).isEqualTo(1);
         assertThat(result.highRiskCount()).isEqualTo(0);
+    }
+
+    @Test
+    void inRepairStatusWithHighRisk_returnsHighRisk() {
+        UUID id = UUID.randomUUID();
+        Equipment eq = equipment(id, EquipmentStatus.IN_REPAIR);
+
+        mockData(List.of(eq), List.of(riskScore(id, 100)));
+
+        EquipmentLifecycleSummaryResponse result = service.getLifecycleSummary();
+
+        assertThat(result.highRiskCount()).isEqualTo(1);
+        assertThat(result.inRepairCount()).isEqualTo(0);
+        assertThat(result.highRiskEquipments()).hasSize(1);
+        assertThat(result.highRiskEquipments().get(0).stage())
+                .isEqualTo(EquipmentLifecycleStage.HIGH_RISK);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -226,7 +242,7 @@ class DashboardLifecycleServiceTest {
     }
 
     @Test
-    void highRiskEquipments_inRepairNotIncluded() {
+    void highRiskEquipments_inRepairWithHighRiskIncluded() {
         UUID id = UUID.randomUUID();
         mockData(
                 List.of(equipment(id, EquipmentStatus.IN_REPAIR)),
@@ -235,8 +251,9 @@ class DashboardLifecycleServiceTest {
 
         EquipmentLifecycleSummaryResponse result = service.getLifecycleSummary();
 
-        assertThat(result.highRiskEquipments()).isEmpty();
-        assertThat(result.inRepairCount()).isEqualTo(1);
+        assertThat(result.highRiskEquipments()).hasSize(1);
+        assertThat(result.highRiskEquipments().get(0).equipmentId()).isEqualTo(id);
+        assertThat(result.inRepairCount()).isEqualTo(0);
     }
 
     // ═══════════════════════════════════════════════════════
