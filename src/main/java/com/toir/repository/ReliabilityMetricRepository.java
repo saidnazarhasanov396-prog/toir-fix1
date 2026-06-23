@@ -28,6 +28,6 @@ public interface ReliabilityMetricRepository extends JpaRepository<ReliabilityMe
     @Query(value = "SELECT COUNT(*) FROM reliability_metrics WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
-    @Query(value = "SELECT * FROM reliability_metrics WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM reliability_metrics WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY metric_date DESC, updated_at DESC", nativeQuery = true)
     List<ReliabilityMetric> findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(@Param("equipmentId") UUID equipmentId);
 }
