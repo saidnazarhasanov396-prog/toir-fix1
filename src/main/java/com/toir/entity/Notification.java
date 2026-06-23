@@ -47,4 +47,13 @@ public class Notification extends BaseEntity {
 
     @Column(name = "read_at")
     private Instant readAt;
+
+    @Column(name = "acknowledged_at")
+    private Instant acknowledgedAt;
+
+    @Column(name = "acknowledged_by_id")
+    private UUID acknowledgedById;
+
+    @Column(name = "acknowledgement_comment", columnDefinition = "text")
+    private String acknowledgementComment;
 }

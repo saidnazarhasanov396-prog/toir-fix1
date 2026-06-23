@@ -1,5 +1,10 @@
 package com.toir.controller;
 import com.toir.dto.common.PageResponseWithSummary;
+import com.toir.dto.notification.BulkFinancialReviewInboxAcknowledgementResponse;
+import com.toir.dto.notification.BulkNotificationReadResponse;
+import com.toir.dto.notification.FinancialReviewInboxAcknowledgementResponse;
+import com.toir.dto.notification.FinancialReviewInboxFilter;
+import com.toir.dto.notification.FinancialReviewInboxItem;
 import com.toir.dto.notification.FinancialReviewInboxSummary;
 import com.toir.dto.notification.NotificationDispatchResponse;
 import com.toir.dto.notification.NotificationDto;
@@ -17,11 +22,14 @@ import com.toir.service.NotificationService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
+import java.util.List;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,6 +45,7 @@ public class NotificationController {
     private final NotificationFacadeService notificationFacadeService;
 
     private static final String READ_AUTH = "hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('NOTIFICATION_READ')";
+    private static final String FINANCIAL_REVIEW_INBOX_AUTH = "hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_READ') or hasAuthority('NOTIFICATION_READ')";
     private static final String MARK_READ_AUTH = "hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('NOTIFICATION_MARK_READ')";
     private static final String ADMIN_AUTH = "hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('NOTIFICATION_ADMIN')";
 
@@ -83,15 +92,97 @@ public class NotificationController {
     }
 
     @GetMapping("/financial-review-inbox")
-    @RequiresSensitiveAccess
-    @PreAuthorize(READ_AUTH)
-    public ResponseEntity<PageResponseWithSummary<NotificationDto, FinancialReviewInboxSummary>> financialReviewInbox(
+    @PreAuthorize(FINANCIAL_REVIEW_INBOX_AUTH)
+    public ResponseEntity<PageResponseWithSummary<FinancialReviewInboxItem, FinancialReviewInboxSummary>> financialReviewInbox(
             @CurrentUser AuthenticatedUser user,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String kind,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String recipientRoleCode,
+            @RequestParam(required = false) String acknowledgementMode,
+            @RequestParam(required = false) Boolean unreadOnly) {
         UUID target = user != null ? UUID.fromString(user.id()) : null;
-        return ResponseEntity.ok(notificationFacadeService.financialReviewInbox(target, page, size, search));
+        FinancialReviewInboxFilter filter = new FinancialReviewInboxFilter(
+                search,
+                kind,
+                departmentId,
+                recipientRoleCode,
+                acknowledgementMode,
+                unreadOnly
+        );
+        if (filter.hasOnlySearch()) {
+            return ResponseEntity.ok(notificationFacadeService.financialReviewInbox(target, page, size, search));
+        }
+        return ResponseEntity.ok(notificationFacadeService.financialReviewInbox(target, page, size, filter));
+    }
+
+    @GetMapping(value = "/financial-review-inbox/export", produces = "text/csv;charset=UTF-8")
+    @PreAuthorize(FINANCIAL_REVIEW_INBOX_AUTH)
+    public ResponseEntity<String> exportFinancialReviewInbox(
+            @CurrentUser AuthenticatedUser user,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String kind,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String recipientRoleCode,
+            @RequestParam(required = false) String acknowledgementMode,
+            @RequestParam(required = false) Boolean unreadOnly) {
+        UUID target = user != null ? UUID.fromString(user.id()) : null;
+        String csv = notificationFacadeService.financialReviewInboxCsv(target, new FinancialReviewInboxFilter(
+                search,
+                kind,
+                departmentId,
+                recipientRoleCode,
+                acknowledgementMode,
+                unreadOnly
+        ));
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"financial-review-inbox.csv\"")
+                .body(csv);
+    }
+
+    @PostMapping("/financial-review-inbox/bulk-read")
+    @PreAuthorize(MARK_READ_AUTH + " or hasAuthority('ACTUAL_COST_READ')")
+    public ResponseEntity<BulkNotificationReadResponse> bulkMarkFinancialReviewInboxRead(
+            @CurrentUser AuthenticatedUser user,
+            @RequestBody IdsRequest request) {
+        UUID currentUserId = user != null ? UUID.fromString(user.id()) : null;
+        return ResponseEntity.ok(notificationFacadeService.bulkMarkFinancialReviewInboxRead(
+                request != null ? request.ids() : List.of(),
+                currentUserId,
+                isNotificationScopeAdmin(user)
+        ));
+    }
+
+    @PostMapping("/financial-review-inbox/{id}/acknowledge")
+    @PreAuthorize(MARK_READ_AUTH + " or hasAuthority('ACTUAL_COST_READ')")
+    public ResponseEntity<FinancialReviewInboxAcknowledgementResponse> acknowledgeFinancialReviewInbox(
+            @PathVariable UUID id,
+            @CurrentUser AuthenticatedUser user,
+            @RequestBody CommentRequest request) {
+        UUID currentUserId = user != null ? UUID.fromString(user.id()) : null;
+        return ResponseEntity.ok(notificationFacadeService.acknowledgeFinancialReviewInbox(
+                id,
+                currentUserId,
+                isNotificationScopeAdmin(user),
+                request != null ? request.comment() : ""
+        ));
+    }
+
+    @PostMapping("/financial-review-inbox/bulk-acknowledge")
+    @PreAuthorize(MARK_READ_AUTH + " or hasAuthority('ACTUAL_COST_READ')")
+    public ResponseEntity<BulkFinancialReviewInboxAcknowledgementResponse> bulkAcknowledgeFinancialReviewInbox(
+            @CurrentUser AuthenticatedUser user,
+            @RequestBody BulkAcknowledgeRequest request) {
+        UUID currentUserId = user != null ? UUID.fromString(user.id()) : null;
+        return ResponseEntity.ok(notificationFacadeService.bulkAcknowledgeFinancialReviewInbox(
+                request != null ? request.ids() : List.of(),
+                currentUserId,
+                isNotificationScopeAdmin(user),
+                request != null ? request.comment() : ""
+        ));
     }
 
     @GetMapping("/sla-rules")
@@ -143,5 +234,14 @@ public class NotificationController {
                 && authentication.getAuthorities().stream()
                 .anyMatch(authority -> PermissionConstants.WILDCARD.equals(authority.getAuthority())
                         || PermissionConstants.NOTIFICATION_ADMIN.equals(authority.getAuthority()));
+    }
+
+    public record IdsRequest(List<UUID> ids) {
+    }
+
+    public record CommentRequest(String comment) {
+    }
+
+    public record BulkAcknowledgeRequest(List<UUID> ids, String comment) {
     }
 }

@@ -1,5 +1,8 @@
 package com.toir.controller;
 
+import com.toir.dto.common.PageResponseWithSummary;
+import com.toir.dto.notification.FinancialReviewInboxFilter;
+import com.toir.dto.notification.FinancialReviewInboxSummary;
 import com.toir.dto.notification.NotificationDto;
 import com.toir.dto.notification.NotificationSummaryDto;
 import com.toir.dto.sla.SlaRuleDto;
@@ -20,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -248,6 +252,70 @@ class NotificationControllerContractTest {
         mockMvc.perform(post("/api/v1/notifications/{id}/read", notificationId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(NotificationStatus.READ.name()));
+    }
+
+    @Test
+    void financialReviewInboxBulkReadRouteExists() throws Exception {
+        authenticate(UUID.randomUUID(), "SYSTEM_ADMIN", List.of("*"));
+
+        mockMvc.perform(post("/api/v1/notifications/financial-review-inbox/bulk-read")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ids\":[]}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void financialReviewInboxAcknowledgeRouteExists() throws Exception {
+        authenticate(UUID.randomUUID(), "SYSTEM_ADMIN", List.of("*"));
+
+        mockMvc.perform(post("/api/v1/notifications/financial-review-inbox/{id}/acknowledge", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"Seen\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void financialReviewInboxForwardsFrontendFilters() throws Exception {
+        UUID currentUserId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        authenticate(currentUserId, "SYSTEM_ADMIN", List.of("*"));
+        FinancialReviewInboxFilter expectedFilter = new FinancialReviewInboxFilter(
+                "pump",
+                "DUE_SOON",
+                departmentId,
+                "FINANCE_MANAGER",
+                "UNACKNOWLEDGED",
+                true
+        );
+        when(notificationFacadeService.financialReviewInbox(
+                eq(currentUserId),
+                eq(2),
+                eq(25),
+                eq(expectedFilter)
+        )).thenReturn(PageResponseWithSummary.of(
+                List.of(),
+                2,
+                25,
+                new FinancialReviewInboxSummary(0, 0, 0, 0, 0, 0)
+        ));
+
+        mockMvc.perform(get("/api/v1/notifications/financial-review-inbox")
+                        .param("page", "2")
+                        .param("size", "25")
+                        .param("search", "pump")
+                        .param("kind", "DUE_SOON")
+                        .param("departmentId", departmentId.toString())
+                        .param("recipientRoleCode", "FINANCE_MANAGER")
+                        .param("acknowledgementMode", "UNACKNOWLEDGED")
+                        .param("unreadOnly", "true"))
+                .andExpect(status().isOk());
+
+        verify(notificationFacadeService).financialReviewInbox(
+                currentUserId,
+                2,
+                25,
+                expectedFilter
+        );
     }
 
     private void authenticate(UUID userId, String primaryRoleCode, List<String> permissions) {

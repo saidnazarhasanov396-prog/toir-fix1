@@ -7,10 +7,12 @@ import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.enums.BudgetStatus;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.ApprovalService;
 import com.toir.service.FinanceScopeService;
 import com.toir.service.maintanance.MaintenanceBudgetService;
@@ -73,6 +75,9 @@ class RbacBudgetSecurityTest {
     CostCategoryRepository costCategoryRepository;
 
     @MockBean
+    DepartmentRepository departmentRepository;
+
+    @MockBean
     UserRepository userRepository;
 
     @MockBean
@@ -83,6 +88,9 @@ class RbacBudgetSecurityTest {
 
     @MockBean
     ApprovalService approvalService;
+
+    @MockBean
+    ActualCostReviewFacadeService actualCostReviewFacadeService;
 
     @BeforeEach
     void setUpFinanceScope() {

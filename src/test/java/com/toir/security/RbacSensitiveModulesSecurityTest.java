@@ -23,6 +23,7 @@ import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.ActualCostReviewRouteOverrideService;
+import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.ActualCostService;
 import com.toir.service.ApprovalService;
 import com.toir.service.AuditLogService;
@@ -140,6 +141,8 @@ class RbacSensitiveModulesSecurityTest {
     ActualCostService actualCostService;
     @MockBean
     ActualCostReviewRouteOverrideService actualCostReviewRouteOverrideService;
+    @MockBean
+    ActualCostReviewFacadeService actualCostReviewFacadeService;
     @MockBean
     MaintenanceBudgetService maintenanceBudgetService;
     @MockBean
