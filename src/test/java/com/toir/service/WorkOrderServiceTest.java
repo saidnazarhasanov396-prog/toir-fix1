@@ -505,7 +505,7 @@ class WorkOrderServiceTest {
         Instant expectedFrom = Instant.parse("2025-12-31T19:00:00Z");
         Instant expectedTo = Instant.parse("2026-12-31T19:00:00Z");
         when(repository.getWorkOrderCalendarMonthBuckets(
-                WorkOrderStatus.PLANNED,
+                WorkOrderStatus.PLANNED.name(),
                 null,
                 null,
                 null,
@@ -526,7 +526,7 @@ class WorkOrderServiceTest {
         assertThat(result.months().get(5).month()).isEqualTo(6);
         assertThat(result.months().get(5).totalOrders()).isEqualTo(3);
         verify(repository).getWorkOrderCalendarMonthBuckets(
-                WorkOrderStatus.PLANNED,
+                WorkOrderStatus.PLANNED.name(),
                 null,
                 null,
                 null,

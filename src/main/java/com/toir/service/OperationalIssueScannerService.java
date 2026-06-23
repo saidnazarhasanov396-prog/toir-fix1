@@ -52,7 +52,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class OperationalIssueScannerService {
+public class    OperationalIssueScannerService {
 
     private static final int LIFETIME_WARNING_MONTHS = 3;
     private static final double LIFETIME_WARNING_HOURS_RATIO = 0.1;
@@ -323,6 +323,8 @@ public class OperationalIssueScannerService {
         if (risk >= LIFECYCLE_RISK_WARNING_THRESHOLD) {
             return NotificationSeverity.WARNING;
         }
+        // Equipment under repair with low risk is not critical by itself — surface it as a
+        // warning so it stays visible without inflating the critical count.
         if (status == EquipmentStatus.IN_REPAIR) {
             return NotificationSeverity.WARNING;
         }
