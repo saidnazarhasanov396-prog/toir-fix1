@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.entity.DowntimeEvent;
+import com.toir.entity.ReliabilityMetric;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.maintenance.WorkOrder;
@@ -12,6 +13,11 @@ import com.toir.enums.WorkType;
 
 import java.time.Duration;
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 final class IndustrialKpiAggregations {
 
@@ -51,6 +57,26 @@ final class IndustrialKpiAggregations {
             return Math.max(Duration.between(event.getStartAt(), event.getEndAt()).toMinutes(), 0);
         }
         return 0;
+    }
+
+    static List<ReliabilityMetric> latestReliabilityMetrics(Collection<ReliabilityMetric> metrics) {
+        if (metrics == null || metrics.isEmpty()) {
+            return List.of();
+        }
+        Comparator<ReliabilityMetric> byMetricDate = Comparator.comparing(
+                ReliabilityMetric::getMetricDate,
+                Comparator.nullsFirst(Comparator.naturalOrder())
+        );
+        return metrics.stream()
+                .filter(Objects::nonNull)
+                .filter(metric -> metric.getEquipmentId() != null)
+                .collect(Collectors.toMap(
+                        ReliabilityMetric::getEquipmentId,
+                        metric -> metric,
+                        (left, right) -> byMetricDate.compare(left, right) >= 0 ? left : right
+                ))
+                .values().stream()
+                .toList();
     }
 
     static BigDecimal stockIssueCost(StockMovement movement, SparePart sparePart) {

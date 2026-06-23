@@ -279,9 +279,10 @@ public class DashboardService {
         List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(m -> departmentId == null || (equipById.containsKey(m.getEquipmentId()) && departmentId.equals(equipById.get(m.getEquipmentId()).getDepartmentId())))
                 .toList();
-        double mtbfAvg = allMetrics.stream().map(ReliabilityMetric::getMtbfHours)
+        List<ReliabilityMetric> latestMetrics = IndustrialKpiAggregations.latestReliabilityMetrics(allMetrics);
+        double mtbfAvg = latestMetrics.stream().map(ReliabilityMetric::getMtbfHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
-        double mttrAvg = allMetrics.stream().map(ReliabilityMetric::getMttrHours)
+        double mttrAvg = latestMetrics.stream().map(ReliabilityMetric::getMttrHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
         
         long totalWO = allWorkOrders.size();

@@ -83,6 +83,7 @@ public class AnalyticsService {
         List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(m -> departmentId == null || isEquipmentInDepartment(equipById, m.getEquipmentId(), departmentId))
                 .toList();
+        List<ReliabilityMetric> latestMetrics = IndustrialKpiAggregations.latestReliabilityMetrics(allMetrics);
         List<com.toir.entity.PprTask> allPprTasks = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(t -> departmentId == null || isEquipmentInDepartment(equipById, t.getEquipmentId(), departmentId))
                 .toList();
@@ -104,9 +105,9 @@ public class AnalyticsService {
 
         Totals totals = new Totals(openRequests, emergencyRequests, closedWorkOrders, activeDefects);
 
-        double mtbfAvg = allMetrics.stream().map(ReliabilityMetric::getMtbfHours)
+        double mtbfAvg = latestMetrics.stream().map(ReliabilityMetric::getMtbfHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
-        double mttrAvg = allMetrics.stream().map(ReliabilityMetric::getMttrHours)
+        double mttrAvg = latestMetrics.stream().map(ReliabilityMetric::getMttrHours)
                 .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
 
         long totalWO = allWorkOrders.size();
@@ -179,12 +180,7 @@ public class AnalyticsService {
                 })
                 .toList();
 
-        List<ReliabilitySnapshotRow> reliabilitySnapshot = allMetrics.stream()
-                .collect(Collectors.toMap(
-                        ReliabilityMetric::getEquipmentId,
-                        m -> m,
-                        (a, b) -> a.getMetricDate().isAfter(b.getMetricDate()) ? a : b))
-                .values().stream()
+        List<ReliabilitySnapshotRow> reliabilitySnapshot = latestMetrics.stream()
                 .limit(10)
                 .map(m -> {
                     Equipment eq = equipById.get(m.getEquipmentId());
