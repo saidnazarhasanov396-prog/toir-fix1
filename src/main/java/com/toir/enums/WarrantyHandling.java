@@ -1,0 +1,10 @@
+package com.toir.enums;
+
+public enum WarrantyHandling {
+    NO_WARRANTY_ISSUE,
+    CONTACT_SUPPLIER,
+    WAITING_FOR_SUPPLIER,
+    INTERNAL_REPAIR_ALLOWED,
+    WARRANTY_REJECTED,
+    EMERGENCY_OVERRIDE
+}

@@ -5,6 +5,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
 
 import com.toir.enums.RequestStatus;
+import com.toir.enums.WarrantyHandling;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -83,4 +84,29 @@ public class RepairRequest extends BaseEntity {
 
     @Column(name = "close_result", columnDefinition = "text")
     private String closeResult;
+
+    @Column(name = "warranty_active_at_creation")
+    private Boolean warrantyActiveAtCreation;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "warranty_handling")
+    private WarrantyHandling warrantyHandling;
+
+    @Column(name = "warranty_decision_comment", columnDefinition = "text")
+    private String warrantyDecisionComment;
+
+    @Column(name = "supplier_contacted_at")
+    private Instant supplierContactedAt;
+
+    @Column(name = "supplier_response", columnDefinition = "text")
+    private String supplierResponse;
+
+    @Column(name = "emergency_reason", columnDefinition = "text")
+    private String emergencyReason;
+
+    @Column(name = "warranty_decision_at")
+    private Instant warrantyDecisionAt;
+
+    @Column(name = "warranty_decision_by_user_id")
+    private UUID warrantyDecisionByUserId;
 }

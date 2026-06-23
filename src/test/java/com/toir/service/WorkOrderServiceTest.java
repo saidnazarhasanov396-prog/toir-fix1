@@ -67,6 +67,7 @@ import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
+import com.toir.enums.WarrantyHandling;
 import com.toir.repository.CompletionActRepository;
 import com.toir.repository.CertificationTypeRepository;
 import com.toir.repository.FileAssetRepository;
@@ -946,6 +947,137 @@ class WorkOrderServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("Cannot create work order for repair request");
                 });
+    }
+
+    @Test
+    void createWorkOrderBlockedWhenWarrantyActiveAndHandlingNotRecorded() {
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, null);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.OPEN);
+        repairRequest.setWarrantyActiveAtCreation(true);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("warranty decision required");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createWorkOrderBlockedWhenWaitingForSupplierResponse() {
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, null);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.OPEN);
+        repairRequest.setWarrantyActiveAtCreation(true);
+        repairRequest.setWarrantyHandling(WarrantyHandling.WAITING_FOR_SUPPLIER);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("warranty decision required");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createWorkOrderBlockedWhenSupplierNotYetContacted() {
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, null);
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.OPEN);
+        repairRequest.setWarrantyActiveAtCreation(true);
+        repairRequest.setWarrantyHandling(WarrantyHandling.CONTACT_SUPPLIER);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("warranty decision required");
+                });
+
+        verify(repository, never()).save(any(WorkOrder.class));
+    }
+
+    @Test
+    void createWorkOrderAllowedWhenWarrantyRejectedBySupplier() {
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, null);
+        mockSuccessfulCreateDependencies(request);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.OPEN);
+        repairRequest.setWarrantyActiveAtCreation(true);
+        repairRequest.setWarrantyHandling(WarrantyHandling.WARRANTY_REJECTED);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest));
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.repairRequestId()).isEqualTo(repairRequestId);
+        assertThat(result.repairRequest()).isNotNull();
+        assertThat(result.repairRequest().id()).isEqualTo(repairRequestId);
+        verify(repairRequestRepository, atLeastOnce()).findByIdAndIsDeletedFalse(repairRequestId);
+    }
+
+    @Test
+    void createWorkOrderAllowedWhenInternalRepairExplicitlyAllowed() {
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, null);
+        mockSuccessfulCreateDependencies(request);
+        RepairRequest repairRequest = repairRequest(repairRequestId, RequestStatus.OPEN);
+        repairRequest.setWarrantyActiveAtCreation(true);
+        repairRequest.setWarrantyHandling(WarrantyHandling.INTERNAL_REPAIR_ALLOWED);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest));
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.repairRequestId()).isEqualTo(repairRequestId);
+        assertThat(result.repairRequest()).isNotNull();
+        assertThat(result.repairRequest().id()).isEqualTo(repairRequestId);
+        verify(repairRequestRepository, atLeastOnce()).findByIdAndIsDeletedFalse(repairRequestId);
+    }
+
+    @Test
+    void createWorkOrderAllowedWhenWarrantyNotActiveAtCreation() {
+        when(repository.save(any(WorkOrder.class)))
+                .thenAnswer(invocation -> {
+                    WorkOrder workOrder = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+                    return workOrder;
+                });
+        UUID repairRequestId = UUID.randomUUID();
+        WorkOrderRequest request = requestWithLinks(repairRequestId, null);
+        mockSuccessfulCreateDependencies(request);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, RequestStatus.OPEN)));
+
+        WorkOrderDto result = service.create(request);
+
+        assertThat(result.repairRequestId()).isEqualTo(repairRequestId);
+        assertThat(result.repairRequest()).isNotNull();
+        assertThat(result.repairRequest().id()).isEqualTo(repairRequestId);
+        verify(repairRequestRepository, atLeastOnce()).findByIdAndIsDeletedFalse(repairRequestId);
     }
 
     @Test

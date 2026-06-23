@@ -7,6 +7,7 @@ import com.toir.dto.repairrequest.RepairRequestMeterReadingRequest;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestRequest;
+import com.toir.dto.repairrequest.WarrantyDecisionRequest;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.meter.MeterReadingRequest;
@@ -35,6 +36,9 @@ import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.WarrantyHandling;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.UserStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -73,10 +77,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.List;
@@ -261,6 +267,132 @@ class RepairRequestServiceTest {
                 any(),
                 any()
         );
+    }
+
+    @Test
+    void createSetsWarrantyActiveAtCreationTrueAndHandlingNullWhenWarrantyActive() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentDepartmentId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequestWithoutDepartment(equipmentId);
+        Equipment equipment = equipment(equipmentId, equipmentDepartmentId);
+        equipment.setHasWarranty(true);
+        equipment.setWarrantyEndDate(LocalDate.now().plusMonths(6));
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        when(departmentRepository.findByIdAndIsDeletedFalse(equipmentDepartmentId)).thenReturn(Optional.empty());
+        when(userRepository.findByIdAndIsDeletedFalse(request.reporterId())).thenReturn(Optional.empty());
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        service.create(request);
+
+        verify(repository).save(argThat(saved ->
+                Boolean.TRUE.equals(saved.getWarrantyActiveAtCreation())
+                        && saved.getWarrantyHandling() == null
+        ));
+    }
+
+    @Test
+    void createSetsWarrantyActiveAtCreationFalseAndHandlingNoWarrantyIssueWhenNoWarranty() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentDepartmentId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequestWithoutDepartment(equipmentId);
+        Equipment equipment = equipment(equipmentId, equipmentDepartmentId);
+        equipment.setHasWarranty(false);
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        when(departmentRepository.findByIdAndIsDeletedFalse(equipmentDepartmentId)).thenReturn(Optional.empty());
+        when(userRepository.findByIdAndIsDeletedFalse(request.reporterId())).thenReturn(Optional.empty());
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        service.create(request);
+
+        verify(repository).save(argThat(saved ->
+                Boolean.FALSE.equals(saved.getWarrantyActiveAtCreation())
+                        && saved.getWarrantyHandling() == WarrantyHandling.NO_WARRANTY_ISSUE
+        ));
+    }
+
+    @Test
+    void createTreatsExpiredWarrantyEndDateAsNotActive() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentDepartmentId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequestWithoutDepartment(equipmentId);
+        Equipment equipment = equipment(equipmentId, equipmentDepartmentId);
+        equipment.setHasWarranty(true);
+        equipment.setWarrantyEndDate(LocalDate.now().minusDays(1));
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        when(departmentRepository.findByIdAndIsDeletedFalse(equipmentDepartmentId)).thenReturn(Optional.empty());
+        when(userRepository.findByIdAndIsDeletedFalse(request.reporterId())).thenReturn(Optional.empty());
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        service.create(request);
+
+        verify(repository).save(argThat(saved ->
+                Boolean.FALSE.equals(saved.getWarrantyActiveAtCreation())
+        ));
+    }
+
+    @Test
+    void createFallsBackToLegacyWarrantyUntilWhenWarrantyEndDateIsNull() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID equipmentDepartmentId = UUID.randomUUID();
+        UUID savedRequestId = UUID.randomUUID();
+        RepairRequestRequest request = createRequestWithoutDepartment(equipmentId);
+        Equipment equipment = equipment(equipmentId, equipmentDepartmentId);
+        equipment.setHasWarranty(true);
+        equipment.setWarrantyEndDate(null);
+        equipment.setWarrantyUntil(LocalDate.now().plusMonths(3));
+
+        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
+            RepairRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", savedRequestId);
+            return saved;
+        });
+        when(departmentRepository.findByIdAndIsDeletedFalse(equipmentDepartmentId)).thenReturn(Optional.empty());
+        when(userRepository.findByIdAndIsDeletedFalse(request.reporterId())).thenReturn(Optional.empty());
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(savedRequestId))
+                .thenReturn(List.of());
+
+        service.create(request);
+
+        verify(repository).save(argThat(saved ->
+                Boolean.TRUE.equals(saved.getWarrantyActiveAtCreation())
+        ));
     }
 
     @Test
@@ -1707,6 +1839,75 @@ class RepairRequestServiceTest {
                 return withWorkOrder;
             }
         };
+    }
+
+    @Test
+    void recordWarrantyDecisionRequiresEmergencyReasonForEmergencyOverride() {
+        UUID id = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> service.recordWarrantyDecision(
+                id,
+                new WarrantyDecisionRequest(WarrantyHandling.EMERGENCY_OVERRIDE, "comment", null, null, null),
+                currentUserId
+        ))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("emergencyReason is required");
+                });
+
+        verify(repository, never()).save(any(RepairRequest.class));
+    }
+
+    @Test
+    void recordWarrantyDecisionPersistsAllFieldsAndAuditsTheChange() {
+        UUID id = UUID.randomUUID();
+        UUID currentUserId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Instant supplierContactedAt = Instant.parse("2026-06-15T10:00:00Z");
+        RepairRequest entity = repairRequest(id);
+        entity.setEquipmentId(equipmentId);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.empty());
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of());
+
+        service.recordWarrantyDecision(
+                id,
+                new WarrantyDecisionRequest(
+                        WarrantyHandling.INTERNAL_REPAIR_ALLOWED,
+                        "Supplier declined coverage",
+                        supplierContactedAt,
+                        "Warranty rejected by vendor",
+                        null
+                ),
+                currentUserId
+        );
+
+        verify(repository).save(argThat(saved ->
+                saved.getWarrantyHandling() == WarrantyHandling.INTERNAL_REPAIR_ALLOWED
+                        && "Supplier declined coverage".equals(saved.getWarrantyDecisionComment())
+                        && supplierContactedAt.equals(saved.getSupplierContactedAt())
+                        && "Warranty rejected by vendor".equals(saved.getSupplierResponse())
+                        && saved.getWarrantyDecisionAt() != null
+                        && currentUserId.equals(saved.getWarrantyDecisionByUserId())
+        ));
+        verify(auditBuilderService).log(
+                eq("repair_request"),
+                eq(id.toString()),
+                eq(AuditAction.UPDATE),
+                eq(AuditModule.REPAIR_REQUEST),
+                eq("Warranty decision recorded: INTERNAL_REPAIR_ALLOWED"),
+                isNull(),
+                any(RepairRequest.class)
+        );
     }
 
     private void stubFindSaveAndDtoLookups(UUID id, RepairRequest entity) {

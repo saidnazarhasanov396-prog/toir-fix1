@@ -8,6 +8,8 @@ import com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
+import com.toir.dto.repairrequest.WarrantyDecisionRequest;
+import com.toir.dto.repairrequest.WarrantyStatusResponse;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.RequestStatus;
 import com.toir.exception.RestException;
@@ -134,6 +136,23 @@ public class RepairRequestController {
             return ResponseEntity.ok(service.requestClarification(id, comment));
         }
         return ResponseEntity.ok(service.requestClarification(id, request));
+    }
+
+    @GetMapping("/{id}/warranty-status")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_READ')")
+    public ResponseEntity<WarrantyStatusResponse> getWarrantyStatus(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.getWarrantyStatus(id));
+    }
+
+    @PostMapping("/{id}/warranty-decision")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_WARRANTY_DECISION')")
+    public ResponseEntity<RepairRequestDto> recordWarrantyDecision(
+            @PathVariable UUID id,
+            @Valid @RequestBody WarrantyDecisionRequest request
+    ) {
+        assertCanMutateRequest(requestOrThrow(id));
+        UUID currentUserId = scopeAccessService.currentUserIdOrNull();
+        return ResponseEntity.ok(service.recordWarrantyDecision(id, request, currentUserId));
     }
 
     private UUID resolveDepartmentFilter(UUID departmentId, UUID equipmentId) {
