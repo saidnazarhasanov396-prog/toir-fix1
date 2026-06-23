@@ -2,6 +2,7 @@ package com.toir.repository.contarctor;
 
 import com.toir.entity.contractors.ContractorContract;
 import com.toir.enums.ContractStatus;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -46,5 +47,21 @@ public interface ContractorContractRepository extends JpaRepository<ContractorCo
     List<ContractorContract> findAllByContractorIdAndStatusAndIsDeletedFalse(
             @Param("contractorId") UUID contractorId,
             @Param("status") ContractStatus status
+    );
+
+    @Query(value = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM contractor_contracts
+                WHERE contractor_id = cast(:contractorId as uuid)
+                  AND status = 'ACTIVE'
+                  AND is_deleted = false
+                  AND start_date <= :date
+                  AND (end_date IS NULL OR end_date >= :date)
+            )
+            """, nativeQuery = true)
+    boolean existsActiveContractValidOn(
+            @Param("contractorId") UUID contractorId,
+            @Param("date") LocalDate date
     );
 }

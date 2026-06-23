@@ -2,14 +2,12 @@ package com.toir.service.contactor;
 
 import com.toir.dto.contractorwork.ContractorWorkDto;
 import com.toir.entity.contractors.Contractor;
-import com.toir.entity.contractors.ContractorContract;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.ActualCostStatus;
-import com.toir.enums.ContractStatus;
 import com.toir.enums.ContractorStatus;
 import com.toir.enums.ContractorWorkStatus;
 import com.toir.enums.WorkOrderStatus;
@@ -183,12 +181,7 @@ public class ContractorWorkService {
 
     private void assertValidContract(UUID contractorId) {
         LocalDate today = LocalDate.now();
-        List<ContractorContract> activeContracts = contractorContractRepository
-                .findAllByContractorIdAndStatusAndIsDeletedFalse(contractorId, ContractStatus.ACTIVE);
-        boolean hasValidContract = activeContracts.stream()
-                .anyMatch(contract -> !contract.getStartDate().isAfter(today)
-                        && (contract.getEndDate() == null || !contract.getEndDate().isBefore(today)));
-        if (!hasValidContract) {
+        if (!contractorContractRepository.existsActiveContractValidOn(contractorId, today)) {
             throw RestException.badRequest("Contractor must have at least one ACTIVE contract valid by date");
         }
     }

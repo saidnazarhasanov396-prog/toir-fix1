@@ -137,8 +137,8 @@ class ContractorWorkServiceTest {
                 .thenReturn(Optional.of(contractorWork(workId, contractorId, workOrderId, ContractorWorkStatus.DRAFT, null)));
         when(contractorRepository.findByIdAndIsDeletedFalse(contractorId))
                 .thenReturn(Optional.of(contractor(contractorId, ContractorStatus.ACTIVE)));
-        when(contractorContractRepository.findAllByContractorIdAndStatusAndIsDeletedFalse(contractorId, ContractStatus.ACTIVE))
-                .thenReturn(List.of(contract(contractorId, ContractStatus.ACTIVE, LocalDate.now().minusDays(10), LocalDate.now().minusDays(1))));
+        when(contractorContractRepository.existsActiveContractValidOn(contractorId, LocalDate.now()))
+                .thenReturn(false);
 
         assertThatThrownBy(() -> service.start(workId))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
@@ -158,8 +158,8 @@ class ContractorWorkServiceTest {
                 .thenReturn(Optional.of(contractorWork(workId, contractorId, workOrderId, ContractorWorkStatus.DRAFT, null)));
         when(contractorRepository.findByIdAndIsDeletedFalse(contractorId))
                 .thenReturn(Optional.of(contractor(contractorId, ContractorStatus.ACTIVE)));
-        when(contractorContractRepository.findAllByContractorIdAndStatusAndIsDeletedFalse(contractorId, ContractStatus.ACTIVE))
-                .thenReturn(List.of(contract(contractorId, ContractStatus.ACTIVE, LocalDate.now().minusDays(1), LocalDate.now().plusDays(30))));
+        when(contractorContractRepository.existsActiveContractValidOn(contractorId, LocalDate.now()))
+                .thenReturn(true);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.DRAFT)));
 
@@ -181,8 +181,8 @@ class ContractorWorkServiceTest {
                 .thenReturn(Optional.of(contractorWork(workId, contractorId, workOrderId, ContractorWorkStatus.DRAFT, null)));
         when(contractorRepository.findByIdAndIsDeletedFalse(contractorId))
                 .thenReturn(Optional.of(contractor(contractorId, ContractorStatus.ACTIVE)));
-        when(contractorContractRepository.findAllByContractorIdAndStatusAndIsDeletedFalse(contractorId, ContractStatus.ACTIVE))
-                .thenReturn(List.of(contract(contractorId, ContractStatus.ACTIVE, LocalDate.now().minusDays(1), LocalDate.now().plusDays(30))));
+        when(contractorContractRepository.existsActiveContractValidOn(contractorId, LocalDate.now()))
+                .thenReturn(true);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
         stubSaveContractorWorkReturnsArgument();
@@ -250,8 +250,8 @@ class ContractorWorkServiceTest {
         when(repository.findByIdAndIsDeletedFalse(workId)).thenReturn(Optional.of(work));
         when(contractorRepository.findByIdAndIsDeletedFalse(contractorId))
                 .thenReturn(Optional.of(contractor(contractorId, ContractorStatus.ACTIVE)));
-        when(contractorContractRepository.findAllByContractorIdAndStatusAndIsDeletedFalse(contractorId, ContractStatus.ACTIVE))
-                .thenReturn(List.of(contract(contractorId, ContractStatus.ACTIVE, LocalDate.now().minusDays(5), LocalDate.now().plusDays(5))));
+        when(contractorContractRepository.existsActiveContractValidOn(contractorId, LocalDate.now()))
+                .thenReturn(true);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.COMPLETED)));
         when(actualCostRepository.findTopByContractorWorkIdAndIsDeletedFalseOrderByUpdatedAtDesc(workId))
@@ -289,8 +289,8 @@ class ContractorWorkServiceTest {
         when(repository.findByIdAndIsDeletedFalse(workId)).thenReturn(Optional.of(work));
         when(contractorRepository.findByIdAndIsDeletedFalse(contractorId))
                 .thenReturn(Optional.of(contractor(contractorId, ContractorStatus.ACTIVE)));
-        when(contractorContractRepository.findAllByContractorIdAndStatusAndIsDeletedFalse(contractorId, ContractStatus.ACTIVE))
-                .thenReturn(List.of(contract(contractorId, ContractStatus.ACTIVE, LocalDate.now().minusDays(5), LocalDate.now().plusDays(5))));
+        when(contractorContractRepository.existsActiveContractValidOn(contractorId, LocalDate.now()))
+                .thenReturn(true);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.COMPLETED)));
         when(actualCostRepository.findTopByContractorWorkIdAndIsDeletedFalseOrderByUpdatedAtDesc(workId))
@@ -311,8 +311,8 @@ class ContractorWorkServiceTest {
                 .thenReturn(Optional.of(contractorWork(workId, contractorId, workOrderId, ContractorWorkStatus.DRAFT, null)));
         when(contractorRepository.findByIdAndIsDeletedFalse(contractorId))
                 .thenReturn(Optional.of(contractor(contractorId, ContractorStatus.ACTIVE)));
-        when(contractorContractRepository.findAllByContractorIdAndStatusAndIsDeletedFalse(contractorId, ContractStatus.ACTIVE))
-                .thenReturn(List.of(contract(contractorId, ContractStatus.ACTIVE, LocalDate.now().minusDays(1), LocalDate.now().plusDays(1))));
+        when(contractorContractRepository.existsActiveContractValidOn(contractorId, LocalDate.now()))
+                .thenReturn(true);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.start(workId))
@@ -330,8 +330,8 @@ class ContractorWorkServiceTest {
         UUID workOrderId = UUID.randomUUID();
         when(contractorRepository.findByIdAndIsDeletedFalse(contractorId))
                 .thenReturn(Optional.of(contractor(contractorId, ContractorStatus.ACTIVE)));
-        when(contractorContractRepository.findAllByContractorIdAndStatusAndIsDeletedFalse(contractorId, ContractStatus.ACTIVE))
-                .thenReturn(List.of(contract(contractorId, ContractStatus.ACTIVE, LocalDate.now().minusDays(1), LocalDate.now().plusDays(1))));
+        when(contractorContractRepository.existsActiveContractValidOn(contractorId, LocalDate.now()))
+                .thenReturn(true);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
 
         ContractorWorkDto payload = new ContractorWorkDto(
@@ -388,8 +388,8 @@ class ContractorWorkServiceTest {
         when(repository.findByIdAndIsDeletedFalse(workId)).thenReturn(Optional.of(work));
         when(contractorRepository.findByIdAndIsDeletedFalse(contractorId))
                 .thenReturn(Optional.of(contractor(contractorId, ContractorStatus.ACTIVE)));
-        when(contractorContractRepository.findAllByContractorIdAndStatusAndIsDeletedFalse(contractorId, ContractStatus.ACTIVE))
-                .thenReturn(List.of(contract(contractorId, ContractStatus.ACTIVE, LocalDate.now().minusDays(5), LocalDate.now().plusDays(5))));
+        when(contractorContractRepository.existsActiveContractValidOn(contractorId, LocalDate.now()))
+                .thenReturn(true);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.COMPLETED)));
         when(actualCostRepository.findTopByContractorWorkIdAndIsDeletedFalseOrderByUpdatedAtDesc(workId))
