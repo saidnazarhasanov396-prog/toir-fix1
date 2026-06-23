@@ -95,8 +95,10 @@ public class RcmService {
         int consequence = 0;
         Integer repairPriority = null;
         String clsCode = null;
+        String clsName = null;
         if (cls != null) {
             clsCode = cls.getCode();
+            clsName = cls.getName();
             repairPriority = cls.getRepairPriority();
             consequence += nz(cls.getSafetyImpact());
             consequence += nz(cls.getProductionImpact());
@@ -118,7 +120,7 @@ public class RcmService {
 
         int risk = Math.min(100, consequence * probability);
         return new EquipmentRiskScore(
-                eq.getId(), eq.getCode(), eq.getName(), clsCode,
+                eq.getId(), eq.getCode(), eq.getName(), clsCode, clsName,
                 consequence, probability, risk, repairPriority,
                 openDefects, mtbf, mttr
         );
