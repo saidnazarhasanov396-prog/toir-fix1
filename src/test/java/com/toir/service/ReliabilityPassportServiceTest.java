@@ -11,6 +11,7 @@ import com.toir.enums.DowntimeType;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
+import com.toir.exception.RestException;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -21,14 +22,18 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -192,6 +197,58 @@ class ReliabilityPassportServiceTest {
         assertThat(result.mttrHours()).isEqualTo(2.0);
     }
 
+    @Test
+    void listFiltersAvailabilityBeforePaginationAndReportsFilteredTotals() {
+        Instant now = Instant.now();
+        LocalDate serviceStart = LocalDate.now(ZoneOffset.UTC).minusDays(100);
+        Equipment highFirst = equipment(UUID.randomUUID(), "EQ-HIGH-1", serviceStart);
+        Equipment medium = equipment(UUID.randomUUID(), "EQ-MEDIUM", serviceStart);
+        Equipment low = equipment(UUID.randomUUID(), "EQ-LOW", serviceStart);
+        Equipment highSecond = equipment(UUID.randomUUID(), "EQ-HIGH-2", serviceStart);
+        List<Equipment> equipment = List.of(highFirst, medium, low, highSecond);
+        List<UUID> ids = equipment.stream().map(Equipment::getId).toList();
+
+        DowntimeEvent mediumDowntime = downtime(
+                medium.getId(),
+                now.minus(Duration.ofDays(70)),
+                (int) Duration.ofHours(300).toMinutes(),
+                DowntimeType.UNPLANNED);
+        DowntimeEvent lowDowntime = downtime(
+                low.getId(),
+                now.minus(Duration.ofDays(80)),
+                (int) Duration.ofHours(600).toMinutes(),
+                DowntimeType.UNPLANNED);
+
+        when(equipmentRepository.searchAllForPassport(null, null)).thenReturn(equipment);
+        when(defectRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+        when(downtimeRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids))
+                .thenReturn(List.of(mediumDowntime, lowDowntime));
+        when(workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+
+        Page<ReliabilityPassport> highPage = service.list(null, null, "HIGH", 1, 1);
+        Page<ReliabilityPassport> mediumPage = service.list(null, null, "medium", 0, 10);
+        Page<ReliabilityPassport> lowPage = service.list(null, null, "LOW", 0, 10);
+
+        assertThat(highPage.getTotalElements()).isEqualTo(2);
+        assertThat(highPage.getContent()).extracting(ReliabilityPassport::equipmentId)
+                .containsExactly(highSecond.getId());
+        assertThat(mediumPage.getTotalElements()).isEqualTo(1);
+        assertThat(mediumPage.getContent()).extracting(ReliabilityPassport::equipmentId)
+                .containsExactly(medium.getId());
+        assertThat(lowPage.getTotalElements()).isEqualTo(1);
+        assertThat(lowPage.getContent()).extracting(ReliabilityPassport::equipmentId)
+                .containsExactly(low.getId());
+    }
+
+    @Test
+    void listRejectsUnknownAvailabilityFilter() {
+        assertThatThrownBy(() -> service.list(null, null, "MEDUIM", 0, 10))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Unknown availability filter: MEDUIM")
+                .hasMessageContaining("Allowed values: high, medium, low");
+    }
+
     private void stubPassport(Equipment equipment, List<Defect> defects, List<DowntimeEvent> downtimes) {
         stubPassport(equipment, defects, downtimes, List.of(), List.of());
     }
@@ -211,10 +268,15 @@ class ReliabilityPassportServiceTest {
     }
 
     private Equipment equipment(UUID id) {
+        return equipment(id, "EQ-1", null);
+    }
+
+    private Equipment equipment(UUID id, String code, LocalDate operationStartDate) {
         Equipment equipment = Equipment.builder()
-                .code("EQ-1")
-                .name("Pump")
-                .inventoryNumber("INV-1")
+                .code(code)
+                .name(code)
+                .inventoryNumber(code + "-INV")
+                .operationStartDate(operationStartDate)
                 .build();
         equipment.setId(id);
         return equipment;
@@ -229,7 +291,12 @@ class ReliabilityPassportServiceTest {
     }
 
     private DowntimeEvent downtime(Instant start, int minutes, DowntimeType type) {
+        return downtime(null, start, minutes, type);
+    }
+
+    private DowntimeEvent downtime(UUID equipmentId, Instant start, int minutes, DowntimeType type) {
         return DowntimeEvent.builder()
+                .equipmentId(equipmentId)
                 .startAt(start)
                 .endAt(start.plus(Duration.ofMinutes(minutes)))
                 .durationMinutes(minutes)

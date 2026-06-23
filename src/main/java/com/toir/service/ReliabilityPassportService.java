@@ -55,10 +55,23 @@ public class ReliabilityPassportService {
     private final RepairRequestRepository repairRequestRepository;
 
     @Transactional(readOnly = true)
-    public Page<ReliabilityPassport> list(UUID equipmentId, String search, int page, int size) {
+    public Page<ReliabilityPassport> list(UUID equipmentId, String search, String availability, int page, int size) {
+        AvailabilityBand availabilityFilter = parseAvailabilityFilter(availability);
         String searchPattern = search == null || search.isBlank()
                 ? null
                 : "%" + search.toLowerCase() + "%";
+
+        if (availabilityFilter != null) {
+            List<Equipment> equipmentList = equipmentRepository.searchAllForPassport(equipmentId, searchPattern);
+            if (equipmentList.isEmpty()) {
+                return PaginationUtils.page(List.of(), page, size);
+            }
+
+            List<ReliabilityPassport> filteredPassports = buildPassports(equipmentList).stream()
+                    .filter(passport -> bandOf(passport.availabilityPct()) == availabilityFilter)
+                    .toList();
+            return PaginationUtils.page(filteredPassports, page, size);
+        }
 
         Page<Equipment> equipmentPage = equipmentRepository.searchForPassport(
                 equipmentId,
@@ -73,6 +86,16 @@ public class ReliabilityPassportService {
         if (ids.isEmpty()) {
             return new PageImpl<>(List.of(), equipmentPage.getPageable(), equipmentPage.getTotalElements());
         }
+
+        List<ReliabilityPassport> passports = buildPassports(equipmentPage.getContent());
+
+        return new PageImpl<>(passports, equipmentPage.getPageable(), equipmentPage.getTotalElements());
+    }
+
+    private List<ReliabilityPassport> buildPassports(List<Equipment> equipmentList) {
+        List<UUID> ids = equipmentList.stream()
+                .map(Equipment::getId)
+                .toList();
 
         Map<UUID, List<Defect>> defectsByEquipment = defectRepository
                 .findAllByEquipmentIdInAndIsDeletedFalse(ids)
@@ -93,7 +116,7 @@ public class ReliabilityPassportService {
                 .collect(Collectors.groupingBy(RepairRequest::getEquipmentId));
 
         Instant now = Instant.now();
-        List<ReliabilityPassport> passports = equipmentPage.getContent().stream()
+        return equipmentList.stream()
                 .map(eq -> buildPassport(
                         eq,
                         defectsByEquipment.getOrDefault(eq.getId(), List.of()),
@@ -102,8 +125,6 @@ public class ReliabilityPassportService {
                         repairRequestsByEquipment.getOrDefault(eq.getId(), List.of()),
                         now))
                 .toList();
-
-        return new PageImpl<>(passports, equipmentPage.getPageable(), equipmentPage.getTotalElements());
     }
 
     @Transactional(readOnly = true)

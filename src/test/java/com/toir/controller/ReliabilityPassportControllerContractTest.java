@@ -62,7 +62,7 @@ class ReliabilityPassportControllerContractTest {
                 now
         );
 
-        when(reliabilityPassportService.list(isNull(), isNull(), eq(0), eq(20)))
+        when(reliabilityPassportService.list(isNull(), isNull(), isNull(), eq(0), eq(20)))
                 .thenReturn(new PageImpl<>(List.of(passport), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/equipment/reliability-passport"))
@@ -81,14 +81,14 @@ class ReliabilityPassportControllerContractTest {
                 .andExpect(jsonPath("$.content[0].topRootCauses[0].count").value(3))
                 .andExpect(jsonPath("$.totalElements").value(1));
 
-        verify(reliabilityPassportService).list(isNull(), isNull(), eq(0), eq(20));
+        verify(reliabilityPassportService).list(isNull(), isNull(), isNull(), eq(0), eq(20));
     }
 
     @Test
     void listWithEquipmentIdFilterPassesIdToService() throws Exception {
         UUID equipmentId = UUID.randomUUID();
 
-        when(reliabilityPassportService.list(eq(equipmentId), isNull(), eq(0), eq(20)))
+        when(reliabilityPassportService.list(eq(equipmentId), isNull(), isNull(), eq(0), eq(20)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/equipment/reliability-passport")
@@ -97,12 +97,12 @@ class ReliabilityPassportControllerContractTest {
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content").isEmpty());
 
-        verify(reliabilityPassportService).list(eq(equipmentId), isNull(), eq(0), eq(20));
+        verify(reliabilityPassportService).list(eq(equipmentId), isNull(), isNull(), eq(0), eq(20));
     }
 
     @Test
     void listWithSearchPassesSearchToService() throws Exception {
-        when(reliabilityPassportService.list(isNull(), eq("compressor"), eq(0), eq(20)))
+        when(reliabilityPassportService.list(isNull(), eq("compressor"), isNull(), eq(0), eq(20)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/equipment/reliability-passport")
@@ -110,12 +110,12 @@ class ReliabilityPassportControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray());
 
-        verify(reliabilityPassportService).list(isNull(), eq("compressor"), eq(0), eq(20));
+        verify(reliabilityPassportService).list(isNull(), eq("compressor"), isNull(), eq(0), eq(20));
     }
 
     @Test
     void listWithPaginationParamsPassesPageAndSizeToService() throws Exception {
-        when(reliabilityPassportService.list(isNull(), isNull(), eq(2), eq(10)))
+        when(reliabilityPassportService.list(isNull(), isNull(), isNull(), eq(2), eq(10)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(2, 10), 0));
 
         mockMvc.perform(get("/api/v1/equipment/reliability-passport")
@@ -124,29 +124,43 @@ class ReliabilityPassportControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray());
 
-        verify(reliabilityPassportService).list(isNull(), isNull(), eq(2), eq(10));
+        verify(reliabilityPassportService).list(isNull(), isNull(), isNull(), eq(2), eq(10));
+    }
+
+    @Test
+    void listWithAvailabilityPassesAvailabilityToService() throws Exception {
+        when(reliabilityPassportService.list(isNull(), isNull(), eq("HIGH"), eq(0), eq(20)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/equipment/reliability-passport")
+                        .param("availability", "HIGH"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+
+        verify(reliabilityPassportService).list(isNull(), isNull(), eq("HIGH"), eq(0), eq(20));
     }
 
     @Test
     void listWithAllFiltersPassesAllParamsToService() throws Exception {
         UUID equipmentId = UUID.randomUUID();
 
-        when(reliabilityPassportService.list(eq(equipmentId), eq("pump"), eq(1), eq(5)))
+        when(reliabilityPassportService.list(eq(equipmentId), eq("pump"), eq("LOW"), eq(1), eq(5)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(1, 5), 0));
 
         mockMvc.perform(get("/api/v1/equipment/reliability-passport")
                         .param("equipmentId", equipmentId.toString())
                         .param("search", "pump")
+                        .param("availability", "LOW")
                         .param("page", "1")
                         .param("size", "5"))
                 .andExpect(status().isOk());
 
-        verify(reliabilityPassportService).list(eq(equipmentId), eq("pump"), eq(1), eq(5));
+        verify(reliabilityPassportService).list(eq(equipmentId), eq("pump"), eq("LOW"), eq(1), eq(5));
     }
 
     @Test
     void listReturnsEmptyPageWhenNoEquipmentMatches() throws Exception {
-        when(reliabilityPassportService.list(isNull(), eq("nonexistent"), eq(0), eq(20)))
+        when(reliabilityPassportService.list(isNull(), eq("nonexistent"), isNull(), eq(0), eq(20)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/equipment/reliability-passport")
@@ -210,7 +224,7 @@ class ReliabilityPassportControllerContractTest {
                 Instant.now()
         );
 
-        when(reliabilityPassportService.list(isNull(), isNull(), eq(0), eq(20)))
+        when(reliabilityPassportService.list(isNull(), isNull(), isNull(), eq(0), eq(20)))
                 .thenReturn(new PageImpl<>(List.of(passport), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/equipment/reliability-passport"))
