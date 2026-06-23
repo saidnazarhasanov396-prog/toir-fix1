@@ -5,6 +5,7 @@ import com.toir.dto.meter.MeterReadingDto;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.WarrantyHandling;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.WorkOrderBriefDto;
 
@@ -42,7 +43,13 @@ public record RepairRequestDto(
         String closeResult,
         List<DefectBriefDto> linkedDefects,
         List<WorkOrderBriefDto> linkedWorkOrders,
-        List<MeterReadingDto> meterReadings
+        List<MeterReadingDto> meterReadings,
+        Boolean warrantyActiveAtCreation,
+        WarrantyHandling warrantyHandling,
+        String warrantyDecisionComment,
+        Instant supplierContactedAt,
+        String supplierResponse,
+        String emergencyReason
 ) {
     public RepairRequestDto(
             UUID id,
@@ -75,7 +82,8 @@ public record RepairRequestDto(
         this(id, number, title, description, templateId, List.of(), List.of(), List.of(), equipmentId, equipmentName, departmentId, departmentName,
                 locationName, reporterId, reporterName, assignedToId, priority, criticality, status, source,
                 detectedAt, targetCompletionAt, actualCompletionAt, reactedAt, rejectionReason,
-                clarificationReason, closeResult, linkedDefects, linkedWorkOrders, List.of());
+                clarificationReason, closeResult, linkedDefects, linkedWorkOrders, List.of(),
+                null, null, null, null, null, null);
     }
 
     public RepairRequestDto(
@@ -108,7 +116,8 @@ public record RepairRequestDto(
         this(id, number, title, description, null, List.of(), List.of(), List.of(), equipmentId, equipmentName, departmentId, departmentName,
                 locationName, reporterId, reporterName, assignedToId, priority, criticality, status, source,
                 detectedAt, targetCompletionAt, actualCompletionAt, reactedAt, rejectionReason,
-                clarificationReason, closeResult, linkedDefects, linkedWorkOrders, List.of());
+                clarificationReason, closeResult, linkedDefects, linkedWorkOrders, List.of(),
+                null, null, null, null, null, null);
     }
 
     public RepairRequestDto {

@@ -73,6 +73,7 @@ import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
+import com.toir.enums.WarrantyHandling;
 
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -1599,6 +1600,7 @@ public class WorkOrderService {
                 throw RestException.badRequest(
                         "Cannot create work order for repair request in status " + repairRequest.getStatus());
             }
+            assertWarrantyAllowsWorkOrder(repairRequest);
             if (request.equipmentId() != null
                     && repairRequest.getEquipmentId() != null
                     && !request.equipmentId().equals(repairRequest.getEquipmentId())) {
@@ -1631,6 +1633,21 @@ public class WorkOrderService {
                     "Defect " + request.defectId() + " belongs to a different repair request");
         }
         return defect;
+    }
+
+    private static final Set<WarrantyHandling> WARRANTY_HANDLING_BLOCKS_WORK_ORDER =
+            EnumSet.of(WarrantyHandling.CONTACT_SUPPLIER, WarrantyHandling.WAITING_FOR_SUPPLIER);
+
+    private void assertWarrantyAllowsWorkOrder(RepairRequest repairRequest) {
+        if (!Boolean.TRUE.equals(repairRequest.getWarrantyActiveAtCreation())) {
+            return;
+        }
+        WarrantyHandling handling = repairRequest.getWarrantyHandling();
+        if (handling == null || WARRANTY_HANDLING_BLOCKS_WORK_ORDER.contains(handling)) {
+            throw RestException.badRequest(
+                    "Work order cannot be created: warranty decision required or pending supplier response for repair request "
+                            + repairRequest.getId());
+        }
     }
 
     private void assertDefectListGate(WorkOrder workOrder) {

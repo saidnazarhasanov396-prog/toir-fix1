@@ -28,6 +28,7 @@ import com.toir.dto.triad.TriadLinkMapper;
 import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.WarrantyHandling;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.MeterReadingContext;
 import com.toir.enums.MeterSource;
@@ -72,6 +73,8 @@ import com.toir.dto.repairrequest.RepairRequestClarificationRequest;
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestTemplateSummaryDto;
+import com.toir.dto.repairrequest.WarrantyDecisionRequest;
+import com.toir.dto.repairrequest.WarrantyStatusResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -80,6 +83,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -225,6 +229,9 @@ public class RepairRequestService {
                 ? null
                 : templateSelections.getFirst().template().getId());
         entity.setEquipmentId(request.equipmentId());
+        boolean warrantyActive = isWarrantyActive(request.equipmentId());
+        entity.setWarrantyActiveAtCreation(warrantyActive);
+        entity.setWarrantyHandling(warrantyActive ? null : WarrantyHandling.NO_WARRANTY_ISSUE);
         entity.setDepartmentId(effectiveDepartmentId);
         entity.setLocationId(request.locationId());
         entity.setReporterId(request.reporterId());
@@ -261,6 +268,55 @@ public class RepairRequestService {
         );
 
         return toDtoWithLinks(saved);
+    }
+
+    @Transactional
+    public RepairRequestDto recordWarrantyDecision(UUID id, WarrantyDecisionRequest request, UUID currentUserId) {
+        RepairRequest entity = repository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Repair request not found: " + id));
+
+        if (request.warrantyHandling() == WarrantyHandling.EMERGENCY_OVERRIDE
+                && (request.emergencyReason() == null || request.emergencyReason().isBlank())) {
+            throw RestException.badRequest("emergencyReason is required for EMERGENCY_OVERRIDE");
+        }
+
+        entity.setWarrantyHandling(request.warrantyHandling());
+        entity.setWarrantyDecisionComment(request.warrantyDecisionComment());
+        entity.setSupplierContactedAt(request.supplierContactedAt());
+        entity.setSupplierResponse(request.supplierResponse());
+        entity.setEmergencyReason(request.emergencyReason());
+        entity.setWarrantyDecisionAt(Instant.now());
+        entity.setWarrantyDecisionByUserId(currentUserId);
+
+        RepairRequest saved = repository.save(entity);
+
+        auditBuilderService.log(
+                "repair_request",
+                String.valueOf(saved.getId()),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_REQUEST,
+                "Warranty decision recorded: " + request.warrantyHandling(),
+                null,
+                saved
+        );
+
+        return toDtoWithLinks(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public WarrantyStatusResponse getWarrantyStatus(UUID id) {
+        RepairRequest entity = repository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Repair request not found: " + id));
+        boolean currentlyActive = isWarrantyActive(entity.getEquipmentId());
+        return new WarrantyStatusResponse(
+                entity.getWarrantyActiveAtCreation(),
+                currentlyActive,
+                entity.getWarrantyHandling(),
+                entity.getWarrantyDecisionComment(),
+                entity.getSupplierContactedAt(),
+                entity.getSupplierResponse(),
+                entity.getEmergencyReason()
+        );
     }
 
     private List<NormalizedTemplateSelection> normalizeTemplateSelections(RepairRequestRequest request) {
@@ -1237,7 +1293,13 @@ public class RepairRequestService {
                 r.getCloseResult(),
                 linkedDefects,
                 linkedWorkOrders,
-                meterReadings
+                meterReadings,
+                r.getWarrantyActiveAtCreation(),
+                r.getWarrantyHandling(),
+                r.getWarrantyDecisionComment(),
+                r.getSupplierContactedAt(),
+                r.getSupplierResponse(),
+                r.getEmergencyReason()
         );
     }
 
@@ -1554,6 +1616,26 @@ public class RepairRequestService {
                 ))
                 .toList();
         return new PageImpl<>(dtos, page.getPageable(), page.getTotalElements());
+    }
+
+    private boolean isWarrantyActive(UUID equipmentId) {
+        if (equipmentId == null) {
+            return false;
+        }
+        return equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .map(this::hasActiveWarranty)
+                .orElse(false);
+    }
+
+    private boolean hasActiveWarranty(Equipment equipment) {
+        if (!Boolean.TRUE.equals(equipment.getHasWarranty())) {
+            return false;
+        }
+        LocalDate today = LocalDate.now();
+        LocalDate effectiveEnd = equipment.getWarrantyEndDate() != null
+                ? equipment.getWarrantyEndDate()
+                : equipment.getWarrantyUntil();
+        return effectiveEnd == null || !effectiveEnd.isBefore(today);
     }
 
     private RepairRequest getOrThrow(UUID id) {
