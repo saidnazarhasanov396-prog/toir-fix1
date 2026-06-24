@@ -19,6 +19,7 @@ class WarehouseAnalyticsIndexesMigrationContractTest {
         assertThat(sql).contains("idx_wsl_warehouse_spare_posted");
         assertThat(sql).contains("idx_wrl_warehouse_spare_posted");
         assertThat(sql).contains("idx_reservations_warehouse_status_updated");
-        assertThat(sql).contains("idx_stock_movements_warehouse_type_date");
+        assertThat(sql).contains("idx_wsl_metadata_warehouse_type_date");
+        assertThat(sql).doesNotContain("ON stock_movements");
     }
 }

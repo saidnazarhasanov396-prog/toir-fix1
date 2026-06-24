@@ -10,6 +10,6 @@ CREATE INDEX IF NOT EXISTS idx_reservations_warehouse_status_updated
     ON reservations (warehouse_id, status, updated_at)
     WHERE is_deleted = false;
 
-CREATE INDEX IF NOT EXISTS idx_stock_movements_warehouse_type_date
-    ON stock_movements (warehouse_id, type, movement_date)
+CREATE INDEX IF NOT EXISTS idx_wsl_metadata_warehouse_type_date
+    ON warehouse_stock_ledger_metadata (warehouse_id, legacy_type, movement_date)
     WHERE is_deleted = false;
