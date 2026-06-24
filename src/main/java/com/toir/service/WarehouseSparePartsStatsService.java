@@ -24,14 +24,26 @@ public class WarehouseSparePartsStatsService {
     private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
-    public SparePartsWarehouseStatsResponse getStats(UUID warehouseId) {
+    public SparePartsWarehouseStatsResponse getStats(
+            UUID warehouseId,
+            String search,
+            UUID typeId,
+            String itemType,
+            String unit
+    ) {
+        String normalizedSearch = (search == null || search.isBlank()) ? null : search.trim();
+        String normalizedItemType = (itemType == null || itemType.isBlank()) ? null : itemType.trim();
+        String normalizedUnit = (unit == null || unit.isBlank()) ? null : unit.trim();
+
         if (warehouseId != null) {
             assertCanAccessWarehouseId(warehouseId);
-            return toResponse(stockRepository.getSparePartsWarehouseStatsByWarehouseIds(List.of(warehouseId)));
+            return toResponse(stockRepository.getSparePartsWarehouseStatsByWarehouseIds(
+                    List.of(warehouseId), normalizedSearch, typeId, normalizedItemType, normalizedUnit));
         }
 
         if (scopeAccessService.isScopeAdmin()) {
-            return toResponse(stockRepository.getSparePartsWarehouseStats());
+            return toResponse(stockRepository.getSparePartsWarehouseStats(
+                    normalizedSearch, typeId, normalizedItemType, normalizedUnit));
         }
 
         List<UUID> accessibleWarehouseIds = warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -42,7 +54,8 @@ public class WarehouseSparePartsStatsService {
             return new SparePartsWarehouseStatsResponse(0, 0, 0, 0);
         }
 
-        return toResponse(stockRepository.getSparePartsWarehouseStatsByWarehouseIds(accessibleWarehouseIds));
+        return toResponse(stockRepository.getSparePartsWarehouseStatsByWarehouseIds(
+                accessibleWarehouseIds, normalizedSearch, typeId, normalizedItemType, normalizedUnit));
     }
 
     private SparePartsWarehouseStatsResponse toResponse(SparePartsWarehouseStatsProjection projection) {

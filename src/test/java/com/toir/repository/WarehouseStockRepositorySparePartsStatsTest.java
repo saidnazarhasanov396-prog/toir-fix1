@@ -59,7 +59,7 @@ class WarehouseStockRepositorySparePartsStatsTest {
 
         saveRepairMaterialUsage(UUID.randomUUID(), warehouseA.getId(), partA.getId(), 999);
 
-        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStats();
+        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStats(null, null, null, null);
 
         assertThat(stats.getNomenclature()).isEqualTo(3);
         assertThat(stats.getActiveReservations()).isEqualTo(1);
@@ -83,7 +83,8 @@ class WarehouseStockRepositorySparePartsStatsTest {
         saveMovement(warehouseA.getId(), partA.getId(), StockMovementType.ISSUE, 5, UUID.randomUUID(), false);
         saveMovement(warehouseB.getId(), partB.getId(), StockMovementType.ISSUE, 7, UUID.randomUUID(), false);
 
-        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(List.of(warehouseA.getId()));
+        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(
+                List.of(warehouseA.getId()), null, null, null, null);
 
         assertThat(stats.getNomenclature()).isEqualTo(1);
         assertThat(stats.getActiveReservations()).isEqualTo(1);
@@ -104,7 +105,8 @@ class WarehouseStockRepositorySparePartsStatsTest {
         saveStock(warehouse, partC, 9, 1, 5, 8.0);   // available=8, trigger=8 -> low
         saveStock(warehouse, partD, 0, 0, 0, null);  // trigger=0 -> excluded
 
-        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(List.of(warehouse.getId()));
+        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(
+                List.of(warehouse.getId()), null, null, null, null);
 
         assertThat(stats.getLowStockItems()).isEqualTo(2);
     }
@@ -120,7 +122,8 @@ class WarehouseStockRepositorySparePartsStatsTest {
         saveStock(warehouse, aboveMinimum, 6, 0, 0, null);
         saveStock(warehouse, noThreshold, 0, 0, 0, null);
 
-        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(List.of(warehouse.getId()));
+        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(
+                List.of(warehouse.getId()), null, null, null, null);
 
         assertThat(stats.getLowStockItems()).isEqualTo(1);
     }
@@ -136,7 +139,8 @@ class WarehouseStockRepositorySparePartsStatsTest {
         saveReservation(stock, ReservationStatus.CANCELLED, false);
         saveReservation(stock, ReservationStatus.ACTIVE, true);
 
-        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(List.of(warehouse.getId()));
+        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(
+                List.of(warehouse.getId()), null, null, null, null);
 
         assertThat(stats.getActiveReservations()).isEqualTo(1);
     }
@@ -151,7 +155,8 @@ class WarehouseStockRepositorySparePartsStatsTest {
         saveMovement(warehouse.getId(), part.getId(), StockMovementType.RECEIPT, 9, UUID.randomUUID(), false);
         saveMovement(warehouse.getId(), part.getId(), StockMovementType.ISSUE, 11, UUID.randomUUID(), true);
 
-        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(List.of(warehouse.getId()));
+        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(
+                List.of(warehouse.getId()), null, null, null, null);
 
         assertThat(stats.getIssuedToWork()).isEqualTo(5.0);
     }
@@ -165,7 +170,8 @@ class WarehouseStockRepositorySparePartsStatsTest {
         saveMovement(warehouse.getId(), part.getId(), StockMovementType.ISSUE, 3, workOrderId, false);
         saveRepairMaterialUsage(workOrderId, warehouse.getId(), part.getId(), 20);
 
-        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(List.of(warehouse.getId()));
+        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(
+                List.of(warehouse.getId()), null, null, null, null);
 
         assertThat(stats.getIssuedToWork()).isEqualTo(3.0);
     }
