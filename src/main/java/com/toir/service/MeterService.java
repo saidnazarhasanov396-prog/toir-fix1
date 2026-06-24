@@ -21,16 +21,19 @@ import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
+import com.toir.util.SortUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -73,6 +76,33 @@ public class MeterService {
         return meterRepository.findAllByFiltersOrderByUpdatedAtDesc(search, meterTypeStr, equipmentId, equipmentSearch).stream()
                 .map(this::enrichWithEquipmentName)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<EquipmentMeterDto> listAll(String search,
+                                           MeterType meterType,
+                                           UUID equipmentId,
+                                           String equipmentSearch,
+                                           String sortBy,
+                                           String sortDir) {
+        List<EquipmentMeterDto> rows = listAll(search, meterType, equipmentId, equipmentSearch);
+        Comparator<EquipmentMeterDto> comparator = switch (sortBy == null ? "" : sortBy.trim()) {
+            case "meterType" -> Comparator.comparing(
+                    EquipmentMeterDto::meterType,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "lastReadingValue" -> Comparator.comparingDouble(EquipmentMeterDto::currentValue);
+            case "lastReadingAt" -> Comparator.comparing(
+                    EquipmentMeterDto::lastReadAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            default -> null;
+        };
+        if (comparator == null) {
+            return rows;
+        }
+        if (SortUtils.direction(sortDir, Sort.Direction.ASC).isDescending()) {
+            comparator = comparator.reversed();
+        }
+        return rows.stream().sorted(comparator).toList();
     }
 
     @Transactional(readOnly = true)

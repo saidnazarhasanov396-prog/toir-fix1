@@ -23,6 +23,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -289,6 +291,25 @@ class ReliabilityPassportServiceTest {
         assertThat(result.getContent()).extracting(ReliabilityPassport::equipmentId)
                 .containsExactly(highDowntime.getId());
         assertThat(result.getContent().getFirst().totalDowntimeMinutes()).isEqualTo(Duration.ofHours(8).toMinutes());
+    }
+
+    @Test
+    void listFallsBackToDefaultPagingWhenSortFieldIsUnsupported() {
+        Equipment equipment = equipment(UUID.randomUUID(), "EQ-DEFAULT", LocalDate.now(ZoneOffset.UTC).minusDays(100));
+        List<UUID> ids = List.of(equipment.getId());
+
+        when(equipmentRepository.searchForPassport(null, null, PageRequest.of(0, 1)))
+                .thenReturn(new PageImpl<>(List.of(equipment), PageRequest.of(0, 1), 1));
+        when(defectRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+        when(downtimeRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+        when(workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+
+        Page<ReliabilityPassport> result = service.list(null, null, null, 0, 1, "equipmentName", "asc");
+
+        assertThat(result.getContent()).extracting(ReliabilityPassport::equipmentId)
+                .containsExactly(equipment.getId());
+        assertThat(result.getTotalElements()).isEqualTo(1);
     }
 
     @Test

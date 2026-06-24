@@ -16,6 +16,8 @@ import com.toir.repository.users.UserRepository;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -79,6 +81,45 @@ public class AuditLogService {
         );
         Map<UUID, AuditLogUserSummary> usersById = loadUsers(logs);
         return logs.map(log -> toResponse(log, usersById));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AuditLogResponseDto> find(int page, int size, AuditAction action, LocalDate fromDate, LocalDate toDate,
+                                          String search, UUID userId, Sort sort) {
+        Page<AuditLog> logs = repository.findAll(
+                auditLogSpecification(action, fromDate, toDate, search, userId),
+                PaginationUtils.pageRequest(page, size, sort == null ? Sort.by(Sort.Direction.DESC, "createdAt") : sort)
+        );
+        Map<UUID, AuditLogUserSummary> usersById = loadUsers(logs);
+        return logs.map(log -> toResponse(log, usersById));
+    }
+
+    private Specification<AuditLog> auditLogSpecification(AuditAction action, LocalDate fromDate, LocalDate toDate,
+                                                         String search, UUID userId) {
+        return (root, query, cb) -> {
+            java.util.List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
+            predicates.add(cb.isFalse(root.get("isDeleted")));
+            if (action != null) {
+                predicates.add(cb.equal(root.get("action"), action));
+            }
+            if (fromDate != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), fromDate.atStartOfDay(ZoneId.of("Asia/Tashkent")).toInstant()));
+            }
+            if (toDate != null) {
+                predicates.add(cb.lessThan(root.get("createdAt"), toDate.plusDays(1).atStartOfDay(ZoneId.of("Asia/Tashkent")).toInstant()));
+            }
+            if (userId != null) {
+                predicates.add(cb.equal(root.get("userId"), userId));
+            }
+            if (search != null && !search.isBlank()) {
+                String pattern = "%" + search.trim().toLowerCase() + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(cb.coalesce(root.get("message"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("entityType"), "")), pattern)
+                ));
+            }
+            return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
     }
 
     private AuditLogResponseDto toResponse(AuditLog log, Map<UUID, AuditLogUserSummary> usersById) {

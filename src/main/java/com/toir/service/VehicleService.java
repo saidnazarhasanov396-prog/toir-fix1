@@ -138,10 +138,7 @@ public class VehicleService {
         if (sortBy == null || sortBy.isBlank()) {
             return false;
         }
-        if (!NUMERIC_SORT_FIELDS.contains(sortBy.trim())) {
-            throw RestException.badRequest("Unsupported vehicle sort: " + sortBy);
-        }
-        return true;
+        return NUMERIC_SORT_FIELDS.contains(sortBy.trim());
     }
 
     private Comparator<VehicleSummaryDto> vehicleComparator(String sortBy, String sortDir) {

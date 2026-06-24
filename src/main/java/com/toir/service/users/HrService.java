@@ -128,12 +128,17 @@ public class HrService {
 
     @Transactional(readOnly = true)
     public Page<EmployeeDto> listEmployees(int page, int pageSize, EmployeeFilterRequest filter) {
+        return listEmployees(page, pageSize, filter, Sort.by(Sort.Direction.DESC, "updatedAt"));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EmployeeDto> listEmployees(int page, int pageSize, EmployeeFilterRequest filter, Sort sort) {
         EmployeeFilterRequest effectiveFilter = filterOrEmpty(filter);
         UUID scopedDepartmentId = enforceEmployeeListDepartmentScope(effectiveFilter.departmentId());
         effectiveFilter = effectiveFilter.withDepartmentId(scopedDepartmentId);
         Page<Employee> employeePage = employeeRepository.findAll(
                 EmployeeSpecifications.byFilter(effectiveFilter),
-                PaginationUtils.pageRequest(page, pageSize, Sort.by(Sort.Direction.DESC, "updatedAt"))
+                PaginationUtils.pageRequest(page, pageSize, sort == null ? Sort.by(Sort.Direction.DESC, "updatedAt") : sort)
         );
         return toDtoPage(employeePage);
     }

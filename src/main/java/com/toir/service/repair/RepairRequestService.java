@@ -170,12 +170,17 @@ public class RepairRequestService {
 
     @Transactional(readOnly = true)
     public Page<RepairRequestDto> search(RepairRequestFilterRequest filter, Integer page, Integer pageSize) {
+        return search(filter, page, pageSize, Sort.by(Sort.Direction.DESC, "updatedAt"));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<RepairRequestDto> search(RepairRequestFilterRequest filter, Integer page, Integer pageSize, Sort sort) {
         Page<RepairRequest> resultPage = repository.findAll(
                 RepairRequestSpecifications.byFilter(filterOrEmpty(filter)),
                 PaginationUtils.pageRequest(
                         page == null ? 0 : page,
                         pageSize == null ? 20 : pageSize,
-                        Sort.by(Sort.Direction.DESC, "updatedAt")
+                        sort == null ? Sort.by(Sort.Direction.DESC, "updatedAt") : sort
                 )
         );
         return toDtoPage(resultPage);

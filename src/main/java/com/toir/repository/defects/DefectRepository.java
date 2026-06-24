@@ -10,6 +10,7 @@ import java.util.UUID;
 import com.toir.repository.projection.DefectStatsProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Repository;
 
 
 @Repository
-public interface DefectRepository extends JpaRepository<Defect, UUID> {
+public interface DefectRepository extends JpaRepository<Defect, UUID>, JpaSpecificationExecutor<Defect> {
     @Query(value = "SELECT * FROM defects WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<Defect> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 

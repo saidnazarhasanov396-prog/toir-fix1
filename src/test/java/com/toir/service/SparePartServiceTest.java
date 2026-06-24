@@ -350,6 +350,23 @@ class SparePartServiceTest {
     }
 
     @Test
+    void unsupportedSortFallsBackToDefaultPageOrder() {
+        SparePart part = sparePart(UUID.randomUUID(), "SP-DEFAULT", "Default", InventoryItemKind.SPARE_PART);
+        Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
+                .thenReturn(List.of());
+
+        Page<SparePartDto> result = service.findAll(20, 0, null, null, null, "", null, "name", "desc");
+
+        assertThat(result.getContent()).extracting(SparePartDto::id)
+                .containsExactly(part.getId());
+        assertThat(result.getPageable().isPaged()).isTrue();
+    }
+
+    @Test
     void findAllReturnsSeparateUnitCodeAndNameFromDictionary() {
         SparePart part = sparePart(UUID.randomUUID(), "SP-L", "Oil", InventoryItemKind.MATERIAL);
         part.setUnit("L");

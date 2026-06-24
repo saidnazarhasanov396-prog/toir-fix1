@@ -21,6 +21,7 @@ import com.toir.security.RequiresSensitiveAccess;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.WorkOrderService;
 import com.toir.util.PaginationUtils;
+import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -54,6 +56,15 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 public class WorkOrderController {
 
+    private static final Map<String, String> SORT_FIELDS = Map.of(
+            "status", "status",
+            "priority", "priority",
+            "workKind", "workType",
+            "plannedStartAt", "startPlannedAt",
+            "plannedEndAt", "endPlannedAt",
+            "createdAt", "createdAt"
+    );
+
     private final WorkOrderService service;
     private final WorkOrderRepository repository;
     private final ScopeAccessService scopeAccessService;
@@ -69,13 +80,38 @@ public class WorkOrderController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Instant plannedFrom,
             @RequestParam(required = false) Instant plannedTo,
-            @RequestParam(required = false, defaultValue = "updatedAt") String sortBy,
+            @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir) {
-        Sort sort = sortDir.equalsIgnoreCase("asc")
-                ? Sort.by(sortBy).ascending()
-                : Sort.by(sortBy).descending();
+        Sort sort = SortUtils.sort(sortBy, sortDir, SORT_FIELDS, "updatedAt", Sort.Direction.DESC);
+        String requestedSort = sortBy == null ? null : sortBy.trim();
+        if (requestedSort == null || requestedSort.isBlank() || "updatedAt".equals(requestedSort)) {
+            return ResponseEntity
+                    .ok(service.search(
+                            status,
+                            scopedDepartment(departmentId),
+                            equipmentId,
+                            page,
+                            size,
+                            search,
+                            plannedFrom,
+                            plannedTo,
+                            sort));
+        }
+        if (SortUtils.field(requestedSort, SORT_FIELDS) == null) {
+            return ResponseEntity
+                    .ok(service.search(
+                            status,
+                            scopedDepartment(departmentId),
+                            equipmentId,
+                            page,
+                            size,
+                            search,
+                            plannedFrom,
+                            plannedTo,
+                            sort));
+        }
         return ResponseEntity
-                .ok(service.search(
+                .ok(service.searchSorted(
                         status,
                         scopedDepartment(departmentId),
                         equipmentId,

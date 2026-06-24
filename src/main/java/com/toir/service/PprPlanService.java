@@ -210,10 +210,7 @@ public class PprPlanService {
         if (sortBy == null || sortBy.isBlank()) {
             return false;
         }
-        if (!NUMERIC_SORT_FIELDS.contains(sortBy.trim())) {
-            throw RestException.badRequest("Unsupported PPR plan sort: " + sortBy);
-        }
-        return true;
+        return NUMERIC_SORT_FIELDS.contains(sortBy.trim());
     }
 
     private List<PprPlanDto> sortIfRequested(List<PprPlanDto> plans, String sortBy, String sortDir) {

@@ -57,8 +57,19 @@ public class MeterController {
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) String equipmentSearch,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.listAll(search, meterType, equipmentId, equipmentSearch), page, size));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDir) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return ResponseEntity.ok(PaginationUtils.page(
+                    service.listAll(search, meterType, equipmentId, equipmentSearch),
+                    page,
+                    size));
+        }
+        return ResponseEntity.ok(PaginationUtils.page(
+                service.listAll(search, meterType, equipmentId, equipmentSearch, sortBy, sortDir),
+                page,
+                size));
     }
 
     @GetMapping("/stats")

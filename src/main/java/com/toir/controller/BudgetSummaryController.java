@@ -31,12 +31,14 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.FinanceScopeService;
 import com.toir.service.ActualCostReviewFacadeService;
+import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -48,6 +50,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -174,7 +177,9 @@ public class BudgetSummaryController {
             @RequestParam(required = false) String dateFrom,
             @RequestParam(required = false) String dateTo,
             @RequestParam(required = false) UUID actualCostId,
-            @RequestParam(required = false) String actualCostIds) {
+            @RequestParam(required = false) String actualCostIds,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         List<ActualCostReviewItem> items = filterReviewItems(
                 actualCostReviewFacadeService.actualCostRegister(search),
                 status,
@@ -190,6 +195,7 @@ public class BudgetSummaryController {
                 actualCostId,
                 actualCostIds
         );
+        items = sortReviewItems(items, sortBy, sortDir);
         return ResponseEntity.ok(PageResponseWithSummary.of(
                 items,
                 page,
@@ -208,7 +214,7 @@ public class BudgetSummaryController {
             String dateTo,
             UUID actualCostId,
             String actualCostIds) {
-        return actualCostRegister(page, size, search, status, costCategoryId, null, null, dateFrom, dateTo, actualCostId, actualCostIds);
+        return actualCostRegister(page, size, search, status, costCategoryId, null, null, dateFrom, dateTo, actualCostId, actualCostIds, null, "desc");
     }
 
     @GetMapping("/actual-costs/review-queue")
@@ -226,7 +232,9 @@ public class BudgetSummaryController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID contractorId,
             @RequestParam(required = false) UUID actualCostId,
-            @RequestParam(required = false) String actualCostIds) {
+            @RequestParam(required = false) String actualCostIds,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         List<ActualCostReviewItem> pending = filterReviewItems(
                 actualCostReviewFacadeService.reviewQueue(search),
                 status,
@@ -242,11 +250,33 @@ public class BudgetSummaryController {
                 actualCostId,
                 actualCostIds
         );
+        pending = sortReviewItems(pending, sortBy, sortDir);
         return ResponseEntity.ok(PageResponse.of(
                 pending,
                 page,
                 size
         ));
+    }
+
+    private List<ActualCostReviewItem> sortReviewItems(List<ActualCostReviewItem> items, String sortBy, String sortDir) {
+        Comparator<ActualCostReviewItem> comparator = switch (sortBy == null ? "" : sortBy.trim()) {
+            case "status" -> Comparator.comparing(
+                    ActualCostReviewItem::status,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+            case "amount" -> Comparator.comparingDouble(ActualCostReviewItem::amount);
+            case "slaThresholdHours" -> Comparator.comparingInt(ActualCostReviewItem::hoursToOverdue);
+            case "dueAt", "createdAt" -> Comparator.comparing(
+                    ActualCostReviewItem::costDate,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            default -> null;
+        };
+        if (comparator == null) {
+            return items;
+        }
+        if (SortUtils.direction(sortDir, Sort.Direction.DESC).isDescending()) {
+            comparator = comparator.reversed();
+        }
+        return items.stream().sorted(comparator).toList();
     }
 
     @GetMapping("/actual-costs/{id}/review-history")

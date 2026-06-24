@@ -39,9 +39,21 @@ public class OperationalIssueController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "detectedAt") String sort,
-            @RequestParam(defaultValue = "desc") String direction
+            @RequestParam(defaultValue = "desc") String direction,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDir
     ) {
-        return ResponseEntity.ok(service.search(status, severity, type, departmentId, equipmentId, search, page, size, sort, direction));
+        return ResponseEntity.ok(service.search(
+                status,
+                severity,
+                type,
+                departmentId,
+                equipmentId,
+                search,
+                page,
+                size,
+                sortBy == null || sortBy.isBlank() ? sort : sortBy,
+                sortDir == null || sortDir.isBlank() ? direction : sortDir));
     }
 
     @GetMapping("/{id}")
