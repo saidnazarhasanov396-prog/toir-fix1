@@ -2,6 +2,8 @@ package com.toir.service.attachment;
 
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
+import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.ApprovalTargetType;
@@ -12,6 +14,7 @@ import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.repository.repair.RepairRequestRepository;
@@ -66,6 +69,9 @@ class AttachmentTargetAccessServiceTest {
     @Mock
     EquipmentCommissioningActRepository equipmentCommissioningActRepository;
 
+    @Mock
+    DefectRepository defectRepository;
+
     private AttachmentTargetAccessService service;
 
     @BeforeEach
@@ -80,7 +86,8 @@ class AttachmentTargetAccessServiceTest {
                 procurementRequestRepository,
                 warehouseRepository,
                 scopeAccessService,
-                equipmentCommissioningActRepository
+                equipmentCommissioningActRepository,
+                defectRepository
         );
     }
 
@@ -159,6 +166,45 @@ class AttachmentTargetAccessServiceTest {
         assertThatThrownBy(() -> service.assertCanAccess(AttachmentTargetType.PROCUREMENT_REQUEST, requestId))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("procurement scope");
+    }
+
+    @Test
+    void departmentScopedUserCanAccessDefectAttachments() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Defect defect = new Defect();
+        defect.setEquipmentId(equipmentId);
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setDepartmentId(departmentId);
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+
+        assertThatCode(() -> service.assertCanAccess(AttachmentTargetType.DEFECT, defectId))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void forbiddenDefectAttachmentScopeThrows() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Defect defect = new Defect();
+        defect.setEquipmentId(equipmentId);
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setDepartmentId(departmentId);
+        when(defectRepository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.assertCanAccess(AttachmentTargetType.DEFECT, defectId))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("defect scope");
     }
 
     private ApprovalRequest approvalWithTarget(ApprovalTargetType targetType) {
