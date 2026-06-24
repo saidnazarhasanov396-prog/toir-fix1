@@ -79,22 +79,24 @@ public class WarehouseAnalyticsService {
         WarehouseAnalyticsFilter safeFilter = filter == null ? new WarehouseAnalyticsFilter() : filter;
         PeriodRange range = range(safeFilter.period());
         List<WarehouseStock> stocks = stocks(safeFilter.warehouseId());
-        Map<UUID, Warehouse> warehouses = warehouses(stocks);
-        Map<UUID, SparePart> parts = spareParts(stocks);
         List<StockMovement> movements = movements(safeFilter.warehouseId(), range);
-
         List<InventoryReplenishmentRecommendationDto> recommendations = replenishmentService
                 .recommendationRows(daysBetween(range), range.fromInstant(), range.toInstant(), safeFilter.warehouseId(), true);
-        List<WarehouseDeficitRowDto> deficits = deficits(recommendations, parts, safeFilter);
-        List<WarehouseReservationRowDto> reservations = reservations(safeFilter, parts, warehouses);
-        List<WarehouseDistributionRowDto> distribution = distribution(stocks, warehouses, parts);
-        List<WarehouseConsumptionRowDto> consumption = consumption(movements, parts);
+        Map<UUID, SparePart> parts = spareParts(stocks, recommendations, movements);
+        List<WarehouseStock> filteredStocks = filterStocks(stocks, parts, movements, safeFilter);
+        Map<UUID, Warehouse> warehouses = warehouses(filteredStocks, recommendations);
+        List<WarehouseDeficitRowDto> deficits = deficits(recommendations, parts, movements, safeFilter);
+        List<WarehouseReservationRowDto> reservations = reservations(safeFilter, parts, warehouses, deficits);
+        Set<UUID> visiblePartIds = visiblePartIds(filteredStocks, deficits, reservations);
+        List<StockMovement> visibleMovements = movementsForVisibleParts(movements, visiblePartIds, hasSliceFilter(safeFilter));
+        List<WarehouseDistributionRowDto> distribution = distribution(filteredStocks, warehouses, parts);
+        List<WarehouseConsumptionRowDto> consumption = consumption(visibleMovements, parts);
         List<WarehouseRiskDto> risks = risks(deficits, recommendations, reservations);
-        List<WarehouseAbcXyzCellDto> abcXyz = abcXyz();
+        List<WarehouseAbcXyzCellDto> abcXyz = abcXyz(visiblePartIds, hasSliceFilter(safeFilter));
 
         return new WarehouseAnalyticsOverviewDto(
-                kpis(safeFilter, stocks, deficits, reservations, distribution, abcXyz),
-                movementPoints(stocks, movements, range),
+                kpis(safeFilter, filteredStocks, parts, deficits, reservations, distribution, abcXyz),
+                movementPoints(filteredStocks, visibleMovements, range),
                 risks,
                 distribution,
                 deficits,
@@ -106,6 +108,7 @@ public class WarehouseAnalyticsService {
 
     private List<WarehouseAnalyticsKpiDto> kpis(WarehouseAnalyticsFilter filter,
                                                 List<WarehouseStock> stocks,
+                                                Map<UUID, SparePart> parts,
                                                 List<WarehouseDeficitRowDto> deficits,
                                                 List<WarehouseReservationRowDto> reservations,
                                                 List<WarehouseDistributionRowDto> distribution,
@@ -114,12 +117,22 @@ public class WarehouseAnalyticsService {
         double stock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
         double reserved = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
         double available = Math.max(stock - reserved, 0);
-        long critical = deficits.stream().filter(item -> "CRITICAL".equals(item.criticality())).count();
+        Set<UUID> criticalPartIds = stocks.stream()
+                .filter(item -> isCritical(parts.get(item.getSparePartId())))
+                .map(WarehouseStock::getSparePartId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        deficits.stream()
+                .filter(item -> "CRITICAL".equals(item.criticality()))
+                .map(WarehouseDeficitRowDto::sparePartId)
+                .forEach(criticalPartIds::add);
+        long critical = criticalPartIds.size();
+        long totalItems = visiblePartIds(stocks, deficits, reservations).size();
         long deadOrZ = abcXyz.stream().filter(item -> "Z".equals(item.xyzClass())).mapToLong(WarehouseAbcXyzCellDto::itemCount).sum();
         double turnover = stock <= 0 ? 0 : round(stats.issuedToWork() / stock * 12);
 
         return List.of(
-                new WarehouseAnalyticsKpiDto("totalItems", "Всего позиций", stats.nomenclature(), "номенклатур", 34.0, 1.2, "info", "Активная номенклатура по доступным складам"),
+                new WarehouseAnalyticsKpiDto("totalItems", "Всего позиций", totalItems, "номенклатур", 34.0, 1.2, "info", "Активная номенклатура по выбранному срезу"),
                 new WarehouseAnalyticsKpiDto("totalStock", "Общий остаток", stock, "ед.", stock * 0.021, 2.1, "neutral", "Суммарное количество по всем складам"),
                 new WarehouseAnalyticsKpiDto("available", "Доступно к выдаче", available, "ед.", available * 0.014, 1.4, "success", "Остаток минус активные резервы"),
                 new WarehouseAnalyticsKpiDto("reserved", "В резерве", reserved, "ед.", -reserved * 0.06, -6.0, "info", "Зарезервировано под работы: " + reservations.size()),
@@ -188,13 +201,16 @@ public class WarehouseAnalyticsService {
                     double reserved = warehouseStocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
                     double available = Math.max(stock - reserved, 0);
                     long deficits = warehouseStocks.stream().filter(item -> isDeficit(item, parts.get(item.getSparePartId()))).count();
+                    boolean hasCriticalDeficit = warehouseStocks.stream()
+                            .anyMatch(item -> isDeficit(item, parts.get(item.getSparePartId()))
+                                    && isCritical(parts.get(item.getSparePartId())));
                     double max = warehouseStocks.stream()
                             .map(WarehouseStock::getMaxQty)
                             .filter(Objects::nonNull)
                             .mapToDouble(Double::doubleValue)
                             .sum();
                     double fill = max <= 0 ? 0 : Math.min(100, available / max * 100);
-                    String status = deficits >= 5 ? "CRITICAL" : deficits > 0 ? "WARNING" : "NORMAL";
+                    String status = hasCriticalDeficit ? "CRITICAL" : deficits > 0 ? "WARNING" : "NORMAL";
                     Warehouse warehouse = warehouses.get(entry.getKey());
                     return new WarehouseDistributionRowDto(
                             entry.getKey(),
@@ -214,13 +230,21 @@ public class WarehouseAnalyticsService {
 
     private List<WarehouseDeficitRowDto> deficits(List<InventoryReplenishmentRecommendationDto> recommendations,
                                                   Map<UUID, SparePart> parts,
+                                                  List<StockMovement> movements,
                                                   WarehouseAnalyticsFilter filter) {
         String search = normalize(filter.search());
+        Set<UUID> movedPartIds = movedPartIds(movements);
         return recommendations.stream()
                 .filter(item -> item.totalShortageQty() > 0 || item.availableStock() <= safe(item.minStock()))
-                .filter(item -> search == null
-                        || contains(item.sparePartCode(), search)
-                        || contains(item.sparePartName(), search))
+                .filter(item -> {
+                    SparePart part = parts.get(item.sparePartId());
+                    return matchesSearch(part, search, item.sparePartCode(), item.sparePartName())
+                            && matchesCategory(part, filter.categoryId())
+                            && (!Boolean.TRUE.equals(filter.onlyCritical()) || isCritical(part))
+                            && (!Boolean.TRUE.equals(filter.noMovement()) || !movedPartIds.contains(item.sparePartId()))
+                            && (!Boolean.TRUE.equals(filter.hasReserve()) || item.reservedStock() > 0)
+                            && matchesStatus(statusForDeficit(part), filter.status());
+                })
                 .map(item -> {
                     SparePart part = parts.get(item.sparePartId());
                     String criticality = part == null || part.getCriticality() == null
@@ -241,7 +265,6 @@ public class WarehouseAnalyticsService {
                             item.forecastSources().isEmpty() ? null : item.forecastSources().get(0).equipmentId()
                     );
                 })
-                .filter(item -> !Boolean.TRUE.equals(filter.onlyCritical()) || "CRITICAL".equals(item.criticality()))
                 .limit(DEFICIT_LIMIT)
                 .toList();
     }
@@ -256,7 +279,11 @@ public class WarehouseAnalyticsService {
             String description = item.code() + " — остаток " + format(item.stock()) + " при минимуме " + format(item.minimum());
             risks.add(new WarehouseRiskDto(severity, title, description, "CREATE_PROCUREMENT", item.sparePartId(), "Создать заявку"));
         });
+        Set<UUID> visibleDeficitPartIds = deficits.stream()
+                .map(WarehouseDeficitRowDto::sparePartId)
+                .collect(Collectors.toSet());
         recommendations.stream()
+                .filter(item -> visibleDeficitPartIds.contains(item.sparePartId()))
                 .filter(item -> item.firstDueAt() != null && item.maintenanceShortageQty() > 0)
                 .limit(Math.max(0, RISK_LIMIT - risks.size()))
                 .forEach(item -> risks.add(new WarehouseRiskDto(
@@ -308,10 +335,21 @@ public class WarehouseAnalyticsService {
 
     private List<WarehouseReservationRowDto> reservations(WarehouseAnalyticsFilter filter,
                                                           Map<UUID, SparePart> parts,
-                                                          Map<UUID, Warehouse> warehouses) {
+                                                          Map<UUID, Warehouse> warehouses,
+                                                          List<WarehouseDeficitRowDto> deficits) {
+        String search = normalize(filter.search());
+        Set<UUID> deficitPartIds = deficits.stream().map(WarehouseDeficitRowDto::sparePartId).collect(Collectors.toSet());
         List<Reservation> rows = reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ReservationStatus.ACTIVE)
                 .stream()
                 .filter(item -> filter.warehouseId() == null || filter.warehouseId().equals(item.getWarehouseId()))
+                .filter(item -> {
+                    SparePart part = parts.get(item.getSparePartId());
+                    return matchesSearch(part, search, null, null)
+                            && matchesCategory(part, filter.categoryId())
+                            && (!Boolean.TRUE.equals(filter.onlyCritical()) || isCritical(part))
+                            && (!Boolean.TRUE.equals(filter.onlyDeficit()) || deficitPartIds.contains(item.getSparePartId()))
+                            && matchesStatus(statusForReservation(part, deficitPartIds.contains(item.getSparePartId())), filter.status());
+                })
                 .limit(RESERVATION_LIMIT)
                 .toList();
         Map<UUID, WorkOrder> workOrders = workOrders(rows);
@@ -339,8 +377,9 @@ public class WarehouseAnalyticsService {
                 .toList();
     }
 
-    private List<WarehouseAbcXyzCellDto> abcXyz() {
+    private List<WarehouseAbcXyzCellDto> abcXyz(Set<UUID> visiblePartIds, boolean constrained) {
         Map<UUID, InventoryAbcAnalysisDto> abc = inventoryAnalyticsService.abcAnalysis().stream()
+                .filter(item -> !constrained || visiblePartIds.contains(item.sparePartId()))
                 .collect(Collectors.toMap(InventoryAbcAnalysisDto::sparePartId, Function.identity(), (a, b) -> a));
         Map<UUID, InventoryXyzAnalysisDto> xyz = inventoryAnalyticsService.xyzAnalysis().stream()
                 .collect(Collectors.toMap(InventoryXyzAnalysisDto::sparePartId, Function.identity(), (a, b) -> a));
@@ -370,6 +409,58 @@ public class WarehouseAnalyticsService {
         return result;
     }
 
+    private List<WarehouseStock> filterStocks(List<WarehouseStock> stocks,
+                                              Map<UUID, SparePart> parts,
+                                              List<StockMovement> movements,
+                                              WarehouseAnalyticsFilter filter) {
+        String search = normalize(filter.search());
+        Set<UUID> movedPartIds = movedPartIds(movements);
+        return stocks.stream()
+                .filter(item -> {
+                    SparePart part = parts.get(item.getSparePartId());
+                    return matchesSearch(part, search, null, null)
+                            && matchesCategory(part, filter.categoryId())
+                            && (!Boolean.TRUE.equals(filter.onlyDeficit()) || isDeficit(item, part))
+                            && (!Boolean.TRUE.equals(filter.onlyCritical()) || isCritical(part))
+                            && (!Boolean.TRUE.equals(filter.noMovement()) || !movedPartIds.contains(item.getSparePartId()))
+                            && (!Boolean.TRUE.equals(filter.hasReserve()) || item.getReservedQty() > 0)
+                            && matchesStatus(statusForStock(item, part), filter.status());
+                })
+                .toList();
+    }
+
+    private List<StockMovement> movementsForVisibleParts(List<StockMovement> movements, Set<UUID> visiblePartIds, boolean constrained) {
+        if (!constrained || visiblePartIds.isEmpty()) {
+            return constrained ? List.of() : movements;
+        }
+        return movements.stream()
+                .filter(item -> item.getSparePartId() != null && visiblePartIds.contains(item.getSparePartId()))
+                .toList();
+    }
+
+    private Set<UUID> visiblePartIds(List<WarehouseStock> stocks,
+                                     List<WarehouseDeficitRowDto> deficits,
+                                     List<WarehouseReservationRowDto> reservations) {
+        Set<UUID> ids = stocks.stream()
+                .map(WarehouseStock::getSparePartId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        deficits.stream().map(WarehouseDeficitRowDto::sparePartId).filter(Objects::nonNull).forEach(ids::add);
+        reservations.stream().map(WarehouseReservationRowDto::sparePartId).filter(Objects::nonNull).forEach(ids::add);
+        return ids;
+    }
+
+    private boolean hasSliceFilter(WarehouseAnalyticsFilter filter) {
+        return filter.warehouseId() != null
+                || normalize(filter.search()) != null
+                || normalize(filter.categoryId()) != null
+                || normalize(filter.status()) != null
+                || Boolean.TRUE.equals(filter.onlyDeficit())
+                || Boolean.TRUE.equals(filter.onlyCritical())
+                || Boolean.TRUE.equals(filter.noMovement())
+                || Boolean.TRUE.equals(filter.hasReserve());
+    }
+
     private List<WarehouseStock> stocks(UUID warehouseId) {
         if (warehouseId != null) {
             return stockRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId);
@@ -389,8 +480,10 @@ public class WarehouseAnalyticsService {
                 .toList();
     }
 
-    private Map<UUID, Warehouse> warehouses(List<WarehouseStock> stocks) {
+    private Map<UUID, Warehouse> warehouses(List<WarehouseStock> stocks,
+                                           List<InventoryReplenishmentRecommendationDto> recommendations) {
         Set<UUID> ids = stocks.stream().map(WarehouseStock::getWarehouseId).filter(Objects::nonNull).collect(Collectors.toSet());
+        recommendations.stream().map(InventoryReplenishmentRecommendationDto::warehouseId).filter(Objects::nonNull).forEach(ids::add);
         if (ids.isEmpty()) {
             return Map.of();
         }
@@ -398,8 +491,12 @@ public class WarehouseAnalyticsService {
                 .collect(Collectors.toMap(Warehouse::getId, Function.identity()));
     }
 
-    private Map<UUID, SparePart> spareParts(List<WarehouseStock> stocks) {
+    private Map<UUID, SparePart> spareParts(List<WarehouseStock> stocks,
+                                            List<InventoryReplenishmentRecommendationDto> recommendations,
+                                            List<StockMovement> movements) {
         Set<UUID> ids = stocks.stream().map(WarehouseStock::getSparePartId).filter(Objects::nonNull).collect(Collectors.toSet());
+        recommendations.stream().map(InventoryReplenishmentRecommendationDto::sparePartId).filter(Objects::nonNull).forEach(ids::add);
+        movements.stream().map(StockMovement::getSparePartId).filter(Objects::nonNull).forEach(ids::add);
         if (ids.isEmpty()) {
             return Map.of();
         }
@@ -428,6 +525,66 @@ public class WarehouseAnalyticsService {
         }
         return equipmentRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
                 .collect(Collectors.toMap(Equipment::getId, Function.identity()));
+    }
+
+    private Set<UUID> movedPartIds(List<StockMovement> movements) {
+        return movements.stream()
+                .map(StockMovement::getSparePartId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+    }
+
+    private boolean matchesSearch(SparePart part, String search, String fallbackCode, String fallbackName) {
+        return search == null
+                || contains(fallbackCode, search)
+                || contains(fallbackName, search)
+                || (part != null && (contains(part.getCode(), search)
+                || contains(part.getName(), search)
+                || contains(part.getSku(), search)
+                || contains(part.getManufacturer(), search)
+                || contains(part.getSpecification(), search)));
+    }
+
+    private boolean matchesCategory(SparePart part, String categoryId) {
+        String normalized = normalize(categoryId);
+        if (normalized == null) {
+            return true;
+        }
+        if (part == null) {
+            return false;
+        }
+        if (part.getType() != null && part.getType().getId() != null
+                && part.getType().getId().toString().equalsIgnoreCase(normalized)) {
+            return true;
+        }
+        return part.getLegacyType() != null && part.getLegacyType().equalsIgnoreCase(normalized);
+    }
+
+    private boolean matchesStatus(String actual, String requested) {
+        String normalized = normalize(requested);
+        return normalized == null || actual.equalsIgnoreCase(normalized);
+    }
+
+    private String statusForStock(WarehouseStock stock, SparePart part) {
+        if (isDeficit(stock, part)) {
+            return isCritical(part) ? "CRITICAL" : "WARNING";
+        }
+        return "NORMAL";
+    }
+
+    private String statusForDeficit(SparePart part) {
+        return isCritical(part) ? "CRITICAL" : "WARNING";
+    }
+
+    private String statusForReservation(SparePart part, boolean deficit) {
+        if (deficit) {
+            return isCritical(part) ? "CRITICAL" : "WARNING";
+        }
+        return isCritical(part) ? "CRITICAL" : "NORMAL";
+    }
+
+    private boolean isCritical(SparePart part) {
+        return part != null && part.getCriticality() == CriticalityLevel.CRITICAL;
     }
 
     private boolean isDeficit(WarehouseStock stock, SparePart part) {
