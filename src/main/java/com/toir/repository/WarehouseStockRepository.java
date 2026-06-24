@@ -81,102 +81,145 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
     List<WarehouseStock> findAllBySparePartIdInAndWarehouseIdInAndIsDeletedFalseOrderByUpdatedAtDesc(Collection<UUID> sparePartIds, Collection<UUID> warehouseIds);
 
     @Query(value = """
-            SELECT
-                (SELECT COUNT(DISTINCT ws.spare_part_id)
-                   FROM warehouse_stocks ws
-                  WHERE ws.is_deleted = false) AS nomenclature,
-                (SELECT COUNT(r.id)
-                   FROM reservations r
-                   JOIN warehouse_stocks ws ON ws.id = r.warehouse_stock_id
-                  WHERE r.is_deleted = false
-                    AND ws.is_deleted = false
-                    AND r.status = 'ACTIVE') AS activeReservations,
-                (SELECT COUNT(*)
-                   FROM (
-                       SELECT ws.warehouse_id,
-                              ws.spare_part_id,
-                              ws.quantity,
-                              ws.reserved_qty,
-                              ws.reorder_point,
-                              ws.min_qty,
-                              sp.min_stock
-                         FROM warehouse_stocks ws
-                         JOIN spare_parts sp ON sp.id = ws.spare_part_id
-                          AND sp.is_deleted = false
-                        WHERE ws.is_deleted = false
-                        GROUP BY ws.warehouse_id, ws.spare_part_id,
-                                 ws.quantity, ws.reserved_qty, ws.reorder_point, ws.min_qty,
-                                 sp.min_stock
-                       HAVING (CASE
-                                WHEN ws.reorder_point > 0 THEN ws.reorder_point
-                                WHEN ws.min_qty > 0 THEN ws.min_qty
-                                WHEN sp.min_stock > 0 THEN sp.min_stock
-                                ELSE NULL
-                              END) IS NOT NULL
-                          AND (ws.quantity - ws.reserved_qty) <= (CASE
-                                WHEN ws.reorder_point > 0 THEN ws.reorder_point
-                                WHEN ws.min_qty > 0 THEN ws.min_qty
-                                WHEN sp.min_stock > 0 THEN sp.min_stock
-                                ELSE NULL
-                              END)
-                   ) low_stock) AS lowStockItems,
-                (SELECT COALESCE(SUM(sm.quantity), 0)
-                   FROM stock_movements sm
-                  WHERE sm.is_deleted = false
-                    AND sm.type = 'ISSUE'
-                    AND sm.work_order_id IS NOT NULL) AS issuedToWork
-            """, nativeQuery = true)
-    SparePartsWarehouseStatsProjection getSparePartsWarehouseStats();
-
-    @Query(value = """
+            WITH filtered_parts AS (
+                SELECT sp.id
+                  FROM spare_parts sp
+                 WHERE sp.is_deleted = false
+                   AND (cast(:typeId as uuid) IS NULL OR sp.type_id = cast(:typeId as uuid))
+                   AND (cast(:itemType as varchar) IS NULL OR sp.kind = cast(:itemType as varchar))
+                   AND (cast(:unit as varchar) IS NULL OR upper(sp.unit) = upper(cast(:unit as varchar)))
+                   AND (cast(:search as varchar) IS NULL
+                       OR lower(sp.code) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.name) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.manufacturer) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.sku) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.specification) LIKE lower(concat('%', cast(:search as varchar), '%')))
+            )
             SELECT
                 (SELECT COUNT(DISTINCT ws.spare_part_id)
                    FROM warehouse_stocks ws
                   WHERE ws.is_deleted = false
-                    AND ws.warehouse_id IN (:warehouseIds)) AS nomenclature,
+                    AND ws.spare_part_id IN (SELECT id FROM filtered_parts)
+                ) AS nomenclature,
                 (SELECT COUNT(r.id)
                    FROM reservations r
                    JOIN warehouse_stocks ws ON ws.id = r.warehouse_stock_id
                   WHERE r.is_deleted = false
                     AND ws.is_deleted = false
                     AND r.status = 'ACTIVE'
-                    AND ws.warehouse_id IN (:warehouseIds)) AS activeReservations,
+                    AND ws.spare_part_id IN (SELECT id FROM filtered_parts)
+                ) AS activeReservations,
                 (SELECT COUNT(*)
                    FROM (
-                       SELECT ws.warehouse_id,
-                              ws.spare_part_id,
-                              ws.quantity,
-                              ws.reserved_qty,
-                              ws.reorder_point,
-                              ws.min_qty,
-                              sp.min_stock
+                       SELECT ws.spare_part_id
                          FROM warehouse_stocks ws
-                         JOIN spare_parts sp ON sp.id = ws.spare_part_id
-                          AND sp.is_deleted = false
                         WHERE ws.is_deleted = false
-                          AND ws.warehouse_id IN (:warehouseIds)
+                          AND ws.spare_part_id IN (SELECT id FROM filtered_parts)
                         GROUP BY ws.warehouse_id, ws.spare_part_id,
                                  ws.quantity, ws.reserved_qty, ws.reorder_point, ws.min_qty,
-                                 sp.min_stock
+                                 (SELECT sp.min_stock FROM spare_parts sp WHERE sp.id = ws.spare_part_id)
                        HAVING (CASE
                                 WHEN ws.reorder_point > 0 THEN ws.reorder_point
                                 WHEN ws.min_qty > 0 THEN ws.min_qty
-                                WHEN sp.min_stock > 0 THEN sp.min_stock
+                                WHEN (SELECT sp.min_stock FROM spare_parts sp WHERE sp.id = ws.spare_part_id) > 0
+                                     THEN (SELECT sp.min_stock FROM spare_parts sp WHERE sp.id = ws.spare_part_id)
                                 ELSE NULL
-                              END) IS NOT NULL
+                               END) IS NOT NULL
                           AND (ws.quantity - ws.reserved_qty) <= (CASE
                                 WHEN ws.reorder_point > 0 THEN ws.reorder_point
                                 WHEN ws.min_qty > 0 THEN ws.min_qty
-                                WHEN sp.min_stock > 0 THEN sp.min_stock
+                                WHEN (SELECT sp.min_stock FROM spare_parts sp WHERE sp.id = ws.spare_part_id) > 0
+                                     THEN (SELECT sp.min_stock FROM spare_parts sp WHERE sp.id = ws.spare_part_id)
                                 ELSE NULL
-                              END)
-                   ) low_stock) AS lowStockItems,
+                               END)
+                   ) low_stock
+                ) AS lowStockItems,
                 (SELECT COALESCE(SUM(sm.quantity), 0)
                    FROM stock_movements sm
                   WHERE sm.is_deleted = false
                     AND sm.type = 'ISSUE'
                     AND sm.work_order_id IS NOT NULL
-                    AND sm.warehouse_id IN (:warehouseIds)) AS issuedToWork
+                    AND sm.spare_part_id IN (SELECT id FROM filtered_parts)
+                ) AS issuedToWork
             """, nativeQuery = true)
-    SparePartsWarehouseStatsProjection getSparePartsWarehouseStatsByWarehouseIds(@Param("warehouseIds") Collection<UUID> warehouseIds);
+    SparePartsWarehouseStatsProjection getSparePartsWarehouseStats(
+            @Param("search") String search,
+            @Param("typeId") UUID typeId,
+            @Param("itemType") String itemType,
+            @Param("unit") String unit
+    );
+
+    @Query(value = """
+            WITH filtered_parts AS (
+                SELECT sp.id
+                  FROM spare_parts sp
+                 WHERE sp.is_deleted = false
+                   AND (cast(:typeId as uuid) IS NULL OR sp.type_id = cast(:typeId as uuid))
+                   AND (cast(:itemType as varchar) IS NULL OR sp.kind = cast(:itemType as varchar))
+                   AND (cast(:unit as varchar) IS NULL OR upper(sp.unit) = upper(cast(:unit as varchar)))
+                   AND (cast(:search as varchar) IS NULL
+                       OR lower(sp.code) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.name) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.manufacturer) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.sku) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.specification) LIKE lower(concat('%', cast(:search as varchar), '%')))
+            )
+            SELECT
+                (SELECT COUNT(DISTINCT ws.spare_part_id)
+                   FROM warehouse_stocks ws
+                  WHERE ws.is_deleted = false
+                    AND ws.warehouse_id IN (:warehouseIds)
+                    AND ws.spare_part_id IN (SELECT id FROM filtered_parts)
+                ) AS nomenclature,
+                (SELECT COUNT(r.id)
+                   FROM reservations r
+                   JOIN warehouse_stocks ws ON ws.id = r.warehouse_stock_id
+                  WHERE r.is_deleted = false
+                    AND ws.is_deleted = false
+                    AND r.status = 'ACTIVE'
+                    AND ws.warehouse_id IN (:warehouseIds)
+                    AND ws.spare_part_id IN (SELECT id FROM filtered_parts)
+                ) AS activeReservations,
+                (SELECT COUNT(*)
+                   FROM (
+                       SELECT ws.spare_part_id
+                         FROM warehouse_stocks ws
+                        WHERE ws.is_deleted = false
+                          AND ws.warehouse_id IN (:warehouseIds)
+                          AND ws.spare_part_id IN (SELECT id FROM filtered_parts)
+                        GROUP BY ws.warehouse_id, ws.spare_part_id,
+                                 ws.quantity, ws.reserved_qty, ws.reorder_point, ws.min_qty,
+                                 (SELECT sp.min_stock FROM spare_parts sp WHERE sp.id = ws.spare_part_id)
+                       HAVING (CASE
+                                WHEN ws.reorder_point > 0 THEN ws.reorder_point
+                                WHEN ws.min_qty > 0 THEN ws.min_qty
+                                WHEN (SELECT sp.min_stock FROM spare_parts sp WHERE sp.id = ws.spare_part_id) > 0
+                                     THEN (SELECT sp.min_stock FROM spare_parts sp WHERE sp.id = ws.spare_part_id)
+                                ELSE NULL
+                               END) IS NOT NULL
+                          AND (ws.quantity - ws.reserved_qty) <= (CASE
+                                WHEN ws.reorder_point > 0 THEN ws.reorder_point
+                                WHEN ws.min_qty > 0 THEN ws.min_qty
+                                WHEN (SELECT sp.min_stock FROM spare_parts sp WHERE sp.id = ws.spare_part_id) > 0
+                                     THEN (SELECT sp.min_stock FROM spare_parts sp WHERE sp.id = ws.spare_part_id)
+                                ELSE NULL
+                               END)
+                   ) low_stock
+                ) AS lowStockItems,
+                (SELECT COALESCE(SUM(sm.quantity), 0)
+                   FROM stock_movements sm
+                  WHERE sm.is_deleted = false
+                    AND sm.type = 'ISSUE'
+                    AND sm.work_order_id IS NOT NULL
+                    AND sm.warehouse_id IN (:warehouseIds)
+                    AND sm.spare_part_id IN (SELECT id FROM filtered_parts)
+                ) AS issuedToWork
+            """, nativeQuery = true)
+    SparePartsWarehouseStatsProjection getSparePartsWarehouseStatsByWarehouseIds(
+            @Param("warehouseIds") Collection<UUID> warehouseIds,
+            @Param("search") String search,
+            @Param("typeId") UUID typeId,
+            @Param("itemType") String itemType,
+            @Param("unit") String unit
+    );
 }

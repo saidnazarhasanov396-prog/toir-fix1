@@ -38,7 +38,7 @@ class WarehouseSparePartsStatsControllerContractTest {
 
     @Test
     void getStatsReturnsAllCards() throws Exception {
-        when(statsService.getStats(isNull()))
+        when(statsService.getStats(isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenReturn(new SparePartsWarehouseStatsResponse(12, 4, 3, 18.5));
 
         mockMvc.perform(get("/api/v1/warehouses/spare-parts/stats"))
@@ -48,13 +48,13 @@ class WarehouseSparePartsStatsControllerContractTest {
                 .andExpect(jsonPath("$.lowStockItems").value(3))
                 .andExpect(jsonPath("$.issuedToWork").value(18.5));
 
-        verify(statsService).getStats(isNull());
+        verify(statsService).getStats(isNull(), isNull(), isNull(), isNull(), isNull());
     }
 
     @Test
     void getStatsWithWarehouseIdPassesFilterToService() throws Exception {
         UUID warehouseId = UUID.randomUUID();
-        when(statsService.getStats(eq(warehouseId)))
+        when(statsService.getStats(eq(warehouseId), isNull(), isNull(), isNull(), isNull()))
                 .thenReturn(new SparePartsWarehouseStatsResponse(5, 1, 1, 7));
 
         mockMvc.perform(get("/api/v1/warehouses/spare-parts/stats")
@@ -65,6 +65,6 @@ class WarehouseSparePartsStatsControllerContractTest {
                 .andExpect(jsonPath("$.lowStockItems").value(1))
                 .andExpect(jsonPath("$.issuedToWork").value(7.0));
 
-        verify(statsService).getStats(eq(warehouseId));
+        verify(statsService).getStats(eq(warehouseId), isNull(), isNull(), isNull(), isNull());
     }
 }
