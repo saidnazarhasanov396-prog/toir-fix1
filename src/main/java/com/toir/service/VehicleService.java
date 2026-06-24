@@ -79,21 +79,39 @@ public class VehicleService {
     private final EmployeeRepository employeeRepository;
     private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
+    private static final Set<String> NUMERIC_SORT_FIELDS = Set.of(
+            "assignedDriverUsageLimitMinutes",
+            "manufactureYear",
+            "averageDailyUsage",
+            "lifetimeLimitValue",
+            "lifetimeBaselineValue",
+            "lifetimeWarningPercent",
+            "currentOdometerKm",
+            "currentEngineHours"
+    );
+
     @Value("${toir.vehicle.driver-role-required:false}")
     private boolean driverRoleRequired;
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, VehicleRegistrationPlateType plateType,
                                         String search, int page, int pageSize) {
+        return list(departmentId, status, plateType, search, page, pageSize, null, "asc");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, VehicleRegistrationPlateType plateType,
+                                        String search, int page, int pageSize, String sortBy, String sortDir) {
         int safePage = Math.max(page, 0);
         int safePageSize = Math.max(pageSize, 1);
+        boolean numericSort = isNumericSort(sortBy);
         Page<Equipment> equipmentPage = vehicleDetailsRepository.searchVehicleEquipment(
                 departmentId,
                 status,
                 plateType,
                 EquipmentCategory.VEHICLE,
                 search,
-                org.springframework.data.domain.PageRequest.of(safePage, safePageSize)
+                numericSort ? Pageable.unpaged() : org.springframework.data.domain.PageRequest.of(safePage, safePageSize)
         );
         Page<EquipmentDto> enrichedEquipmentPage = equipmentService.enrich(equipmentPage);
         Map<UUID, VehicleDetails> detailsByEquipment = vehicleDetailsRepository
@@ -107,7 +125,42 @@ public class VehicleService {
                 })
                 .filter(Objects::nonNull)
                 .toList();
+        if (numericSort) {
+            List<VehicleSummaryDto> sorted = items.stream()
+                    .sorted(vehicleComparator(sortBy, sortDir))
+                    .toList();
+            return com.toir.util.PaginationUtils.page(sorted, safePage, safePageSize);
+        }
         return new FixedTotalPage<>(items, enrichedEquipmentPage.getPageable(), enrichedEquipmentPage.getTotalElements());
+    }
+
+    private boolean isNumericSort(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return false;
+        }
+        if (!NUMERIC_SORT_FIELDS.contains(sortBy.trim())) {
+            throw RestException.badRequest("Unsupported vehicle sort: " + sortBy);
+        }
+        return true;
+    }
+
+    private Comparator<VehicleSummaryDto> vehicleComparator(String sortBy, String sortDir) {
+        Comparator<VehicleSummaryDto> comparator = switch (sortBy.trim()) {
+            case "assignedDriverUsageLimitMinutes" -> nullableComparator(VehicleSummaryDto::assignedDriverUsageLimitMinutes);
+            case "manufactureYear" -> nullableComparator(VehicleSummaryDto::manufactureYear);
+            case "averageDailyUsage" -> nullableComparator(VehicleSummaryDto::averageDailyUsage);
+            case "lifetimeLimitValue" -> nullableComparator(VehicleSummaryDto::lifetimeLimitValue);
+            case "lifetimeBaselineValue" -> nullableComparator(VehicleSummaryDto::lifetimeBaselineValue);
+            case "lifetimeWarningPercent" -> nullableComparator(VehicleSummaryDto::lifetimeWarningPercent);
+            case "currentOdometerKm" -> Comparator.comparingDouble(VehicleSummaryDto::currentOdometerKm);
+            case "currentEngineHours" -> Comparator.comparingDouble(VehicleSummaryDto::currentEngineHours);
+            default -> throw RestException.badRequest("Unsupported vehicle sort: " + sortBy);
+        };
+        return "desc".equalsIgnoreCase(sortDir) ? comparator.reversed() : comparator;
+    }
+
+    private static <T, U extends Comparable<? super U>> Comparator<T> nullableComparator(Function<T, U> extractor) {
+        return Comparator.comparing(extractor, Comparator.nullsLast(Comparator.naturalOrder()));
     }
 
     @Transactional(readOnly = true)

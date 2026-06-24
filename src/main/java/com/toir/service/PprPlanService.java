@@ -45,6 +45,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.Year;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -82,6 +83,7 @@ public class PprPlanService {
             EnumSet.of(PlanStatus.DRAFT, PlanStatus.GENERATED);
     private static final Set<PlanStatus> PLAN_EXECUTION_STATUSES =
             EnumSet.of(PlanStatus.APPROVED, PlanStatus.IN_PROGRESS);
+    private static final Set<String> NUMERIC_SORT_FIELDS = Set.of("taskCount", "intervalHours");
 
 
     @Transactional(readOnly = true)
@@ -106,21 +108,41 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public Page<PprPlanDto> findAllUnpaged(Integer year, Integer month, Integer day, UUID departmentId) {
+        return findAllUnpaged(year, month, day, departmentId, null, "asc");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprPlanDto> findAllUnpaged(Integer year, Integer month, Integer day, UUID departmentId, String sortBy, String sortDir) {
         List<PprPlanDto> plans = findAll(year, month, day, departmentId);
+        plans = sortIfRequested(plans, sortBy, sortDir);
         return PaginationUtils.page(plans, 0, PaginationUtils.pageSizeFromList(0, plans.size()), plans.size());
     }
 
     @Transactional(readOnly = true)
     public Page<PprPlanDto> findAllUnpaged(Integer year, Integer month, Integer day, UUID departmentId, UUID equipmentId) {
+        return findAllUnpaged(year, month, day, departmentId, equipmentId, null, "asc");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprPlanDto> findAllUnpaged(Integer year, Integer month, Integer day, UUID departmentId, UUID equipmentId, String sortBy, String sortDir) {
         if (equipmentId == null) {
-            return findAllUnpaged(year, month, day, departmentId);
+            return findAllUnpaged(year, month, day, departmentId, sortBy, sortDir);
         }
         List<PprPlanDto> plans = findAll(year, month, day, departmentId, equipmentId);
+        plans = sortIfRequested(plans, sortBy, sortDir);
         return PaginationUtils.page(plans, 0, PaginationUtils.pageSizeFromList(0, plans.size()), plans.size());
     }
 
     @Transactional(readOnly = true)
     public Page<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId, int page, int size) {
+        return findAll(year, month, day, departmentId, page, size, null, "asc");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId, int page, int size, String sortBy, String sortDir) {
+        if (isNumericSort(sortBy)) {
+            return PaginationUtils.page(sortIfRequested(findAll(year, month, day, departmentId), sortBy, sortDir), page, size);
+        }
         validateDateFilterParts(year, month, day);
         Page<PprPlan> plans = planRepository.searchPlans(
                         year,
@@ -147,8 +169,16 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public Page<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId, UUID equipmentId, int page, int size) {
+        return findAll(year, month, day, departmentId, equipmentId, page, size, null, "asc");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId, UUID equipmentId, int page, int size, String sortBy, String sortDir) {
         if (equipmentId == null) {
-            return findAll(year, month, day, departmentId, page, size);
+            return findAll(year, month, day, departmentId, page, size, sortBy, sortDir);
+        }
+        if (isNumericSort(sortBy)) {
+            return PaginationUtils.page(sortIfRequested(findAll(year, month, day, departmentId, equipmentId), sortBy, sortDir), page, size);
         }
         validateDateFilterParts(year, month, day);
         Page<PprPlan> plans = planRepository.searchPlans(
@@ -174,6 +204,34 @@ public class PprPlanService {
                 regulationNames,
                 equipmentId
         ));
+    }
+
+    private boolean isNumericSort(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return false;
+        }
+        if (!NUMERIC_SORT_FIELDS.contains(sortBy.trim())) {
+            throw RestException.badRequest("Unsupported PPR plan sort: " + sortBy);
+        }
+        return true;
+    }
+
+    private List<PprPlanDto> sortIfRequested(List<PprPlanDto> plans, String sortBy, String sortDir) {
+        if (!isNumericSort(sortBy)) {
+            return plans;
+        }
+        Comparator<PprPlanDto> comparator = switch (sortBy.trim()) {
+            case "taskCount" -> Comparator.comparingLong(PprPlanDto::taskCount);
+            case "intervalHours" -> Comparator.comparing(
+                    PprPlanDto::intervalHours,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            default -> throw RestException.badRequest("Unsupported PPR plan sort: " + sortBy);
+        };
+        if ("desc".equalsIgnoreCase(sortDir)) {
+            comparator = comparator.reversed();
+        }
+        return plans.stream().sorted(comparator).toList();
     }
 
     @Transactional(readOnly = true)

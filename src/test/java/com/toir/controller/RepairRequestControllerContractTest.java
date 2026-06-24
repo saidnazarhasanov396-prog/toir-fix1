@@ -636,7 +636,9 @@ class RepairRequestControllerContractTest {
                                       "title": "Bearing wear",
                                       "description": "Noise from bearing",
                                       "category": "Mechanical",
-                                      "severity": "HIGH"
+                                      "severity": "HIGH",
+                                      "failure_reason": "Insufficient lubrication",
+                                      "root_cause": "Missed lubrication route"
                                     }
                                   ]
                                 }
@@ -650,6 +652,8 @@ class RepairRequestControllerContractTest {
         verify(service).create(captor.capture());
         assertThat(captor.getValue().defects()).hasSize(1);
         assertThat(captor.getValue().defects().getFirst().title()).isEqualTo("Bearing wear");
+        assertThat(captor.getValue().defects().getFirst().failureReason()).isEqualTo("Insufficient lubrication");
+        assertThat(captor.getValue().defects().getFirst().rootCause()).isEqualTo("Missed lubrication route");
         assertThat(captor.getValue().defectId()).isNull();
     }
 

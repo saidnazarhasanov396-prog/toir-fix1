@@ -75,15 +75,29 @@ public class VehicleController {
             @RequestParam(required = false) VehicleRegistrationPlateType plateType,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "20") int size
+            @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDir
     ) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return ResponseEntity.ok(service.list(
+                    scopedDepartment(departmentId),
+                    status,
+                    plateType,
+                    search,
+                    page,
+                    size
+            ));
+        }
         return ResponseEntity.ok(service.list(
                 scopedDepartment(departmentId),
                 status,
                 plateType,
                 search,
                 page,
-                size
+                size,
+                sortBy,
+                sortDir
         ));
     }
 

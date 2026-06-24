@@ -37,6 +37,15 @@ public class ReliabilityPassportService {
 
     private static final EnumSet<DefectStatus> OPEN_DEFECT_STATUSES =
             EnumSet.of(DefectStatus.OPEN, DefectStatus.IN_ANALYSIS, DefectStatus.IN_PROGRESS);
+    private static final List<String> NUMERIC_SORT_FIELDS = List.of(
+            "totalDefects",
+            "openDefects",
+            "totalDowntimeEvents",
+            "totalDowntimeMinutes",
+            "mtbfHours",
+            "mttrHours",
+            "availabilityPct"
+    );
 
     private final EquipmentRepository equipmentRepository;
     private final DefectRepository defectRepository;
@@ -46,20 +55,36 @@ public class ReliabilityPassportService {
 
     @Transactional(readOnly = true)
     public Page<ReliabilityPassport> list(UUID equipmentId, String search, String availability, int page, int size) {
+        return list(equipmentId, search, availability, page, size, null, "asc");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ReliabilityPassport> list(UUID equipmentId,
+                                          String search,
+                                          String availability,
+                                          int page,
+                                          int size,
+                                          String sortBy,
+                                          String sortDir) {
         AvailabilityBand availabilityFilter = parseAvailabilityFilter(availability);
         String searchPattern = search == null || search.isBlank()
                 ? null
                 : "%" + search.toLowerCase() + "%";
 
-        if (availabilityFilter != null) {
+        if (availabilityFilter != null || isNumericSort(sortBy)) {
             List<Equipment> equipmentList = equipmentRepository.searchAllForPassport(equipmentId, searchPattern);
             if (equipmentList.isEmpty()) {
                 return PaginationUtils.page(List.of(), page, size);
             }
 
             List<ReliabilityPassport> filteredPassports = buildPassports(equipmentList).stream()
-                    .filter(passport -> bandOf(passport.availabilityPct()) == availabilityFilter)
+                    .filter(passport -> availabilityFilter == null || bandOf(passport.availabilityPct()) == availabilityFilter)
                     .toList();
+            if (isNumericSort(sortBy)) {
+                filteredPassports = filteredPassports.stream()
+                        .sorted(passportComparator(sortBy, sortDir))
+                        .toList();
+            }
             return PaginationUtils.page(filteredPassports, page, size);
         }
 
@@ -80,6 +105,36 @@ public class ReliabilityPassportService {
         List<ReliabilityPassport> passports = buildPassports(equipmentPage.getContent());
 
         return new PageImpl<>(passports, equipmentPage.getPageable(), equipmentPage.getTotalElements());
+    }
+
+    private boolean isNumericSort(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return false;
+        }
+        if (!NUMERIC_SORT_FIELDS.contains(sortBy.trim())) {
+            throw RestException.badRequest("Unsupported reliability passport sort: " + sortBy);
+        }
+        return true;
+    }
+
+    private Comparator<ReliabilityPassport> passportComparator(String sortBy, String sortDir) {
+        Comparator<ReliabilityPassport> comparator = switch (sortBy.trim()) {
+            case "totalDefects" -> Comparator.comparingInt(ReliabilityPassport::totalDefects);
+            case "openDefects" -> Comparator.comparingInt(ReliabilityPassport::openDefects);
+            case "totalDowntimeEvents" -> Comparator.comparingInt(ReliabilityPassport::totalDowntimeEvents);
+            case "totalDowntimeMinutes" -> Comparator.comparingLong(ReliabilityPassport::totalDowntimeMinutes);
+            case "mtbfHours" -> Comparator.comparing(
+                    ReliabilityPassport::mtbfHours,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            case "mttrHours" -> Comparator.comparing(
+                    ReliabilityPassport::mttrHours,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            case "availabilityPct" -> Comparator.comparingDouble(ReliabilityPassport::availabilityPct);
+            default -> throw RestException.badRequest("Unsupported reliability passport sort: " + sortBy);
+        };
+        return "desc".equalsIgnoreCase(sortDir) ? comparator.reversed() : comparator;
     }
 
     private List<ReliabilityPassport> buildPassports(List<Equipment> equipmentList) {
@@ -213,7 +268,9 @@ public class ReliabilityPassportService {
         }
         List<TopCause> topCauses = causes.entrySet().stream()
                 .map(e -> new TopCause(e.getKey(), e.getValue()))
-                .sorted(Comparator.comparingInt(TopCause::count).reversed())
+                .sorted(Comparator.comparingInt(TopCause::count).reversed()
+                        .thenComparing(cause -> "UNKNOWN".equalsIgnoreCase(cause.cause()) ? 1 : 0)
+                        .thenComparing(TopCause::cause, String.CASE_INSENSITIVE_ORDER))
                 .limit(10)
                 .toList();
 

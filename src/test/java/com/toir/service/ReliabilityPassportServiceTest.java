@@ -86,6 +86,22 @@ class ReliabilityPassportServiceTest {
     }
 
     @Test
+    void passportDoesNotPreferUnknownWhenCauseCountsTie() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+
+        Defect known = defect(DefectStatus.OPEN, "123", "123");
+        Defect unknown = defect(DefectStatus.OPEN, null, null);
+
+        stubPassport(equipment, List.of(unknown, known), List.of());
+
+        ReliabilityPassport result = service.passport(equipmentId);
+
+        assertThat(result.topRootCauses()).extracting(cause -> cause.cause())
+                .containsExactly("123", "UNKNOWN");
+    }
+
+    @Test
     void passportClipsBoundaryEventsAndCountsOpenDowntimeThroughNow() {
         UUID equipmentId = UUID.randomUUID();
         Instant now = Instant.now();
@@ -239,6 +255,40 @@ class ReliabilityPassportServiceTest {
         assertThat(lowPage.getTotalElements()).isEqualTo(1);
         assertThat(lowPage.getContent()).extracting(ReliabilityPassport::equipmentId)
                 .containsExactly(low.getId());
+    }
+
+    @Test
+    void listSortsComputedMetricsBeforePagination() {
+        Instant now = Instant.now();
+        LocalDate serviceStart = LocalDate.now(ZoneOffset.UTC).minusDays(100);
+        Equipment lowDowntime = equipment(UUID.randomUUID(), "EQ-LOW-DOWNTIME", serviceStart);
+        Equipment highDowntime = equipment(UUID.randomUUID(), "EQ-HIGH-DOWNTIME", serviceStart);
+        List<Equipment> equipment = List.of(lowDowntime, highDowntime);
+        List<UUID> ids = equipment.stream().map(Equipment::getId).toList();
+
+        DowntimeEvent small = downtime(
+                lowDowntime.getId(),
+                now.minus(Duration.ofDays(20)),
+                (int) Duration.ofHours(2).toMinutes(),
+                DowntimeType.UNPLANNED);
+        DowntimeEvent large = downtime(
+                highDowntime.getId(),
+                now.minus(Duration.ofDays(20)),
+                (int) Duration.ofHours(8).toMinutes(),
+                DowntimeType.UNPLANNED);
+
+        when(equipmentRepository.searchAllForPassport(null, null)).thenReturn(equipment);
+        when(defectRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+        when(downtimeRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of(small, large));
+        when(workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+
+        Page<ReliabilityPassport> result = service.list(null, null, null, 0, 1, "totalDowntimeMinutes", "desc");
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent()).extracting(ReliabilityPassport::equipmentId)
+                .containsExactly(highDowntime.getId());
+        assertThat(result.getContent().getFirst().totalDowntimeMinutes()).isEqualTo(Duration.ofHours(8).toMinutes());
     }
 
     @Test

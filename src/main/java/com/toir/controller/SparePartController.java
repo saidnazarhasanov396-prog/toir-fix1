@@ -39,8 +39,10 @@ public class SparePartController {
             @RequestParam(required = false) UUID typeId,
             @RequestParam(required = false) String type,
             @RequestParam(required = false, defaultValue = "") String search,
-            @RequestParam(required = false) UUID warehouseId
-            ) { return ResponseEntity.ok(service.findAll(size, page, itemType, typeId, type, search, warehouseId)); }
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDir
+            ) { return ResponseEntity.ok(service.findAll(size, page, itemType, typeId, type, search, warehouseId, sortBy, sortDir)); }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")

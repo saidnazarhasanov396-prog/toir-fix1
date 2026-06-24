@@ -128,6 +128,26 @@ public class EquipmentService {
     private final UserRepository userRepository;
     private final ScopeAccessService scopeAccessService;
     private static final int MAX_EQUIPMENT_DOCUMENT_FILES = 25;
+    private static final Set<String> NUMERIC_SORT_FIELDS = Set.of(
+            "producedYear",
+            "averageOperatingLifeHours",
+            "expectedLifetimeMonths",
+            "expectedLifetimeYears",
+            "expectedLifetimeHours",
+            "lifetimeLimitValue",
+            "lifetimeBaselineValue",
+            "lifetimeWarningPercent",
+            "lifetimeCurrentValue",
+            "lifetimeTargetValue",
+            "lifetimeRemainingValue",
+            "lifetimeConsumedPercent",
+            "averageDailyUsage",
+            "daysOfResourceRemaining",
+            "forecastConsumedResource",
+            "forecastRemainingResource",
+            "forecastAvgUsagePerActiveDay",
+            "forecastRemainingActiveDays"
+    );
     private static final Set<WorkOrderStatus> FINAL_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED);
 
@@ -194,10 +214,32 @@ public class EquipmentService {
                                      String search,
                                      int page,
                                      int pageSize) {
+        return search(scopeDepartmentId, departmentId, equipmentTypeId, status, category, warehouseId, locationType,
+                outsideReason, overdueOnly, availableForReplacement, search, page, pageSize, null, "asc");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EquipmentDto> search(UUID scopeDepartmentId,
+                                     UUID departmentId,
+                                     UUID equipmentTypeId,
+                                     EquipmentStatus status,
+                                     EquipmentCategory category,
+                                     UUID warehouseId,
+                                     EquipmentLocationType locationType,
+                                     EquipmentOutsideReason outsideReason,
+                                     boolean overdueOnly,
+                                     boolean availableForReplacement,
+                                     String search,
+                                     int page,
+                                     int pageSize,
+                                     String sortBy,
+                                     String sortDir) {
         String searchPattern = null;
         if (search != null && !search.isBlank()) {
             searchPattern = "%" + search.trim().toLowerCase() + "%";
         }
+        boolean numericSort = isNumericSort(sortBy);
+        Pageable pageable = numericSort ? Pageable.unpaged() : PaginationUtils.pageRequest(page, pageSize);
         Page<Equipment> items;
         if (availableForReplacement) {
             if (warehouseId == null) {
@@ -216,7 +258,7 @@ public class EquipmentService {
                     status,
                     category,
                     searchPattern,
-                    PaginationUtils.pageRequest(page, pageSize)
+                    pageable
             );
         } else {
             items = repository.search(
@@ -231,10 +273,56 @@ public class EquipmentService {
                     overdueOnly,
                     LocalDate.now(),
                     searchPattern,
-                    PaginationUtils.pageRequest(page, pageSize)
+                    pageable
             );
         }
-        return enrich(items);
+        Page<EquipmentDto> enriched = enrich(items);
+        if (!numericSort) {
+            return enriched;
+        }
+        List<EquipmentDto> sorted = enriched.getContent().stream()
+                .sorted(equipmentComparator(sortBy, sortDir))
+                .toList();
+        return PaginationUtils.page(sorted, page, pageSize);
+    }
+
+    private boolean isNumericSort(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return false;
+        }
+        if (!NUMERIC_SORT_FIELDS.contains(sortBy.trim())) {
+            throw RestException.badRequest("Unsupported equipment sort: " + sortBy);
+        }
+        return true;
+    }
+
+    private Comparator<EquipmentDto> equipmentComparator(String sortBy, String sortDir) {
+        Comparator<EquipmentDto> comparator = switch (sortBy.trim()) {
+            case "producedYear" -> nullableComparator(EquipmentDto::producedYear);
+            case "averageOperatingLifeHours" -> nullableComparator(EquipmentDto::averageOperatingLifeHours);
+            case "expectedLifetimeMonths" -> nullableComparator(EquipmentDto::expectedLifetimeMonths);
+            case "expectedLifetimeYears" -> nullableComparator(EquipmentDto::expectedLifetimeYears);
+            case "expectedLifetimeHours" -> nullableComparator(EquipmentDto::expectedLifetimeHours);
+            case "lifetimeLimitValue" -> nullableComparator(EquipmentDto::lifetimeLimitValue);
+            case "lifetimeBaselineValue" -> nullableComparator(EquipmentDto::lifetimeBaselineValue);
+            case "lifetimeWarningPercent" -> nullableComparator(EquipmentDto::lifetimeWarningPercent);
+            case "lifetimeCurrentValue" -> nullableComparator(EquipmentDto::lifetimeCurrentValue);
+            case "lifetimeTargetValue" -> nullableComparator(EquipmentDto::lifetimeTargetValue);
+            case "lifetimeRemainingValue" -> nullableComparator(EquipmentDto::lifetimeRemainingValue);
+            case "lifetimeConsumedPercent" -> nullableComparator(EquipmentDto::lifetimeConsumedPercent);
+            case "averageDailyUsage" -> nullableComparator(EquipmentDto::averageDailyUsage);
+            case "daysOfResourceRemaining" -> nullableComparator(EquipmentDto::daysOfResourceRemaining);
+            case "forecastConsumedResource" -> nullableComparator(EquipmentDto::forecastConsumedResource);
+            case "forecastRemainingResource" -> nullableComparator(EquipmentDto::forecastRemainingResource);
+            case "forecastAvgUsagePerActiveDay" -> nullableComparator(EquipmentDto::forecastAvgUsagePerActiveDay);
+            case "forecastRemainingActiveDays" -> nullableComparator(EquipmentDto::forecastRemainingActiveDays);
+            default -> throw RestException.badRequest("Unsupported equipment sort: " + sortBy);
+        };
+        return "desc".equalsIgnoreCase(sortDir) ? comparator.reversed() : comparator;
+    }
+
+    private static <T, U extends Comparable<? super U>> Comparator<T> nullableComparator(Function<T, U> extractor) {
+        return Comparator.comparing(extractor, Comparator.nullsLast(Comparator.naturalOrder()));
     }
 
     @Transactional(readOnly = true)
