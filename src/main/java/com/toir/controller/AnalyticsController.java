@@ -4,11 +4,10 @@ import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.dto.analytics.FailureParetoResponse;
 import com.toir.dto.analytics.RcaEquipmentResponse;
 import com.toir.dto.analytics.RcaOverviewResponse;
-import com.toir.entity.ReliabilityMetric;
+import com.toir.controller.ReliabilityPassportController.ReliabilityPassport;
 import com.toir.service.AnalyticsService;
-import com.toir.util.PaginationUtils;
+import com.toir.service.ReliabilityPassportService;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -29,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AnalyticsController {
 
     private final AnalyticsService service;
+    private final ReliabilityPassportService reliabilityPassportService;
 
     @GetMapping("/overview")
     public ResponseEntity<AnalyticsOverview> overview() {
@@ -56,7 +56,11 @@ public class AnalyticsController {
     }
 
     @GetMapping("/reliability")
-    public ResponseEntity<Page<ReliabilityMetric>> reliabilityList(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.reliabilityList(), page, size));
+    public ResponseEntity<Page<ReliabilityPassport>> reliabilityList(
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "8") int size) {
+        return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, null, page, size));
     }
 }
