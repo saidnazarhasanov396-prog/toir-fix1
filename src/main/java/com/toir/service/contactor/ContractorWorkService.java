@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -64,11 +65,13 @@ public class ContractorWorkService {
         assertValidContract(r.contractorId());
         WorkOrder workOrder = requireLinkedWorkOrder(r.workOrderId());
         assertWorkOrderAllowsContractorWork(workOrder);
+        assignWorkOrderToContractor(workOrder, r.contractorId());
 
         ContractorWork w = new ContractorWork();
         w.setContractorId(r.contractorId());
         w.setWorkOrderId(r.workOrderId());
         w.setDescription(r.description());
+        w.setCost(r.cost());
         ContractorWork saved = repository.save(w);
 
         auditBuilderService.log(
@@ -82,6 +85,16 @@ public class ContractorWorkService {
         );
 
         return ContractorWorkDto.from(saved);
+    }
+
+    private void assignWorkOrderToContractor(WorkOrder workOrder, UUID contractorId) {
+        if (workOrder.getContractorId() != null && !Objects.equals(workOrder.getContractorId(), contractorId)) {
+            throw RestException.badRequest("Linked work order is already assigned to another contractor");
+        }
+        if (!Objects.equals(workOrder.getContractorId(), contractorId)) {
+            workOrder.setContractorId(contractorId);
+            workOrderRepository.save(workOrder);
+        }
     }
 
     @Transactional

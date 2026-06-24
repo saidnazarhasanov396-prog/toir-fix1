@@ -111,6 +111,40 @@ class ContractorWorkServiceTest {
     }
 
     @Test
+    void createShouldAssignLinkedWorkOrderToContractorAndPreservePlannedCost() {
+        UUID contractorId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = workOrder(workOrderId, WorkOrderStatus.APPROVED);
+        when(contractorRepository.findByIdAndIsDeletedFalse(contractorId))
+                .thenReturn(Optional.of(contractor(contractorId, ContractorStatus.ACTIVE)));
+        when(contractorContractRepository.existsActiveContractValidOn(contractorId, LocalDate.now()))
+                .thenReturn(true);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(workOrderRepository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubSaveContractorWorkReturnsArgument();
+
+        ContractorWorkDto result = service.create(new ContractorWorkDto(
+                null,
+                contractorId,
+                workOrderId,
+                "Contractor pump repair",
+                null,
+                null,
+                null,
+                1250d,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        assertThat(workOrder.getContractorId()).isEqualTo(contractorId);
+        assertThat(result.cost()).isEqualTo(1250d);
+        verify(workOrderRepository).save(workOrder);
+    }
+
+    @Test
     void startShouldFailWhenContractorIsInactive() {
         UUID contractorId = UUID.randomUUID();
         UUID workId = UUID.randomUUID();
@@ -412,7 +446,13 @@ class ContractorWorkServiceTest {
     }
 
     private void stubSaveContractorWorkReturnsArgument() {
-        when(repository.save(any(ContractorWork.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(ContractorWork.class))).thenAnswer(invocation -> {
+            ContractorWork work = invocation.getArgument(0);
+            if (work.getId() == null) {
+                work.setId(UUID.randomUUID());
+            }
+            return work;
+        });
     }
 
     private void stubActualCostSaveReturnsArgument() {
