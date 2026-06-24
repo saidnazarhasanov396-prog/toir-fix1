@@ -17,6 +17,7 @@ import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.InventoryItemKind;
 import com.toir.enums.NotificationSeverity;
+import com.toir.enums.ReservationStatus;
 import com.toir.repository.ReservationRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
@@ -82,7 +83,7 @@ class WarehouseAnalyticsServiceTest {
         when(inventoryAnalyticsService.abcAnalysis()).thenReturn(List.<InventoryAbcAnalysisDto>of());
         when(inventoryAnalyticsService.xyzAnalysis()).thenReturn(List.<InventoryXyzAnalysisDto>of());
         when(inventoryAnalyticsService.stockoutRisk()).thenReturn(List.<InventoryStockoutRiskDto>of());
-        when(reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ReservationStatus.ACTIVE)).thenReturn(List.of());
     }
 
     @Test
