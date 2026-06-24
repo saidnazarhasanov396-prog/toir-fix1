@@ -93,7 +93,7 @@ public class SparePartService {
 
     @Transactional(readOnly = true)
     public Page<SparePartDto> findAll(Integer pageSize, Integer page, String itemType, String search, UUID warehouseId) {
-        return findAll(pageSize, page, itemType, (UUID) null, null, search, warehouseId);
+        return findAll(pageSize, page, itemType, (UUID) null, null, null, search, warehouseId, null, "asc");
     }
 
     @Transactional(readOnly = true)
@@ -105,7 +105,7 @@ public class SparePartService {
             String search,
             UUID warehouseId
     ) {
-        return findAll(pageSize, page, itemType, null, type, search, warehouseId);
+        return findAll(pageSize, page, itemType, null, type, null, search, warehouseId, null, "asc");
     }
 
     @Transactional(readOnly = true)
@@ -117,7 +117,7 @@ public class SparePartService {
             String search,
             UUID warehouseId
     ) {
-        return findAll(pageSize, page, itemType, typeId, null, search, warehouseId);
+        return findAll(pageSize, page, itemType, typeId, null, null, search, warehouseId, null, "asc");
     }
 
     @Transactional(readOnly = true)
@@ -130,7 +130,7 @@ public class SparePartService {
             String search,
             UUID warehouseId
     ) {
-        return findAll(pageSize, page, itemType, typeId, type, search, warehouseId, null, "asc");
+        return findAll(pageSize, page, itemType, typeId, type, null, search, warehouseId, null, "asc");
     }
 
     @Transactional(readOnly = true)
@@ -145,12 +145,43 @@ public class SparePartService {
             String sortBy,
             String sortDir
     ) {
+        return findAll(pageSize, page, itemType, typeId, type, null, search, warehouseId, sortBy, sortDir);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SparePartDto> findAll(
+            Integer pageSize,
+            Integer page,
+            String itemType,
+            UUID typeId,
+            String type,
+            String unit,
+            String search,
+            UUID warehouseId
+    ) {
+        return findAll(pageSize, page, itemType, typeId, type, unit, search, warehouseId, null, "asc");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SparePartDto> findAll(
+            Integer pageSize,
+            Integer page,
+            String itemType,
+            UUID typeId,
+            String type,
+            String unit,
+            String search,
+            UUID warehouseId,
+            String sortBy,
+            String sortDir
+    ) {
         int safePage = Math.max(page != null ? page : 0, 0);
         int safePageSize = Math.max(pageSize != null ? pageSize : 20, 1);
         boolean numericSort = isNumericSort(sortBy);
         Pageable pageable = numericSort ? Pageable.unpaged() : PaginationUtils.pageRequest(safePage, safePageSize);
         InventoryItemKind inventoryItemKind = mapItemType(itemType);
         UUID sparePartTypeId = resolveTypeFilter(typeId, type);
+        String unitFilter = (unit == null || unit.isBlank()) ? null : unit.trim();
         String searchPattern = toSearchPattern(search);
 
         List<UUID> scopedWarehouseIds = null;
@@ -160,6 +191,7 @@ public class SparePartService {
             parts = repository.findAllByFilterAndWarehouseId(
                     inventoryItemKind,
                     sparePartTypeId,
+                    unitFilter,
                     searchPattern,
                     warehouseId,
                     pageable
@@ -168,6 +200,7 @@ public class SparePartService {
             parts = repository.findAllByFilter(
                     inventoryItemKind,
                     sparePartTypeId,
+                    unitFilter,
                     searchPattern,
                     pageable
             );
@@ -179,6 +212,7 @@ public class SparePartService {
             parts = repository.findAllByFilterAndWarehouseIds(
                     inventoryItemKind,
                     sparePartTypeId,
+                    unitFilter,
                     searchPattern,
                     scopedWarehouseIds,
                     pageable
