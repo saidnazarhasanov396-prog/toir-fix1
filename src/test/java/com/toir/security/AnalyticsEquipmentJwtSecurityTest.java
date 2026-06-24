@@ -3,6 +3,7 @@ package com.toir.security;
 import com.toir.controller.AnalyticsController;
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.service.AnalyticsService;
+import com.toir.service.ReliabilityPassportService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,9 @@ class AnalyticsEquipmentJwtSecurityTest {
 
     @MockBean
     AnalyticsService analyticsService;
+
+    @MockBean
+    ReliabilityPassportService reliabilityPassportService;
 
     @Test
     void endpointAcceptsTokenWithAnalyticsReadPermission() throws Exception {
