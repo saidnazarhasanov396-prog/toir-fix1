@@ -15,7 +15,10 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.PaginationUtils;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -32,6 +35,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class OperationalIssueService {
+
+    private static final List<String> INSPECTION_DEFECT_DISPLAY_SEARCH_ALIASES = List.of(
+            "дефект при проверке",
+            "дефект",
+            "defect",
+            "inspection defect",
+            "inspection",
+            "tekshiruvdagi nuqson",
+            "tekshiruv",
+            "nuqson"
+    );
 
     private final OperationalIssueRepository repository;
     private final EquipmentRepository equipmentRepository;
@@ -52,6 +66,8 @@ public class OperationalIssueService {
                                             String direction) {
         UUID effectiveDepartmentId = effectiveDepartmentFilter(requestedDepartmentId);
         String searchPattern = toSearchPattern(search);
+        Collection<OperationalIssueType> searchTypeAliases = searchTypeAliases(search);
+        boolean searchTypeAliasesActive = !searchTypeAliases.isEmpty();
         Page<OperationalIssue> result = repository.search(
                 scopeAccessService.isScopeAdmin() ? null : effectiveDepartmentId,
                 status,
@@ -60,6 +76,8 @@ public class OperationalIssueService {
                 scopeAccessService.isScopeAdmin() ? requestedDepartmentId : effectiveDepartmentId,
                 equipmentId,
                 searchPattern,
+                searchTypeAliasesActive,
+                searchTypeAliasesActive ? searchTypeAliases : EnumSet.allOf(OperationalIssueType.class),
                 pageRequest(page, size, sort, direction)
         );
         return toDtoPage(result);
@@ -235,6 +253,31 @@ public class OperationalIssueService {
         if (search == null || search.isBlank()) {
             return null;
         }
-        return "%" + search.trim().toLowerCase() + "%";
+        return "%" + normalizeSearch(search) + "%";
+    }
+
+    private Collection<OperationalIssueType> searchTypeAliases(String search) {
+        if (search == null || search.isBlank()) {
+            return EnumSet.noneOf(OperationalIssueType.class);
+        }
+        String normalized = normalizeSearch(search);
+        EnumSet<OperationalIssueType> aliases = EnumSet.noneOf(OperationalIssueType.class);
+        if (matchesAnyDisplayAlias(normalized, INSPECTION_DEFECT_DISPLAY_SEARCH_ALIASES)) {
+            aliases.add(OperationalIssueType.INSPECTION_DEFECT);
+        }
+        return aliases;
+    }
+
+    private boolean matchesAnyDisplayAlias(String normalizedSearch, Collection<String> aliases) {
+        if (normalizedSearch.length() < 3) {
+            return false;
+        }
+        return aliases.stream()
+                .map(this::normalizeSearch)
+                .anyMatch(alias -> alias.equals(normalizedSearch) || alias.startsWith(normalizedSearch));
+    }
+
+    private String normalizeSearch(String search) {
+        return search.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
     }
 }
