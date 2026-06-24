@@ -39,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -79,7 +80,13 @@ class WarehouseAnalyticsServiceTest {
 
     @BeforeEach
     void setUpCommonMocks() {
-        when(sparePartsStatsService.getStats(any())).thenReturn(new SparePartsWarehouseStatsResponse(0, 0, 0, 0));
+        when(sparePartsStatsService.getStats(
+                nullable(UUID.class),
+                nullable(String.class),
+                nullable(UUID.class),
+                nullable(String.class),
+                nullable(String.class)
+        )).thenReturn(new SparePartsWarehouseStatsResponse(0, 0, 0, 0));
         when(inventoryAnalyticsService.abcAnalysis()).thenReturn(List.<InventoryAbcAnalysisDto>of());
         when(inventoryAnalyticsService.xyzAnalysis()).thenReturn(List.<InventoryXyzAnalysisDto>of());
         when(inventoryAnalyticsService.stockoutRisk()).thenReturn(List.<InventoryStockoutRiskDto>of());
