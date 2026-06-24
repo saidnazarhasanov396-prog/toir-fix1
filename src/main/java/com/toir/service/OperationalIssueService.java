@@ -45,11 +45,13 @@ public class OperationalIssueService {
                                             OperationalIssueType type,
                                             UUID requestedDepartmentId,
                                             UUID equipmentId,
+                                            String search,
                                             int page,
                                             int size,
                                             String sort,
                                             String direction) {
         UUID effectiveDepartmentId = effectiveDepartmentFilter(requestedDepartmentId);
+        String searchPattern = toSearchPattern(search);
         Page<OperationalIssue> result = repository.search(
                 scopeAccessService.isScopeAdmin() ? null : effectiveDepartmentId,
                 status,
@@ -57,6 +59,7 @@ public class OperationalIssueService {
                 type,
                 scopeAccessService.isScopeAdmin() ? requestedDepartmentId : effectiveDepartmentId,
                 equipmentId,
+                searchPattern,
                 pageRequest(page, size, sort, direction)
         );
         return toDtoPage(result);
@@ -226,5 +229,12 @@ public class OperationalIssueService {
                 PaginationUtils.pageRequest(page, size).getPageSize(),
                 Sort.by(sortDirection, property)
         );
+    }
+
+    private String toSearchPattern(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+        return "%" + search.trim().toLowerCase() + "%";
     }
 }

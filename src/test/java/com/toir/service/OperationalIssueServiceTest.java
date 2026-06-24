@@ -69,6 +69,7 @@ class OperationalIssueServiceTest {
                 eq(OperationalIssueType.OVERDUE_WORK_ORDER),
                 eq(jwtDepartmentId),
                 eq(equipmentId),
+                eq(null),
                 any()
         )).thenReturn(new PageImpl<>(List.of(issue)));
         when(equipmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(equipment));
@@ -80,6 +81,7 @@ class OperationalIssueServiceTest {
                 OperationalIssueType.OVERDUE_WORK_ORDER,
                 requestedDepartmentId,
                 equipmentId,
+                null,
                 0,
                 20,
                 "detectedAt",
@@ -103,14 +105,15 @@ class OperationalIssueServiceTest {
                 eq(null),
                 eq(requestedDepartmentId),
                 eq(null),
+                eq(null),
                 any()
         )).thenReturn(org.springframework.data.domain.Page.empty());
 
-        service.search(null, null, null, requestedDepartmentId, null, 0, 20, "severity", "asc");
+        service.search(null, null, null, requestedDepartmentId, null, null, 0, 20, "severity", "asc");
 
         ArgumentCaptor<org.springframework.data.domain.Pageable> pageableCaptor =
                 ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
-        verify(repository).search(eq(null), eq(null), eq(null), eq(null), eq(requestedDepartmentId), eq(null), pageableCaptor.capture());
+        verify(repository).search(eq(null), eq(null), eq(null), eq(null), eq(requestedDepartmentId), eq(null), eq(null), pageableCaptor.capture());
         assertThat(pageableCaptor.getValue().getSort().getOrderFor("severity").isAscending()).isTrue();
     }
 
@@ -167,6 +170,7 @@ class OperationalIssueServiceTest {
                 eq(OperationalIssueType.OVERDUE_REPAIR_REQUEST),
                 eq(null),
                 eq(null),
+                eq(null),
                 any()
         )).thenReturn(new PageImpl<>(List.of(issue)));
 
@@ -174,6 +178,7 @@ class OperationalIssueServiceTest {
                 OperationalIssueStatus.OPEN,
                 NotificationSeverity.CRITICAL,
                 OperationalIssueType.OVERDUE_REPAIR_REQUEST,
+                null,
                 null,
                 null,
                 0,
@@ -187,6 +192,45 @@ class OperationalIssueServiceTest {
         assertThat(dto.titleParams()).containsEntry("requestNumber", "RR-2026-105814");
         assertThat(dto.messageKey()).isEqualTo("operationalIssues.messages.OVERDUE_REPAIR_REQUEST");
         assertThat(dto.messageParams()).containsEntry("targetCompletionAt", "2026-06-20T08:00:00Z");
+    }
+
+    @Test
+    void searchNormalizesSearchTextBeforeRepositoryCall() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.search(
+                eq(null),
+                eq(OperationalIssueStatus.OPEN),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq("%cobalt%"),
+                any()
+        )).thenReturn(org.springframework.data.domain.Page.empty());
+
+        service.search(
+                OperationalIssueStatus.OPEN,
+                null,
+                null,
+                null,
+                null,
+                "  CoBalt  ",
+                0,
+                20,
+                "detectedAt",
+                "desc"
+        );
+
+        verify(repository).search(
+                eq(null),
+                eq(OperationalIssueStatus.OPEN),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq("%cobalt%"),
+                any()
+        );
     }
 
     private OperationalIssue issue(UUID id, UUID equipmentId, UUID departmentId) {
