@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,19 +58,63 @@ public class MaintenanceAdvisor {
             }
             EquipmentRiskScore score = scoreByEq.get(eq.getId());
             List<String> actions = new ArrayList<>();
+            List<AdviceAction> actionItems = new ArrayList<>();
             String urgency = "LOW";
 
             if (score != null && score.riskScore() >= 60) {
-                actions.add("Запланировать внеочередной осмотр / диагностику");
+                String label = "Запланировать внеочередной осмотр / диагностику";
+                actions.add(label);
+                actionItems.add(adviceAction(
+                        "SCHEDULE_INSPECTION",
+                        label,
+                        "Создать маршрут внеочередного осмотра для оборудования",
+                        "/inspection",
+                        orderedQuery(
+                                "equipmentId", eq.getId().toString(),
+                                "mode", "create-route",
+                                "source", "advisor",
+                                "reason", "high-risk"
+                        ),
+                        "HIGH",
+                        true
+                ));
                 urgency = "HIGH";
             } else if (score != null && score.riskScore() >= 30) {
-                actions.add("Усилить мониторинг по графику ТО");
+                String label = "Усилить мониторинг по графику ТО";
+                actions.add(label);
+                actionItems.add(adviceAction(
+                        "OPEN_MONITORING",
+                        label,
+                        "Открыть мониторинг оборудования и проверить счетчики/показания",
+                        "/meters",
+                        orderedQuery(
+                                "equipmentId", eq.getId().toString(),
+                                "source", "advisor",
+                                "reason", "medium-risk"
+                        ),
+                        "MEDIUM",
+                        true
+                ));
                 urgency = "MEDIUM";
             }
 
             long openDefects = openDefectsByEq.getOrDefault(eq.getId(), 0L);
             if (openDefects >= 3) {
-                actions.add("Разобрать накопленные дефекты (>= 3 открытых)");
+                String label = "Разобрать накопленные дефекты (>= 3 открытых)";
+                actions.add(label);
+                actionItems.add(adviceAction(
+                        "OPEN_DEFECTS",
+                        label,
+                        "Открыть дефекты оборудования, кроме закрытых",
+                        "/defects",
+                        orderedQuery(
+                                "equipmentId", eq.getId().toString(),
+                                "statusScope", "open",
+                                "source", "advisor"
+                        ),
+                        "HIGH",
+                        true
+                ));
                 urgency = upgrade(urgency, "HIGH");
             }
 
@@ -79,10 +124,25 @@ public class MaintenanceAdvisor {
                     .filter(r -> "ALARM".equals(r.getSeverity()) || "WARN".equals(r.getSeverity()))
                     .toList();
             if (!alarms.isEmpty()) {
-                actions.add("Проверить параметры: "
+                String label = "Проверить параметры: "
                         + alarms.stream().map(r -> r.getParameter() + "=" + r.getValue()).limit(3)
-                        .collect(Collectors.joining(", ")));
-                if (alarms.stream().anyMatch(r -> "ALARM".equals(r.getSeverity()))) {
+                        .collect(Collectors.joining(", "));
+                boolean hasAlarm = alarms.stream().anyMatch(r -> "ALARM".equals(r.getSeverity()));
+                actions.add(label);
+                actionItems.add(adviceAction(
+                        "OPEN_MONITORING",
+                        label,
+                        "Открыть мониторинг оборудования с проблемными параметрами",
+                        "/meters",
+                        orderedQuery(
+                                "equipmentId", eq.getId().toString(),
+                                "source", "advisor",
+                                "reason", "condition-alert"
+                        ),
+                        hasAlarm ? "HIGH" : "MEDIUM",
+                        false
+                ));
+                if (hasAlarm) {
                     urgency = upgrade(urgency, "HIGH");
                 } else {
                     urgency = upgrade(urgency, "MEDIUM");
@@ -96,10 +156,14 @@ public class MaintenanceAdvisor {
                 if (latest.getNextDueAt() != null) {
                     long daysToDue = java.time.temporal.ChronoUnit.DAYS.between(today, latest.getNextDueAt());
                     if (daysToDue < 0) {
-                        actions.add("Просрочена поверка на " + Math.abs(daysToDue) + " дн.");
+                        String label = "Просрочена поверка на " + Math.abs(daysToDue) + " дн.";
+                        actions.add(label);
+                        actionItems.add(calibrationAction(eq.getId(), label, "calibration-overdue", "HIGH"));
                         urgency = upgrade(urgency, "HIGH");
                     } else if (daysToDue <= 30) {
-                        actions.add("Запланировать поверку (осталось " + daysToDue + " дн.)");
+                        String label = "Запланировать поверку (осталось " + daysToDue + " дн.)";
+                        actions.add(label);
+                        actionItems.add(calibrationAction(eq.getId(), label, "calibration-due", "MEDIUM"));
                         urgency = upgrade(urgency, "MEDIUM");
                     }
                 }
@@ -112,7 +176,7 @@ public class MaintenanceAdvisor {
             out.add(new EquipmentAdvice(
                     eq.getId(), eq.getCode(), eq.getName(),
                     score != null ? score.riskScore() : 0,
-                    openDefects, alarms.size(), urgency, actions
+                    openDefects, alarms.size(), urgency, actions, actionItems
             ));
         }
         out.sort((a, b) -> Integer.compare(urgencyRank(b.urgency()), urgencyRank(a.urgency())));
@@ -154,6 +218,43 @@ public class MaintenanceAdvisor {
         };
     }
 
+    private AdviceAction calibrationAction(UUID equipmentId, String label, String reason, String urgency) {
+        return adviceAction(
+                "SCHEDULE_CALIBRATION",
+                label,
+                "Открыть регистрацию поверки для оборудования",
+                "/calibrations",
+                orderedQuery(
+                        "equipmentId", equipmentId.toString(),
+                        "mode", "create",
+                        "source", "advisor",
+                        "reason", reason
+                ),
+                urgency,
+                true
+        );
+    }
+
+    private AdviceAction adviceAction(
+            String type,
+            String label,
+            String description,
+            String targetPath,
+            Map<String, String> query,
+            String urgency,
+            boolean primary
+    ) {
+        return new AdviceAction(type, label, description, targetPath, query, urgency, primary);
+    }
+
+    private Map<String, String> orderedQuery(String... entries) {
+        Map<String, String> query = new LinkedHashMap<>();
+        for (int i = 0; i < entries.length; i += 2) {
+            query.put(entries[i], entries[i + 1]);
+        }
+        return query;
+    }
+
     public record EquipmentAdvice(
             UUID equipmentId,
             String equipmentCode,
@@ -162,7 +263,18 @@ public class MaintenanceAdvisor {
             long openDefects,
             int recentAlarms,
             String urgency,
-            List<String> actions
+            List<String> actions,
+            List<AdviceAction> actionItems
+    ) {}
+
+    public record AdviceAction(
+            String type,
+            String label,
+            String description,
+            String targetPath,
+            Map<String, String> query,
+            String urgency,
+            boolean primary
     ) {}
 
     public record MaintenanceAdviceStats(
