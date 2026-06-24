@@ -84,6 +84,7 @@ public final class PermissionConstants {
     public static final String INVENTORY_ADJUSTMENT = "INVENTORY_ADJUSTMENT";
     public static final String INVENTORY_ANALYTICS_READ = "INVENTORY_ANALYTICS_READ";
     public static final String INVENTORY_VALUATION_READ = "INVENTORY_VALUATION_READ";
+    public static final String WAREHOUSE_ANALYTICS_READ = "WAREHOUSE_ANALYTICS_READ";
     public static final String MATERIAL_USAGE_READ = "MATERIAL_USAGE_READ";
     public static final String MATERIAL_USAGE_ISSUE = "MATERIAL_USAGE_ISSUE";
     public static final String PROCUREMENT_READ = "PROCUREMENT_READ";

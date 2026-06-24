@@ -4,6 +4,7 @@ import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.service.AnalyticsService;
+import com.toir.service.ReliabilityPassportService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,12 +27,15 @@ class EquipmentAnalyticsControllerContractTest {
     @Mock
     AnalyticsService service;
 
+    @Mock
+    ReliabilityPassportService reliabilityPassportService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new AnalyticsController(service),
+                        new AnalyticsController(service, reliabilityPassportService),
                         new DowntimeAnalyticsCompatibilityController(service))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

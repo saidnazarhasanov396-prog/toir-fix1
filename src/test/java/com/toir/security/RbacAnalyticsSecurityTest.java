@@ -4,10 +4,12 @@ import com.toir.controller.AnalyticsController;
 import com.toir.controller.DashboardController;
 import com.toir.controller.DowntimeAnalyticsCompatibilityController;
 import com.toir.controller.ParetoController;
+import com.toir.controller.ReliabilityPassportController.ReliabilityPassport;
 import com.toir.service.AnalyticsService;
 import com.toir.service.DashboardLifecycleService;
 import com.toir.service.DashboardService;
 import com.toir.service.ParetoService;
+import com.toir.service.ReliabilityPassportService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -16,6 +18,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -60,6 +63,9 @@ class RbacAnalyticsSecurityTest {
     AnalyticsService analyticsService;
 
     @MockBean
+    ReliabilityPassportService reliabilityPassportService;
+
+    @MockBean
     ParetoService paretoService;
 
     @TestConfiguration
@@ -88,7 +94,8 @@ class RbacAnalyticsSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.ANALYTICS_READ)
     void analyticsReadCanReadDashboardAndAnalytics() throws Exception {
-        when(analyticsService.reliabilityList()).thenReturn(List.of());
+        when(reliabilityPassportService.list(any(), any(), any(), anyInt(), anyInt()))
+                .thenReturn(new PageImpl<>(List.of()));
         when(paretoService.downtimeCauses(any(), any(), anyInt(), anyInt())).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/v1/dashboards/overview"))
