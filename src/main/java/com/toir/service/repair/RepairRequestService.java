@@ -60,6 +60,7 @@ import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.MeterService;
 import com.toir.service.NotificationService;
+import com.toir.service.OperationalIssueLifecycleSyncService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
@@ -112,6 +113,7 @@ public class RepairRequestService {
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
     private final NotificationService notificationService;
+    private final OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final MaintenanceTemplateRepository maintenanceTemplateRepository;
     private final MaintenanceOperationRepository maintenanceOperationRepository;
@@ -1148,6 +1150,7 @@ public class RepairRequestService {
         entity.setStatus(RequestStatus.CLOSED);
 
         RepairRequest save = repository.save(entity);
+        operationalIssueLifecycleSyncService.sweepRepairRequest(save.getId(), "Repair request closed.");
         createCompletionAnchor(save);
 
         auditBuilderService.log(

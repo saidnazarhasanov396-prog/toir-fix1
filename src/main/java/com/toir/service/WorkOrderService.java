@@ -195,6 +195,7 @@ public class WorkOrderService {
     private final ScopeAccessService scopeAccessService;
     private final WorkOrderNumberService workOrderNumberService;
     private final NotificationService notificationService;
+    private final OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     private final ObjectMapper objectMapper;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
@@ -1407,6 +1408,9 @@ public class WorkOrderService {
                     defect.setStatus(DefectStatus.RESOLVED);
                     defect.setResolvedAt(Instant.now());
                     Defect saved = defectRepository.save(defect);
+                    operationalIssueLifecycleSyncService.resolveDefectIssueIfTerminal(
+                            saved,
+                            "Defect resolved from linked work order completion.");
                     auditBuilderService.log(
                             "defect",
                             saved.getId().toString(),
@@ -1435,6 +1439,9 @@ public class WorkOrderService {
                     }
                     request.setStatus(RequestStatus.COMPLETED);
                     RepairRequest saved = repairRequestRepository.save(request);
+                    operationalIssueLifecycleSyncService.sweepRepairRequest(
+                            saved.getId(),
+                            "Repair request completed after linked work orders and defects reached terminal state.");
                     auditBuilderService.log(
                             "repair_request",
                             saved.getId().toString(),
@@ -1463,6 +1470,9 @@ public class WorkOrderService {
                     }
                     defect.setStatus(DefectStatus.CLOSED);
                     Defect saved = defectRepository.save(defect);
+                    operationalIssueLifecycleSyncService.resolveDefectIssueIfTerminal(
+                            saved,
+                            "Defect closed after linked work orders reached terminal state.");
                     auditBuilderService.log(
                             "defect",
                             saved.getId().toString(),

@@ -302,6 +302,9 @@ class WorkOrderServiceTest {
     @Mock
     ObjectMapper objectMapper;
 
+    @Mock
+    OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
+
     @InjectMocks
     WorkOrderService service;
 
@@ -2587,6 +2590,8 @@ class WorkOrderServiceTest {
         assertThat(response.defect()).isNotNull();
         assertThat(response.defect().status()).isEqualTo(DefectStatus.RESOLVED);
         verify(defectRepository).save(defect);
+        verify(operationalIssueLifecycleSyncService)
+                .resolveDefectIssueIfTerminal(defect, "Defect resolved from linked work order completion.");
     }
 
     @Test
@@ -2614,6 +2619,8 @@ class WorkOrderServiceTest {
         assertThat(response.defect()).isNotNull();
         assertThat(response.defect().status()).isEqualTo(DefectStatus.IN_PROGRESS);
         verify(defectRepository, never()).save(any(Defect.class));
+        verify(operationalIssueLifecycleSyncService, never())
+                .resolveDefectIssueIfTerminal(any(Defect.class), any());
     }
 
     @Test
@@ -2648,6 +2655,9 @@ class WorkOrderServiceTest {
         assertThat(response.repairRequest()).isNotNull();
         assertThat(response.repairRequest().status()).isEqualTo(RequestStatus.COMPLETED);
         verify(repairRequestRepository).save(repairRequest);
+        verify(operationalIssueLifecycleSyncService)
+                .sweepRepairRequest(repairRequestId,
+                        "Repair request completed after linked work orders and defects reached terminal state.");
     }
 
     @Test
@@ -3522,6 +3532,9 @@ class WorkOrderServiceTest {
         assertThat(response.defect()).isNotNull();
         assertThat(response.defect().status()).isEqualTo(DefectStatus.CLOSED);
         verify(defectRepository).save(defect);
+        verify(operationalIssueLifecycleSyncService)
+                .resolveDefectIssueIfTerminal(defect,
+                        "Defect closed after linked work orders reached terminal state.");
     }
 
     @Test

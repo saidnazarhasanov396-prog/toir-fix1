@@ -63,6 +63,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.MeterService;
 import com.toir.service.NotificationService;
+import com.toir.service.OperationalIssueLifecycleSyncService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
@@ -170,6 +171,9 @@ class RepairRequestServiceTest {
 
     @Mock
     ObjectMapper objectMapper;
+
+    @Mock
+    OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
 
     @InjectMocks
     RepairRequestService service;
@@ -1406,6 +1410,8 @@ class RepairRequestServiceTest {
 
         assertThat(result.status()).isEqualTo(RequestStatus.CLOSED);
         assertThat(result.closeResult()).isEqualTo("Resolved");
+        verify(operationalIssueLifecycleSyncService)
+                .sweepRepairRequest(id, "Repair request closed.");
 
         org.mockito.ArgumentCaptor<MaintenanceCompletionAnchor> anchorCaptor =
                 org.mockito.ArgumentCaptor.forClass(MaintenanceCompletionAnchor.class);
@@ -1415,6 +1421,29 @@ class RepairRequestServiceTest {
         assertThat(anchor.getRepairRequestId()).isEqualTo(id);
         assertThat(anchor.getPerformedAt()).isEqualTo(entity.getActualCompletionAt());
         assertThat(anchor.getSource()).isEqualTo("REPAIR_REQUEST");
+    }
+
+    @Test
+    void closeWithAdminOverrideRunsFinalSweepWithoutResolvingOpenDefectStatuses() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+        entity.setStatus(RequestStatus.OPEN);
+        Defect openDefect = defect(id);
+        openDefect.setStatus(DefectStatus.OPEN);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(openDefect));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of());
+        stubNameLookups(entity);
+
+        service.close(id, new CloseRequestRequest("Admin accepted risk"));
+
+        assertThat(openDefect.getStatus()).isEqualTo(DefectStatus.OPEN);
+        verify(operationalIssueLifecycleSyncService)
+                .sweepRepairRequest(id, "Repair request closed.");
     }
 
     @Test
