@@ -143,12 +143,12 @@ class SparePartServiceTest {
     @Test
     void itemTypeSparePartReturnsOnlySpareParts() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), any()))
+        when(repository.findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, "SPARE_PART", "", null);
 
-        verify(repository).findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), any());
+        verify(repository).findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), isNull(), any());
     }
 
     @Test
@@ -158,12 +158,12 @@ class SparePartServiceTest {
 
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(typeRepository.findByCodeIgnoreCaseAndActiveTrue("OIL")).thenReturn(Optional.of(oilType));
-        when(repository.findAllByFilter(isNull(), eq(typeId), isNull(), any()))
+        when(repository.findAllByFilter(isNull(), eq(typeId), isNull(), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, null, "OIL", "", null);
 
-        verify(repository).findAllByFilter(isNull(), eq(typeId), isNull(), any());
+        verify(repository).findAllByFilter(isNull(), eq(typeId), isNull(), isNull(), any());
     }
 
     @Test
@@ -171,45 +171,45 @@ class SparePartServiceTest {
         UUID typeId = UUID.randomUUID();
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(typeRepository.findByIdAndActiveTrue(typeId)).thenReturn(Optional.of(sparePartType(typeId, "OIL", "Oil", "LITER")));
-        when(repository.findAllByFilter(isNull(), eq(typeId), isNull(), any()))
+        when(repository.findAllByFilter(isNull(), eq(typeId), isNull(), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, null, typeId, "", null);
 
-        verify(repository).findAllByFilter(isNull(), eq(typeId), isNull(), any());
+        verify(repository).findAllByFilter(isNull(), eq(typeId), isNull(), isNull(), any());
     }
 
     @Test
     void itemTypeSparePartsAliasWorks() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), any()))
+        when(repository.findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, "SPARE_PARTS", "", null);
 
-        verify(repository).findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), any());
+        verify(repository).findAllByFilter(eq(InventoryItemKind.SPARE_PART), isNull(), isNull(), isNull(), any());
     }
 
     @Test
     void itemTypeMaterialReturnsMaterialKind() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), any()))
+        when(repository.findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, "MATERIAL", "", null);
 
-        verify(repository).findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), any());
+        verify(repository).findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), isNull(), any());
     }
 
     @Test
     void itemTypeMaterialsAliasWorks() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), any()))
+        when(repository.findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, "MATERIALS", "", null);
 
-        verify(repository).findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), any());
+        verify(repository).findAllByFilter(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), isNull(), any());
     }
 
     @Test
@@ -233,7 +233,7 @@ class SparePartServiceTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
-        when(repository.findAllByFilterAndWarehouseId(isNull(), isNull(), isNull(), eq(warehouseId), any())).thenReturn(page);
+        when(repository.findAllByFilterAndWarehouseId(isNull(), isNull(), isNull(), isNull(), eq(warehouseId), any())).thenReturn(page);
         when(stockRepository.findAllBySparePartIdInAndWarehouseIdAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection(), eq(warehouseId)))
                 .thenReturn(List.of(stock));
 
@@ -255,12 +255,12 @@ class SparePartServiceTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
-        when(repository.findAllByFilterAndWarehouseId(eq(InventoryItemKind.MATERIAL), isNull(), eq("%bolt%"), eq(warehouseId), any()))
+        when(repository.findAllByFilterAndWarehouseId(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), eq("%bolt%"), eq(warehouseId), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, "MATERIALS", "bolt", warehouseId);
 
-        verify(repository).findAllByFilterAndWarehouseId(eq(InventoryItemKind.MATERIAL), isNull(), eq("%bolt%"), eq(warehouseId), any());
+        verify(repository).findAllByFilterAndWarehouseId(eq(InventoryItemKind.MATERIAL), isNull(), isNull(), eq("%bolt%"), eq(warehouseId), any());
     }
 
     @Test
@@ -276,7 +276,7 @@ class SparePartServiceTest {
         assertThatThrownBy(() -> service.findAll(20, 0, null, "", warehouseId))
                 .isInstanceOf(AccessDeniedException.class);
 
-        verify(repository, never()).findAllByFilterAndWarehouseId(any(), any(), any(), any(), any());
+        verify(repository, never()).findAllByFilterAndWarehouseId(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -296,7 +296,7 @@ class SparePartServiceTest {
                 .thenReturn(List.of(allowedWarehouse, deniedWarehouse));
         when(scopeAccessService.canAccessDepartment(allowedDepartmentId)).thenReturn(true);
         when(scopeAccessService.canAccessDepartment(deniedDepartmentId)).thenReturn(false);
-        when(repository.findAllByFilterAndWarehouseIds(isNull(), isNull(), isNull(), anyCollection(), any())).thenReturn(page);
+        when(repository.findAllByFilterAndWarehouseIds(isNull(), isNull(), isNull(), isNull(), anyCollection(), any())).thenReturn(page);
         when(stockRepository.findAllBySparePartIdInAndWarehouseIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection(), anyCollection()))
                 .thenReturn(List.of(stock));
 
@@ -306,7 +306,7 @@ class SparePartServiceTest {
         assertThat(result.getContent().getFirst().id()).isEqualTo(part.getId());
 
         ArgumentCaptor<List<UUID>> warehouseIdsCaptor = ArgumentCaptor.forClass(List.class);
-        verify(repository).findAllByFilterAndWarehouseIds(isNull(), isNull(), isNull(), warehouseIdsCaptor.capture(), any());
+        verify(repository).findAllByFilterAndWarehouseIds(isNull(), isNull(), isNull(), isNull(), warehouseIdsCaptor.capture(), any());
         assertThat(warehouseIdsCaptor.getValue()).containsExactly(allowedWarehouseId);
     }
 
@@ -317,15 +317,15 @@ class SparePartServiceTest {
         Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);
 
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
         when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
                 .thenReturn(List.of(stock));
 
         Page<SparePartDto> result = service.findAll(20, 0, null, "", null);
 
         assertThat(result.getContent()).hasSize(1);
-        verify(repository).findAllByFilter(isNull(), isNull(), isNull(), any());
-        verify(repository, never()).findAllByFilterAndWarehouseIds(any(), any(), any(), anyCollection(), any());
+        verify(repository).findAllByFilter(isNull(), isNull(), isNull(), isNull(), any());
+        verify(repository, never()).findAllByFilterAndWarehouseIds(any(), any(), any(), any(), anyCollection(), any());
     }
 
     @Test
@@ -337,7 +337,7 @@ class SparePartServiceTest {
         Page<SparePart> page = new PageImpl<>(List.of(low, high));
 
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
         when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
                 .thenReturn(List.of(lowStock, highStock));
 
@@ -357,7 +357,7 @@ class SparePartServiceTest {
         Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);
 
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
         when(unitOfMeasurementRepository.findAllByTokenIgnoreCaseIn(List.of("l"))).thenReturn(List.of(unit));
         when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
                 .thenReturn(List.of());
@@ -367,6 +367,53 @@ class SparePartServiceTest {
         assertThat(result.getContent().getFirst().unit()).isEqualTo("L");
         assertThat(result.getContent().getFirst().unitCode()).isEqualTo("L");
         assertThat(result.getContent().getFirst().unitName()).isEqualTo("Литр");
+    }
+
+    @Test
+    void unitFilterPassesNormalizedUnitCodeToRepository() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), eq("KG"), isNull(), any()))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        service.findAll(20, 0, null, null, null, "KG", "", null);
+
+        verify(repository).findAllByFilter(isNull(), isNull(), eq("KG"), isNull(), any());
+    }
+
+    @Test
+    void unitFilterTrimsBlankUnitToNull() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any()))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        service.findAll(20, 0, null, null, null, "   ", "", null);
+
+        verify(repository).findAllByFilter(isNull(), isNull(), isNull(), isNull(), any());
+    }
+
+    @Test
+    void unitFilterCombinesWithTypeIdUsingAndLogic() {
+        UUID typeId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(typeRepository.findByIdAndActiveTrue(typeId))
+                .thenReturn(Optional.of(sparePartType(typeId, "OIL", "Oil", "LITER")));
+        when(repository.findAllByFilter(isNull(), eq(typeId), eq("LITER"), isNull(), any()))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        service.findAll(20, 0, null, typeId, null, "LITER", "", null);
+
+        verify(repository).findAllByFilter(isNull(), eq(typeId), eq("LITER"), isNull(), any());
+    }
+
+    @Test
+    void unitFilterLowerCasePassesTrimmedCodeToRepository() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), eq("kg"), isNull(), any()))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        service.findAll(20, 0, null, null, null, "kg", "", null);
+
+        verify(repository).findAllByFilter(isNull(), isNull(), eq("kg"), isNull(), any());
     }
 
     @Test

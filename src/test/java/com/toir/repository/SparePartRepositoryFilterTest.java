@@ -47,6 +47,7 @@ class SparePartRepositoryFilterTest {
                 null,
                 null,
                 null,
+                null,
                 warehouseA.getId(),
                 PageRequest.of(0, 20)
         );
@@ -68,6 +69,7 @@ class SparePartRepositoryFilterTest {
                 InventoryItemKind.MATERIAL,
                 null,
                 null,
+                null,
                 warehouse.getId(),
                 PageRequest.of(0, 20)
         );
@@ -86,6 +88,7 @@ class SparePartRepositoryFilterTest {
         saveStock(warehouse, nut, 3, false);
 
         Page<SparePart> result = repository.findAllByFilterAndWarehouseId(
+                null,
                 null,
                 null,
                 "%bolt%",
@@ -115,12 +118,39 @@ class SparePartRepositoryFilterTest {
                 null,
                 null,
                 null,
+                null,
                 List.of(warehouseA.getId()),
                 PageRequest.of(0, 20)
         );
 
         assertThat(result.getContent()).extracting(SparePart::getId)
                 .containsExactly(allowed.getId());
+    }
+
+    @Test
+    void unitFilterReturnsOnlyMatchingUnitCaseInsensitively() {
+        SparePart kilogramPart = saveSparePart("SP-KG", "Weight part", InventoryItemKind.SPARE_PART, false, "KG");
+        saveSparePart("SP-PCS", "Count part", InventoryItemKind.SPARE_PART, false, "PCS");
+
+        Page<SparePart> upperCaseResult = repository.findAllByFilter(
+                null,
+                null,
+                "KG",
+                null,
+                PageRequest.of(0, 20)
+        );
+        Page<SparePart> lowerCaseResult = repository.findAllByFilter(
+                null,
+                null,
+                "kg",
+                null,
+                PageRequest.of(0, 20)
+        );
+
+        assertThat(upperCaseResult.getContent()).extracting(SparePart::getId)
+                .containsExactly(kilogramPart.getId());
+        assertThat(lowerCaseResult.getContent()).extracting(SparePart::getId)
+                .containsExactly(kilogramPart.getId());
     }
 
     private Warehouse saveWarehouse(String code, String name) {
@@ -132,11 +162,15 @@ class SparePartRepositoryFilterTest {
     }
 
     private SparePart saveSparePart(String code, String name, InventoryItemKind kind, boolean deleted) {
+        return saveSparePart(code, name, kind, deleted, "PCS");
+    }
+
+    private SparePart saveSparePart(String code, String name, InventoryItemKind kind, boolean deleted, String unit) {
         SparePart sparePart = new SparePart();
         sparePart.setCode(code);
         sparePart.setName(name);
         sparePart.setKind(kind);
-        sparePart.setUnit("PCS");
+        sparePart.setUnit(unit);
         sparePart.setType(saveSparePartType("TYPE-" + code));
         sparePart.setLegacyType("OTHER");
         sparePart.setMinStock(0);

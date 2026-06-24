@@ -75,6 +75,7 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
     @Query(value = """
         select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
         and (:typeId is null or sp.type.id = :typeId)
+        and (:unit is null or upper(sp.unit) = upper(cast(:unit as string)))
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern
             or lower(sp.name) like :searchPattern
@@ -86,12 +87,14 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
 """)
     Page<SparePart> findAllByFilter(@Param("itemType") InventoryItemKind itemType,
                                     @Param("typeId") UUID typeId,
+                                    @Param("unit") String unit,
                                     @Param("searchPattern") String searchPattern,
                                     Pageable pageable);
 
     @Query(value = """
         select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
         and (:typeId is null or sp.type.id = :typeId)
+        and (:unit is null or upper(sp.unit) = upper(cast(:unit as string)))
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern
             or lower(sp.name) like :searchPattern
@@ -110,6 +113,7 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
 """)
     Page<SparePart> findAllByFilterAndWarehouseId(@Param("itemType") InventoryItemKind itemType,
                                                   @Param("typeId") UUID typeId,
+                                                  @Param("unit") String unit,
                                                   @Param("searchPattern") String searchPattern,
                                                   @Param("warehouseId") UUID warehouseId,
                                                   Pageable pageable);
@@ -117,6 +121,7 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
     @Query(value = """
         select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
         and (:typeId is null or sp.type.id = :typeId)
+        and (:unit is null or upper(sp.unit) = upper(cast(:unit as string)))
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern
             or lower(sp.name) like :searchPattern
@@ -135,6 +140,7 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
 """)
     Page<SparePart> findAllByFilterAndWarehouseIds(@Param("itemType") InventoryItemKind itemType,
                                                    @Param("typeId") UUID typeId,
+                                                   @Param("unit") String unit,
                                                    @Param("searchPattern") String searchPattern,
                                                    @Param("warehouseIds") Collection<UUID> warehouseIds,
                                                    Pageable pageable);
