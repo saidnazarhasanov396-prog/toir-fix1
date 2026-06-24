@@ -37,6 +37,7 @@ public record WorkOrderDto(
         DefectListStatus defectListStatus,
         UUID pprTaskId,
         UUID contractorId,
+        ContractorRef contractor,
         UUID performerId,
         String performerName,
         WorkOrderStatus status,
@@ -112,7 +113,7 @@ public record WorkOrderDto(
                         int materialsCount) {
         this(id, number, title, equipmentId, equipmentNodeId, equipmentNodeCode, equipmentNodeName,
                 equipmentNodeType, departmentId, equipmentName, departmentName, null, null, null, repairRequestId, defectId,
-                null, null, null, pprTaskId, contractorId, null, null, status, type, workType, priority, startPlannedAt, endPlannedAt,
+                null, null, null, pprTaskId, contractorId, null, null, null, status, type, workType, priority, startPlannedAt, endPlannedAt,
                 startedAt, completedAt, summary, result, closureNotes, createdById, approvedById, warehouseId,
                 replacementEquipmentId, replacementEquipmentName, tasks, repairRequest, defect, operationsCount,
                 materialsCount, false, false, null, null, List.of(), null);
@@ -158,7 +159,7 @@ public record WorkOrderDto(
                         int materialsCount) {
         this(id, number, title, equipmentId, equipmentNodeId, equipmentNodeCode, equipmentNodeName,
                 equipmentNodeType, departmentId, equipmentName, departmentName, null, null, null, repairRequestId, defectId,
-                null, null, null, pprTaskId, contractorId, performerId, performerName, status, type, workType, priority, startPlannedAt, endPlannedAt,
+                null, null, null, pprTaskId, contractorId, null, performerId, performerName, status, type, workType, priority, startPlannedAt, endPlannedAt,
                 startedAt, completedAt, summary, result, closureNotes, createdById, approvedById, warehouseId,
                 replacementEquipmentId, replacementEquipmentName, tasks, repairRequest, defect, operationsCount,
                 materialsCount, false, false, null, null, List.of(), null);
@@ -198,7 +199,7 @@ public record WorkOrderDto(
                         int materialsCount) {
         this(id, number, title, equipmentId, null, null, null, null, departmentId, equipmentName, departmentName,
                 null, null, null,
-                repairRequestId, defectId, null, null, null, pprTaskId, contractorId, null, null, status, type, workType, priority,
+                repairRequestId, defectId, null, null, null, pprTaskId, contractorId, null, null, null, status, type, workType, priority,
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
                 createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
                 tasks, repairRequest, defect, operationsCount, materialsCount, false, false, null, null, List.of(), null);
@@ -240,10 +241,13 @@ public record WorkOrderDto(
                         int materialsCount) {
         this(id, number, title, equipmentId, null, null, null, null, departmentId, equipmentName, departmentName,
                 null, null, null,
-                repairRequestId, defectId, null, null, null, pprTaskId, contractorId, performerId, performerName, status, type, workType, priority,
+                repairRequestId, defectId, null, null, null, pprTaskId, contractorId, null, performerId, performerName, status, type, workType, priority,
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
                 createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
                 tasks, repairRequest, defect, operationsCount, materialsCount, false, false, null, null, List.of(), null);
+    }
+
+    public record ContractorRef(UUID id, String code, String name) {
     }
 //    public static WorkOrderDto from(WorkOrder w) {
 //        return new WorkOrderDto(

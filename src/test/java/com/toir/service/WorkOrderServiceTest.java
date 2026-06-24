@@ -21,6 +21,7 @@ import com.toir.entity.PprTask;
 import com.toir.entity.Reservation;
 import com.toir.entity.SafetyPermit;
 import com.toir.entity.UploadedFile;
+import com.toir.entity.contractors.Contractor;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.defects.DefectList;
 import com.toir.entity.equipment.Equipment;
@@ -83,6 +84,7 @@ import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.WorkExecutionRepository;
+import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -211,6 +213,9 @@ class WorkOrderServiceTest {
 
     @Mock
     WorkExecutionRepository workExecutionRepository;
+
+    @Mock
+    ContractorRepository contractorRepository;
 
     @Mock
     RepairMaterialUsageRepository repairMaterialUsageRepository;
@@ -1503,6 +1508,25 @@ class WorkOrderServiceTest {
 
         assertThat(response.performerId()).isEqualTo(performerId);
         assertThat(response.performerName()).isEqualTo("Ivan Petrov");
+    }
+
+    @Test
+    void findByIdReturnsAssignedContractorReference() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID contractorId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        workOrder.setContractorId(contractorId);
+        Contractor contractor = contractor(contractorId, "CTR-2026-0007", "Tashkent Service LLC");
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(contractorRepository.findByIdAndIsDeletedFalse(contractorId)).thenReturn(Optional.of(contractor));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto response = service.findById(workOrderId);
+
+        assertThat(response.contractor()).isNotNull();
+        assertThat(response.contractor().id()).isEqualTo(contractorId);
+        assertThat(response.contractor().code()).isEqualTo("CTR-2026-0007");
+        assertThat(response.contractor().name()).isEqualTo("Tashkent Service LLC");
     }
 
     @Test
@@ -4134,6 +4158,14 @@ class WorkOrderServiceTest {
         user.setFullName(fullName);
         user.setPasswordHash("hash");
         return user;
+    }
+
+    private Contractor contractor(UUID id, String code, String name) {
+        Contractor contractor = new Contractor();
+        contractor.setId(id);
+        contractor.setCode(code);
+        contractor.setName(name);
+        return contractor;
     }
 
     private void mockSuccessfulCreateDependencies(WorkOrderRequest request) {

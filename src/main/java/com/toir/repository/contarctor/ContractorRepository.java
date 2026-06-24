@@ -1,6 +1,7 @@
 package com.toir.repository.contarctor;
 
 import com.toir.entity.contractors.Contractor;
+import com.toir.enums.ContractorStatus;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +28,23 @@ public interface ContractorRepository extends JpaRepository<Contractor, UUID> {
             ORDER BY c.updatedAt DESC
             """)
     List<Contractor> findAllBySearch(@Param("search") String search);
+
+    @Query("""
+            SELECT c FROM Contractor c
+            WHERE c.isDeleted = false
+                AND (:status IS NULL OR c.status = :status)
+                AND (cast(:specialization as string) IS NULL OR :specialization = '' OR
+                     lower(coalesce(c.specialization, '')) LIKE lower(concat('%', cast(:specialization as string), '%')))
+                AND (cast(:search as string) IS NULL OR :search = '' OR
+                     lower(c.code) LIKE lower(concat('%', cast(:search as string), '%')) OR
+                     lower(c.name) LIKE lower(concat('%', cast(:search as string), '%')))
+            ORDER BY c.updatedAt DESC
+            """)
+    List<Contractor> findAllByFilters(
+            @Param("search") String search,
+            @Param("status") ContractorStatus status,
+            @Param("specialization") String specialization
+    );
 
     @Query(value = "SELECT * FROM contractors WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<Contractor> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
