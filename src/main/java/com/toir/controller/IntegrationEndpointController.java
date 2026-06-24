@@ -7,13 +7,16 @@ import com.toir.enums.IntegrationSyncStatus;
 import com.toir.security.RequiresAdmin;
 import com.toir.service.IntegrationEndpointService;
 import com.toir.util.PaginationUtils;
+import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -81,8 +84,31 @@ public class IntegrationEndpointController {
 
     @GetMapping("/sync-logs")
     public ResponseEntity<Page<IntegrationSyncLogDto>> syncLogs(
-            @RequestParam(required = false) UUID endpointId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(mesService.getLogs(endpointId), page, size));
+            @RequestParam(required = false) UUID endpointId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "desc") String sortDir) {
+        List<IntegrationSyncLogDto> rows = mesService.getLogs(endpointId);
+        Comparator<IntegrationSyncLogDto> comparator = switch (sortBy == null ? "" : sortBy.trim()) {
+            case "status" -> Comparator.comparing(
+                    IntegrationSyncLogDto::status,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "direction" -> Comparator.comparing(
+                    IntegrationSyncLogDto::direction,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+            case "createdAt" -> Comparator.comparing(
+                    IntegrationSyncLogDto::startedAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            default -> null;
+        };
+        if (comparator != null) {
+            if (SortUtils.direction(sortDir, Sort.Direction.DESC).isDescending()) {
+                comparator = comparator.reversed();
+            }
+            rows = rows.stream().sorted(comparator).toList();
+        }
+        return ResponseEntity.ok(PaginationUtils.page(rows, page, size));
     }
 
     @DeleteMapping("/{id}")

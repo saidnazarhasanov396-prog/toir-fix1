@@ -128,8 +128,12 @@ public class EquipmentService {
     private final UserRepository userRepository;
     private final ScopeAccessService scopeAccessService;
     private static final int MAX_EQUIPMENT_DOCUMENT_FILES = 25;
-    private static final Set<String> NUMERIC_SORT_FIELDS = Set.of(
+    private static final Set<String> DTO_SORT_FIELDS = Set.of(
             "producedYear",
+            "status",
+            "criticalityClass",
+            "commissioningDate",
+            "createdAt",
             "averageOperatingLifeHours",
             "expectedLifetimeMonths",
             "expectedLifetimeYears",
@@ -238,8 +242,8 @@ public class EquipmentService {
         if (search != null && !search.isBlank()) {
             searchPattern = "%" + search.trim().toLowerCase() + "%";
         }
-        boolean numericSort = isNumericSort(sortBy);
-        Pageable pageable = numericSort ? Pageable.unpaged() : PaginationUtils.pageRequest(page, pageSize);
+        boolean dtoSort = isDtoSort(sortBy);
+        Pageable pageable = dtoSort ? Pageable.unpaged() : PaginationUtils.pageRequest(page, pageSize);
         Page<Equipment> items;
         if (availableForReplacement) {
             if (warehouseId == null) {
@@ -277,28 +281,31 @@ public class EquipmentService {
             );
         }
         Page<EquipmentDto> enriched = enrich(items);
-        if (!numericSort) {
+        if (!dtoSort) {
             return enriched;
         }
+        Map<UUID, java.time.Instant> createdAtById = items.getContent().stream()
+                .collect(Collectors.toMap(Equipment::getId, Equipment::getCreatedAt, (left, right) -> left));
         List<EquipmentDto> sorted = enriched.getContent().stream()
-                .sorted(equipmentComparator(sortBy, sortDir))
+                .sorted(equipmentComparator(sortBy, sortDir, createdAtById))
                 .toList();
         return PaginationUtils.page(sorted, page, pageSize);
     }
 
-    private boolean isNumericSort(String sortBy) {
+    private boolean isDtoSort(String sortBy) {
         if (sortBy == null || sortBy.isBlank()) {
             return false;
         }
-        if (!NUMERIC_SORT_FIELDS.contains(sortBy.trim())) {
-            throw RestException.badRequest("Unsupported equipment sort: " + sortBy);
-        }
-        return true;
+        return DTO_SORT_FIELDS.contains(sortBy.trim());
     }
 
-    private Comparator<EquipmentDto> equipmentComparator(String sortBy, String sortDir) {
+    private Comparator<EquipmentDto> equipmentComparator(String sortBy, String sortDir, Map<UUID, java.time.Instant> createdAtById) {
         Comparator<EquipmentDto> comparator = switch (sortBy.trim()) {
             case "producedYear" -> nullableComparator(EquipmentDto::producedYear);
+            case "status" -> nullableComparator(EquipmentDto::status);
+            case "criticalityClass" -> nullableComparator(dto -> dto.criticalityClassId() == null ? null : dto.criticalityClassId().toString());
+            case "commissioningDate" -> nullableComparator(EquipmentDto::commissionedAt);
+            case "createdAt" -> nullableComparator(dto -> createdAtById.get(dto.id()));
             case "averageOperatingLifeHours" -> nullableComparator(EquipmentDto::averageOperatingLifeHours);
             case "expectedLifetimeMonths" -> nullableComparator(EquipmentDto::expectedLifetimeMonths);
             case "expectedLifetimeYears" -> nullableComparator(EquipmentDto::expectedLifetimeYears);

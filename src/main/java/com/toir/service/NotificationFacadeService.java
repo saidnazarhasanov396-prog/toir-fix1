@@ -18,11 +18,14 @@ import com.toir.util.CsvWriter;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import com.toir.util.SortUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -40,6 +43,13 @@ public class NotificationFacadeService {
     public Page<NotificationDto> list(UUID recipientId, int page, int size, String search,
                                       NotificationStatus status, NotificationSeverity severity, String entityType,
                                       boolean unreadOnly) {
+        return list(recipientId, page, size, search, status, severity, entityType, unreadOnly, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<NotificationDto> list(UUID recipientId, int page, int size, String search,
+                                      NotificationStatus status, NotificationSeverity severity, String entityType,
+                                      boolean unreadOnly, String sortBy, String sortDir) {
         List<NotificationDto> items = recipientId != null ? notificationService.findForUser(recipientId) : List.of();
         items = items.stream()
                 .filter(n -> !unreadOnly || n.status() != NotificationStatus.READ)
@@ -52,6 +62,22 @@ public class NotificationFacadeService {
                         || containsIgnoreCase(n.entityType(), search)
                         || containsIgnoreCase(n.entityId(), search))
                 .toList();
+        Comparator<NotificationDto> comparator = switch (sortBy == null ? "" : sortBy.trim()) {
+            case "type" -> Comparator.comparing(
+                    NotificationDto::entityType,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+            case "read" -> Comparator.comparing(n -> n.status() == NotificationStatus.READ);
+            case "createdAt" -> Comparator.comparing(
+                    NotificationDto::createdAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            default -> null;
+        };
+        if (comparator != null) {
+            if (SortUtils.direction(sortDir, Sort.Direction.DESC).isDescending()) {
+                comparator = comparator.reversed();
+            }
+            items = items.stream().sorted(comparator).toList();
+        }
         return PaginationUtils.page(items, page, size);
     }
 

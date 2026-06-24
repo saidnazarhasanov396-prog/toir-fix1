@@ -58,9 +58,34 @@ public class NotificationController {
                                       @RequestParam(required = false) NotificationSeverity severity,
                                       @RequestParam(required = false) String entityType,
                                       @RequestParam(required = false) Boolean unreadOnly,
-                                      @CurrentUser AuthenticatedUser user, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+                                      @CurrentUser AuthenticatedUser user,
+                                      @RequestParam(defaultValue = "0") int page,
+                                      @RequestParam(defaultValue = "20") int size,
+                                      @RequestParam(required = false) String sortBy,
+                                      @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         UUID target = resolveRecipient(recipientId, user);
-        return ResponseEntity.ok(notificationFacadeService.list(target, page, size, search, status, severity, entityType, Boolean.TRUE.equals(unreadOnly)));
+        if (sortBy == null || sortBy.isBlank()) {
+            return ResponseEntity.ok(notificationFacadeService.list(
+                    target,
+                    page,
+                    size,
+                    search,
+                    status,
+                    severity,
+                    entityType,
+                    Boolean.TRUE.equals(unreadOnly)));
+        }
+        return ResponseEntity.ok(notificationFacadeService.list(
+                target,
+                page,
+                size,
+                search,
+                status,
+                severity,
+                entityType,
+                Boolean.TRUE.equals(unreadOnly),
+                sortBy,
+                sortDir));
     }
 
     @GetMapping("/summary")

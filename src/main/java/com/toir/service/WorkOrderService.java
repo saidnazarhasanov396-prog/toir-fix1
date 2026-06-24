@@ -111,6 +111,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -251,6 +252,54 @@ public class WorkOrderService {
                 plannedTo,
                 nativeQueryPageable);
         return toDtoPage(resultPage);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WorkOrderDto> searchSorted(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page,
+                                           int pageSize, String search, Instant plannedFrom, Instant plannedTo, Sort sort) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
+        Page<WorkOrder> resultPage = repository.findAll(
+                workOrderListSpecification(status, departmentId, equipmentId, normalizeSearch(search), plannedFrom, plannedTo),
+                pageable);
+        return toDtoPage(resultPage);
+    }
+
+    private Specification<WorkOrder> workOrderListSpecification(WorkOrderStatus status,
+                                                                UUID departmentId,
+                                                                UUID equipmentId,
+                                                                String search,
+                                                                Instant plannedFrom,
+                                                                Instant plannedTo) {
+        return (root, query, cb) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.isFalse(root.get("isDeleted")));
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (departmentId != null) {
+                predicates.add(cb.equal(root.get("departmentId"), departmentId));
+            }
+            if (equipmentId != null) {
+                predicates.add(cb.equal(root.get("equipmentId"), equipmentId));
+            }
+            if (plannedFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(cb.coalesce(root.get("endPlannedAt"), root.get("startPlannedAt")), plannedFrom));
+            }
+            if (plannedTo != null) {
+                predicates.add(cb.lessThan(cb.coalesce(root.get("endPlannedAt"), root.get("startPlannedAt")), plannedTo));
+            }
+            if (search != null && !search.isBlank()) {
+                String pattern = "%" + search.toLowerCase() + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(cb.coalesce(root.get("number"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("title"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("summary"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("result"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("closureNotes"), "")), pattern)
+                ));
+            }
+            return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
     }
 
     @Transactional(readOnly = true)

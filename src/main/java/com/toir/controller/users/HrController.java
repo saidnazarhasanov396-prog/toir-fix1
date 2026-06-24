@@ -3,14 +3,18 @@ import com.toir.dto.hr.*;
 import com.toir.security.SecurityScope;
 import com.toir.service.users.HrService;
 import com.toir.util.PaginationUtils;
+import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +27,15 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class HrController {
 
+    private static final Map<String, String> EMPLOYEE_SORT_FIELDS = Map.of(
+            "status", "active",
+            "hireDate", "hireDate"
+    );
+    private static final Map<String, String> TIMESHEET_SORT_FIELDS = Map.of(
+            "workDate", "workDate",
+            "hours", "hours"
+    );
+
     private final HrService service;
     private final SecurityScope securityScope;
 
@@ -31,13 +44,25 @@ public class HrController {
     public ResponseEntity<Page<EmployeeDto>> listEmployees(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
-            @ModelAttribute EmployeeFilterRequest filter
+            @ModelAttribute EmployeeFilterRequest filter,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "desc") String sortDir
     ) {
         UUID scopedDepartmentId = securityScope.enforceDepartmentScope(filter.departmentId());
+        EmployeeFilterRequest scopedFilter = filter.withDepartmentId(scopedDepartmentId);
+        if (sortBy == null || sortBy.isBlank()) {
+            return ResponseEntity.ok(service.listEmployees(
+                    page - 1,
+                    size,
+                    scopedFilter
+            ));
+        }
+        Sort sort = SortUtils.sort(sortBy, sortDir, EMPLOYEE_SORT_FIELDS, "updatedAt", Sort.Direction.DESC);
         return ResponseEntity.ok(service.listEmployees(
                 page - 1,
                 size,
-                filter.withDepartmentId(scopedDepartmentId)
+                scopedFilter,
+                sort
         ));
     }
 
@@ -141,10 +166,29 @@ public class HrController {
     public ResponseEntity<Page<TimesheetEntryDto>> timesheet(
             @RequestParam(required = false) UUID employeeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(employeeId != null
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDir) {
+        List<TimesheetEntryDto> rows = employeeId != null
                 ? service.timesheetFor(employeeId, from, to)
-                : service.timesheetRange(from, to), page, size));
+                : service.timesheetRange(from, to);
+        String sortField = SortUtils.field(sortBy, TIMESHEET_SORT_FIELDS);
+        if (sortField != null) {
+            Comparator<TimesheetEntryDto> comparator = "hours".equals(sortField)
+                    ? Comparator.comparingDouble(HrController::totalHours)
+                    : Comparator.comparing(TimesheetEntryDto::workDate, Comparator.nullsLast(Comparator.naturalOrder()));
+            if (SortUtils.direction(sortDir, Sort.Direction.ASC).isDescending()) {
+                comparator = comparator.reversed();
+            }
+            rows = rows.stream().sorted(comparator).toList();
+        }
+        return ResponseEntity.ok(PaginationUtils.page(rows, page, size));
+    }
+
+    private static double totalHours(TimesheetEntryDto entry) {
+        return entry.hoursRegular() + entry.hoursOvertime() + entry.hoursNight() + entry.hoursHoliday();
     }
 
     @PostMapping("/timesheet")

@@ -9,13 +9,16 @@ import com.toir.exception.RestException;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.KnowledgeArticleRepository;
 import com.toir.service.defects.DefectService;
+import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 import java.util.UUID;
+import java.util.Map;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,6 +30,13 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "defects")
 @RequiredArgsConstructor
 public class DefectController {
+
+    private static final Map<String, String> SORT_FIELDS = Map.of(
+            "status", "status",
+            "severity", "severity",
+            "detectedAt", "detectedAt",
+            "createdAt", "createdAt"
+    );
 
     private final DefectService service;
 
@@ -40,10 +50,16 @@ public class DefectController {
             @RequestParam(required = false) DefectStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String search
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "desc") String sortDir
     ) {
         UUID resolvedRepairRequestId = resolveRepairRequestIdFilter(repairRequestId, requestIdAlias);
-        return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, status, page, size, search));
+        if (sortBy == null || sortBy.isBlank()) {
+            return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, status, page, size, search));
+        }
+        Sort sort = SortUtils.sort(sortBy, sortDir, SORT_FIELDS, "updatedAt", Sort.Direction.DESC);
+        return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, status, page, size, search, sort));
     }
 
     @GetMapping("/stats")
