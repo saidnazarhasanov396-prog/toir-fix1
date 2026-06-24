@@ -3,6 +3,7 @@ package com.toir.service.attachment;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.CompletionAct;
 import com.toir.entity.StockMovement;
+import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ProcurementRequest;
@@ -18,6 +19,7 @@ import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.repository.repair.RepairRequestRepository;
@@ -26,7 +28,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashSet;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -43,6 +47,7 @@ public class AttachmentTargetAccessService {
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
     private final EquipmentCommissioningActRepository equipmentCommissioningActRepository;
+    private final DefectRepository defectRepository;
 
     public AttachmentTargetType assertCanAccess(AttachmentTargetType targetType, UUID targetId) {
         if (targetType == null) {
@@ -56,6 +61,7 @@ public class AttachmentTargetAccessService {
             case VEHICLE -> assertCanAccessEquipment(targetId, true);
             case WORK_ORDER -> assertCanAccessWorkOrder(targetId);
             case REPAIR_REQUEST -> assertCanAccessRepairRequest(targetId);
+            case DEFECT -> assertCanAccessDefect(targetId);
             case COMPLETION_ACT -> assertCanAccessCompletionAct(targetId);
             case APPROVAL -> assertCanAccessApproval(targetId);
             case PROCUREMENT_REQUEST -> assertCanAccessProcurementRequest(targetId);
@@ -71,7 +77,7 @@ public class AttachmentTargetAccessService {
             case VEHICLE -> FileCategory.VEHICLE_DOCUMENT;
             case WORK_ORDER -> FileCategory.WORK_ORDER_DOCUMENT;
             case STOCK_MOVEMENT -> FileCategory.STOCK_MOVEMENT_DOCUMENT;
-            case REPAIR_REQUEST, COMPLETION_ACT, APPROVAL, PROCUREMENT_REQUEST, EQUIPMENT_COMMISSIONING -> FileCategory.DOCUMENT;
+            case REPAIR_REQUEST, DEFECT, COMPLETION_ACT, APPROVAL, PROCUREMENT_REQUEST, EQUIPMENT_COMMISSIONING -> FileCategory.DOCUMENT;
         };
     }
 
@@ -114,6 +120,31 @@ public class AttachmentTargetAccessService {
             return;
         }
         throw new AccessDeniedException("Access denied by repair request scope");
+    }
+
+    private void assertCanAccessDefect(UUID defectId) {
+        Defect defect = defectRepository.findByIdAndIsDeletedFalse(defectId)
+                .orElseThrow(() -> RestException.notFound("Defect not found: " + defectId));
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        Set<UUID> departments = new LinkedHashSet<>();
+        if (defect.getEquipmentId() != null) {
+            equipmentRepository.findByIdAndIsDeletedFalse(defect.getEquipmentId())
+                    .map(Equipment::getDepartmentId)
+                    .filter(Objects::nonNull)
+                    .ifPresent(departments::add);
+        }
+        if (defect.getRepairRequestId() != null) {
+            repairRequestRepository.findByIdAndIsDeletedFalse(defect.getRepairRequestId())
+                    .map(RepairRequest::getDepartmentId)
+                    .filter(Objects::nonNull)
+                    .ifPresent(departments::add);
+        }
+        if (departments.size() == 1 && scopeAccessService.canAccessDepartment(departments.iterator().next())) {
+            return;
+        }
+        throw new AccessDeniedException("Access denied by defect scope");
     }
 
     private void assertCanAccessCompletionAct(UUID actId) {

@@ -23,9 +23,11 @@ public interface OperationalIssueRepository extends JpaRepository<OperationalIss
 
     Optional<OperationalIssue> findByIdAndIsDeletedFalse(UUID id);
 
-    @Query("""
+    @Query(value = """
             select issue
             from OperationalIssue issue
+            left join Equipment equipment on equipment.id = issue.equipmentId and equipment.isDeleted = false
+            left join Department department on department.id = issue.departmentId and department.isDeleted = false
             where issue.isDeleted = false
               and (:scopeDepartmentId is null or issue.departmentId = :scopeDepartmentId)
               and (:status is null or issue.status = :status)
@@ -33,6 +35,45 @@ public interface OperationalIssueRepository extends JpaRepository<OperationalIss
               and (:type is null or issue.type = :type)
               and (:departmentId is null or issue.departmentId = :departmentId)
               and (:equipmentId is null or issue.equipmentId = :equipmentId)
+              and (
+                    :searchPattern is null
+                    or lower(coalesce(issue.title, '')) like :searchPattern
+                    or lower(coalesce(issue.message, '')) like :searchPattern
+                    or lower(coalesce(issue.sourceType, '')) like :searchPattern
+                    or lower(coalesce(equipment.code, '')) like :searchPattern
+                    or lower(coalesce(equipment.name, '')) like :searchPattern
+                    or lower(coalesce(equipment.inventoryNumber, '')) like :searchPattern
+                    or lower(coalesce(department.code, '')) like :searchPattern
+                    or lower(coalesce(department.name, '')) like :searchPattern
+                    or lower(coalesce(department.nameEn, '')) like :searchPattern
+                    or lower(coalesce(department.nameUz, '')) like :searchPattern
+                  )
+            """,
+            countQuery = """
+            select count(issue)
+            from OperationalIssue issue
+            left join Equipment equipment on equipment.id = issue.equipmentId and equipment.isDeleted = false
+            left join Department department on department.id = issue.departmentId and department.isDeleted = false
+            where issue.isDeleted = false
+              and (:scopeDepartmentId is null or issue.departmentId = :scopeDepartmentId)
+              and (:status is null or issue.status = :status)
+              and (:severity is null or issue.severity = :severity)
+              and (:type is null or issue.type = :type)
+              and (:departmentId is null or issue.departmentId = :departmentId)
+              and (:equipmentId is null or issue.equipmentId = :equipmentId)
+              and (
+                    :searchPattern is null
+                    or lower(coalesce(issue.title, '')) like :searchPattern
+                    or lower(coalesce(issue.message, '')) like :searchPattern
+                    or lower(coalesce(issue.sourceType, '')) like :searchPattern
+                    or lower(coalesce(equipment.code, '')) like :searchPattern
+                    or lower(coalesce(equipment.name, '')) like :searchPattern
+                    or lower(coalesce(equipment.inventoryNumber, '')) like :searchPattern
+                    or lower(coalesce(department.code, '')) like :searchPattern
+                    or lower(coalesce(department.name, '')) like :searchPattern
+                    or lower(coalesce(department.nameEn, '')) like :searchPattern
+                    or lower(coalesce(department.nameUz, '')) like :searchPattern
+                  )
             """)
     Page<OperationalIssue> search(@Param("scopeDepartmentId") UUID scopeDepartmentId,
                                   @Param("status") OperationalIssueStatus status,
@@ -40,5 +81,6 @@ public interface OperationalIssueRepository extends JpaRepository<OperationalIss
                                   @Param("type") OperationalIssueType type,
                                   @Param("departmentId") UUID departmentId,
                                   @Param("equipmentId") UUID equipmentId,
+                                  @Param("searchPattern") String searchPattern,
                                   Pageable pageable);
 }

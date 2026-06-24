@@ -35,12 +35,13 @@ public class OperationalIssueController {
             @RequestParam(required = false) OperationalIssueType type,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "detectedAt") String sort,
             @RequestParam(defaultValue = "desc") String direction
     ) {
-        return ResponseEntity.ok(service.search(status, severity, type, departmentId, equipmentId, page, size, sort, direction));
+        return ResponseEntity.ok(service.search(status, severity, type, departmentId, equipmentId, search, page, size, sort, direction));
     }
 
     @GetMapping("/{id}")
