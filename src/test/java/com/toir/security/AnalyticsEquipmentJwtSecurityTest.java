@@ -8,11 +8,10 @@ import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -29,13 +28,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(controllers = AnalyticsController.class)
 @ActiveProfiles("test")
+@TestPropertySource(properties = "app.cors.allowed-origin-patterns=http://localhost:3000")
 @Import({
         SecurityConfig.class,
         JwtAuthenticationFilter.class,
         JwtAuthenticationEntryPoint.class,
         RestAccessDeniedHandler.class,
-        SecurityAccessService.class,
-        AnalyticsEquipmentJwtSecurityTest.SecurityBeans.class
+        SecurityAccessService.class
 })
 class AnalyticsEquipmentJwtSecurityTest {
 
@@ -47,16 +46,6 @@ class AnalyticsEquipmentJwtSecurityTest {
 
     @MockBean
     AnalyticsService analyticsService;
-
-    @TestConfiguration
-    static class SecurityBeans {
-        @Bean
-        CorsProperties corsProperties() {
-            CorsProperties props = new CorsProperties();
-            props.setAllowedOriginPatterns(List.of("http://localhost:3000"));
-            return props;
-        }
-    }
 
     @Test
     void endpointAcceptsTokenWithAnalyticsReadPermission() throws Exception {
