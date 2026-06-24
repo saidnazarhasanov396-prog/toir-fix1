@@ -70,9 +70,14 @@ public class ReliabilityPassportController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String availability,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDir
     ) {
-        return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, availability, page, size));
+        if (sortBy == null || sortBy.isBlank()) {
+            return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, availability, page, size));
+        }
+        return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, availability, page, size, sortBy, sortDir));
     }
 
     @GetMapping("/reliability-passports/stats")

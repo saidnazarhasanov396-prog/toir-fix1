@@ -48,6 +48,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +77,19 @@ public class SparePartService {
     private final ScopeAccessService scopeAccessService;
     private final AuditBuilderService auditBuilderService;
     private final LegacyStockProjectionService legacyStockProjectionService;
+
+    private static final List<String> NUMERIC_SORT_FIELDS = List.of(
+            "minStock",
+            "currentStock",
+            "reservedStock",
+            "availableStock",
+            "warehouseCount",
+            "leadTimeDays",
+            "lastPurchasePrice",
+            "averageCost",
+            "lastPurchaseCost",
+            "inventoryValue"
+    );
 
     @Transactional(readOnly = true)
     public Page<SparePartDto> findAll(Integer pageSize, Integer page, String itemType, String search, UUID warehouseId) {
@@ -116,9 +130,25 @@ public class SparePartService {
             String search,
             UUID warehouseId
     ) {
+        return findAll(pageSize, page, itemType, typeId, type, search, warehouseId, null, "asc");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SparePartDto> findAll(
+            Integer pageSize,
+            Integer page,
+            String itemType,
+            UUID typeId,
+            String type,
+            String search,
+            UUID warehouseId,
+            String sortBy,
+            String sortDir
+    ) {
         int safePage = Math.max(page != null ? page : 0, 0);
         int safePageSize = Math.max(pageSize != null ? pageSize : 20, 1);
-        Pageable pageable = PaginationUtils.pageRequest(safePage, safePageSize);
+        boolean numericSort = isNumericSort(sortBy);
+        Pageable pageable = numericSort ? Pageable.unpaged() : PaginationUtils.pageRequest(safePage, safePageSize);
         InventoryItemKind inventoryItemKind = mapItemType(itemType);
         UUID sparePartTypeId = resolveTypeFilter(typeId, type);
         String searchPattern = toSearchPattern(search);
@@ -158,6 +188,17 @@ public class SparePartService {
         if (parts.isEmpty()) {
             return parts.map(SparePartDto::from);
         }
+        Page<SparePartDto> enrichedParts = enrichPartPage(parts, warehouseId, scopedWarehouseIds);
+        if (!numericSort) {
+            return enrichedParts;
+        }
+        List<SparePartDto> sorted = enrichedParts.getContent().stream()
+                .sorted(sparePartComparator(sortBy, sortDir))
+                .toList();
+        return PaginationUtils.page(sorted, safePage, safePageSize);
+    }
+
+    private Page<SparePartDto> enrichPartPage(Page<SparePart> parts, UUID warehouseId, List<UUID> scopedWarehouseIds) {
         Map<String, SparePartDto.UnitRef> unitRefsByToken = unitRefsByToken(parts.getContent());
 
         List<UUID> sparePartIds = parts.getContent().stream().map(SparePart::getId).toList();
@@ -195,6 +236,48 @@ public class SparePartService {
                             unitRefFor(part.getUnit(), unitRefsByToken)
                     ));
                 });
+    }
+
+    private boolean isNumericSort(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return false;
+        }
+        if (!NUMERIC_SORT_FIELDS.contains(sortBy.trim())) {
+            throw RestException.badRequest("Unsupported spare part sort: " + sortBy);
+        }
+        return true;
+    }
+
+    private Comparator<SparePartDto> sparePartComparator(String sortBy, String sortDir) {
+        Comparator<SparePartDto> comparator = switch (sortBy.trim()) {
+            case "minStock" -> Comparator.comparingDouble(SparePartDto::minStock);
+            case "currentStock" -> Comparator.comparingDouble(SparePartDto::currentStock);
+            case "reservedStock" -> Comparator.comparingDouble(SparePartDto::reservedStock);
+            case "availableStock" -> Comparator.comparingDouble(SparePartDto::availableStock);
+            case "warehouseCount" -> Comparator.comparingInt(SparePartDto::warehouseCount);
+            case "leadTimeDays" -> Comparator.comparing(
+                    SparePartDto::leadTimeDays,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            case "lastPurchasePrice" -> Comparator.comparing(
+                    SparePartDto::lastPurchasePrice,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            case "averageCost" -> Comparator.comparing(
+                    SparePartDto::averageCost,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            case "lastPurchaseCost" -> Comparator.comparing(
+                    SparePartDto::lastPurchaseCost,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            case "inventoryValue" -> Comparator.comparing(
+                    SparePartDto::inventoryValue,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            default -> throw RestException.badRequest("Unsupported spare part sort: " + sortBy);
+        };
+        return "desc".equalsIgnoreCase(sortDir) ? comparator.reversed() : comparator;
     }
 
     private InventoryItemKind mapItemType(String itemType) {

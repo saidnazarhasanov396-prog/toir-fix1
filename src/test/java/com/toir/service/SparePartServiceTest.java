@@ -329,6 +329,27 @@ class SparePartServiceTest {
     }
 
     @Test
+    void numericSortUsesEnrichedStockValuesBeforePagination() {
+        SparePart low = sparePart(UUID.randomUUID(), "SP-LOW", "Low", InventoryItemKind.SPARE_PART);
+        SparePart high = sparePart(UUID.randomUUID(), "SP-HIGH", "High", InventoryItemKind.SPARE_PART);
+        WarehouseStock lowStock = stock(UUID.randomUUID(), low.getId(), 4, 0);
+        WarehouseStock highStock = stock(UUID.randomUUID(), high.getId(), 12, 0);
+        Page<SparePart> page = new PageImpl<>(List.of(low, high));
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
+                .thenReturn(List.of(lowStock, highStock));
+
+        Page<SparePartDto> result = service.findAll(1, 0, null, null, null, "", null, "currentStock", "desc");
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent()).extracting(SparePartDto::id)
+                .containsExactly(high.getId());
+        assertThat(result.getContent().getFirst().currentStock()).isEqualTo(12);
+    }
+
+    @Test
     void findAllReturnsSeparateUnitCodeAndNameFromDictionary() {
         SparePart part = sparePart(UUID.randomUUID(), "SP-L", "Oil", InventoryItemKind.MATERIAL);
         part.setUnit("L");

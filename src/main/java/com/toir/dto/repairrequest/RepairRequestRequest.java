@@ -1,5 +1,6 @@
 package com.toir.dto.repairrequest;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
@@ -152,8 +153,8 @@ public record RepairRequestRequest(
             String description,
             String category,
             String severity,
-            String failureReason,
-            String rootCause
+            @JsonAlias("failure_reason") String failureReason,
+            @JsonAlias("root_cause") String rootCause
     ) {}
 
     public record TemplateSelectionRequest(

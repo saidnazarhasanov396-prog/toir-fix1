@@ -218,6 +218,38 @@ class DefectControllerContractTest {
         verify(service).create(captor.capture());
         assertEquals(repairRequestId, captor.getValue().repairRequestId());
         assertEquals(defectListId, captor.getValue().defectListId());
+        assertEquals("Seal damage", captor.getValue().failureReason());
+        assertEquals("Aging", captor.getValue().rootCause());
+    }
+
+    @Test
+    void createAcceptsSnakeCaseCauseFields() throws Exception {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID defectListId = UUID.randomUUID();
+        when(service.create(any())).thenReturn(defectResponse(equipmentId, repairRequestId));
+
+        mockMvc.perform(post("/api/v1/defects")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "title": "Leak",
+                                  "description": "Oil leak detected",
+                                  "equipmentId": "%s",
+                                  "defectListId": "%s",
+                                  "repairRequestId": "%s",
+                                  "category": "MECHANICAL",
+                                  "severity": "MEDIUM",
+                                  "failure_reason": "Seal damage",
+                                  "root_cause": "Aging"
+                                }
+                                """.formatted(equipmentId, defectListId, repairRequestId)))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<DefectRequest> captor = ArgumentCaptor.forClass(DefectRequest.class);
+        verify(service).create(captor.capture());
+        assertEquals("Seal damage", captor.getValue().failureReason());
+        assertEquals("Aging", captor.getValue().rootCause());
     }
 
     @Test

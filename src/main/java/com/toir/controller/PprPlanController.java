@@ -88,21 +88,36 @@ public class PprPlanController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
             @Parameter(description = "Optional page index. Must be provided together with size. Omit both page and size to return all matching plans in the same response wrapper.") @RequestParam(required = false) Integer page,
-            @Parameter(description = "Optional page size. Must be provided together with page. Omit both page and size to return all matching plans in the same response wrapper.") @RequestParam(required = false) Integer size) {
+            @Parameter(description = "Optional page size. Must be provided together with page. Omit both page and size to return all matching plans in the same response wrapper.") @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDir) {
         UUID scopedDepartmentId = scopedDepartment(departmentId);
+        boolean sortingRequested = sortBy != null && !sortBy.isBlank();
         if (page == null && size == null) {
             if (equipmentId == null) {
-                return ResponseEntity.ok(service.findAllUnpaged(year, month, day, scopedDepartmentId));
+                if (!sortingRequested) {
+                    return ResponseEntity.ok(service.findAllUnpaged(year, month, day, scopedDepartmentId));
+                }
+                return ResponseEntity.ok(service.findAllUnpaged(year, month, day, scopedDepartmentId, sortBy, sortDir));
             }
-            return ResponseEntity.ok(service.findAllUnpaged(year, month, day, scopedDepartmentId, equipmentId));
+            if (!sortingRequested) {
+                return ResponseEntity.ok(service.findAllUnpaged(year, month, day, scopedDepartmentId, equipmentId));
+            }
+            return ResponseEntity.ok(service.findAllUnpaged(year, month, day, scopedDepartmentId, equipmentId, sortBy, sortDir));
         }
         if (page == null || size == null) {
             throw RestException.badRequest("Both page and size must be provided for paginated PPR plan list");
         }
         if (equipmentId == null) {
-            return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId, page, size));
+            if (!sortingRequested) {
+                return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId, page, size));
+            }
+            return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId, page, size, sortBy, sortDir));
         }
-        return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId, equipmentId, page, size));
+        if (!sortingRequested) {
+            return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId, equipmentId, page, size));
+        }
+        return ResponseEntity.ok(service.findAll(year, month, day, scopedDepartmentId, equipmentId, page, size, sortBy, sortDir));
     }
 
     @GetMapping("/stats")

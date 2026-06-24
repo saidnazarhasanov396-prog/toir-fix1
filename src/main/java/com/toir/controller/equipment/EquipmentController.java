@@ -65,10 +65,28 @@ public class EquipmentController {
             @RequestParam(defaultValue = "false") boolean availableForReplacement,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "20") int size
+            @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDir
     ) {
         int safePage = Math.max(0, page);
         int safePageSize = Math.max(1, size);
+        if (sortBy == null || sortBy.isBlank()) {
+            return ResponseEntity.ok(service.search(
+                    scopedDepartment(),
+                    departmentId,
+                    equipmentTypeId,
+                    status,
+                    category,
+                    warehouseId,
+                    locationType,
+                    outsideReason,
+                    overdueOnly,
+                    availableForReplacement,
+                    search,
+                    safePage,
+                    safePageSize));
+        }
         return ResponseEntity.ok(service.search(
                 scopedDepartment(),
                 departmentId,
@@ -82,7 +100,9 @@ public class EquipmentController {
                 availableForReplacement,
                 search,
                 safePage,
-                safePageSize));
+                safePageSize,
+                sortBy,
+                sortDir));
     }
 
     @GetMapping("/{id}")

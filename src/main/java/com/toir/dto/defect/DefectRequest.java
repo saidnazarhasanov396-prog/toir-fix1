@@ -16,8 +16,8 @@ public record DefectRequest(
         @JsonAlias("requestId") UUID repairRequestId,
         String category,
         String severity,
-        String failureReason,
-        String rootCause
+        @JsonAlias("failure_reason") String failureReason,
+        @JsonAlias("root_cause") String rootCause
 ) {
     public DefectRequest(String code,
                          String title,
