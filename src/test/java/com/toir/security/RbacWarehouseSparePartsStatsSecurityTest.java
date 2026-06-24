@@ -66,7 +66,8 @@ class RbacWarehouseSparePartsStatsSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.STOCK_READ)
     void stockReadCanReadStats() throws Exception {
-        when(statsService.getStats(isNull())).thenReturn(new SparePartsWarehouseStatsResponse(1, 1, 1, 1));
+        when(statsService.getStats(isNull(), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(new SparePartsWarehouseStatsResponse(1, 1, 1, 1));
 
         mockMvc.perform(get("/api/v1/warehouses/spare-parts/stats"))
                 .andExpect(status().isOk());

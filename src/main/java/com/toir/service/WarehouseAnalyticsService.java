@@ -113,7 +113,8 @@ public class WarehouseAnalyticsService {
                                                 List<WarehouseReservationRowDto> reservations,
                                                 List<WarehouseDistributionRowDto> distribution,
                                                 List<WarehouseAbcXyzCellDto> abcXyz) {
-        SparePartsWarehouseStatsResponse stats = sparePartsStatsService.getStats(filter.warehouseId());
+        SparePartsWarehouseStatsResponse stats = sparePartsStatsService.getStats(
+                filter.warehouseId(), null, null, null, null);
         double stock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
         double reserved = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
         double available = Math.max(stock - reserved, 0);
