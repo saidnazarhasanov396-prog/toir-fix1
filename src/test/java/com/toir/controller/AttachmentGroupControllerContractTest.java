@@ -164,6 +164,55 @@ class AttachmentGroupControllerContractTest {
     }
 
     @Test
+    void createGroupAllowsDefectCreateTarget() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID groupId = UUID.randomUUID();
+        UUID firstFileId = UUID.randomUUID();
+        UUID secondFileId = UUID.randomUUID();
+        authenticateWithAuthorities(userId, "DEFECT_CREATE");
+        when(service.createGroup(
+                eq("Defect evidence"),
+                eq(null),
+                eq("DEFECT"),
+                eq(targetId),
+                eq("PHOTO"),
+                eq(null),
+                any(),
+                eq(null),
+                any()
+        ))
+                .thenReturn(group(groupId, targetId, firstFileId, secondFileId, AttachmentTargetType.DEFECT));
+
+        mockMvc.perform(multipart("/api/v1/attachments/groups")
+                        .file(new MockMultipartFile("files", "leak.jpg", "image/jpeg", "jpg".getBytes()))
+                        .param("title", "Defect evidence")
+                        .param("targetType", "DEFECT")
+                        .param("targetId", targetId.toString())
+                        .param("documentType", "PHOTO"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.targetType").value("DEFECT"));
+    }
+
+    @Test
+    void listGroupsAllowsDefectReadTarget() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID groupId = UUID.randomUUID();
+        UUID firstFileId = UUID.randomUUID();
+        UUID secondFileId = UUID.randomUUID();
+        authenticateWithAuthorities(userId, "DEFECT_READ");
+        when(service.listGroups(eq("DEFECT"), eq(targetId), any()))
+                .thenReturn(List.of(group(groupId, targetId, firstFileId, secondFileId, AttachmentTargetType.DEFECT)));
+
+        mockMvc.perform(get("/api/v1/attachments/groups")
+                        .param("targetType", "DEFECT")
+                        .param("targetId", targetId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].targetType").value("DEFECT"));
+    }
+
+    @Test
     void addFilesToExistingGroupUsesGroupEndpoint() throws Exception {
         UUID targetId = UUID.randomUUID();
         UUID groupId = UUID.randomUUID();

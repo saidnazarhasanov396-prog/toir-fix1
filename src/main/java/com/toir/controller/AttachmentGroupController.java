@@ -47,6 +47,7 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
+            hasAuthority('DEFECT_CREATE') or hasAuthority('DEFECT_UPDATE') or
             hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
             hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
             """)
@@ -83,6 +84,7 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
+            hasAuthority('DEFECT_CREATE') or hasAuthority('DEFECT_UPDATE') or
             hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
             hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
             """)
@@ -103,7 +105,7 @@ public class AttachmentGroupController {
             hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
-            hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ') or
+            hasAuthority('DEFECT_READ') or hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ') or
             hasAuthority('EQUIPMENT_COMMISSIONING_READ')
             """)
     public ResponseEntity<AttachmentGroupDto> getGroup(
@@ -118,7 +120,7 @@ public class AttachmentGroupController {
             hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
-            hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ')
+            hasAuthority('DEFECT_READ') or hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ')
             """)
     public ResponseEntity<List<AttachmentGroupDto>> listGroups(
             @RequestParam String targetType,
@@ -133,7 +135,7 @@ public class AttachmentGroupController {
             hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
-            hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ')
+            hasAuthority('DEFECT_READ') or hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ')
             """)
     public ResponseEntity<PresignedUrlResponse> getFilePresignedUrl(
             @PathVariable UUID groupId,
@@ -148,7 +150,7 @@ public class AttachmentGroupController {
             hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
-            hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ')
+            hasAuthority('DEFECT_READ') or hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ')
             """)
     public ResponseEntity<Resource> downloadFile(
             @PathVariable UUID groupId,
@@ -176,6 +178,7 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
+            hasAuthority('DEFECT_CREATE') or hasAuthority('DEFECT_UPDATE') or
             hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
             hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
             """)
@@ -194,6 +197,7 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_UPDATE') or hasAuthority('WORK_ORDER_UPDATE') or
             hasAuthority('WORK_ORDER_CREATE') or hasAuthority('STOCK_RECEIVE') or
             hasAuthority('STOCK_ISSUE') or hasAuthority('REPAIR_REQUEST_UPDATE') or
+            hasAuthority('DEFECT_CREATE') or hasAuthority('DEFECT_UPDATE') or
             hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
             hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
             """)
@@ -212,16 +216,18 @@ public class AttachmentGroupController {
         if (hasAuthority(authentication, "SYSTEM_ADMIN") || hasAuthority(authentication, "*")) {
             return;
         }
-        String requiredAuthority = switch (targetType) {
-            case EQUIPMENT, VEHICLE -> "EQUIPMENT_UPDATE";
-            case WORK_ORDER, COMPLETION_ACT -> "WORK_ORDER_UPDATE";
-            case REPAIR_REQUEST -> "REPAIR_REQUEST_UPDATE";
-            case APPROVAL -> "APPROVAL_UPDATE";
-            case PROCUREMENT_REQUEST -> "PROCUREMENT_CREATE";
-            case STOCK_MOVEMENT -> null;
-            case EQUIPMENT_COMMISSIONING -> "EQUIPMENT_COMMISSIONING_UPDATE";
+        List<String> requiredAuthorities = switch (targetType) {
+            case EQUIPMENT, VEHICLE -> List.of("EQUIPMENT_UPDATE");
+            case WORK_ORDER, COMPLETION_ACT -> List.of("WORK_ORDER_UPDATE");
+            case REPAIR_REQUEST -> List.of("REPAIR_REQUEST_UPDATE");
+            case DEFECT -> List.of("DEFECT_CREATE", "DEFECT_UPDATE");
+            case APPROVAL -> List.of("APPROVAL_UPDATE");
+            case PROCUREMENT_REQUEST -> List.of("PROCUREMENT_CREATE");
+            case STOCK_MOVEMENT -> List.of();
+            case EQUIPMENT_COMMISSIONING -> List.of("EQUIPMENT_COMMISSIONING_UPDATE");
         };
-        if (requiredAuthority == null || !hasAuthority(authentication, requiredAuthority)) {
+        if (requiredAuthorities.isEmpty()
+                || requiredAuthorities.stream().noneMatch(authority -> hasAuthority(authentication, authority))) {
             throw new AccessDeniedException("Access denied by attachment target permission");
         }
     }

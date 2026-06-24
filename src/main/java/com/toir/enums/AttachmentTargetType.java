@@ -9,6 +9,7 @@ public enum AttachmentTargetType {
     VEHICLE,
     WORK_ORDER,
     REPAIR_REQUEST,
+    DEFECT,
     COMPLETION_ACT,
     APPROVAL,
     PROCUREMENT_REQUEST,
