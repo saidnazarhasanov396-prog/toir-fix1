@@ -10,6 +10,7 @@ import com.toir.repository.OperationalIssueRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.security.ScopeAccessService;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -70,6 +71,8 @@ class OperationalIssueServiceTest {
                 eq(jwtDepartmentId),
                 eq(equipmentId),
                 eq(null),
+                eq(false),
+                any(),
                 any()
         )).thenReturn(new PageImpl<>(List.of(issue)));
         when(equipmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(equipment));
@@ -106,6 +109,8 @@ class OperationalIssueServiceTest {
                 eq(requestedDepartmentId),
                 eq(null),
                 eq(null),
+                eq(false),
+                any(),
                 any()
         )).thenReturn(org.springframework.data.domain.Page.empty());
 
@@ -113,7 +118,7 @@ class OperationalIssueServiceTest {
 
         ArgumentCaptor<org.springframework.data.domain.Pageable> pageableCaptor =
                 ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
-        verify(repository).search(eq(null), eq(null), eq(null), eq(null), eq(requestedDepartmentId), eq(null), eq(null), pageableCaptor.capture());
+        verify(repository).search(eq(null), eq(null), eq(null), eq(null), eq(requestedDepartmentId), eq(null), eq(null), eq(false), any(), pageableCaptor.capture());
         assertThat(pageableCaptor.getValue().getSort().getOrderFor("severity").isAscending()).isTrue();
     }
 
@@ -171,6 +176,8 @@ class OperationalIssueServiceTest {
                 eq(null),
                 eq(null),
                 eq(null),
+                eq(false),
+                any(),
                 any()
         )).thenReturn(new PageImpl<>(List.of(issue)));
 
@@ -205,6 +212,8 @@ class OperationalIssueServiceTest {
                 eq(null),
                 eq(null),
                 eq("%cobalt%"),
+                eq(false),
+                any(),
                 any()
         )).thenReturn(org.springframework.data.domain.Page.empty());
 
@@ -229,6 +238,96 @@ class OperationalIssueServiceTest {
                 eq(null),
                 eq(null),
                 eq("%cobalt%"),
+                eq(false),
+                any(),
+                any()
+        );
+    }
+
+    @Test
+    void searchExpandsRussianDefectDisplayTextToInspectionDefectAlias() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.search(
+                eq(null),
+                eq(OperationalIssueStatus.OPEN),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq("%деф%"),
+                eq(true),
+                any(),
+                any()
+        )).thenReturn(org.springframework.data.domain.Page.empty());
+
+        service.search(
+                OperationalIssueStatus.OPEN,
+                null,
+                null,
+                null,
+                null,
+                "  деф  ",
+                0,
+                20,
+                "detectedAt",
+                "desc"
+        );
+
+        ArgumentCaptor<Collection<OperationalIssueType>> aliasesCaptor = ArgumentCaptor.forClass(Collection.class);
+        verify(repository).search(
+                eq(null),
+                eq(OperationalIssueStatus.OPEN),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq("%деф%"),
+                eq(true),
+                aliasesCaptor.capture(),
+                any()
+        );
+        assertThat(aliasesCaptor.getValue()).containsExactly(OperationalIssueType.INSPECTION_DEFECT);
+    }
+
+    @Test
+    void searchDoesNotBroadenSpecificDefectCodeToDisplayAlias() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.search(
+                eq(null),
+                eq(OperationalIssueStatus.OPEN),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq("%def-2026-0016%"),
+                eq(false),
+                any(),
+                any()
+        )).thenReturn(org.springframework.data.domain.Page.empty());
+
+        service.search(
+                OperationalIssueStatus.OPEN,
+                null,
+                null,
+                null,
+                null,
+                "DEF-2026-0016",
+                0,
+                20,
+                "detectedAt",
+                "desc"
+        );
+
+        verify(repository).search(
+                eq(null),
+                eq(OperationalIssueStatus.OPEN),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq("%def-2026-0016%"),
+                eq(false),
+                any(),
                 any()
         );
     }
