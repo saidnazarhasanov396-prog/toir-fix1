@@ -1,7 +1,6 @@
 package com.toir.security;
 
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
-import com.toir.entity.ReliabilityMetric;
 import com.toir.entity.StockMovement;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
@@ -397,24 +396,11 @@ class AnalyticsPbacScopeTest {
     }
 
     @Test
-    void reliabilityListIsFilteredToCurrentDepartment() {
-        UUID departmentA = UUID.randomUUID();
-        UUID departmentB = UUID.randomUUID();
-        UUID equipmentA = UUID.randomUUID();
-        UUID equipmentB = UUID.randomUUID();
-        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
-        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(departmentA);
-        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
-                equipment(equipmentA, departmentA),
-                equipment(equipmentB, departmentB)
-        ));
-        ReliabilityMetric metricA = ReliabilityMetric.builder().equipmentId(equipmentA).build();
-        ReliabilityMetric metricB = ReliabilityMetric.builder().equipmentId(equipmentB).build();
-        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(metricA, metricB));
-
-        List<ReliabilityMetric> result = analyticsService.reliabilityList();
-
-        assertThat(result).containsExactly(metricA);
+    void reliabilityEndpointNowDelegatesToReliabilityPassportService() {
+        // Department scoping for GET /api/v1/analytics/reliability is now handled
+        // by ReliabilityPassportService.list() via equipmentRepository.searchForPassport().
+        // See ReliabilityPassportService tests for scope coverage.
+        // AnalyticsService.reliabilityList() is no longer called by the controller.
     }
 
     private void stubDashboardEmptyData() {
