@@ -9,7 +9,11 @@ import com.toir.exception.RestException;
 import com.toir.repository.CalibrationRecordRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +44,36 @@ public class CalibrationService {
     @Transactional(readOnly = true)
     public List<CalibrationRecordDto> findAll(String search) {
         return repo.findAll(search).stream().map(CalibrationRecordDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CalibrationRecordDto> search(UUID equipmentId, String search, int page, int size, Sort sort) {
+        if (equipmentId != null) {
+            ensureEquipmentExists(equipmentId);
+        }
+        return repo.findAll(
+                        calibrationSpecification(equipmentId, search),
+                        PaginationUtils.pageRequest(page, size, sort == null ? Sort.by(Sort.Direction.DESC, "updatedAt") : sort)
+                )
+                .map(CalibrationRecordDto::from);
+    }
+
+    private Specification<CalibrationRecord> calibrationSpecification(UUID equipmentId, String search) {
+        return (root, query, cb) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
+            predicates.add(cb.isFalse(root.get("isDeleted")));
+            if (equipmentId != null) {
+                predicates.add(cb.equal(root.get("equipmentId"), equipmentId));
+            }
+            if (search != null && !search.isBlank()) {
+                String pattern = "%" + search.trim().toLowerCase() + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(cb.coalesce(root.get("certificateNumber"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("performedBy"), "")), pattern)
+                ));
+            }
+            return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
     }
 
     @Transactional(readOnly = true)

@@ -111,10 +111,7 @@ public class ReliabilityPassportService {
         if (sortBy == null || sortBy.isBlank()) {
             return false;
         }
-        if (!NUMERIC_SORT_FIELDS.contains(sortBy.trim())) {
-            throw RestException.badRequest("Unsupported reliability passport sort: " + sortBy);
-        }
-        return true;
+        return NUMERIC_SORT_FIELDS.contains(sortBy.trim());
     }
 
     private Comparator<ReliabilityPassport> passportComparator(String sortBy, String sortDir) {

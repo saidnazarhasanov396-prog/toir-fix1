@@ -40,6 +40,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -95,6 +97,52 @@ public class DefectService {
             return toResponsePage(new PageImpl<>(scopedContent, pageable, scopedContent.size()));
         }
         return toResponsePage(resultPage);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<DefectResponse> search(UUID equipmentId, UUID repairRequestId, DefectStatus status, int page, int size, String search, Sort sort) {
+        var pageable = PaginationUtils.pageRequest(page, size, sort == null ? Sort.by(Sort.Direction.DESC, "updatedAt") : sort);
+        Page<Defect> resultPage = repository.findAll(defectListSpecification(equipmentId, repairRequestId, status, search), pageable);
+        if (!scopeAccessService.isScopeAdmin()) {
+            List<Defect> scopedContent = resultPage.getContent()
+                    .stream()
+                    .filter(this::canAccessDefect)
+                    .toList();
+            return toResponsePage(new PageImpl<>(scopedContent, pageable, scopedContent.size()));
+        }
+        return toResponsePage(resultPage);
+    }
+
+    private Specification<Defect> defectListSpecification(UUID equipmentId,
+                                                          UUID repairRequestId,
+                                                          DefectStatus status,
+                                                          String search) {
+        return (root, query, cb) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.isFalse(root.get("isDeleted")));
+            if (equipmentId != null) {
+                predicates.add(cb.equal(root.get("equipmentId"), equipmentId));
+            }
+            if (repairRequestId != null) {
+                predicates.add(cb.equal(root.get("repairRequestId"), repairRequestId));
+            }
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (search != null && !search.isBlank()) {
+                String pattern = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(cb.coalesce(root.get("code"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("title"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("description"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("category"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("severity"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("failureReason"), "")), pattern),
+                        cb.like(cb.lower(cb.coalesce(root.get("rootCause"), "")), pattern)
+                ));
+            }
+            return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
     }
 
     @Transactional(readOnly = true)

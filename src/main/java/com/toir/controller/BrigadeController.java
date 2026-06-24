@@ -5,13 +5,16 @@ import com.toir.dto.brigade.BrigadeMemberRequest;
 import com.toir.dto.brigade.BrigadeRequest;
 import com.toir.service.BrigadeService;
 import com.toir.util.PaginationUtils;
+import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -31,8 +34,19 @@ public class BrigadeController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) Boolean activeOnly,
             @RequestParam(required = false) String search
-    , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findAll(departmentId, activeOnly,search), page, size));
+    , @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDir) {
+        List<BrigadeDto> rows = service.findAll(departmentId, activeOnly, search);
+        if ("memberCount".equals(sortBy)) {
+            Comparator<BrigadeDto> comparator = Comparator.comparingInt(dto -> dto.members() == null ? 0 : dto.members().size());
+            if (SortUtils.direction(sortDir, Sort.Direction.ASC).isDescending()) {
+                comparator = comparator.reversed();
+            }
+            rows = rows.stream().sorted(comparator).toList();
+        }
+        return ResponseEntity.ok(PaginationUtils.page(rows, page, size));
     }
 
     @GetMapping("/{id}")

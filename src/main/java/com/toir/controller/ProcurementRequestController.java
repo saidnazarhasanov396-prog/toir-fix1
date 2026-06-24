@@ -15,13 +15,16 @@ import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.ProcurementRequestService;
 import com.toir.service.PurchaseOrderService;
 import com.toir.util.PaginationUtils;
+import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -49,9 +52,36 @@ public class ProcurementRequestController {
             @RequestParam(required = false) Double minAmount,
             @RequestParam(required = false) Double maxAmount,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "desc") String sortDir) {
+        List<ProcurementRequestDto> rows = service.findAll(
+                status,
+                departmentId,
+                search,
+                type,
+                sourceDefectId,
+                sourcePprTaskId,
+                minAmount,
+                maxAmount);
+        Comparator<ProcurementRequestDto> comparator = switch (sortBy == null ? "" : sortBy.trim()) {
+            case "status" -> Comparator.comparing(
+                    ProcurementRequestDto::status,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "totalAmount" -> Comparator.comparingDouble(ProcurementRequestDto::totalEstimatedCost);
+            case "requestedAt" -> Comparator.comparing(
+                    ProcurementRequestDto::submittedAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            default -> null;
+        };
+        if (comparator != null) {
+            if (SortUtils.direction(sortDir, Sort.Direction.DESC).isDescending()) {
+                comparator = comparator.reversed();
+            }
+            rows = rows.stream().sorted(comparator).toList();
+        }
         return ResponseEntity.ok(PaginationUtils.page(
-                service.findAll(status, departmentId, search, type, sourceDefectId, sourcePprTaskId, minAmount, maxAmount),
+                rows,
                 page,
                 size
         ));

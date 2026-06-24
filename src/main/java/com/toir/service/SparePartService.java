@@ -276,10 +276,7 @@ public class SparePartService {
         if (sortBy == null || sortBy.isBlank()) {
             return false;
         }
-        if (!NUMERIC_SORT_FIELDS.contains(sortBy.trim())) {
-            throw RestException.badRequest("Unsupported spare part sort: " + sortBy);
-        }
-        return true;
+        return NUMERIC_SORT_FIELDS.contains(sortBy.trim());
     }
 
     private Comparator<SparePartDto> sparePartComparator(String sortBy, String sortDir) {

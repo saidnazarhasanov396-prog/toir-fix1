@@ -16,13 +16,16 @@ import com.toir.exception.RestException;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.repair.RepairRequestService;
+import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -35,6 +38,15 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class RepairRequestController {
 
+    private static final Map<String, String> SORT_FIELDS = Map.of(
+            "status", "status",
+            "severity", "criticality",
+            "criticality", "criticality",
+            "priority", "priority",
+            "detectedAt", "detectedAt",
+            "createdAt", "createdAt"
+    );
+
     private final RepairRequestService service;
     private final RepairRequestRepository repository;
     private final ScopeAccessService scopeAccessService;
@@ -45,10 +57,17 @@ public class RepairRequestController {
     public ResponseEntity<Page<RepairRequestDto>> list(
             @ModelAttribute RepairRequestFilterRequest filter,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "20") int size
+            @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "desc") String sortDir
     ) {
         UUID scopedDepartmentId = resolveDepartmentFilter(filter.departmentId(), filter.equipmentId());
-        return ResponseEntity.ok(service.search(filter.withDepartmentId(scopedDepartmentId), page, size));
+        RepairRequestFilterRequest scopedFilter = filter.withDepartmentId(scopedDepartmentId);
+        if (sortBy == null || sortBy.isBlank()) {
+            return ResponseEntity.ok(service.search(scopedFilter, page, size));
+        }
+        Sort sort = SortUtils.sort(sortBy, sortDir, SORT_FIELDS, "updatedAt", Sort.Direction.DESC);
+        return ResponseEntity.ok(service.search(scopedFilter, page, size, sort));
     }
 
     @GetMapping("/stats")
