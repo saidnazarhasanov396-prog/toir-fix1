@@ -1,6 +1,7 @@
 package com.toir.controller;
 import com.toir.dto.audit.AuditLogResponseDto;
 import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.service.AuditLogService;
 import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,6 +38,7 @@ public class AuditLogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
             @RequestParam(required = false) AuditAction action,
+            @RequestParam(required = false) AuditModule module,
             @RequestParam(required = false) LocalDate fromDate,
             @RequestParam(required = false) LocalDate toDate,
             @RequestParam(required = false) String search,
@@ -45,6 +47,6 @@ public class AuditLogController {
             @RequestParam(required = false, defaultValue = "desc") String sortDir
              ) {
         Sort sort = SortUtils.sort(sortBy, sortDir, SORT_FIELDS, "createdAt", Sort.Direction.DESC);
-        return ResponseEntity.ok(service.find(page, size, action, fromDate, toDate, search, userId, sort));
+        return ResponseEntity.ok(service.find(page, size, module, action, fromDate, toDate, search, userId, sort));
     }
 }

@@ -53,7 +53,7 @@ class AuditLogServiceTest {
     void auditLogWithNullUserIdShouldReturnResponseWithout500() {
         AuditLog log = auditLog(null);
         when(repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(
-                any(), any(), any(), any(), any(), any(Pageable.class)))
+                any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(log)));
 
         Page<AuditLogResponseDto> result = service.find(0, 20, null, null, null, null, null);
@@ -68,7 +68,7 @@ class AuditLogServiceTest {
         UUID userId = UUID.randomUUID();
         AuditLog log = auditLog(userId);
         when(repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(
-                any(), any(), any(), any(), any(), any(Pageable.class)))
+                any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(log)));
         when(userRepository.findAuditLogUserSummariesByIdIn(anyCollection())).thenReturn(List.of());
 
@@ -86,7 +86,7 @@ class AuditLogServiceTest {
         UUID missingDepartmentId = UUID.fromString("63f42751-41dd-4125-a1f2-7ab3068264dd");
         AuditLog log = auditLog(userId);
         when(repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(
-                any(), any(), any(), any(), any(), any(Pageable.class)))
+                any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(log)));
         when(userRepository.findAuditLogUserSummariesByIdIn(anyCollection()))
                 .thenReturn(List.of(userSummary(userId, missingDepartmentId, null)));
@@ -104,7 +104,7 @@ class AuditLogServiceTest {
         UUID firstUserId = UUID.randomUUID();
         UUID secondUserId = UUID.randomUUID();
         when(repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(
-                any(), any(), any(), any(), any(), any(Pageable.class)))
+                any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(auditLog(firstUserId), auditLog(secondUserId))));
         when(userRepository.findAuditLogUserSummariesByIdIn(anyCollection()))
                 .thenReturn(List.of(userSummary(firstUserId, UUID.randomUUID(), "Maintenance")));
@@ -117,6 +117,25 @@ class AuditLogServiceTest {
         verify(userRepository).findAuditLogUserSummariesByIdIn(captor.capture());
         assertThat(captor.getValue()).containsExactlyInAnyOrder(firstUserId, secondUserId);
         verify(userRepository, never()).findByIdAndIsDeletedFalse(any());
+    }
+
+    @Test
+    void auditLogListingPassesModuleFilterToRepository() {
+        when(repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(
+                any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        service.find(0, 20, AuditModule.WORK_ORDER, AuditAction.UPDATE, null, null, null, null);
+
+        verify(repository).findAllByIsDeletedFalseOrderByCreatedAtDesc(
+                org.mockito.ArgumentMatchers.eq("WORK_ORDER"),
+                org.mockito.ArgumentMatchers.eq("UPDATE"),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(Pageable.class)
+        );
     }
 
     private AuditLog auditLog(UUID userId) {

@@ -16,7 +16,7 @@ import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.temporal.Temporal;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -68,7 +68,7 @@ public class AuditSerializationService {
             }
 
             ObjectNode diff = objectMapper.createObjectNode();
-            Set<String> fields = new HashSet<>();
+            Set<String> fields = new LinkedHashSet<>();
             oldNode.fieldNames().forEachRemaining(fields::add);
             newNode.fieldNames().forEachRemaining(fields::add);
 

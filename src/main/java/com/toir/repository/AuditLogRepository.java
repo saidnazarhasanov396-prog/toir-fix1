@@ -34,6 +34,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID>, JpaSp
     long countByIsDeletedFalse();
 
     @Query(value = "SELECT * FROM audit_logs al WHERE al.is_deleted = false " +
+            "AND (CAST(:module AS text) IS NULL OR al.module = CAST(:module AS text)) " +
             "AND (CAST(:action AS text) IS NULL OR al.action = CAST(:action AS text)) " +
             "AND (CAST(:fromDate AS date) IS NULL OR CAST(al.created_at AS date) >= CAST(:fromDate AS date)) " +
             "AND (CAST(:toDate AS date) IS NULL OR CAST(al.created_at AS date) <= CAST(:toDate AS date)) " +
@@ -41,11 +42,12 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID>, JpaSp
             "AND (CAST(:searchPattern AS text) IS NULL OR al.message ILIKE CAST(:searchPattern AS text) OR al.entity_type ILIKE CAST(:searchPattern AS text)) " +
             "ORDER BY al.created_at DESC",
             countQuery = "SELECT COUNT(*) FROM audit_logs al WHERE al.is_deleted = false " +
+            "AND (CAST(:module AS text) IS NULL OR al.module = CAST(:module AS text)) " +
             "AND (CAST(:action AS text) IS NULL OR al.action = CAST(:action AS text)) " +
             "AND (CAST(:fromDate AS date) IS NULL OR CAST(al.created_at AS date) >= CAST(:fromDate AS date)) " +
             "AND (CAST(:toDate AS date) IS NULL OR CAST(al.created_at AS date) <= CAST(:toDate AS date)) " +
             "AND (CAST(:userId AS uuid) IS NULL OR al.user_id = CAST(:userId AS uuid)) " +
             "AND (CAST(:searchPattern AS text) IS NULL OR al.message ILIKE CAST(:searchPattern AS text) OR al.entity_type ILIKE CAST(:searchPattern AS text))",
             nativeQuery = true)
-    Page<AuditLog> findAllByIsDeletedFalseOrderByCreatedAtDesc(@Param("action") String action, @Param("fromDate") LocalDate fromDate, @Param("toDate") LocalDate toDate, @Param("searchPattern") String searchPattern, @Param("userId") UUID userId, @Param("pageable") Pageable pageable);
+    Page<AuditLog> findAllByIsDeletedFalseOrderByCreatedAtDesc(@Param("module") String module, @Param("action") String action, @Param("fromDate") LocalDate fromDate, @Param("toDate") LocalDate toDate, @Param("searchPattern") String searchPattern, @Param("userId") UUID userId, @Param("pageable") Pageable pageable);
 }
