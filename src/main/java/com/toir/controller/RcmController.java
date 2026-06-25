@@ -33,12 +33,16 @@ public class RcmController {
     public ResponseEntity<Page<EquipmentRiskScore>> list(@RequestParam(defaultValue = "0") int top,
                                                          @RequestParam(defaultValue = "0") int page,
                                                          @RequestParam(defaultValue = "20") int size,
+                                                         @RequestParam(defaultValue = "riskScore") String sortBy,
+                                                         @RequestParam(defaultValue = "desc") String sortDir,
                                                          @RequestParam(required = false) String lang,
                                                          @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         String responseLang = requestedLanguage(lang, acceptLanguage);
         List<EquipmentRiskScore> scores = responseLang == null
-                ? (top > 0 ? service.topN(top) : service.computeAll())
-                : (top > 0 ? service.topN(top, responseLang) : service.computeAll(responseLang));
+                ? (top > 0 ? service.topN(top, sortBy, sortDir) : service.computeAll(sortBy, sortDir))
+                : (top > 0
+                ? service.topN(top, sortBy, sortDir, responseLang)
+                : service.computeAll(sortBy, sortDir, responseLang));
         return ResponseEntity.ok(PaginationUtils.page(scores, page, size));
     }
 

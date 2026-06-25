@@ -1,9 +1,8 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:toir_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;NON_KEYWORDS=VALUE,MONTH,YEAR;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    url: jdbc:postgresql://localhost:5433/toir_demo
+    username: postgres
+    password: root123
     hikari:
       connection-timeout: 3000
 
