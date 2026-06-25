@@ -51,7 +51,6 @@ deploy:
     - |
       cat > toir-backend.env <<EOF
       SPRING_PROFILES_ACTIVE=prod
-      APP_FIREBASE_ENABLED=false
       EOF
     - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password ${CI_REGISTRY_PASSWORD}"
     - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker pull ${CI_REGISTRY_IMAGE}:latest"

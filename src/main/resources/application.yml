@@ -22,11 +22,7 @@ app:
     manual-attributes:
       write-enabled: ${APP_FEATURES_MANUAL_ATTRIBUTES_WRITE_ENABLED:false}
   firebase:
-    enabled: ${APP_FIREBASE_ENABLED:false}
-    project-id: ${APP_FIREBASE_PROJECT_ID:}
-    service-account-file: ${APP_FIREBASE_SERVICE_ACCOUNT_FILE:}
-    service-account-json: ${APP_FIREBASE_SERVICE_ACCOUNT_JSON:}
-    service-account-base64: ${APP_FIREBASE_SERVICE_ACCOUNT_BASE64:}
+    enabled: true
 
 minio:
   endpoint: https://s3.tenzorsoft.uz
