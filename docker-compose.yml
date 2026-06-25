@@ -29,10 +29,14 @@ services:
       SPRING_DATASOURCE_USERNAME: toir
       SPRING_DATASOURCE_PASSWORD: toir
       FILE_STORAGE_PATH: /app/uploads
+      APP_FIREBASE_ENABLED: "true"
+      APP_FIREBASE_PROJECT_ID: toir-51480
+      APP_FIREBASE_SERVICE_ACCOUNT_FILE: /run/secrets/firebase-service-account.json
     ports:
       - "8080:8080"
     volumes:
       - toir_uploads:/app/uploads
+      - ./.secrets/firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
 
 volumes:
   toir_pgdata:

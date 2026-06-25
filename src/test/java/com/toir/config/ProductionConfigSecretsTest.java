@@ -83,12 +83,12 @@ class ProductionConfigSecretsTest {
     }
 
     @Test
-    void gitlabDeployDoesNotUseLegacyFirebaseEnvironmentSwitches() throws IOException {
+    void gitlabDeployExplicitlyDisablesFirebase() throws IOException {
         String gitlabCi = Files.readString(GITLAB_CI);
 
         assertThat(gitlabCi)
-                .as("Firebase is initialized from the packaged classpath service account")
-                .doesNotContain("APP_FIREBASE_ENABLED")
+                .as("production deploy must not require Firebase credentials")
+                .contains("APP_FIREBASE_ENABLED=false")
                 .doesNotContain("APP_FIREBASE_PROJECT_ID")
                 .doesNotContain("APP_FIREBASE_SERVICE_ACCOUNT_BASE64")
                 .doesNotContain("APP_FIREBASE_SERVICE_ACCOUNT_JSON")
