@@ -389,14 +389,16 @@ class SparePartServiceTest {
     }
 
     @Test
-    void unitFilterPassesNormalizedUnitCodeToRepository() {
+    void unitFilterPassesUuidToRepositoryWhenValidIdProvided() {
+        UUID unitId = UUID.randomUUID();
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(isNull(), isNull(), eq("KG"), isNull(), any()))
+        when(unitOfMeasurementRepository.existsByIdAndIsDeletedFalse(unitId)).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), eq(unitId), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
-        service.findAll(20, 0, null, null, null, "KG", "", null);
+        service.findAll(20, 0, null, null, null, unitId.toString(), "", null);
 
-        verify(repository).findAllByFilter(isNull(), isNull(), eq("KG"), isNull(), any());
+        verify(repository).findAllByFilter(isNull(), isNull(), eq(unitId), isNull(), any());
     }
 
     @Test
@@ -413,26 +415,57 @@ class SparePartServiceTest {
     @Test
     void unitFilterCombinesWithTypeIdUsingAndLogic() {
         UUID typeId = UUID.randomUUID();
+        UUID unitId = UUID.randomUUID();
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(typeRepository.findByIdAndActiveTrue(typeId))
                 .thenReturn(Optional.of(sparePartType(typeId, "OIL", "Oil", "LITER")));
-        when(repository.findAllByFilter(isNull(), eq(typeId), eq("LITER"), isNull(), any()))
+        when(unitOfMeasurementRepository.existsByIdAndIsDeletedFalse(unitId)).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), eq(typeId), eq(unitId), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
-        service.findAll(20, 0, null, typeId, null, "LITER", "", null);
+        service.findAll(20, 0, null, typeId, null, unitId.toString(), "", null);
 
-        verify(repository).findAllByFilter(isNull(), eq(typeId), eq("LITER"), isNull(), any());
+        verify(repository).findAllByFilter(isNull(), eq(typeId), eq(unitId), isNull(), any());
     }
 
     @Test
-    void unitFilterLowerCasePassesTrimmedCodeToRepository() {
+    void unitFilterLegacyCodeResolvesToUuid() {
+        UUID unitId = UUID.randomUUID();
+        UnitOfMeasurement kgUnit = unit("KG", "Kilogram");
+        kgUnit.setId(unitId);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findAllByFilter(isNull(), isNull(), eq("kg"), isNull(), any()))
+        when(unitOfMeasurementRepository.findByTokenIgnoreCase("kg")).thenReturn(List.of(kgUnit));
+        when(repository.findAllByFilter(isNull(), isNull(), eq(unitId), isNull(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         service.findAll(20, 0, null, null, null, "kg", "", null);
 
-        verify(repository).findAllByFilter(isNull(), isNull(), eq("kg"), isNull(), any());
+        verify(repository).findAllByFilter(isNull(), isNull(), eq(unitId), isNull(), any());
+    }
+
+    @Test
+    void unitFilterUnknownUuidPassesNull() {
+        UUID unknownId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(unitOfMeasurementRepository.existsByIdAndIsDeletedFalse(unknownId)).thenReturn(false);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any()))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        service.findAll(20, 0, null, null, null, unknownId.toString(), "", null);
+
+        verify(repository).findAllByFilter(isNull(), isNull(), isNull(), isNull(), any());
+    }
+
+    @Test
+    void unitFilterUnknownTokenPassesNull() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(unitOfMeasurementRepository.findByTokenIgnoreCase("unknown-unit")).thenReturn(List.of());
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any()))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        service.findAll(20, 0, null, null, null, "unknown-unit", "", null);
+
+        verify(repository).findAllByFilter(isNull(), isNull(), isNull(), isNull(), any());
     }
 
     @Test

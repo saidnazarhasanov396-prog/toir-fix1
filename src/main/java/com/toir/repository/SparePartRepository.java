@@ -75,7 +75,17 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
     @Query(value = """
         select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
         and (:typeId is null or sp.type.id = :typeId)
-        and (:unit is null or upper(sp.unit) = upper(cast(:unit as string)))
+        and (:unitId is null or exists (
+            select 1 from UnitOfMeasurement uom
+            where uom.id = :unitId
+              and uom.isDeleted = false
+              and (
+                lower(sp.unit) = lower(uom.code)
+                or lower(sp.unit) = lower(uom.name)
+                or (uom.nameEn is not null and lower(sp.unit) = lower(uom.nameEn))
+                or (uom.nameUz is not null and lower(sp.unit) = lower(uom.nameUz))
+              )
+        ))
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern
             or lower(sp.name) like :searchPattern
@@ -87,14 +97,24 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
 """)
     Page<SparePart> findAllByFilter(@Param("itemType") InventoryItemKind itemType,
                                     @Param("typeId") UUID typeId,
-                                    @Param("unit") String unit,
+                                    @Param("unitId") UUID unitId,
                                     @Param("searchPattern") String searchPattern,
                                     Pageable pageable);
 
     @Query(value = """
         select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
         and (:typeId is null or sp.type.id = :typeId)
-        and (:unit is null or upper(sp.unit) = upper(cast(:unit as string)))
+        and (:unitId is null or exists (
+            select 1 from UnitOfMeasurement uom
+            where uom.id = :unitId
+              and uom.isDeleted = false
+              and (
+                lower(sp.unit) = lower(uom.code)
+                or lower(sp.unit) = lower(uom.name)
+                or (uom.nameEn is not null and lower(sp.unit) = lower(uom.nameEn))
+                or (uom.nameUz is not null and lower(sp.unit) = lower(uom.nameUz))
+              )
+        ))
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern
             or lower(sp.name) like :searchPattern
@@ -113,7 +133,7 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
 """)
     Page<SparePart> findAllByFilterAndWarehouseId(@Param("itemType") InventoryItemKind itemType,
                                                   @Param("typeId") UUID typeId,
-                                                  @Param("unit") String unit,
+                                                  @Param("unitId") UUID unitId,
                                                   @Param("searchPattern") String searchPattern,
                                                   @Param("warehouseId") UUID warehouseId,
                                                   Pageable pageable);
@@ -121,7 +141,17 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
     @Query(value = """
         select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
         and (:typeId is null or sp.type.id = :typeId)
-        and (:unit is null or upper(sp.unit) = upper(cast(:unit as string)))
+        and (:unitId is null or exists (
+            select 1 from UnitOfMeasurement uom
+            where uom.id = :unitId
+              and uom.isDeleted = false
+              and (
+                lower(sp.unit) = lower(uom.code)
+                or lower(sp.unit) = lower(uom.name)
+                or (uom.nameEn is not null and lower(sp.unit) = lower(uom.nameEn))
+                or (uom.nameUz is not null and lower(sp.unit) = lower(uom.nameUz))
+              )
+        ))
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern
             or lower(sp.name) like :searchPattern
@@ -140,7 +170,7 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
 """)
     Page<SparePart> findAllByFilterAndWarehouseIds(@Param("itemType") InventoryItemKind itemType,
                                                    @Param("typeId") UUID typeId,
-                                                   @Param("unit") String unit,
+                                                   @Param("unitId") UUID unitId,
                                                    @Param("searchPattern") String searchPattern,
                                                    @Param("warehouseIds") Collection<UUID> warehouseIds,
                                                    Pageable pageable);
