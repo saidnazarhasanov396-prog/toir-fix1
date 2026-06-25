@@ -183,7 +183,7 @@ class DefectPbacScopeTest {
         Defect inScope = defect(UUID.randomUUID(), equipmentInScope, null);
         Defect outOfScope = defect(UUID.randomUUID(), equipmentOutOfScope, null);
         PageRequest pageRequest = PageRequest.of(0, 20);
-        when(repository.searchPaginated(null, null, null, null, pageRequest))
+        when(repository.searchPaginated(null, null, null, null, null, null, pageRequest))
                 .thenReturn(new PageImpl<>(List.of(inScope, outOfScope), pageRequest, 2));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentInScope)).thenReturn(Optional.of(equipment(equipmentInScope, departmentA)));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentOutOfScope)).thenReturn(Optional.of(equipment(equipmentOutOfScope, departmentB)));
@@ -191,7 +191,7 @@ class DefectPbacScopeTest {
         when(scopeAccessService.canAccessDepartment(departmentB)).thenReturn(false);
         stubResponseDependencies(inScope);
 
-        var result = service.search(null, null, null, 0, 20, null);
+        var result = service.search(null, null, null, null, null, 0, 20, null);
 
         assertThat(result.getContent()).extracting("id").containsExactly(inScope.getId());
         assertThat(result.getTotalElements()).isEqualTo(1);
