@@ -1,5 +1,6 @@
 package com.toir.dto.supplier;
 
+import com.toir.enums.SupplierType;
 import jakarta.validation.constraints.NotBlank;
 
 public record SupplierRequest(
@@ -10,6 +11,7 @@ public record SupplierRequest(
         String email,
         String address,
         String taxNumber,
-        Boolean active
+        Boolean active,
+        SupplierType supplierType
 ) {
 }

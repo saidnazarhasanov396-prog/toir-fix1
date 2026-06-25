@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,6 +26,7 @@ public class ContractorController {
     private final ContractorService service;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('CONTRACTOR_READ')")
     public ResponseEntity<Page<ContractorDto>> list(@RequestParam(required = false) String search,
                                                     @RequestParam(required = false) ContractorStatus status,
                                                     @RequestParam(required = false) String specialization,
@@ -34,21 +36,25 @@ public class ContractorController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('CONTRACTOR_READ')")
     public ResponseEntity<ContractorDetailDto> get(@PathVariable UUID id) {
         return ResponseEntity.ok(service.findDetailById(id));
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('CONTRACTOR_CREATE')")
     public ResponseEntity<ContractorDto> create(@Valid @RequestBody ContractorRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('CONTRACTOR_UPDATE')")
     public ResponseEntity<ContractorDto> update(@PathVariable UUID id, @Valid @RequestBody ContractorRequest request) {
         return ResponseEntity.ok(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('CONTRACTOR_DELETE')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);

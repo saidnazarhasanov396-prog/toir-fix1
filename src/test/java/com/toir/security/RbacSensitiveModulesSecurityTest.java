@@ -17,6 +17,8 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -161,6 +163,10 @@ class RbacSensitiveModulesSecurityTest {
     DepartmentRepository departmentRepository;
     @MockBean
     FinanceScopeService financeScopeService;
+    @MockBean
+    ContractorWorkRepository contractorWorkRepository;
+    @MockBean
+    ContractorRepository contractorRepository;
 
     @TestConfiguration
     static class SecurityBeans {

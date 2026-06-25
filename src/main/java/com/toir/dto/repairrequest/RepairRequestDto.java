@@ -10,6 +10,7 @@ import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.WorkOrderBriefDto;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -49,8 +50,62 @@ public record RepairRequestDto(
         String warrantyDecisionComment,
         Instant supplierContactedAt,
         String supplierResponse,
-        String emergencyReason
+        String emergencyReason,
+        UUID warrantySupplierId,
+        String warrantySupplierName,
+        String warrantySupplierContactPerson,
+        String warrantySupplierPhone,
+        String warrantySupplierEmail,
+        LocalDate warrantyStartDateAtCreation,
+        LocalDate warrantyEndDateAtCreation
 ) {
+    public RepairRequestDto(
+            UUID id,
+            String number,
+            String title,
+            String description,
+            UUID templateId,
+            List<UUID> templateIds,
+            List<RepairRequestTemplateSummaryDto> templates,
+            List<RepairRequestActionReferenceDto> actionReferences,
+            UUID equipmentId,
+            String equipmentName,
+            UUID departmentId,
+            String departmentName,
+            String locationName,
+            UUID reporterId,
+            String reporterName,
+            UUID assignedToId,
+            PriorityLevel priority,
+            CriticalityLevel criticality,
+            RequestStatus status,
+            RequestSource source,
+            Instant detectedAt,
+            Instant targetCompletionAt,
+            Instant actualCompletionAt,
+            Instant reactedAt,
+            String rejectionReason,
+            String clarificationReason,
+            String closeResult,
+            List<DefectBriefDto> linkedDefects,
+            List<WorkOrderBriefDto> linkedWorkOrders,
+            List<MeterReadingDto> meterReadings,
+            Boolean warrantyActiveAtCreation,
+            WarrantyHandling warrantyHandling,
+            String warrantyDecisionComment,
+            Instant supplierContactedAt,
+            String supplierResponse,
+            String emergencyReason
+    ) {
+        this(id, number, title, description, templateId, templateIds, templates, actionReferences,
+                equipmentId, equipmentName, departmentId, departmentName, locationName, reporterId, reporterName,
+                assignedToId, priority, criticality, status, source, detectedAt, targetCompletionAt,
+                actualCompletionAt, reactedAt, rejectionReason, clarificationReason, closeResult,
+                linkedDefects, linkedWorkOrders, meterReadings, warrantyActiveAtCreation, warrantyHandling,
+                warrantyDecisionComment, supplierContactedAt, supplierResponse, emergencyReason,
+                null, null, null, null, null, null, null);
+    }
+
     public RepairRequestDto(
             UUID id,
             String number,
@@ -83,7 +138,8 @@ public record RepairRequestDto(
                 locationName, reporterId, reporterName, assignedToId, priority, criticality, status, source,
                 detectedAt, targetCompletionAt, actualCompletionAt, reactedAt, rejectionReason,
                 clarificationReason, closeResult, linkedDefects, linkedWorkOrders, List.of(),
-                null, null, null, null, null, null);
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null);
     }
 
     public RepairRequestDto(
@@ -117,7 +173,8 @@ public record RepairRequestDto(
                 locationName, reporterId, reporterName, assignedToId, priority, criticality, status, source,
                 detectedAt, targetCompletionAt, actualCompletionAt, reactedAt, rejectionReason,
                 clarificationReason, closeResult, linkedDefects, linkedWorkOrders, List.of(),
-                null, null, null, null, null, null);
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null);
     }
 
     public RepairRequestDto {

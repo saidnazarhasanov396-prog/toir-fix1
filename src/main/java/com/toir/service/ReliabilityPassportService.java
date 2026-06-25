@@ -52,6 +52,7 @@ public class ReliabilityPassportService {
     private final DowntimeEventRepository downtimeRepository;
     private final WorkOrderRepository workOrderRepository;
     private final RepairRequestRepository repairRequestRepository;
+    private final MetricExplanationService metricExplanationService;
 
     @Transactional(readOnly = true)
     public Page<ReliabilityPassport> list(UUID equipmentId, String search, String availability, int page, int size) {
@@ -66,6 +67,18 @@ public class ReliabilityPassportService {
                                           int size,
                                           String sortBy,
                                           String sortDir) {
+        return list(equipmentId, search, availability, page, size, sortBy, sortDir, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ReliabilityPassport> list(UUID equipmentId,
+                                          String search,
+                                          String availability,
+                                          int page,
+                                          int size,
+                                          String sortBy,
+                                          String sortDir,
+                                          String lang) {
         AvailabilityBand availabilityFilter = parseAvailabilityFilter(availability);
         String searchPattern = search == null || search.isBlank()
                 ? null
@@ -77,7 +90,7 @@ public class ReliabilityPassportService {
                 return PaginationUtils.page(List.of(), page, size);
             }
 
-            List<ReliabilityPassport> filteredPassports = buildPassports(equipmentList).stream()
+            List<ReliabilityPassport> filteredPassports = buildPassports(equipmentList, lang).stream()
                     .filter(passport -> availabilityFilter == null || bandOf(passport.availabilityPct()) == availabilityFilter)
                     .toList();
             if (isNumericSort(sortBy)) {
@@ -102,7 +115,7 @@ public class ReliabilityPassportService {
             return new PageImpl<>(List.of(), equipmentPage.getPageable(), equipmentPage.getTotalElements());
         }
 
-        List<ReliabilityPassport> passports = buildPassports(equipmentPage.getContent());
+        List<ReliabilityPassport> passports = buildPassports(equipmentPage.getContent(), lang);
 
         return new PageImpl<>(passports, equipmentPage.getPageable(), equipmentPage.getTotalElements());
     }
@@ -135,6 +148,10 @@ public class ReliabilityPassportService {
     }
 
     private List<ReliabilityPassport> buildPassports(List<Equipment> equipmentList) {
+        return buildPassports(equipmentList, null);
+    }
+
+    private List<ReliabilityPassport> buildPassports(List<Equipment> equipmentList, String lang) {
         List<UUID> ids = equipmentList.stream()
                 .map(Equipment::getId)
                 .toList();
@@ -165,7 +182,8 @@ public class ReliabilityPassportService {
                         downtimesByEquipment.getOrDefault(eq.getId(), List.of()),
                         workOrdersByEquipment.getOrDefault(eq.getId(), List.of()),
                         repairRequestsByEquipment.getOrDefault(eq.getId(), List.of()),
-                        now))
+                        now,
+                        lang))
                 .toList();
     }
 
@@ -227,6 +245,11 @@ public class ReliabilityPassportService {
 
     @Transactional(readOnly = true)
     public ReliabilityPassport passport(UUID equipmentId) {
+        return passport(equipmentId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public ReliabilityPassport passport(UUID equipmentId, String lang) {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
 
@@ -235,7 +258,7 @@ public class ReliabilityPassportService {
         List<WorkOrder> workOrders = workOrderRepository.search(null, null, equipmentId);
         List<RepairRequest> repairRequests = repairRequestRepository.search(null, null, equipmentId);
 
-        return buildPassport(equipment, defects, downtimes, workOrders, repairRequests, Instant.now());
+        return buildPassport(equipment, defects, downtimes, workOrders, repairRequests, Instant.now(), lang);
     }
 
     private ReliabilityPassport buildPassport(Equipment equipment,
@@ -244,6 +267,16 @@ public class ReliabilityPassportService {
                                               List<WorkOrder> workOrders,
                                               List<RepairRequest> repairRequests,
                                               Instant now) {
+        return buildPassport(equipment, defects, downtimes, workOrders, repairRequests, now, null);
+    }
+
+    private ReliabilityPassport buildPassport(Equipment equipment,
+                                              List<Defect> defects,
+                                              List<DowntimeEvent> downtimes,
+                                              List<WorkOrder> workOrders,
+                                              List<RepairRequest> repairRequests,
+                                              Instant now,
+                                              String lang) {
         List<Defect> activeDefects = defects.stream()
                 .filter(d -> d.getStatus() != DefectStatus.CANCELLED)
                 .toList();
@@ -253,6 +286,7 @@ public class ReliabilityPassportService {
 
         ReliabilityDowntimeCalculator.EquipmentReliability reliability =
                 ReliabilityDowntimeCalculator.calculate(equipment, downtimes, workOrders, repairRequests, now);
+        double downtimeHours = reliability.totalDowntimeMinutes() / 60.0;
 
         Map<String, Integer> causes = new HashMap<>();
         for (Defect d : activeDefects) {
@@ -283,7 +317,14 @@ public class ReliabilityPassportService {
                 reliability.mttrHours(),
                 reliability.availabilityPct(),
                 topCauses,
-                now
+                now,
+                metricExplanationService.availability(
+                        lang,
+                        reliability.observedHours(),
+                        downtimeHours,
+                        reliability.operatingHours(),
+                        reliability.availabilityPct()
+                )
         );
     }
 

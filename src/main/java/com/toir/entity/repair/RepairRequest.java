@@ -10,6 +10,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -94,6 +95,27 @@ public class RepairRequest extends BaseEntity {
 
     @Column(name = "warranty_decision_comment", columnDefinition = "text")
     private String warrantyDecisionComment;
+
+    @Column(name = "warranty_supplier_id")
+    private UUID warrantySupplierId;
+
+    @Column(name = "warranty_supplier_name")
+    private String warrantySupplierName;
+
+    @Column(name = "warranty_supplier_contact_person")
+    private String warrantySupplierContactPerson;
+
+    @Column(name = "warranty_supplier_phone")
+    private String warrantySupplierPhone;
+
+    @Column(name = "warranty_supplier_email")
+    private String warrantySupplierEmail;
+
+    @Column(name = "warranty_start_date_at_creation")
+    private LocalDate warrantyStartDateAtCreation;
+
+    @Column(name = "warranty_end_date_at_creation")
+    private LocalDate warrantyEndDateAtCreation;
 
     @Column(name = "supplier_contacted_at")
     private Instant supplierContactedAt;

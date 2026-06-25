@@ -17,7 +17,9 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -39,6 +41,33 @@ public class MaintenanceBudgetService {
             throw forbidden();
         }
         return repository.findAllByDepartmentIdAndYearAndIsDeletedFalse(departmentId, year).stream()
+                .map(MaintenanceBudgetDto::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MaintenanceBudgetDto> findFiltered(Integer year,
+                                                   Integer month,
+                                                   UUID requestedDepartmentId,
+                                                   String sortBy,
+                                                   String sortDir) {
+        UUID effectiveDepartmentId = requestedDepartmentId;
+        if (!scopeAccessService.isScopeAdmin()) {
+            effectiveDepartmentId = scopeAccessService.enforceDepartmentScope(requestedDepartmentId);
+            if (effectiveDepartmentId == null) {
+                throw forbidden();
+            }
+        }
+        Comparator<MaintenanceBudget> comparator = budgetComparator(sortBy);
+        if (sortDir == null || sortDir.isBlank() || "desc".equalsIgnoreCase(sortDir)) {
+            comparator = comparator.reversed();
+        }
+        UUID departmentFilter = effectiveDepartmentId;
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(budget -> year == null || budget.getYear() == year)
+                .filter(budget -> month == null || Objects.equals(budget.getMonth(), month))
+                .filter(budget -> departmentFilter == null || Objects.equals(budget.getDepartmentId(), departmentFilter))
+                .sorted(comparator)
                 .map(MaintenanceBudgetDto::from)
                 .toList();
     }
@@ -165,5 +194,25 @@ public class MaintenanceBudgetService {
 
     private AccessDeniedException forbidden() {
         return new AccessDeniedException("Access denied by budget scope");
+    }
+
+    private Comparator<MaintenanceBudget> budgetComparator(String sortBy) {
+        return switch (sortBy == null ? "" : sortBy.trim()) {
+            case "year" -> Comparator.comparingInt(MaintenanceBudget::getYear);
+            case "month", "period" -> Comparator.comparing(
+                    MaintenanceBudget::getMonth,
+                    Comparator.nullsFirst(Comparator.naturalOrder()));
+            case "status" -> Comparator.comparing(
+                    budget -> budget.getStatus() != null ? budget.getStatus().name() : "",
+                    String.CASE_INSENSITIVE_ORDER);
+            case "totalPlanned", "plannedAmount" -> Comparator.comparingDouble(MaintenanceBudget::getTotalPlanned);
+            case "totalActual", "actualAmount" -> Comparator.comparingDouble(MaintenanceBudget::getTotalActual);
+            case "updatedAt" -> Comparator.comparing(
+                    MaintenanceBudget::getUpdatedAt,
+                    Comparator.nullsFirst(Comparator.naturalOrder()));
+            default -> Comparator.comparing(
+                    MaintenanceBudget::getUpdatedAt,
+                    Comparator.nullsFirst(Comparator.naturalOrder()));
+        };
     }
 }
