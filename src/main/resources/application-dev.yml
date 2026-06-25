@@ -61,7 +61,6 @@ app:
   logging:
     level:
       com.toir: DEBUG
-      com.example.tinder.service.firebase: DEBUG
       com.google.firebase: DEBUG
 
 logging:
