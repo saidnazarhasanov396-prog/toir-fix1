@@ -40,4 +40,13 @@ public interface ContractorWorkRepository extends JpaRepository<ContractorWork, 
 
     @Query(value = "SELECT * FROM contractor_works WHERE work_order_id = :workOrderId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ContractorWork> findAllByWorkOrderIdAndIsDeletedFalse(@Param("workOrderId") UUID workOrderId);
+
+    @Query(value = """
+            SELECT *
+            FROM contractor_works
+            WHERE work_order_id IN (:workOrderIds)
+              AND is_deleted = false
+            ORDER BY updated_at DESC
+            """, nativeQuery = true)
+    List<ContractorWork> findAllByWorkOrderIdInAndIsDeletedFalse(@Param("workOrderIds") Collection<UUID> workOrderIds);
 }

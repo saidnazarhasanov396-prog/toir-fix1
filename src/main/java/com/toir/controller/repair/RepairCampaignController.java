@@ -1,7 +1,14 @@
 package com.toir.controller.repair;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
+import com.toir.dto.repaircampaign.RepairCampaignCancelRequest;
+import com.toir.dto.repaircampaign.RepairCampaignCostSummaryDto;
+import com.toir.dto.repaircampaign.RepairCampaignEquipmentPreviewItemDto;
+import com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
+import com.toir.dto.repaircampaign.RepairCampaignSummaryDto;
+import com.toir.dto.workorder.WorkOrderDto;
+import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.RestException;
 import com.toir.service.repair.RepairCampaignService;
@@ -9,6 +16,7 @@ import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
+import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -38,6 +46,11 @@ public class RepairCampaignController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<RepairCampaignDto> update(@PathVariable UUID id, @Valid @RequestBody RepairCampaignRequest r) {
+        return ResponseEntity.ok(service.update(id, r));
+    }
+
     @PostMapping("/{id}/reject")
     public ResponseEntity<RepairCampaignDto> reject(@PathVariable UUID id) {
         throw RestException.conflict("Use /api/v1/approvals/{id}/reject to reject approval requests");
@@ -49,13 +62,99 @@ public class RepairCampaignController {
     @PostMapping("/{id}/close")
     public ResponseEntity<RepairCampaignDto> close(@PathVariable UUID id) { return ResponseEntity.ok(service.close(id)); }
 
+    @PostMapping("/{id}/complete")
+    public ResponseEntity<RepairCampaignDto> complete(@PathVariable UUID id) { return ResponseEntity.ok(service.complete(id)); }
+
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<RepairCampaignDto> cancel(
+            @PathVariable UUID id,
+            @Valid @RequestBody RepairCampaignCancelRequest request
+    ) {
+        return ResponseEntity.ok(service.cancel(id, request.reason()));
+    }
+
+    @GetMapping("/{id}/summary")
+    public ResponseEntity<RepairCampaignSummaryDto> summary(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.summary(id));
+    }
+
+    @GetMapping("/{id}/costs")
+    public ResponseEntity<RepairCampaignCostSummaryDto> costs(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.costs(id));
+    }
+
+    @GetMapping("/{id}/work-orders")
+    public ResponseEntity<Page<WorkOrderDto>> workOrders(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findWorkOrders(id), page, size));
+    }
+
     @PostMapping("/{id}/stages")
     public ResponseEntity<RepairCampaignStageDto> addStage(@PathVariable UUID id, @Valid @RequestBody RepairCampaignStageDto r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addStage(id, r));
     }
 
+    @PutMapping("/{id}/stages/{stageId}")
+    public ResponseEntity<RepairCampaignStageDto> updateStage(
+            @PathVariable UUID id,
+            @PathVariable UUID stageId,
+            @Valid @RequestBody RepairCampaignStageDto r
+    ) {
+        return ResponseEntity.ok(service.updateStage(id, stageId, r));
+    }
+
+    @PostMapping("/{id}/stages/{stageId}/complete")
+    public ResponseEntity<RepairCampaignStageDto> completeStage(
+            @PathVariable UUID id,
+            @PathVariable UUID stageId
+    ) {
+        return ResponseEntity.ok(service.completeStage(id, stageId));
+    }
+
     @PostMapping("/stages/{stageId}/complete")
     public ResponseEntity<RepairCampaignStageDto> completeStage(@PathVariable UUID stageId, @RequestParam double actualCost) {
         return ResponseEntity.ok(service.completeStage(stageId, actualCost));
+    }
+
+    @PostMapping("/{id}/stages/{stageId}/work-orders")
+    public ResponseEntity<WorkOrderDto> createWorkOrder(
+            @PathVariable UUID id,
+            @PathVariable UUID stageId,
+            @Valid @RequestBody WorkOrderRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createWorkOrder(id, stageId, request));
+    }
+
+    @PostMapping("/{id}/stages/{stageId}/work-orders/{workOrderId}/attach")
+    public ResponseEntity<WorkOrderDto> attachWorkOrder(
+            @PathVariable UUID id,
+            @PathVariable UUID stageId,
+            @PathVariable UUID workOrderId
+    ) {
+        return ResponseEntity.ok(service.attachWorkOrder(id, stageId, workOrderId));
+    }
+
+    @PostMapping("/{id}/work-orders/{workOrderId}/detach")
+    public ResponseEntity<WorkOrderDto> detachWorkOrder(
+            @PathVariable UUID id,
+            @PathVariable UUID workOrderId
+    ) {
+        return ResponseEntity.ok(service.detachWorkOrder(id, workOrderId));
+    }
+
+    @GetMapping("/{id}/equipment-preview")
+    public ResponseEntity<List<RepairCampaignEquipmentPreviewItemDto>> equipmentPreview(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.equipmentPreview(id));
+    }
+
+    @PostMapping("/{id}/generate-work-orders")
+    public ResponseEntity<List<WorkOrderDto>> generateWorkOrders(
+            @PathVariable UUID id,
+            @RequestBody(required = false) RepairCampaignGenerateWorkOrdersRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.generateWorkOrders(id, request));
     }
 }

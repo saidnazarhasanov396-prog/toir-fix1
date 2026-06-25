@@ -2,10 +2,15 @@ package com.toir.service;
 
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.Department;
 import com.toir.entity.repair.RepairCampaign;
+import com.toir.entity.repair.RepairCampaignStage;
+import com.toir.enums.RepairCampaignScopeType;
 import com.toir.enums.RepairCampaignStatus;
+import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
@@ -43,6 +48,9 @@ class RepairCampaignServiceTest {
     private DepartmentRepository departmentRepository;
 
     @Mock
+    private WorkOrderRepository workOrderRepository;
+
+    @Mock
     private AuditBuilderService auditBuilderService;
 
     @InjectMocks
@@ -61,8 +69,6 @@ class RepairCampaignServiceTest {
         c1.setStages(List.of());
 
         when(repository.findAllFiltered(2026, "DRAFT", "%annual%")).thenReturn(List.of(c1));
-        when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(dept));
-
         List<RepairCampaignDto> results = service.findAllFiltered("annual", 2026, RepairCampaignStatus.DRAFT);
 
         assertThat(results).hasSize(1);
@@ -82,6 +88,9 @@ class RepairCampaignServiceTest {
                 LocalDate.of(2026, 2, 1),
                 1000,
                 null,
+                null,
+                List.of(),
+                null,
                 null
         );
 
@@ -92,5 +101,86 @@ class RepairCampaignServiceTest {
                 });
 
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createEquipmentTypeCampaignRequiresEquipmentTypeId() {
+        RepairCampaignRequest request = new RepairCampaignRequest(
+                null,
+                "Pump type overhaul",
+                2026,
+                null,
+                null,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 2, 1),
+                1000,
+                RepairCampaignScopeType.EQUIPMENT_TYPE,
+                null,
+                List.of(),
+                null,
+                null
+        );
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("equipmentTypeId");
+                });
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createCrossDepartmentCampaignRequiresParticipants() {
+        RepairCampaignRequest request = new RepairCampaignRequest(
+                null,
+                "Shutdown overhaul",
+                2026,
+                null,
+                null,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 2, 1),
+                1000,
+                RepairCampaignScopeType.CROSS_DEPARTMENT,
+                null,
+                List.of(),
+                null,
+                null
+        );
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("participant department");
+                });
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void completeStageRejectsActiveLinkedWorkOrders() {
+        UUID stageId = UUID.randomUUID();
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = new RepairCampaign();
+        campaign.setId(campaignId);
+        campaign.setStatus(RepairCampaignStatus.IN_PROGRESS);
+
+        RepairCampaignStage stage = new RepairCampaignStage();
+        stage.setId(stageId);
+        stage.setCampaign(campaign);
+
+        WorkOrder activeOrder = new WorkOrder();
+        activeOrder.setId(UUID.randomUUID());
+        activeOrder.setStatus(WorkOrderStatus.IN_PROGRESS);
+
+        when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
+        when(workOrderRepository.findAllByRepairCampaignStageIdAndIsDeletedFalseOrderByUpdatedAtDesc(stageId))
+                .thenReturn(List.of(activeOrder));
+
+        assertThatThrownBy(() -> service.completeStage(campaignId, stageId))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("active work order");
+                });
     }
 }

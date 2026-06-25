@@ -75,6 +75,8 @@ public class WorkOrderController {
             @RequestParam(required = false) WorkOrderStatus status,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) UUID repairCampaignId,
+            @RequestParam(required = false) UUID repairCampaignStageId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search,
@@ -83,6 +85,21 @@ public class WorkOrderController {
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         Sort sort = SortUtils.sort(sortBy, sortDir, SORT_FIELDS, "updatedAt", Sort.Direction.DESC);
+        if (repairCampaignId != null || repairCampaignStageId != null) {
+            return ResponseEntity
+                    .ok(service.searchByCampaign(
+                            status,
+                            scopedDepartment(departmentId),
+                            equipmentId,
+                            page,
+                            size,
+                            search,
+                            plannedFrom,
+                            plannedTo,
+                            sort,
+                            repairCampaignId,
+                            repairCampaignStageId));
+        }
         String requestedSort = sortBy == null ? null : sortBy.trim();
         if (requestedSort == null || requestedSort.isBlank() || "updatedAt".equals(requestedSort)) {
             return ResponseEntity

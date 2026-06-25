@@ -36,6 +36,17 @@ public interface ActualCostRepository extends JpaRepository<ActualCost, UUID> {
     @Query(value = """
             SELECT *
             FROM actual_costs
+            WHERE work_order_id IN (:workOrderIds)
+              AND is_deleted = false
+            ORDER BY updated_at DESC
+            """, nativeQuery = true)
+    List<ActualCost> findAllByWorkOrderIdInAndIsDeletedFalseOrderByUpdatedAtDesc(
+            @Param("workOrderIds") Collection<UUID> workOrderIds
+    );
+
+    @Query(value = """
+            SELECT *
+            FROM actual_costs
             WHERE contractor_work_id = cast(:contractorWorkId as uuid)
               AND is_deleted = false
             ORDER BY updated_at DESC
