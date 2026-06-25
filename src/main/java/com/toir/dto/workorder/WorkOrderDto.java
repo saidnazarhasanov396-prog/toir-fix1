@@ -67,12 +67,77 @@ public record WorkOrderDto(
         UUID stoppageActFileId,
         @JsonInclude(JsonInclude.Include.NON_EMPTY)
         List<RepairMaterialUsageDto> materialUsages,
-        Instant updatedAt
+        Instant updatedAt,
+        UUID repairCampaignId,
+        UUID repairCampaignStageId,
+        String repairCampaignName,
+        String repairCampaignStageName
 ) {
     public WorkOrderDto {
         repairActRequired = Boolean.TRUE.equals(repairActRequired);
         stoppageActRequired = Boolean.TRUE.equals(stoppageActRequired);
         materialUsages = materialUsages == null ? List.of() : List.copyOf(materialUsages);
+    }
+
+    public WorkOrderDto(UUID id,
+                        String number,
+                        String title,
+                        UUID equipmentId,
+                        UUID equipmentNodeId,
+                        String equipmentNodeCode,
+                        String equipmentNodeName,
+                        EquipmentNodeType equipmentNodeType,
+                        UUID departmentId,
+                        String equipmentName,
+                        String departmentName,
+                        UUID locationId,
+                        String locationName,
+                        String workLocationNote,
+                        UUID repairRequestId,
+                        UUID defectId,
+                        UUID defectListId,
+                        String defectListNumber,
+                        DefectListStatus defectListStatus,
+                        UUID pprTaskId,
+                        UUID contractorId,
+                        ContractorRef contractor,
+                        UUID performerId,
+                        String performerName,
+                        WorkOrderStatus status,
+                        WorkOrderType type,
+                        WorkType workType,
+                        PriorityLevel priority,
+                        Instant startPlannedAt,
+                        Instant endPlannedAt,
+                        Instant startedAt,
+                        Instant completedAt,
+                        String summary,
+                        String result,
+                        String closureNotes,
+                        UUID createdById,
+                        UUID approvedById,
+                        UUID warehouseId,
+                        UUID replacementEquipmentId,
+                        String replacementEquipmentName,
+                        List<WorkOrderTaskDto> tasks,
+                        RepairRequestBriefDto repairRequest,
+                        DefectBriefDto defect,
+                        int operationsCount,
+                        int materialsCount,
+                        Boolean repairActRequired,
+                        Boolean stoppageActRequired,
+                        UUID repairActFileId,
+                        UUID stoppageActFileId,
+                        List<RepairMaterialUsageDto> materialUsages,
+                        Instant updatedAt) {
+        this(id, number, title, equipmentId, equipmentNodeId, equipmentNodeCode, equipmentNodeName,
+                equipmentNodeType, departmentId, equipmentName, departmentName, locationId, locationName,
+                workLocationNote, repairRequestId, defectId, defectListId, defectListNumber, defectListStatus,
+                pprTaskId, contractorId, contractor, performerId, performerName, status, type, workType, priority,
+                startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes, createdById,
+                approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName, tasks, repairRequest,
+                defect, operationsCount, materialsCount, repairActRequired, stoppageActRequired, repairActFileId,
+                stoppageActFileId, materialUsages, updatedAt, null, null, null, null);
     }
 
     public WorkOrderDto(UUID id,

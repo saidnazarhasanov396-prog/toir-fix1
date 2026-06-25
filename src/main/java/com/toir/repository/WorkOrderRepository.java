@@ -84,6 +84,12 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
     @Query(value = "SELECT * FROM work_orders WHERE contractor_id = :contractorId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<WorkOrder> findAllByContractorIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("contractorId") UUID contractorId);
 
+    @Query(value = "SELECT * FROM work_orders WHERE repair_campaign_id = cast(:campaignId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<WorkOrder> findAllByRepairCampaignIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("campaignId") UUID campaignId);
+
+    @Query(value = "SELECT * FROM work_orders WHERE repair_campaign_stage_id = cast(:stageId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<WorkOrder> findAllByRepairCampaignStageIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("stageId") UUID stageId);
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM work_orders WHERE equipment_node_id = cast(:equipmentNodeId as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByEquipmentNodeIdAndIsDeletedFalse(@Param("equipmentNodeId") UUID equipmentNodeId);
 
@@ -133,6 +139,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
                 nullif(to_jsonb(w)->>'defect_list_id', '')::uuid as defect_list_id,
                 w.ppr_task_id,
                 nullif(to_jsonb(w)->>'maintenance_due_event_id', '')::uuid as maintenance_due_event_id,
+                nullif(to_jsonb(w)->>'repair_campaign_id', '')::uuid as repair_campaign_id,
+                nullif(to_jsonb(w)->>'repair_campaign_stage_id', '')::uuid as repair_campaign_stage_id,
                 to_jsonb(w)->>'cycle_key' as cycle_key,
                 w.contractor_id,
                 nullif(to_jsonb(w)->>'brigade_member_id', '')::uuid as brigade_member_id,

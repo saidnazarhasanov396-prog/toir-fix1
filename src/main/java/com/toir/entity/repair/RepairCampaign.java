@@ -1,5 +1,6 @@
 package com.toir.entity.repair;
 import com.toir.entity.BaseEntity;
+import com.toir.enums.RepairCampaignScopeType;
 import com.toir.enums.RepairCampaignStatus;
 
 import jakarta.persistence.*;
@@ -39,6 +40,14 @@ public class RepairCampaign extends BaseEntity {
     private UUID departmentId;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "scope_type", nullable = false)
+    @Builder.Default
+    private RepairCampaignScopeType scopeType = RepairCampaignScopeType.CUSTOM;
+
+    @Column(name = "equipment_type_id")
+    private UUID equipmentTypeId;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RepairCampaignStatus status = RepairCampaignStatus.DRAFT;
 
@@ -62,5 +71,11 @@ public class RepairCampaign extends BaseEntity {
 
     @OneToMany(mappedBy = "campaign", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sequence ASC")
+    @Builder.Default
     private List<RepairCampaignStage> stages = new ArrayList<>();
+
+    @OneToMany(mappedBy = "campaign", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("role ASC")
+    @Builder.Default
+    private List<RepairCampaignDepartment> participantDepartments = new ArrayList<>();
 }

@@ -1,8 +1,8 @@
 package com.toir.dto.repaircampaign;
 
 import com.toir.entity.repair.RepairCampaign;
+import com.toir.enums.RepairCampaignScopeType;
 import com.toir.enums.RepairCampaignStatus;
-import com.toir.service.department.DepartmentService;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -24,8 +24,38 @@ public record RepairCampaignDto(
         double variance,
         String scope,
         String notes,
-        List<RepairCampaignStageDto> stages
+        List<RepairCampaignStageDto> stages,
+        RepairCampaignScopeType scopeType,
+        UUID equipmentTypeId,
+        List<RepairCampaignDepartmentDto> participantDepartments,
+        int workOrderCount,
+        int completedWorkOrderCount,
+        double approvedActual,
+        double pendingActual
 ) {
+    public RepairCampaignDto(
+            UUID id,
+            String code,
+            String name,
+            int year,
+            Integer quarter,
+            UUID departmentId,
+            String departmentName,
+            RepairCampaignStatus status,
+            LocalDate startDate,
+            LocalDate endDate,
+            double totalBudget,
+            double totalActual,
+            double variance,
+            String scope,
+            String notes,
+            List<RepairCampaignStageDto> stages
+    ) {
+        this(id, code, name, year, quarter, departmentId, departmentName, status, startDate, endDate, totalBudget,
+                totalActual, variance, scope, notes, stages, RepairCampaignScopeType.CUSTOM, null, List.of(),
+                0, 0, totalActual, 0);
+    }
+
     public static RepairCampaignDto from(RepairCampaign c, String departmentName) {
         return new RepairCampaignDto(
                 c.getId(), c.getCode(), c.getName(),
@@ -34,7 +64,14 @@ public record RepairCampaignDto(
                 c.getTotalBudget(), c.getTotalActual(),
                 c.getTotalBudget() - c.getTotalActual(),
                 c.getScope(), c.getNotes(),
-                c.getStages().stream().map(RepairCampaignStageDto::from).toList()
+                c.getStages().stream().map(RepairCampaignStageDto::from).toList(),
+                c.getScopeType(),
+                c.getEquipmentTypeId(),
+                List.of(),
+                0,
+                0,
+                c.getTotalActual(),
+                0
         );
     }
 
