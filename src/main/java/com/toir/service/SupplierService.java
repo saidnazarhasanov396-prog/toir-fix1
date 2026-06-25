@@ -6,6 +6,7 @@ import com.toir.dto.supplier.SupplierRequest;
 import com.toir.entity.PurchaseOrder;
 import com.toir.entity.Supplier;
 import com.toir.enums.PurchaseOrderStatus;
+import com.toir.enums.SupplierType;
 import com.toir.exception.RestException;
 import com.toir.repository.PurchaseOrderRepository;
 import com.toir.repository.SupplierRepository;
@@ -27,7 +28,12 @@ public class SupplierService {
 
     @Transactional(readOnly = true)
     public List<SupplierDto> findAll(String search, Boolean active) {
-        return supplierRepository.search(trimToNull(search), active).stream()
+        return findAll(search, active, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SupplierDto> findAll(String search, Boolean active, SupplierType supplierType) {
+        return supplierRepository.search(trimToNull(search), active, supplierType).stream()
                 .map(SupplierDto::from)
                 .toList();
     }
@@ -91,9 +97,17 @@ public class SupplierService {
     }
 
     Supplier loadActive(UUID id) {
+        return loadActiveForType(id, null, "new purchase orders");
+    }
+
+    public Supplier loadActiveForType(UUID id, SupplierType requiredType, String context) {
         Supplier supplier = load(id);
         if (!Boolean.TRUE.equals(supplier.getActive())) {
-            throw RestException.badRequest("Inactive suppliers cannot be selected for new purchase orders");
+            throw RestException.badRequest("Inactive suppliers cannot be selected for " + context);
+        }
+        SupplierType actualType = supplier.getSupplierType() == null ? SupplierType.BOTH : supplier.getSupplierType();
+        if (!actualType.supports(requiredType)) {
+            throw RestException.badRequest("Supplier must support " + requiredType + " for " + context);
         }
         return supplier;
     }
@@ -110,6 +124,7 @@ public class SupplierService {
         supplier.setEmail(trimToNull(request.email()));
         supplier.setAddress(trimToNull(request.address()));
         supplier.setTaxNumber(trimToNull(request.taxNumber()));
+        supplier.setSupplierType(request.supplierType() != null ? request.supplierType() : SupplierType.BOTH);
         if (request.active() != null) {
             supplier.setActive(request.active());
         } else if (supplier.getActive() == null) {

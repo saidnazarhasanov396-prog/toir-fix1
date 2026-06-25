@@ -5,10 +5,12 @@ import com.toir.entity.SparePart;
 import com.toir.entity.Department;
 import com.toir.entity.Location;
 import com.toir.entity.StockMovement;
+import com.toir.entity.Supplier;
 import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.SupplierType;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.InventoryItemKind;
 import com.toir.enums.SparePartType;
@@ -519,6 +521,43 @@ class SparePartServiceTest {
     }
 
     @Test
+    void createRejectsPreferredSupplierThatDoesNotSupportSpareParts() {
+        String codePrefix = "SP-" + java.time.Year.now().getValue() + "-";
+        UUID supplierId = UUID.randomUUID();
+        com.toir.entity.SparePartType otherType = sparePartType(UUID.randomUUID(), "OTHER", "Other", "PCS");
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(codePrefix + "0001")).thenReturn(false);
+        when(typeRepository.findByCodeIgnoreCaseAndActiveTrue("OTHER")).thenReturn(Optional.of(otherType));
+        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
+                .thenReturn(Optional.of(supplier(supplierId, "Equipment Supplier", SupplierType.EQUIPMENT)));
+
+        assertThatThrownBy(() -> service.create(new com.toir.dto.sparepart.SparePartRequest(
+                null,
+                "Bearing",
+                null,
+                InventoryItemKind.SPARE_PART,
+                null,
+                null,
+                "PCS",
+                null,
+                null,
+                0,
+                supplierId,
+                null,
+                null,
+                null,
+                null,
+                null
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("SPARE_PART");
+                });
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
     void createAllowsFlexibleUnitOverrideForType() {
         String codePrefix = "SP-" + java.time.Year.now().getValue() + "-";
         com.toir.entity.SparePartType oilType = sparePartType(UUID.randomUUID(), "OIL", "Oil", "LITER");
@@ -761,5 +800,15 @@ class SparePartServiceTest {
         unit.setCode(code);
         unit.setName(name);
         return unit;
+    }
+
+    private Supplier supplier(UUID id, String name, SupplierType supplierType) {
+        Supplier supplier = new Supplier();
+        supplier.setId(id);
+        supplier.setCode("SUP-" + id.toString().substring(0, 8));
+        supplier.setName(name);
+        supplier.setActive(true);
+        supplier.setSupplierType(supplierType);
+        return supplier;
     }
 }

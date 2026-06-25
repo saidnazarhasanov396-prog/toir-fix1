@@ -26,6 +26,7 @@ import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.PurchaseOrderStatus;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.SupplierType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.ProcurementRequestRepository;
@@ -74,7 +75,7 @@ public class PurchaseOrderService {
 
     @Transactional
     public PurchaseOrderDto create(PurchaseOrderRequest request) {
-        Supplier supplier = supplierService.loadActive(request.supplierId());
+        Supplier supplier = supplierService.loadActiveForType(request.supplierId(), SupplierType.SPARE_PART, "purchase orders");
         Warehouse warehouse = warehouseOrThrow(request.warehouseId());
         assertCanAccessWarehouse(warehouse);
         PurchaseOrder order = newOrder(supplier.getId(), warehouse.getId(), request.expectedDeliveryDate(), request.comment());
@@ -157,7 +158,7 @@ public class PurchaseOrderService {
         Warehouse warehouse = warehouseOrThrow(procurement.getWarehouseId());
         assertCanAccessWarehouse(warehouse);
         UUID supplierId = request.supplierId() != null ? request.supplierId() : preferredSupplierId(procurement);
-        Supplier supplier = supplierService.loadActive(supplierId);
+        Supplier supplier = supplierService.loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders");
         PurchaseOrder order = newOrder(supplier.getId(), warehouse.getId(), request.expectedDeliveryDate(), request.comment());
         order.setProcurementRequestId(procurement.getId());
         for (ProcurementRequestLine line : procurement.getLines()) {

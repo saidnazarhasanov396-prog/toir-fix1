@@ -9,6 +9,7 @@ import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
 import com.toir.dto.repairrequest.WarrantyDecisionRequest;
+import com.toir.dto.repairrequest.WarrantyPreviewResponse;
 import com.toir.dto.repairrequest.WarrantyStatusResponse;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.RequestStatus;
@@ -77,6 +78,13 @@ public class RepairRequestController {
     ) {
         UUID scopedDepartmentId = resolveDepartmentFilter(filter.departmentId(), filter.equipmentId());
         return ResponseEntity.ok(service.getStats(filter.withDepartmentId(scopedDepartmentId)));
+    }
+
+    @GetMapping("/warranty-preview")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_CREATE') or hasAuthority('REPAIR_REQUEST_READ')")
+    public ResponseEntity<WarrantyPreviewResponse> warrantyPreview(@RequestParam UUID equipmentId) {
+        assertCanPreviewWarranty(equipmentId);
+        return ResponseEntity.ok(service.getWarrantyPreview(equipmentId));
     }
 
     @GetMapping("/{id}")
@@ -212,6 +220,13 @@ public class RepairRequestController {
                 ? request.departmentId()
                 : service.resolveDepartmentIdForCreate(request);
         assertCanAccessDepartmentForMutation(departmentId);
+    }
+
+    private void assertCanPreviewWarranty(UUID equipmentId) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return;
+        }
+        assertCanAccessDepartmentForMutation(service.resolveDepartmentIdForEquipment(equipmentId));
     }
 
     private void assertCanMutateRequest(RepairRequest request) {

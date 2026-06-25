@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.entity.RcmSnapshot;
+import com.toir.entity.ReliabilityMetric;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.CriticalityClass;
 import com.toir.entity.equipment.Equipment;
@@ -22,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -176,6 +178,27 @@ class RcmServiceTest {
     }
 
     @Test
+    void computeAllSortsByRequestedMetric() {
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(equipment(firstId), equipment(secondId)));
+        when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(
+                        reliabilityMetric(firstId, 4000, 12),
+                        reliabilityMetric(secondId, 1200, 4)
+                ));
+
+        List<EquipmentRiskScore> scores = service.computeAll("mtbfHours", "asc");
+
+        assertThat(scores).extracting(EquipmentRiskScore::equipmentId)
+                .containsExactly(secondId, firstId);
+    }
+
+    @Test
     void postThenGetHistoryReturnsNonEmptyForSameEquipment() {
         UUID equipmentId = UUID.randomUUID();
         List<RcmSnapshot> storage = new ArrayList<>();
@@ -221,5 +244,14 @@ class RcmServiceTest {
         defect.setEquipmentId(equipmentId);
         defect.setStatus(DefectStatus.OPEN);
         return defect;
+    }
+
+    private ReliabilityMetric reliabilityMetric(UUID equipmentId, double mtbfHours, double mttrHours) {
+        ReliabilityMetric metric = new ReliabilityMetric();
+        metric.setEquipmentId(equipmentId);
+        metric.setMetricDate(LocalDate.parse("2026-06-01"));
+        metric.setMtbfHours(mtbfHours);
+        metric.setMttrHours(mttrHours);
+        return metric;
     }
 }
