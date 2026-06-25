@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,13 +33,13 @@ public class RcmController {
     public ResponseEntity<Page<EquipmentRiskScore>> list(@RequestParam(defaultValue = "0") int top,
                                                          @RequestParam(defaultValue = "0") int page,
                                                          @RequestParam(defaultValue = "20") int size,
-                                                         @RequestParam(defaultValue = "riskScore") String sortBy,
-                                                         @RequestParam(defaultValue = "desc") String sortDir) {
-        return ResponseEntity.ok(PaginationUtils.page(
-                top > 0 ? service.topN(top, sortBy, sortDir) : service.computeAll(sortBy, sortDir),
-                page,
-                size
-        ));
+                                                         @RequestParam(required = false) String lang,
+                                                         @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        String responseLang = requestedLanguage(lang, acceptLanguage);
+        List<EquipmentRiskScore> scores = responseLang == null
+                ? (top > 0 ? service.topN(top) : service.computeAll())
+                : (top > 0 ? service.topN(top, responseLang) : service.computeAll(responseLang));
+        return ResponseEntity.ok(PaginationUtils.page(scores, page, size));
     }
 
     @PostMapping("/snapshot")
@@ -56,5 +57,15 @@ public class RcmController {
     public ResponseEntity<RcmAutoPlannerService.AutoPlanResult> autoPlan(@RequestParam(defaultValue = "30") int riskThreshold,
                                                          @RequestParam(required = false) UUID planId) {
         return ResponseEntity.ok(autoPlannerService.generate(riskThreshold, planId));
+    }
+
+    private String requestedLanguage(String lang, String acceptLanguage) {
+        if (lang != null && !lang.isBlank()) {
+            return lang;
+        }
+        if (acceptLanguage != null && !acceptLanguage.isBlank()) {
+            return acceptLanguage;
+        }
+        return null;
     }
 }

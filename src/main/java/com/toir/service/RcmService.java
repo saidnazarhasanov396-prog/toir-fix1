@@ -1,4 +1,6 @@
 package com.toir.service;
+
+import com.toir.dto.analytics.MetricExplanationDto;
 import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.entity.RcmSnapshot;
 import com.toir.exception.RestException;
@@ -13,9 +15,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.entity.ReliabilityMetric;
 import com.toir.repository.ReliabilityMetricRepository;
-import com.toir.util.SortUtils;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,14 +36,15 @@ public class RcmService {
     private final DefectRepository defectRepository;
     private final ReliabilityMetricRepository reliabilityMetricRepository;
     private final RcmSnapshotRepository snapshotRepository;
+    private final MetricExplanationService metricExplanationService;
 
 
 
     public List<EquipmentRiskScore> computeAll() {
-        return computeAll("riskScore", "desc");
+        return computeAll(null);
     }
 
-    public List<EquipmentRiskScore> computeAll(String sortBy, String sortDir) {
+    public List<EquipmentRiskScore> computeAll(String lang) {
         Map<UUID, CriticalityClass> critById = criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(CriticalityClass::getId, c -> c));
         Map<UUID, Long> openDefectsByEq = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -53,17 +54,17 @@ public class RcmService {
                 .collect(Collectors.toMap(ReliabilityMetric::getEquipmentId, m -> m, (a, b) -> a));
 
         return equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .map(eq -> score(eq, critById, openDefectsByEq, metricByEq))
-                .sorted(riskScoreComparator(sortBy, sortDir))
+                .map(eq -> score(eq, critById, openDefectsByEq, metricByEq, lang))
+                .sorted(Comparator.comparingInt(EquipmentRiskScore::riskScore).reversed())
                 .toList();
     }
 
     public List<EquipmentRiskScore> topN(int n) {
-        return topN(n, "riskScore", "desc");
+        return topN(n, null);
     }
 
-    public List<EquipmentRiskScore> topN(int n, String sortBy, String sortDir) {
-        return computeAll(sortBy, sortDir).stream().limit(n).toList();
+    public List<EquipmentRiskScore> topN(int n, String lang) {
+        return computeAll(lang).stream().limit(n).toList();
     }
 
     /** Рассчитывает RCM и сохраняет snapshot-строки на текущий момент. */
@@ -100,9 +101,14 @@ public class RcmService {
     private EquipmentRiskScore score(Equipment eq,
                                      Map<UUID, CriticalityClass> critById,
                                      Map<UUID, Long> openDefectsByEq,
-                                     Map<UUID, ReliabilityMetric> metricByEq) {
+                                     Map<UUID, ReliabilityMetric> metricByEq,
+                                     String lang) {
         CriticalityClass cls = eq.getCriticalityClassId() != null ? critById.get(eq.getCriticalityClassId()) : null;
         int consequence = 0;
+        int safetyImpact = 0;
+        int productionImpact = 0;
+        int ecologicalImpact = 0;
+        int energyImpact = 0;
         Integer repairPriority = null;
         String clsCode = null;
         String clsName = null;
@@ -110,10 +116,11 @@ public class RcmService {
             clsCode = cls.getCode();
             clsName = cls.getName();
             repairPriority = cls.getRepairPriority();
-            consequence += nz(cls.getSafetyImpact());
-            consequence += nz(cls.getProductionImpact());
-            consequence += nz(cls.getEcologicalImpact());
-            consequence += nz(cls.getEnergyImpact());
+            safetyImpact = nz(cls.getSafetyImpact());
+            productionImpact = nz(cls.getProductionImpact());
+            ecologicalImpact = nz(cls.getEcologicalImpact());
+            energyImpact = nz(cls.getEnergyImpact());
+            consequence = safetyImpact + productionImpact + ecologicalImpact + energyImpact;
         }
         long openDefects = openDefectsByEq.getOrDefault(eq.getId(), 0L);
         ReliabilityMetric m = metricByEq.get(eq.getId());
@@ -129,29 +136,25 @@ public class RcmService {
         else probability = 1;
 
         int risk = Math.min(100, consequence * probability);
+        MetricExplanationDto explanation = metricExplanationService.rcmRisk(
+                lang,
+                safetyImpact,
+                productionImpact,
+                ecologicalImpact,
+                energyImpact,
+                consequence,
+                probability,
+                risk,
+                openDefects,
+                mtbf,
+                mttr
+        );
         return new EquipmentRiskScore(
                 eq.getId(), eq.getCode(), eq.getName(), clsCode, clsName,
                 consequence, probability, risk, repairPriority,
-                openDefects, mtbf, mttr
+                openDefects, mtbf, mttr, explanation
         );
     }
 
     private int nz(Integer v) { return v == null ? 0 : v; }
-
-    private Comparator<EquipmentRiskScore> riskScoreComparator(String sortBy, String sortDir) {
-        String requestedSort = sortBy == null || sortBy.isBlank() ? "riskScore" : sortBy.trim();
-        Comparator<EquipmentRiskScore> comparator = switch (requestedSort) {
-            case "consequence" -> Comparator.comparingInt(EquipmentRiskScore::consequence);
-            case "probability", "probabilityPercent" -> Comparator.comparingInt(EquipmentRiskScore::probability);
-            case "riskScore" -> Comparator.comparingInt(EquipmentRiskScore::riskScore);
-            case "openDefects" -> Comparator.comparingLong(EquipmentRiskScore::openDefects);
-            case "mtbfHours" -> Comparator.comparingDouble(EquipmentRiskScore::mtbfHours);
-            case "mttrHours" -> Comparator.comparingDouble(EquipmentRiskScore::mttrHours);
-            default -> Comparator.comparingInt(EquipmentRiskScore::riskScore);
-        };
-        if (SortUtils.direction(sortDir, Sort.Direction.DESC).isDescending()) {
-            return comparator.reversed();
-        }
-        return comparator;
-    }
 }

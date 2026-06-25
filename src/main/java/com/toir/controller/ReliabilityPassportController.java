@@ -1,5 +1,6 @@
 package com.toir.controller;
 
+import com.toir.dto.analytics.MetricExplanationDto;
 import com.toir.service.ReliabilityPassportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -49,8 +50,28 @@ public class ReliabilityPassportController {
             @Schema(description = "Top causes from non-cancelled defect rootCause/failureReason fields")
             List<TopCause> topRootCauses,
             @Schema(description = "Time when this read-only passport was calculated")
-            Instant generatedAt
-    ) {}
+            Instant generatedAt,
+            @Schema(description = "Localized explanation of the availability calculation.")
+            MetricExplanationDto explanation
+    ) {
+        public ReliabilityPassport(
+                UUID equipmentId,
+                String equipmentCode,
+                String equipmentName,
+                int totalDefects,
+                int openDefects,
+                int totalDowntimeEvents,
+                long totalDowntimeMinutes,
+                Double mtbfHours,
+                Double mttrHours,
+                double availabilityPct,
+                List<TopCause> topRootCauses,
+                Instant generatedAt
+        ) {
+            this(equipmentId, equipmentCode, equipmentName, totalDefects, openDefects, totalDowntimeEvents,
+                    totalDowntimeMinutes, mtbfHours, mttrHours, availabilityPct, topRootCauses, generatedAt, null);
+        }
+    }
 
     public record ReliabilityPassportStats(
             int total,
@@ -72,12 +93,24 @@ public class ReliabilityPassportController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String sortBy,
-            @RequestParam(required = false, defaultValue = "asc") String sortDir
+            @RequestParam(required = false, defaultValue = "asc") String sortDir,
+            @RequestParam(required = false) String lang,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage
     ) {
+        String responseLang = requestedLanguage(lang, acceptLanguage);
         if (sortBy == null || sortBy.isBlank()) {
-            return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, availability, page, size));
+            if (responseLang == null) {
+                return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, availability, page, size));
+            }
+            return ResponseEntity.ok(reliabilityPassportService.list(
+                    equipmentId, search, availability, page, size, null, "asc", responseLang));
         }
-        return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, availability, page, size, sortBy, sortDir));
+        if (responseLang == null) {
+            return ResponseEntity.ok(reliabilityPassportService.list(
+                    equipmentId, search, availability, page, size, sortBy, sortDir));
+        }
+        return ResponseEntity.ok(reliabilityPassportService.list(
+                equipmentId, search, availability, page, size, sortBy, sortDir, responseLang));
     }
 
     @GetMapping("/reliability-passports/stats")
@@ -87,8 +120,20 @@ public class ReliabilityPassportController {
     public ResponseEntity<ReliabilityPassportStats> stats(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String availability
+            @RequestParam(required = false) String availability,
+            @RequestParam(required = false) String lang,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage
     ) {
         return ResponseEntity.ok(reliabilityPassportService.stats(equipmentId, search, availability));
+    }
+
+    private String requestedLanguage(String lang, String acceptLanguage) {
+        if (lang != null && !lang.isBlank()) {
+            return lang;
+        }
+        if (acceptLanguage != null && !acceptLanguage.isBlank()) {
+            return acceptLanguage;
+        }
+        return null;
     }
 }
