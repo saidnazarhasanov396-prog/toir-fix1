@@ -94,14 +94,6 @@
             <version>${firebase-admin.version}</version>
             <exclusions>
                 <exclusion>
-                    <groupId>com.google.code.gson</groupId>
-                    <artifactId>gson</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.http-client</groupId>
-                    <artifactId>google-http-client-gson</artifactId>
-                </exclusion>
-                <exclusion>
                     <groupId>com.fasterxml.jackson.dataformat</groupId>
                     <artifactId>jackson-dataformat-xml</artifactId>
                 </exclusion>
