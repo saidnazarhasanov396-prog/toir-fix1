@@ -30,6 +30,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.OperationalIssueLifecycleSyncService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -98,6 +99,9 @@ class DefectServiceTest {
 
     @Mock
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+
+    @Mock
+    OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
 
     @InjectMocks
     DefectService service;
@@ -477,6 +481,22 @@ class DefectServiceTest {
 
         assertThat(defect.getEquipmentNodeId()).isNull();
         assertThat(response.equipmentNodeId()).isNull();
+    }
+
+    @Test
+    void resolveSyncsOperationalIssueAfterSavingResolvedDefect() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Defect defect = defect(defectId, equipmentId);
+        defect.setStatus(DefectStatus.OPEN);
+        when(repository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(repository.save(any(Defect.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubCreateResponseDependencies(equipmentId);
+
+        service.resolve(defectId);
+
+        verify(operationalIssueLifecycleSyncService)
+                .resolveDefectIssueIfTerminal(defect, "Defect resolved directly.");
     }
 
     @Test

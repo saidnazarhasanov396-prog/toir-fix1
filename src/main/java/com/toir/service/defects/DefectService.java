@@ -31,6 +31,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.OperationalIssueLifecycleSyncService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
@@ -66,6 +67,7 @@ public class DefectService {
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+    private final OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
     private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_DEFECT_LINK =
             EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
     private final KnowledgeArticleRepository knowledgeRepository;
@@ -242,6 +244,7 @@ public class DefectService {
         entity.setResolvedAt(Instant.now());
 
         Defect saved = repository.save(entity);
+        operationalIssueLifecycleSyncService.resolveDefectIssueIfTerminal(saved, "Defect resolved directly.");
 
         auditBuilderService.log(
                 "defect",

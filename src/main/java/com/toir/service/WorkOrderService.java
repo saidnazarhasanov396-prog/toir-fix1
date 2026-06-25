@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.entity.Department;
 import com.toir.entity.Location;
 import com.toir.entity.UploadedFile;
+import com.toir.entity.contractors.Contractor;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.defects.DefectList;
 import com.toir.entity.equipment.Equipment;
@@ -49,6 +50,7 @@ import com.toir.repository.ReservationRepository;
 import com.toir.repository.SafetyPermitRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
+import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.WorkExecutionRepository;
@@ -163,6 +165,7 @@ public class WorkOrderService {
     private final RepairRequestTemplateActionRepository repairRequestTemplateActionRepository;
     private final DefectRepository defectRepository;
     private final DefectListRepository defectListRepository;
+    private final ContractorRepository contractorRepository;
     private final BrigadeMemberRepository brigadeMemberRepository;
     private final UserRepository userRepository;
     private final UserCertificationRepository userCertificationRepository;
@@ -195,6 +198,7 @@ public class WorkOrderService {
     private final ScopeAccessService scopeAccessService;
     private final WorkOrderNumberService workOrderNumberService;
     private final NotificationService notificationService;
+    private final OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     private final ObjectMapper objectMapper;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
@@ -1407,6 +1411,9 @@ public class WorkOrderService {
                     defect.setStatus(DefectStatus.RESOLVED);
                     defect.setResolvedAt(Instant.now());
                     Defect saved = defectRepository.save(defect);
+                    operationalIssueLifecycleSyncService.resolveDefectIssueIfTerminal(
+                            saved,
+                            "Defect resolved from linked work order completion.");
                     auditBuilderService.log(
                             "defect",
                             saved.getId().toString(),
@@ -1435,6 +1442,9 @@ public class WorkOrderService {
                     }
                     request.setStatus(RequestStatus.COMPLETED);
                     RepairRequest saved = repairRequestRepository.save(request);
+                    operationalIssueLifecycleSyncService.sweepRepairRequest(
+                            saved.getId(),
+                            "Repair request completed after linked work orders and defects reached terminal state.");
                     auditBuilderService.log(
                             "repair_request",
                             saved.getId().toString(),
@@ -1463,6 +1473,9 @@ public class WorkOrderService {
                     }
                     defect.setStatus(DefectStatus.CLOSED);
                     Defect saved = defectRepository.save(defect);
+                    operationalIssueLifecycleSyncService.resolveDefectIssueIfTerminal(
+                            saved,
+                            "Defect closed after linked work orders reached terminal state.");
                     auditBuilderService.log(
                             "defect",
                             saved.getId().toString(),
@@ -2422,6 +2435,7 @@ public class WorkOrderService {
                 linkedDefectList == null ? null : linkedDefectList.getCode(),
                 linkedDefectList == null ? null : linkedDefectList.getStatus(),
                 entity.getPprTaskId(), entity.getContractorId(),
+                contractorRef(entity.getContractorId()),
                 performerId(entity), performerName(entity),
                 entity.getStatus(), entity.getType(), entity.getWorkType(), entity.getPriority(),
                 entity.getStartPlannedAt(), entity.getEndPlannedAt(), entity.getStartedAt(), entity.getCompletedAt(),
@@ -2439,6 +2453,23 @@ public class WorkOrderService {
                 entity.getStoppageActFileAssetId(),
                 materialUsages,
                 entity.getUpdatedAt());
+    }
+
+    private WorkOrderDto.ContractorRef contractorRef(UUID contractorId) {
+        if (contractorId == null) {
+            return null;
+        }
+        return contractorRepository.findByIdAndIsDeletedFalse(contractorId)
+                .map(this::toContractorRef)
+                .orElse(null);
+    }
+
+    private WorkOrderDto.ContractorRef toContractorRef(Contractor contractor) {
+        return new WorkOrderDto.ContractorRef(
+                contractor.getId(),
+                contractor.getCode(),
+                contractor.getName()
+        );
     }
 
     private List<WorkOrderTaskDto> taskDtos(List<WorkOrderTask> tasks) {

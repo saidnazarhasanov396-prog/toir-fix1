@@ -26,8 +26,12 @@ public class WarehouseSparePartsStatsController {
     @GetMapping("/stats")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
     public ResponseEntity<SparePartsWarehouseStatsResponse> getStats(
-            @RequestParam(required = false) UUID warehouseId
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) UUID typeId,
+            @RequestParam(required = false) String itemType,
+            @RequestParam(required = false) String unit
     ) {
-        return ResponseEntity.ok(statsService.getStats(warehouseId));
+        return ResponseEntity.ok(statsService.getStats(warehouseId, search, typeId, itemType, unit));
     }
 }

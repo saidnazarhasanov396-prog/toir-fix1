@@ -1,6 +1,8 @@
 package com.toir.controller.contractor;
+import com.toir.dto.contractor.ContractorDetailDto;
 import com.toir.dto.contractor.ContractorDto;
 import com.toir.dto.contractor.ContractorRequest;
+import com.toir.enums.ContractorStatus;
 import com.toir.service.contactor.ContractorService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,13 +26,17 @@ public class ContractorController {
 
     @GetMapping
     public ResponseEntity<Page<ContractorDto>> list(@RequestParam(required = false) String search,
+                                                    @RequestParam(required = false) ContractorStatus status,
+                                                    @RequestParam(required = false) String specialization,
                                                     @RequestParam(defaultValue = "0") int page,
                                                     @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search, status, specialization), page, size));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ContractorDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
+    public ResponseEntity<ContractorDetailDto> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.findDetailById(id));
+    }
 
     @PostMapping
     public ResponseEntity<ContractorDto> create(@Valid @RequestBody ContractorRequest request) {

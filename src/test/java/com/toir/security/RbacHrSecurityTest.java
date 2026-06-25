@@ -2,11 +2,13 @@ package com.toir.security;
 
 import com.toir.controller.users.HrController;
 import com.toir.dto.hr.EmployeeDto;
+import com.toir.dto.hr.EmployeePictureDto;
 import com.toir.dto.hr.EmployeeRequest;
 import com.toir.dto.hr.EmployeeStatsResponse;
 import com.toir.dto.hr.TimesheetEntryDto;
 import com.toir.dto.hr.TimesheetEntryRequest;
 import com.toir.enums.TimesheetStatus;
+import com.toir.service.users.EmployeePictureService;
 import com.toir.service.users.HrService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,11 +19,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,6 +36,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -60,6 +66,9 @@ class RbacHrSecurityTest {
 
     @MockBean
     HrService hrService;
+
+    @MockBean
+    EmployeePictureService employeePictureService;
 
     @MockBean
     SecurityScope securityScope;
@@ -122,6 +131,56 @@ class RbacHrSecurityTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/hr/employees/{id}", employeeId))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.EMPLOYEE_READ)
+    void employeeReadCanReadEmployeePictures() throws Exception {
+        UUID employeeId = UUID.randomUUID();
+        UUID pictureId = UUID.randomUUID();
+        when(employeePictureService.getPictures(eq(employeeId), any()))
+                .thenReturn(List.of(employeePictureDto(employeeId, pictureId)));
+        when(employeePictureService.getPicture(eq(pictureId), any()))
+                .thenReturn(employeePictureDto(employeeId, pictureId));
+        when(employeePictureService.downloadPicture(eq(pictureId), any()))
+                .thenReturn(new ByteArrayResource("png".getBytes()));
+
+        mockMvc.perform(get("/api/v1/hr/employees/{id}/pictures", employeeId))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/hr/employee-pictures/{pictureId}/download", pictureId))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.EMPLOYEE_UPDATE)
+    void employeeUpdateCanUploadAndDeleteEmployeePictures() throws Exception {
+        UUID employeeId = UUID.randomUUID();
+        UUID pictureId = UUID.randomUUID();
+        when(employeePictureService.uploadPictures(eq(employeeId), any(), eq(List.of("Portrait")), eq("PROFILE"), any()))
+                .thenReturn(List.of(employeePictureDto(employeeId, pictureId)));
+
+        mockMvc.perform(multipart("/api/v1/hr/employees/{id}/pictures", employeeId)
+                        .file(new MockMultipartFile("files", "portrait.png", "image/png", "png".getBytes()))
+                        .param("pictureNames", "Portrait")
+                        .param("pictureType", "PROFILE"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(delete("/api/v1/hr/employee-pictures/{pictureId}", pictureId))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.EMPLOYEE_READ)
+    void employeeReadCannotMutateEmployeePictures() throws Exception {
+        UUID employeeId = UUID.randomUUID();
+        UUID pictureId = UUID.randomUUID();
+
+        mockMvc.perform(multipart("/api/v1/hr/employees/{id}/pictures", employeeId)
+                        .file(new MockMultipartFile("files", "portrait.png", "image/png", "png".getBytes())))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(delete("/api/v1/hr/employee-pictures/{pictureId}", pictureId))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -321,6 +380,21 @@ class RbacHrSecurityTest {
                 null,
                 TimesheetStatus.APPROVED,
                 null
+        );
+    }
+
+    private static EmployeePictureDto employeePictureDto(UUID employeeId, UUID pictureId) {
+        return new EmployeePictureDto(
+                pictureId,
+                employeeId,
+                "Portrait",
+                "PROFILE",
+                "portrait.png",
+                "image/png",
+                123L,
+                LocalDateTime.parse("2026-06-25T06:00:00"),
+                UUID.randomUUID(),
+                "/api/v1/hr/employee-pictures/" + pictureId + "/download"
         );
     }
 

@@ -213,6 +213,63 @@ class AttachmentGroupControllerContractTest {
     }
 
     @Test
+    void createGroupAllowsEmployeeUpdateForHrEmployeePassportTarget() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        UUID groupId = UUID.randomUUID();
+        UUID firstFileId = UUID.randomUUID();
+        UUID secondFileId = UUID.randomUUID();
+        authenticateWithAuthorities(userId, "EMPLOYEE_UPDATE");
+        when(service.createGroup(
+                eq("Passport"),
+                eq("Employee passport"),
+                eq("HR_EMPLOYEE"),
+                eq(employeeId),
+                eq("PASSPORT"),
+                eq("AA1234567"),
+                any(),
+                eq(List.of("front", "back")),
+                any()
+        ))
+                .thenReturn(group(groupId, employeeId, firstFileId, secondFileId, AttachmentTargetType.HR_EMPLOYEE));
+
+        mockMvc.perform(multipart("/api/v1/attachments/groups")
+                        .file(new MockMultipartFile("files", "front.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .file(new MockMultipartFile("files", "back.pdf", "application/pdf", "%PDF-1.4\n".getBytes()))
+                        .param("title", "Passport")
+                        .param("description", "Employee passport")
+                        .param("targetType", "HR_EMPLOYEE")
+                        .param("targetId", employeeId.toString())
+                        .param("documentType", "PASSPORT")
+                        .param("documentNumber", "AA1234567")
+                        .param("labels", "front", "back"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.targetType").value("HR_EMPLOYEE"))
+                .andExpect(jsonPath("$.documentType").value("PASSPORT"))
+                .andExpect(jsonPath("$.documentNumber").value("AA1234567"))
+                .andExpect(jsonPath("$.files[0].downloadUrl").value(
+                        "/api/v1/attachments/groups/" + groupId + "/files/" + firstFileId + "/download"));
+    }
+
+    @Test
+    void listGroupsAllowsEmployeeReadForHrEmployeePassportTarget() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        UUID groupId = UUID.randomUUID();
+        UUID firstFileId = UUID.randomUUID();
+        UUID secondFileId = UUID.randomUUID();
+        authenticateWithAuthorities(userId, "EMPLOYEE_READ");
+        when(service.listGroups(eq("HR_EMPLOYEE"), eq(employeeId), any()))
+                .thenReturn(List.of(group(groupId, employeeId, firstFileId, secondFileId, AttachmentTargetType.HR_EMPLOYEE)));
+
+        mockMvc.perform(get("/api/v1/attachments/groups")
+                        .param("targetType", "HR_EMPLOYEE")
+                        .param("targetId", employeeId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].targetType").value("HR_EMPLOYEE"));
+    }
+
+    @Test
     void addFilesToExistingGroupUsesGroupEndpoint() throws Exception {
         UUID targetId = UUID.randomUUID();
         UUID groupId = UUID.randomUUID();
@@ -291,8 +348,8 @@ class AttachmentGroupControllerContractTest {
                 "Driver passport",
                 targetType,
                 targetId,
-                null,
-                null,
+                targetType == AttachmentTargetType.HR_EMPLOYEE ? "PASSPORT" : null,
+                targetType == AttachmentTargetType.HR_EMPLOYEE ? "AA1234567" : null,
                 currentUserId,
                 LocalDateTime.now(),
                 List.of(
