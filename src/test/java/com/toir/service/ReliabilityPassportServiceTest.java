@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -56,6 +57,9 @@ class ReliabilityPassportServiceTest {
     @Mock
     RepairRequestRepository repairRequestRepository;
 
+    @Spy
+    MetricExplanationService metricExplanationService = new MetricExplanationService();
+
     @InjectMocks
     ReliabilityPassportService service;
 
@@ -85,6 +89,41 @@ class ReliabilityPassportServiceTest {
         assertThat(result.availabilityPct()).isCloseTo(8758.0 / 8760.0 * 100.0, withinOneMinute());
         assertThat(result.topRootCauses()).extracting(cause -> cause.cause())
                 .containsExactlyInAnyOrder("Wear", "Overload");
+    }
+
+    @Test
+    void passportIncludesLocalizedRussianAvailabilityExplanation() {
+        UUID equipmentId = UUID.randomUUID();
+        Instant now = Instant.now();
+        Equipment equipment = equipment(equipmentId);
+        DowntimeEvent unplanned = downtime(now.minus(Duration.ofDays(5)), 120, DowntimeType.UNPLANNED);
+
+        stubPassport(equipment, List.of(), List.of(unplanned));
+
+        ReliabilityPassport result = service.passport(equipmentId, "ru");
+
+        assertThat(result.explanation().locale()).isEqualTo("ru");
+        assertThat(result.explanation().formula())
+                .isEqualTo("(наблюдаемое время - простой) / наблюдаемое время × 100");
+        assertThat(result.explanation().summary())
+                .contains("Доступность")
+                .contains("простой 2");
+        assertThat(result.explanation().steps()).anySatisfy(step -> {
+            assertThat(step.label()).isEqualTo("Простой");
+            assertThat(step.value().doubleValue()).isCloseTo(2.0, org.assertj.core.data.Offset.offset(0.01));
+            assertThat(step.unit()).isEqualTo("часы");
+        });
+        assertThat(result.explanation().steps()).anySatisfy(step -> {
+            assertThat(step.label()).isEqualTo("Рабочее время");
+            assertThat(step.value().doubleValue()).isGreaterThan(0.0);
+            assertThat(step.unit()).isEqualTo("часы");
+        });
+        assertThat(result.explanation().steps()).anySatisfy(step -> {
+            assertThat(step.label()).isEqualTo("Доступность");
+            assertThat(step.value().doubleValue())
+                    .isCloseTo(result.availabilityPct(), org.assertj.core.data.Offset.offset(0.01));
+            assertThat(step.unit()).isEqualTo("%");
+        });
     }
 
     @Test

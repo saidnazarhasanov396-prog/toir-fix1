@@ -1,5 +1,7 @@
 package com.toir.dto.rcm;
 
+import com.toir.dto.analytics.MetricExplanationDto;
+
 import java.util.UUID;
 
 /**
@@ -23,5 +25,22 @@ public record EquipmentRiskScore(
         Integer repairPriority,
         long openDefects,
         double mtbfHours,
-        double mttrHours
-) {}
+        double mttrHours,
+        MetricExplanationDto explanation
+) {
+    public EquipmentRiskScore(UUID equipmentId,
+                              String equipmentCode,
+                              String equipmentName,
+                              String criticalityClass,
+                              String criticalityClassName,
+                              int consequence,
+                              int probability,
+                              int riskScore,
+                              Integer repairPriority,
+                              long openDefects,
+                              double mtbfHours,
+                              double mttrHours) {
+        this(equipmentId, equipmentCode, equipmentName, criticalityClass, criticalityClassName,
+                consequence, probability, riskScore, repairPriority, openDefects, mtbfHours, mttrHours, null);
+    }
+}
