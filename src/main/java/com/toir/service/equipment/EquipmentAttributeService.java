@@ -358,7 +358,10 @@ public class EquipmentAttributeService {
             throw RestException.badRequest("Attribute definition does not belong to equipment type: " + equipmentTypeId);
         }
         definition.setDeleted(true);
-        requiredCriticalityRepository.softDeleteByAttributeDefinitionId(definitionId);
+        List<EquipmentAttributeRequiredCriticality> requiredCriticalities =
+                requiredCriticalityRepository.findAllByAttributeDefinitionIdAndIsDeletedFalse(definitionId);
+        requiredCriticalities.forEach(requiredCriticality -> requiredCriticality.setDeleted(true));
+        requiredCriticalityRepository.saveAll(requiredCriticalities);
         definitionRepository.save(definition);
     }
 

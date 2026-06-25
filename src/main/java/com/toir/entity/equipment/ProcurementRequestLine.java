@@ -5,6 +5,7 @@ import com.toir.entity.projects.ProcurementRequest;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -46,6 +47,21 @@ public class ProcurementRequestLine extends BaseEntity {
 
     @Column(name = "estimated_cost", nullable = false)
     private double estimatedCost = 0.0;
+
+    @Column(name = "has_warranty", nullable = false)
+    private Boolean hasWarranty = false;
+
+    @Column(name = "warranty_start_date")
+    private LocalDate warrantyStartDate;
+
+    @Column(name = "warranty_end_date")
+    private LocalDate warrantyEndDate;
+
+    @Column(name = "warranty_duration_months")
+    private Integer warrantyDurationMonths;
+
+    @Column(name = "warranty_supplier_id")
+    private UUID warrantySupplierId;
 
     @Column(name = "notes", columnDefinition = "text")
     private String notes;

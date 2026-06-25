@@ -170,6 +170,37 @@ class PurchaseOrderServiceTest {
     }
 
     @Test
+    void createFromProcurementRequestDefaultsToRequestSupplier() {
+        UUID procurementId = UUID.randomUUID();
+        UUID procurementLineId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID supplierId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        ProcurementRequest procurement = procurement(procurementId, procurementLineId, warehouseId, sparePartId);
+        procurement.setStatus(ProcurementRequestStatus.APPROVED);
+        procurement.setSupplierId(supplierId);
+        SparePart sparePart = sparePart(sparePartId);
+        Supplier supplier = supplier(supplierId);
+        when(procurementRequestRepository.findByIdAndIsDeletedFalse(procurementId)).thenReturn(Optional.of(procurement));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse(warehouseId)));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(supplierService.loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders")).thenReturn(supplier);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(purchaseOrderRepository.save(any(PurchaseOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(supplierService.load(supplierId)).thenReturn(supplier);
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(sparePart));
+
+        var result = service.createFromProcurementRequest(
+                procurementId,
+                new ProcurementRequestPurchaseOrderRequest(null, null, null)
+        );
+
+        assertThat(result.supplierId()).isEqualTo(supplierId);
+        assertThat(procurement.getSupplierId()).isEqualTo(supplierId);
+        verify(supplierService).loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders");
+    }
+
+    @Test
     void receivingLinkedPurchaseOrderSyncsProcurementProgressAndMovementSource() {
         UUID orderId = UUID.randomUUID();
         UUID orderLineId = UUID.randomUUID();

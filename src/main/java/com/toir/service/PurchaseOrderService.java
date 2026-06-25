@@ -157,8 +157,14 @@ public class PurchaseOrderService {
         }
         Warehouse warehouse = warehouseOrThrow(procurement.getWarehouseId());
         assertCanAccessWarehouse(warehouse);
-        UUID supplierId = request.supplierId() != null ? request.supplierId() : preferredSupplierId(procurement);
+        UUID supplierId = request.supplierId() != null
+                ? request.supplierId()
+                : procurement.getSupplierId();
+        if (supplierId == null) {
+            supplierId = preferredSupplierId(procurement);
+        }
         Supplier supplier = supplierService.loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders");
+        procurement.setSupplierId(supplier.getId());
         PurchaseOrder order = newOrder(supplier.getId(), warehouse.getId(), request.expectedDeliveryDate(), request.comment());
         order.setProcurementRequestId(procurement.getId());
         for (ProcurementRequestLine line : procurement.getLines()) {

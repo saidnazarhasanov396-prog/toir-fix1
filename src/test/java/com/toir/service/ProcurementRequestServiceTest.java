@@ -8,6 +8,7 @@ import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.entity.PprTask;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
+import com.toir.entity.Supplier;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
@@ -17,6 +18,8 @@ import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.dto.procurement.EquipmentWarrantyLineRequest;
+import com.toir.dto.procurement.ProcurementOrderRequest;
 import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.EquipmentLocationType;
@@ -25,6 +28,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.SupplierType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
@@ -32,6 +36,7 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -103,6 +108,9 @@ class ProcurementRequestServiceTest {
     WarehouseRepository warehouseRepository;
 
     @Mock
+    SupplierRepository supplierRepository;
+
+    @Mock
     ScopeAccessService scopeAccessService;
 
     @Mock
@@ -140,6 +148,7 @@ class ProcurementRequestServiceTest {
                 lowStockRecommendationService,
                 actualCostRepository,
                 costCategoryRepository,
+                supplierRepository,
                 toirStockService,
                 legacyStockProjectionService
         );
@@ -264,6 +273,110 @@ class ProcurementRequestServiceTest {
         ArgumentCaptor<ProcurementRequest> saved = ArgumentCaptor.forClass(ProcurementRequest.class);
         verify(repository).save(saved.capture());
         assertThat(saved.getValue().getPriority()).isEqualTo(PriorityLevel.CRITICAL);
+    }
+
+    @Test
+    void creatingDraftRequestCanStoreScopedSupplier() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID sparePartId = UUID.randomUUID();
+        UUID supplierId = UUID.randomUUID();
+        SparePart sparePart = sparePart(sparePartId);
+        Supplier supplier = supplier(supplierId, SupplierType.SPARE_PART);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId)).thenReturn(Optional.of(supplier));
+        when(supplierRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(supplier));
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.create(new ProcurementRequestRequest(
+                "Supplier procurement",
+                null,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                LocalDate.of(2026, 7, 15),
+                List.of(new ProcurementLineRequest(sparePartId, 2, "PCS", 10.0, null)),
+                ProcurementRequestType.SPARE_PART,
+                null,
+                null,
+                null,
+                PriorityLevel.MEDIUM,
+                supplierId
+        ));
+
+        assertThat(result.supplierId()).isEqualTo(supplierId);
+        assertThat(result.supplierName()).isEqualTo("Supplier");
+        ArgumentCaptor<ProcurementRequest> saved = ArgumentCaptor.forClass(ProcurementRequest.class);
+        verify(repository).save(saved.capture());
+        assertThat(saved.getValue().getSupplierId()).isEqualTo(supplierId);
+    }
+
+    @Test
+    void orderingRequiresSupplierWhenRequestDoesNotHaveOne() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.APPROVED,
+                List.of(line(UUID.randomUUID(), 1, null)));
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+
+        assertThatThrownBy(() -> service.markOrdered(requestId, new ProcurementOrderRequest(null, null, null, List.of())))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Supplier is required");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void orderingValidatesSupplierScopeForProcurementType() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID supplierId = UUID.randomUUID();
+        ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.APPROVED,
+                List.of(equipmentLine(UUID.randomUUID(), "CNS pump", 1, null)));
+        request.setType(ProcurementRequestType.EQUIPMENT);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
+                .thenReturn(Optional.of(supplier(supplierId, SupplierType.SPARE_PART)));
+
+        assertThatThrownBy(() -> service.markOrdered(requestId, new ProcurementOrderRequest(supplierId, null, null, List.of())))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("EQUIPMENT");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void orderingAppliesEquipmentLineWarrantyDefaults() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID supplierId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        ProcurementRequestLine line = equipmentLine(equipmentTypeId, "CNS pump", 1, null);
+        ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.APPROVED, List.of(line));
+        request.setType(ProcurementRequestType.EQUIPMENT);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
+                .thenReturn(Optional.of(supplier(supplierId, SupplierType.EQUIPMENT)));
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.markOrdered(requestId, new ProcurementOrderRequest(
+                supplierId,
+                null,
+                null,
+                List.of(new EquipmentWarrantyLineRequest(
+                        line.getId(),
+                        true,
+                        LocalDate.of(2026, 6, 25),
+                        null,
+                        12,
+                        null
+                ))
+        ));
+
+        assertThat(result.status()).isEqualTo(ProcurementRequestStatus.ORDERED);
+        assertThat(result.supplierId()).isEqualTo(supplierId);
+        assertThat(result.lines().getFirst().hasWarranty()).isTrue();
+        assertThat(result.lines().getFirst().warrantySupplierId()).isEqualTo(supplierId);
+        assertThat(result.lines().getFirst().warrantyStartDate()).isEqualTo(LocalDate.of(2026, 6, 25));
+        assertThat(result.lines().getFirst().warrantyEndDate()).isEqualTo(LocalDate.of(2027, 6, 25));
     }
 
     @Test
@@ -434,10 +547,17 @@ class ProcurementRequestServiceTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
+        UUID supplierId = UUID.randomUUID();
+        UUID warrantySupplierId = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
         ProcurementRequestLine line = equipmentLine(equipmentTypeId, "CNS pump", 2, 5_000_000.0);
+        line.setHasWarranty(true);
+        line.setWarrantyStartDate(LocalDate.of(2026, 6, 18));
+        line.setWarrantyEndDate(LocalDate.of(2027, 6, 18));
+        line.setWarrantySupplierId(warrantySupplierId);
         ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED, List.of(line));
         request.setType(ProcurementRequestType.EQUIPMENT);
+        request.setSupplierId(supplierId);
         when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
@@ -486,6 +606,11 @@ class ProcurementRequestServiceTest {
                     assertThat(equipment.getProcurementRequestId()).isEqualTo(requestId);
                     assertThat(equipment.getProcurementRequestLineId()).isEqualTo(line.getId());
                     assertThat(equipment.getProcurementStockMovementId()).isEqualTo(movement.getId());
+                    assertThat(equipment.getSupplierId()).isEqualTo(supplierId);
+                    assertThat(equipment.getHasWarranty()).isTrue();
+                    assertThat(equipment.getWarrantySupplierId()).isEqualTo(warrantySupplierId);
+                    assertThat(equipment.getWarrantyStartDate()).isEqualTo(LocalDate.of(2026, 6, 18));
+                    assertThat(equipment.getWarrantyEndDate()).isEqualTo(LocalDate.of(2027, 6, 18));
                 });
 
         ArgumentCaptor<WarehouseEquipmentItem> itemCaptor = ArgumentCaptor.forClass(WarehouseEquipmentItem.class);
@@ -797,6 +922,16 @@ class ProcurementRequestServiceTest {
         sparePart.setName("Bearing");
         sparePart.setUnit("pcs");
         return sparePart;
+    }
+
+    private Supplier supplier(UUID supplierId, SupplierType supplierType) {
+        Supplier supplier = new Supplier();
+        supplier.setId(supplierId);
+        supplier.setCode("SUP-1");
+        supplier.setName("Supplier");
+        supplier.setActive(true);
+        supplier.setSupplierType(supplierType);
+        return supplier;
     }
 
     private EquipmentType equipmentType(UUID id, String name) {

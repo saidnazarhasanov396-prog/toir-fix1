@@ -6,6 +6,7 @@ import com.toir.entity.users.EmployeeSpecialisation;
 import com.toir.repository.TimesheetEntryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
+import com.toir.repository.users.EmployeePictureRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.EmployeeSpecialisationRepository;
 import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
@@ -43,6 +44,7 @@ class HrServiceBySpecialisationTest {
     @Mock EmployeeWorkRoleRepository employeeWorkRoleRepository;
     @Mock EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
     @Mock EmployeeSpecialisationRepository employeeSpecialisationRepository;
+    @Mock EmployeePictureRepository employeePictureRepository;
 
     @InjectMocks
     HrService service;
@@ -52,6 +54,8 @@ class HrServiceBySpecialisationTest {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         lenient().when(employeeSpecialisationRepository.findByIdAndIsDeletedFalse(any(UUID.class)))
                 .thenAnswer(inv -> Optional.of(specialisation(inv.getArgument(0))));
+        lenient().when(employeePictureRepository.findPrimaryCandidatesByEmployeeIds(any()))
+                .thenReturn(List.of());
     }
 
     @Test

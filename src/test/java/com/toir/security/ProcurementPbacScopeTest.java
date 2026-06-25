@@ -13,6 +13,7 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -62,6 +63,7 @@ class ProcurementPbacScopeTest {
     LowStockRecommendationService lowStockRecommendationService;
     ActualCostRepository actualCostRepository;
     CostCategoryRepository costCategoryRepository;
+    SupplierRepository supplierRepository;
     ProcurementRequestService service;
 
     @BeforeEach
@@ -82,6 +84,7 @@ class ProcurementPbacScopeTest {
         lowStockRecommendationService = mock(LowStockRecommendationService.class);
         actualCostRepository = mock(ActualCostRepository.class);
         costCategoryRepository = mock(CostCategoryRepository.class);
+        supplierRepository = mock(SupplierRepository.class);
         service = new ProcurementRequestService(
                 repository,
                 sparePartRepository,
@@ -99,6 +102,7 @@ class ProcurementPbacScopeTest {
                 lowStockRecommendationService,
                 actualCostRepository,
                 costCategoryRepository,
+                supplierRepository,
                 mock(ToirStockService.class),
                 mock(LegacyStockProjectionService.class)
         );

@@ -1,5 +1,6 @@
 package com.toir.entity;
 
+import com.toir.audit.AuditExcluded;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import jakarta.persistence.*;
@@ -17,6 +18,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@AuditExcluded
 public class AuditLog {
 
     @Id
@@ -48,6 +50,21 @@ public class AuditLog {
 
     @Column(name = "user_agent")
     private String userAgent;
+
+    @Column(columnDefinition = "text")
+    private String reason;
+
+    @Column(name = "source")
+    private String source;
+
+    @Column(name = "request_method")
+    private String requestMethod;
+
+    @Column(name = "request_path", columnDefinition = "text")
+    private String requestPath;
+
+    @Column(name = "correlation_id")
+    private String correlationId;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "previous_snapshot", columnDefinition = "jsonb")

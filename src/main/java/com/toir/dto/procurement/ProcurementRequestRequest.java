@@ -21,7 +21,8 @@ public record ProcurementRequestRequest(
         UUID sourceDefectId,
         UUID sourcePprTaskId,
         UUID responsibleId,
-        PriorityLevel priority
+        PriorityLevel priority,
+        UUID supplierId
 ) {
     public ProcurementRequestRequest(@NotBlank String title,
                                      String description,
@@ -29,7 +30,7 @@ public record ProcurementRequestRequest(
                                      UUID warehouseId,
                                      LocalDate requiredBy,
                                      @Valid List<ProcurementLineRequest> lines) {
-        this(title, description, departmentId, warehouseId, requiredBy, lines, null, null, null, null, null);
+        this(title, description, departmentId, warehouseId, requiredBy, lines, null, null, null, null, null, null);
     }
 
     public ProcurementRequestRequest(@NotBlank String title,
@@ -42,7 +43,7 @@ public record ProcurementRequestRequest(
                                      UUID sourceDefectId,
                                      UUID sourcePprTaskId) {
         this(title, description, departmentId, warehouseId, requiredBy, lines, type,
-                sourceDefectId, sourcePprTaskId, null, null);
+                sourceDefectId, sourcePprTaskId, null, null, null);
     }
 
     public ProcurementRequestRequest(@NotBlank String title,
@@ -56,6 +57,21 @@ public record ProcurementRequestRequest(
                                      UUID sourcePprTaskId,
                                      UUID responsibleId) {
         this(title, description, departmentId, warehouseId, requiredBy, lines, type,
-                sourceDefectId, sourcePprTaskId, responsibleId, null);
+                sourceDefectId, sourcePprTaskId, responsibleId, null, null);
+    }
+
+    public ProcurementRequestRequest(@NotBlank String title,
+                                     String description,
+                                     UUID departmentId,
+                                     UUID warehouseId,
+                                     LocalDate requiredBy,
+                                     @Valid List<ProcurementLineRequest> lines,
+                                     ProcurementRequestType type,
+                                     UUID sourceDefectId,
+                                     UUID sourcePprTaskId,
+                                     UUID responsibleId,
+                                     PriorityLevel priority) {
+        this(title, description, departmentId, warehouseId, requiredBy, lines, type,
+                sourceDefectId, sourcePprTaskId, responsibleId, priority, null);
     }
 }

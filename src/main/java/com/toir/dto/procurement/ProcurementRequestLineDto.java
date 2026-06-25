@@ -3,6 +3,7 @@ package com.toir.dto.procurement;
 import com.toir.entity.SparePart;
 import com.toir.entity.equipment.ProcurementRequestLine;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 public record ProcurementRequestLineDto(
@@ -19,7 +20,13 @@ public record ProcurementRequestLineDto(
         String unit,
         Double unitPrice,
         double estimatedCost,
-        String notes
+        String notes,
+        Boolean hasWarranty,
+        LocalDate warrantyStartDate,
+        LocalDate warrantyEndDate,
+        Integer warrantyDurationMonths,
+        UUID warrantySupplierId,
+        String warrantySupplierName
 ) {
     public ProcurementRequestLineDto(UUID id,
                                      UUID requestId,
@@ -32,22 +39,31 @@ public record ProcurementRequestLineDto(
                                      double estimatedCost,
                                      String notes) {
         this(id, requestId, sparePartId, null, null, null, null, quantity, receivedQuantity,
-                remainingQuantity, unit, unitPrice, estimatedCost, notes);
+                remainingQuantity, unit, unitPrice, estimatedCost, notes,
+                false, null, null, null, null, null);
     }
 
     public static ProcurementRequestLineDto from(ProcurementRequestLine l) {
-        return from(l, null, null);
+        return from(l, null, null, null);
     }
 
     public static ProcurementRequestLineDto from(ProcurementRequestLine l, SparePart sparePart) {
+        return from(l, sparePart, null);
+    }
+
+    public static ProcurementRequestLineDto from(ProcurementRequestLine l, SparePart sparePart, String warrantySupplierName) {
         return from(
                 l,
                 sparePart == null ? null : sparePart.getCode(),
-                sparePart == null ? null : sparePart.getName()
+                sparePart == null ? null : sparePart.getName(),
+                warrantySupplierName
         );
     }
 
-    private static ProcurementRequestLineDto from(ProcurementRequestLine l, String sparePartCode, String sparePartName) {
+    private static ProcurementRequestLineDto from(ProcurementRequestLine l,
+                                                  String sparePartCode,
+                                                  String sparePartName,
+                                                  String warrantySupplierName) {
         return new ProcurementRequestLineDto(
                 l.getId(),
                 l.getRequest() != null ? l.getRequest().getId() : null,
@@ -62,7 +78,13 @@ public record ProcurementRequestLineDto(
                 l.getUnit(),
                 l.getUnitPrice(),
                 l.getEstimatedCost(),
-                l.getNotes()
+                l.getNotes(),
+                Boolean.TRUE.equals(l.getHasWarranty()),
+                l.getWarrantyStartDate(),
+                l.getWarrantyEndDate(),
+                l.getWarrantyDurationMonths(),
+                l.getWarrantySupplierId(),
+                warrantySupplierName
         );
     }
 }

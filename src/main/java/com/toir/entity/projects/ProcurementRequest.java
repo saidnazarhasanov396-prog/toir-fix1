@@ -52,6 +52,9 @@ public class ProcurementRequest extends BaseEntity {
     @Column(name = "responsible_id")
     private UUID responsibleId;
 
+    @Column(name = "supplier_id")
+    private UUID supplierId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private PriorityLevel priority = PriorityLevel.MEDIUM;

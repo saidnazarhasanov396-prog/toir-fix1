@@ -8,6 +8,7 @@ import com.toir.repository.TimesheetEntryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
+import com.toir.repository.users.EmployeePictureRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.EmployeeSpecialisationRepository;
 import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
@@ -71,6 +72,9 @@ class EmployeePbacScopeTest {
     @Mock
     EmployeeSpecialisationRepository employeeSpecialisationRepository;
 
+    @Mock
+    EmployeePictureRepository employeePictureRepository;
+
     @InjectMocks
     HrService service;
 
@@ -79,6 +83,8 @@ class EmployeePbacScopeTest {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         lenient().when(employeeSpecialisationRepository.findByIdAndIsDeletedFalse(any(UUID.class)))
                 .thenAnswer(invocation -> Optional.of(specialisation(invocation.getArgument(0))));
+        lenient().when(employeePictureRepository.findPrimaryCandidatesByEmployeeIds(any()))
+                .thenReturn(List.of());
     }
 
     @Test

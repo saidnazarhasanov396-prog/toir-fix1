@@ -2,6 +2,7 @@ package com.toir.service.users;
 
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeFilterRequest;
+import com.toir.dto.hr.EmployeePictureDto;
 import com.toir.dto.hr.EmployeeRequest;
 import com.toir.dto.hr.EmployeeSpecialisationDto;
 import com.toir.dto.hr.EmployeeSpecialisationRequest;
@@ -24,6 +25,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
 import com.toir.repository.specification.EmployeeSpecifications;
+import com.toir.repository.users.EmployeePictureRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.EmployeeSpecialisationRepository;
 import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
@@ -67,6 +69,7 @@ public class HrService {
     private final EmployeeWorkRoleRepository employeeWorkRoleRepository;
     private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
     private final EmployeeSpecialisationRepository employeeSpecialisationRepository;
+    private final EmployeePictureRepository employeePictureRepository;
 
     @Transactional(readOnly = true)
     public Page<EmployeeDto> listEmployees(
@@ -629,6 +632,7 @@ public class HrService {
                 ));
 
         Map<UUID, List<String>> workRoleCodesByEmployee = workRoleCodesByEmployee(employees);
+        Map<UUID, EmployeePictureDto> primaryPictureByEmployee = primaryPicturesByEmployee(employees);
 
         Map<UUID, EmployeeSpecialisationDto> specialisationById = specialisationIds.isEmpty()
                 ? Map.of()
@@ -649,9 +653,35 @@ public class HrService {
                         resolveSpecialisation(specialisationById, employee.getSpecialisationId()),
                         employee.getId() == null
                                 ? List.of()
-                                : workRoleCodesByEmployee.getOrDefault(employee.getId(), List.of())
+                                : workRoleCodesByEmployee.getOrDefault(employee.getId(), List.of()),
+                        employee.getId() == null
+                                ? null
+                                : primaryPictureByEmployee.get(employee.getId())
                 ))
                 .toList();
+    }
+
+    private Map<UUID, EmployeePictureDto> primaryPicturesByEmployee(List<Employee> employees) {
+        List<UUID> employeeIds = employees.stream()
+                .map(Employee::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (employeeIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return nullToEmpty(employeePictureRepository.findPrimaryCandidatesByEmployeeIds(employeeIds))
+                .stream()
+                .filter(picture -> picture.getEmployee() != null && picture.getEmployee().getId() != null)
+                .map(picture -> Map.entry(picture.getEmployee().getId(), EmployeePictureDto.from(picture.getEmployee().getId(), picture)))
+                .filter(entry -> entry.getValue() != null)
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (first, ignored) -> first,
+                        LinkedHashMap::new
+                ));
     }
 
     private <T> List<T> nullToEmpty(List<T> values) {

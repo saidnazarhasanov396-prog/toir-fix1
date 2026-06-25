@@ -2,14 +2,18 @@ package com.toir.service;
 
 import com.toir.dto.hr.*;
 import com.toir.entity.Department;
+import com.toir.entity.UploadedFile;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.Employee;
+import com.toir.entity.users.EmployeePicture;
 import com.toir.entity.users.EmployeeSpecialisation;
 import com.toir.enums.DepartmentType;
+import com.toir.enums.FileCategory;
 import com.toir.repository.TimesheetEntryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
 import com.toir.repository.projects.EmployeeStatsProjection;
+import com.toir.repository.users.EmployeePictureRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.EmployeeSpecialisationRepository;
 import com.toir.repository.users.EmployeeWorkRoleAssignmentRepository;
@@ -28,6 +32,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -68,6 +73,9 @@ class HrServiceTest {
 
     @Mock
     EmployeeSpecialisationRepository employeeSpecialisationRepository;
+
+    @Mock
+    EmployeePictureRepository employeePictureRepository;
 
     @InjectMocks
     HrService service;
@@ -123,6 +131,45 @@ class HrServiceTest {
 
         verify(departmentRepository).findAllByIdInAndIsDeletedFalse(List.of(departmentId));
         verify(brigadeRepository).findAllByIdInAndIsDeletedFalse(List.of(brigadeId));
+    }
+
+    @Test
+    void listEmployeesIncludesPrimaryPictureForTableAvatar() {
+        UUID departmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        UUID pictureId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        Employee employee = employee(employeeId, departmentId, null);
+        EmployeePicture picture = employeePicture(
+                pictureId,
+                employee,
+                uploadedPictureFile(fileId, "portrait.png")
+        );
+
+        when(employeeRepository.searchEmployees(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                PageRequest.of(0, 20)
+        )).thenReturn(new PageImpl<>(
+                List.of(employee),
+                PageRequest.of(0, 20),
+                1
+        ));
+        when(employeePictureRepository.findPrimaryCandidatesByEmployeeIds(List.of(employeeId)))
+                .thenReturn(List.of(picture));
+
+        var result = service.listEmployees(0, 20, null, null, null, null);
+
+        EmployeeDto dto = result.getContent().getFirst();
+        assertThat(dto.primaryPicture()).isNotNull();
+        assertThat(dto.primaryPicture().id()).isEqualTo(pictureId);
+        assertThat(dto.primaryPicture().employeeId()).isEqualTo(employeeId);
+        assertThat(dto.primaryPicture().downloadUrl())
+                .isEqualTo("/api/v1/hr/employee-pictures/" + pictureId + "/download");
     }
 
     @Test
@@ -576,6 +623,34 @@ class HrServiceTest {
         employee.setActive(true);
         employee.setDeleted(false);
         return employee;
+    }
+
+    private UploadedFile uploadedPictureFile(UUID fileId, String originalName) {
+        UploadedFile file = new UploadedFile();
+        file.setId(fileId);
+        file.setOriginalName(originalName);
+        file.setStoredName(fileId + ".png");
+        file.setObjectName("employee-pictures/" + fileId + ".png");
+        file.setContentType("image/png");
+        file.setSize(123L);
+        file.setExtension("png");
+        file.setCategory(FileCategory.EMPLOYEE_PICTURE);
+        file.setUploadedBy(UUID.randomUUID());
+        file.setDeleted(false);
+        return file;
+    }
+
+    private EmployeePicture employeePicture(UUID pictureId, Employee employee, UploadedFile file) {
+        EmployeePicture picture = new EmployeePicture();
+        picture.setId(pictureId);
+        picture.setEmployee(employee);
+        picture.setFile(file);
+        picture.setPictureName("Portrait");
+        picture.setPictureType("PROFILE");
+        picture.setUploadedBy(UUID.randomUUID());
+        picture.setUploadedAt(LocalDateTime.parse("2026-06-25T09:00:00"));
+        picture.setDeleted(false);
+        return picture;
     }
 
     private static EmployeeWorkRoleCodeProjection workRoleCode(UUID employeeId, String code) {

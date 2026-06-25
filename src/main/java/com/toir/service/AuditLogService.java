@@ -3,6 +3,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.toir.audit.AuditLogWriteCommand;
+import com.toir.audit.AuditLogWriteScheduler;
 import com.toir.dto.audit.AuditLogResponseDto;
 import com.toir.dto.audit.AuditLogUserSummary;
 import com.toir.dto.user.UserDto;
@@ -19,10 +21,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Map;
@@ -33,45 +33,62 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class AuditLogService {
 
     private final AuditLogRepository repository;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
+    private final AuditLogWriteScheduler writeScheduler;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(UUID userId, AuditModule module, String entityType, String entityId,
                        AuditAction action, String message, String ip, String userAgent) {
         recordDetailed(userId, module, entityType, entityId, action, message, ip, userAgent, null, null, null);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordDetailed(UUID userId, AuditModule module, String entityType, String entityId,
                                AuditAction action, String message, String ip, String userAgent,
                                String diffJson, String previousSnapshot, String currentSnapshot) {
-        AuditLog entry = new AuditLog();
-        entry.setUserId(userId);
-        entry.setModule(module);
-        entry.setEntityType(entityType);
-        entry.setEntityId(entityId);
-        entry.setAction(action);
-        entry.setMessage(message);
-        entry.setIpAddress(ip);
-        entry.setUserAgent(userAgent);
-        entry.setDiffJson(diffJson);
-        entry.setPreviousSnapshot(previousSnapshot);
-        entry.setCurrentSnapshot(currentSnapshot);
-        entry.setCreatedAt(Instant.now().atZone(ZoneId.of("Asia/Tashkent")).toInstant());
-        repository.save(entry);
+        recordDetailed(userId, module, entityType, entityId, action, message, ip, userAgent,
+                diffJson, previousSnapshot, currentSnapshot, null, null, null, null, null);
+    }
+
+    public void recordDetailed(UUID userId, AuditModule module, String entityType, String entityId,
+                               AuditAction action, String message, String ip, String userAgent,
+                               String diffJson, String previousSnapshot, String currentSnapshot,
+                               String reason, String source, String requestMethod, String requestPath, String correlationId) {
+        writeScheduler.schedule(new AuditLogWriteCommand(
+                userId,
+                module,
+                entityType,
+                entityId,
+                action,
+                message,
+                ip,
+                userAgent,
+                diffJson,
+                previousSnapshot,
+                currentSnapshot,
+                reason,
+                source,
+                requestMethod,
+                requestPath,
+                correlationId
+        ));
     }
 
     @Transactional(readOnly = true)
     public Page<AuditLogResponseDto> find(int page, int size, AuditAction action, LocalDate fromDate, LocalDate toDate, String search,UUID userId) {
+        return find(page, size, null, action, fromDate, toDate, search, userId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AuditLogResponseDto> find(int page, int size, AuditModule module, AuditAction action, LocalDate fromDate, LocalDate toDate, String search, UUID userId) {
+        String moduleStr = module != null ? module.name() : null;
         String actionStr = action != null ? action.name() : null;
         String searchPattern = search != null ? "%" + search + "%" : null;
         Page<AuditLog> logs = repository.findAllByIsDeletedFalseOrderByCreatedAtDesc(
+                moduleStr,
                 actionStr,
                 fromDate,
                 toDate,
@@ -86,19 +103,28 @@ public class AuditLogService {
     @Transactional(readOnly = true)
     public Page<AuditLogResponseDto> find(int page, int size, AuditAction action, LocalDate fromDate, LocalDate toDate,
                                           String search, UUID userId, Sort sort) {
+        return find(page, size, null, action, fromDate, toDate, search, userId, sort);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AuditLogResponseDto> find(int page, int size, AuditModule module, AuditAction action, LocalDate fromDate, LocalDate toDate,
+                                          String search, UUID userId, Sort sort) {
         Page<AuditLog> logs = repository.findAll(
-                auditLogSpecification(action, fromDate, toDate, search, userId),
+                auditLogSpecification(module, action, fromDate, toDate, search, userId),
                 PaginationUtils.pageRequest(page, size, sort == null ? Sort.by(Sort.Direction.DESC, "createdAt") : sort)
         );
         Map<UUID, AuditLogUserSummary> usersById = loadUsers(logs);
         return logs.map(log -> toResponse(log, usersById));
     }
 
-    private Specification<AuditLog> auditLogSpecification(AuditAction action, LocalDate fromDate, LocalDate toDate,
+    private Specification<AuditLog> auditLogSpecification(AuditModule module, AuditAction action, LocalDate fromDate, LocalDate toDate,
                                                          String search, UUID userId) {
         return (root, query, cb) -> {
             java.util.List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
             predicates.add(cb.isFalse(root.get("isDeleted")));
+            if (module != null) {
+                predicates.add(cb.equal(root.get("module"), module));
+            }
             if (action != null) {
                 predicates.add(cb.equal(root.get("action"), action));
             }
@@ -148,6 +174,11 @@ public class AuditLogService {
                 log.getMessage(),
                 log.getIpAddress(),
                 log.getUserAgent(),
+                log.getReason(),
+                log.getSource(),
+                log.getRequestMethod(),
+                log.getRequestPath(),
+                log.getCorrelationId(),
                 log.getCreatedAt(),
                 toJsonObject(readJson(log.getPreviousSnapshot())),
                 toJsonObject(readJson(log.getCurrentSnapshot())),

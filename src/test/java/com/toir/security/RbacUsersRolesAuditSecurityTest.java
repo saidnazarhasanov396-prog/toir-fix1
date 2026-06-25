@@ -5,6 +5,8 @@ import com.toir.controller.users.RoleController;
 import com.toir.controller.users.UserController;
 import com.toir.dto.role.RoleDto;
 import com.toir.dto.user.UserDto;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.enums.UserStatus;
 import com.toir.service.AuditLogService;
 import com.toir.service.users.RoleService;
@@ -33,6 +35,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.hamcrest.Matchers.hasItem;
 
 @WebMvcTest(controllers = {
         UserController.class,
@@ -251,6 +255,22 @@ class RbacUsersRolesAuditSecurityTest {
     @WithMockUser(authorities = PermissionConstants.USER_READ)
     void unrelatedPermissionCannotReadAuditLog() throws Exception {
         mockMvc.perform(get("/api/v1/audit-log?page=0&size=1"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.AUDIT_LOG_READ)
+    void exactAuditLogReadPermissionCanReadAuditLogMetadata() throws Exception {
+        mockMvc.perform(get("/api/v1/audit-log/metadata"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.actions", hasItem(AuditAction.LOGIN.name())))
+                .andExpect(jsonPath("$.modules", hasItem(AuditModule.WORK_ORDER.name())));
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.USER_READ)
+    void unrelatedPermissionCannotReadAuditLogMetadata() throws Exception {
+        mockMvc.perform(get("/api/v1/audit-log/metadata"))
                 .andExpect(status().isForbidden());
     }
 
