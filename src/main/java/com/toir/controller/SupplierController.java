@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.supplier.SupplierDto;
 import com.toir.dto.supplier.SupplierPerformanceDto;
 import com.toir.dto.supplier.SupplierRequest;
+import com.toir.enums.SupplierType;
 import com.toir.security.PermissionConstants;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.SupplierService;
@@ -40,10 +41,11 @@ public class SupplierController {
     public ResponseEntity<Page<SupplierDto>> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean active,
+            @RequestParam(required = false) SupplierType supplierType,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search, active), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search, active, supplierType), page, size));
     }
 
     @GetMapping("/{id}")

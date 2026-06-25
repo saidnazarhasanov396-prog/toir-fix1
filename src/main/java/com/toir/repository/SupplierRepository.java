@@ -1,6 +1,7 @@
 package com.toir.repository;
 
 import com.toir.entity.Supplier;
+import com.toir.enums.SupplierType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,6 +29,11 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
             where s.isDeleted = false
               and (:active is null or s.active = :active)
               and (
+                    :supplierType is null
+                    or (:supplierType = com.toir.enums.SupplierType.BOTH and s.supplierType = com.toir.enums.SupplierType.BOTH)
+                    or (:supplierType <> com.toir.enums.SupplierType.BOTH and (s.supplierType = :supplierType or s.supplierType = com.toir.enums.SupplierType.BOTH))
+                  )
+              and (
                     :search is null
                     or lower(s.code) like lower(concat('%', :search, '%'))
                     or lower(s.name) like lower(concat('%', :search, '%'))
@@ -35,5 +41,9 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
                   )
             order by s.updatedAt desc
             """)
-    List<Supplier> search(@Param("search") String search, @Param("active") Boolean active);
+    List<Supplier> search(
+            @Param("search") String search,
+            @Param("active") Boolean active,
+            @Param("supplierType") SupplierType supplierType
+    );
 }

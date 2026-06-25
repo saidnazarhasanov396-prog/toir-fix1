@@ -11,6 +11,7 @@ import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.Location;
+import com.toir.entity.Supplier;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
@@ -39,6 +40,7 @@ import com.toir.enums.MeterType;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.SupplierType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
@@ -47,6 +49,7 @@ import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.EquipmentUsageSessionRepository;
 import com.toir.repository.FileAssetRepository;
+import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -105,6 +108,7 @@ public class EquipmentService {
     private final EquipmentAttributeValueRepository attributeValueRepository;
     private final EquipmentMeterRepository equipmentMeterRepository;
     private final WarehouseRepository warehouseRepository;
+    private final SupplierRepository supplierRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
     private final EquipmentUsageSessionRepository equipmentUsageSessionRepository;
@@ -614,6 +618,7 @@ public class EquipmentService {
         validateParent(null, request.parentId());
         validateWarrantyDateRange(request.warrantyStartDate(), request.warrantyEndDate());
         validateWarrantyAttachment(request.hasWarranty(), request.warrantyAttachmentId());
+        validateSupplierReferences(request);
         validateResponsibleEmployee(request.responsibleId());
         Equipment entity = new Equipment();
         entity.setCode(nextCode());
@@ -670,6 +675,7 @@ public class EquipmentService {
         validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
         validateWarrantyDateRangeForUpdate(entity, request);
         validateWarrantyAttachmentForUpdate(request);
+        validateSupplierReferencesForUpdate(entity, request);
         validateResponsibleEmployee(request.responsibleId());
 
         applyForUpdate(entity, request);
@@ -792,6 +798,8 @@ public class EquipmentService {
         Set<UUID> parentIds = collectIds(items, Equipment::getParentId);
         Set<UUID> currentWarehouseIds = collectIds(items, Equipment::getCurrentWarehouseId);
         Set<UUID> warrantyAttachmentIds = collectIds(items, Equipment::getWarrantyAttachmentId);
+        Set<UUID> supplierIds = collectIds(items, Equipment::getSupplierId);
+        Set<UUID> warrantySupplierIds = collectIds(items, Equipment::getWarrantySupplierId);
         Set<UUID> equipmentIds = items.stream().map(Equipment::getId).collect(Collectors.toSet());
         Set<UUID> equipmentIdsWithCreatedAct = new HashSet<>(
                 equipmentCommissioningActRepository.findEquipmentIdsWithStatuses(
@@ -829,6 +837,11 @@ public class EquipmentService {
                 : byId(warehouseRepository.findAllByIdInAndIsDeletedFalse(warehouseIdsToLoad), Warehouse::getId);
         Map<UUID, EquipmentType> typeMap = byId(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(typeIds), EquipmentType::getId);
         Map<UUID, Equipment> parentMap = byId(repository.findAllByIdInAndIsDeletedFalse(parentIds), Equipment::getId);
+        Set<UUID> allSupplierIds = new HashSet<>(supplierIds);
+        allSupplierIds.addAll(warrantySupplierIds);
+        Map<UUID, Supplier> supplierMap = allSupplierIds.isEmpty()
+                ? Collections.emptyMap()
+                : byId(supplierRepository.findAllByIdInAndIsDeletedFalse(allSupplierIds), Supplier::getId);
         Map<UUID, EquipmentPassport> passportMap = passportRepository
                 .findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
                 .collect(Collectors.toMap(EquipmentPassport::getEquipmentId, Function.identity(), (a, b) -> a));
@@ -877,7 +890,9 @@ public class EquipmentService {
                             ),
                             resolveLifetimeMeter(e, activeMetersByEquipment.getOrDefault(e.getId(), List.of())),
                             responsibleRef,
-                            equipmentIdsWithCreatedAct.contains(e.getId())
+                            equipmentIdsWithCreatedAct.contains(e.getId()),
+                            supplierMap.get(e.getSupplierId()),
+                            supplierMap.get(e.getWarrantySupplierId())
                     );
                 })
                 .toList();
@@ -1203,6 +1218,7 @@ public class EquipmentService {
         entity.setParentId(request.parentId());
         entity.setCriticalityClassId(request.criticalityClassId());
         entity.setResponsibleId(request.responsibleId());
+        entity.setSupplierId(request.supplierId());
         entity.setManufacturer(request.manufacturer());
         if (request.status() != null) entity.setStatus(request.status());
         entity.setCategory(request.category() != null ? request.category() : EquipmentCategory.PRODUCTION_EQUIPMENT);
@@ -1213,6 +1229,7 @@ public class EquipmentService {
         entity.setWarrantyAttachmentId(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyAttachmentId() : null);
         entity.setWarrantyStartDate(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyStartDate() : null);
         entity.setWarrantyEndDate(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyEndDate() : null);
+        entity.setWarrantySupplierId(Boolean.TRUE.equals(request.hasWarranty()) ? effectiveWarrantySupplierId(request) : null);
         entity.setOperationStartDate(request.operationStartDate());
         entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths());
         entity.setExpectedLifetimeYears(request.expectedLifetimeYears());
@@ -1872,6 +1889,7 @@ public class EquipmentService {
         entity.setParentId(request.parentId());
         entity.setCriticalityClassId(request.criticalityClassId()  != null ? request.criticalityClassId() : entity.getCriticalityClassId());
         entity.setResponsibleId(request.responsibleId() != null ? request.responsibleId() : entity.getResponsibleId());
+        entity.setSupplierId(request.supplierId() != null ? request.supplierId() : entity.getSupplierId());
         entity.setManufacturer(request.manufacturer() != null ? request.manufacturer() : entity.getManufacturer());
         entity.setCategory(request.category() != null ? request.category() : entity.getCategory());
         entity.setCommissionedAt(request.commissionedAt() != null ? request.commissionedAt() : entity.getCommissionedAt());
@@ -2046,6 +2064,74 @@ public class EquipmentService {
         }
     }
 
+    private void validateSupplierReferences(EquipmentCreateRequest request) {
+        if (request.supplierId() != null) {
+            loadActiveEquipmentSupplier(request.supplierId(), "equipment supplier");
+        }
+        UUID warrantySupplierId = effectiveWarrantySupplierId(request);
+        if (warrantySupplierId != null && !warrantySupplierId.equals(request.supplierId())) {
+            loadActiveEquipmentSupplier(warrantySupplierId, "equipment warranty supplier");
+        }
+    }
+
+    private void validateSupplierReferencesForUpdate(Equipment entity, EquipmentUpdateRequest request) {
+        if (request.supplierId() != null) {
+            loadActiveEquipmentSupplier(request.supplierId(), "equipment supplier");
+        }
+        UUID warrantySupplierId = effectiveWarrantySupplierIdForUpdate(entity, request);
+        if (warrantySupplierId != null
+                && !warrantySupplierId.equals(request.supplierId())) {
+            loadActiveEquipmentSupplier(warrantySupplierId, "equipment warranty supplier");
+        }
+    }
+
+    private UUID effectiveWarrantySupplierId(EquipmentCreateRequest request) {
+        if (!Boolean.TRUE.equals(request.hasWarranty())) {
+            return null;
+        }
+        UUID supplierId = request.warrantySupplierId() != null
+                ? request.warrantySupplierId()
+                : request.supplierId();
+        if (supplierId == null) {
+            throw RestException.badRequest("Warranty supplier is required when warranty is enabled");
+        }
+        return supplierId;
+    }
+
+    private UUID effectiveWarrantySupplierIdForUpdate(Equipment entity, EquipmentUpdateRequest request) {
+        if (Boolean.FALSE.equals(request.hasWarranty())) {
+            return null;
+        }
+        boolean warrantyEnabled = Boolean.TRUE.equals(request.hasWarranty())
+                || (request.hasWarranty() == null && Boolean.TRUE.equals(entity.getHasWarranty()));
+        if (!warrantyEnabled) {
+            return null;
+        }
+        UUID supplierId = firstNonNull(
+                request.warrantySupplierId(),
+                entity.getWarrantySupplierId(),
+                request.supplierId(),
+                entity.getSupplierId()
+        );
+        if (supplierId == null) {
+            throw RestException.badRequest("Warranty supplier is required when warranty is enabled");
+        }
+        return supplierId;
+    }
+
+    private Supplier loadActiveEquipmentSupplier(UUID supplierId, String context) {
+        Supplier supplier = supplierRepository.findByIdAndIsDeletedFalse(supplierId)
+                .orElseThrow(() -> RestException.notFound("Supplier not found: " + supplierId));
+        if (!Boolean.TRUE.equals(supplier.getActive())) {
+            throw RestException.badRequest("Inactive supplier cannot be selected as " + context);
+        }
+        SupplierType supplierType = supplier.getSupplierType() == null ? SupplierType.BOTH : supplier.getSupplierType();
+        if (!supplierType.supports(SupplierType.EQUIPMENT)) {
+            throw RestException.badRequest("Supplier must support EQUIPMENT for " + context);
+        }
+        return supplier;
+    }
+
     private FileAsset getFileAssetOrThrow(UUID fileAssetId) {
         return fileAssetRepository.findByIdAndIsDeletedFalse(fileAssetId)
                 .orElseThrow(() -> RestException.notFound("File not found: " + fileAssetId));
@@ -2057,6 +2143,7 @@ public class EquipmentService {
             entity.setWarrantyAttachmentId(null);
             entity.setWarrantyStartDate(null);
             entity.setWarrantyEndDate(null);
+            entity.setWarrantySupplierId(null);
             return;
         }
         if (Boolean.TRUE.equals(request.hasWarranty())) {
@@ -2071,6 +2158,11 @@ public class EquipmentService {
         }
         if (request.warrantyEndDate() != null) {
             entity.setWarrantyEndDate(request.warrantyEndDate());
+        }
+        if (request.warrantySupplierId() != null) {
+            entity.setWarrantySupplierId(request.warrantySupplierId());
+        } else if (Boolean.TRUE.equals(entity.getHasWarranty()) && entity.getWarrantySupplierId() == null) {
+            entity.setWarrantySupplierId(entity.getSupplierId());
         }
     }
 

@@ -1,6 +1,7 @@
 package com.toir.dto.equipment;
 
 import com.toir.entity.FileAsset;
+import com.toir.entity.Supplier;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.enums.EquipmentCategory;
@@ -77,7 +78,11 @@ public record EquipmentDto(
         Double forecastAvgUsagePerActiveDay,
         Long forecastRemainingActiveDays,
         LocalDate forecastCalculatedAt,
-        boolean isCreatedAct
+        boolean isCreatedAct,
+        UUID supplierId,
+        String supplierName,
+        UUID warrantySupplierId,
+        String warrantySupplierName
 ) {
     public EquipmentDto(
             UUID id,
@@ -130,7 +135,7 @@ public record EquipmentDto(
                 expectedEndDate, remainingLifetime, lifetimeStatus, hasWarranty, warrantyAttachmentId,
                 warrantyStartDate, warrantyEndDate, warrantyAttachment, passportCompleteness,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                false);
+                false, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -179,7 +184,7 @@ public record EquipmentDto(
                 expectedLifetimeMonths, expectedLifetimeYears, null, operatingDuration, expectedEndDate, remainingLifetime,
                 lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                false);
+                false, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -216,7 +221,7 @@ public record EquipmentDto(
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null, null,
                 LifetimeStatus.UNKNOWN, false, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                false);
+                false, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -412,6 +417,24 @@ public record EquipmentDto(
                                     EquipmentMeter lifetimeMeter,
                                     ResponsibleRef responsible,
                                     boolean isCreatedAct) {
+        return from(e, department, location, equipmentType, parent, passport, placement, warrantyAttachment,
+                passportCompleteness, lifetimeMeter, responsible, isCreatedAct, null, null);
+    }
+
+    public static EquipmentDto from(Equipment e,
+                                    Ref department,
+                                    Ref location,
+                                    Ref equipmentType,
+                                    Ref parent,
+                                    PassportRef passport,
+                                    PlacementRef placement,
+                                    FileAsset warrantyAttachment,
+                                    PassportCompletenessRef passportCompleteness,
+                                    EquipmentMeter lifetimeMeter,
+                                    ResponsibleRef responsible,
+                                    boolean isCreatedAct,
+                                    Supplier supplier,
+                                    Supplier warrantySupplier) {
         return new EquipmentDto(
                 e.getId(), e.getCode(), e.getName(), e.getInventoryNumber(), e.getTechnicalNumber(),
                 e.getSerialNumber(), e.getModel(), e.getProducedYear(), e.getEquipmentTypeId(), e.getDepartmentId(),
@@ -442,7 +465,11 @@ public record EquipmentDto(
                 e.getForecastAvgUsagePerActiveDay(),
                 e.getForecastRemainingActiveDays(),
                 e.getForecastCalculatedAt(),
-                isCreatedAct
+                isCreatedAct,
+                e.getSupplierId(),
+                supplier == null ? null : supplier.getName(),
+                e.getWarrantySupplierId(),
+                warrantySupplier == null ? null : warrantySupplier.getName()
         );
     }
 
