@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.exception.RestException;
 import com.toir.entity.RcmSnapshot;
 import com.toir.service.RcmAutoPlannerService;
@@ -17,6 +18,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -94,6 +96,35 @@ class RcmControllerContractTest {
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].equipmentId").value(equipmentId.toString()));
+    }
+
+    @Test
+    void listRiskScoresAcceptsSortAndReturnsProbabilityPercent() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        when(service.computeAll("probability", "asc")).thenReturn(List.of(new EquipmentRiskScore(
+                equipmentId,
+                "EQ-200",
+                "Pump",
+                "CRIT-MED",
+                "Medium criticality",
+                12,
+                4,
+                48,
+                2,
+                3,
+                1800,
+                6
+        )));
+
+        mockMvc.perform(get("/api/v1/rcm/risk-scores")
+                        .param("sortBy", "probability")
+                        .param("sortDir", "asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.content[0].probability").value(4))
+                .andExpect(jsonPath("$.content[0].probabilityPercent").value(80));
+
+        verify(service).computeAll("probability", "asc");
     }
 
     private RcmSnapshot snapshot(UUID equipmentId, String equipmentCode) {
