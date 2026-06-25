@@ -2,6 +2,7 @@ package com.toir.repository;
 
 import com.toir.entity.SparePart;
 import com.toir.entity.SparePartType;
+import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.InventoryItemKind;
@@ -128,29 +129,62 @@ class SparePartRepositoryFilterTest {
     }
 
     @Test
-    void unitFilterReturnsOnlyMatchingUnitCaseInsensitively() {
-        SparePart kilogramPart = saveSparePart("SP-KG", "Weight part", InventoryItemKind.SPARE_PART, false, "KG");
-        saveSparePart("SP-PCS", "Count part", InventoryItemKind.SPARE_PART, false, "PCS");
+    void unitIdFilterReturnOnlyMatchingUnit() {
+        UnitOfMeasurement kg = saveUnitOfMeasurement("UOM-2024-0001", "kg");
+        saveUnitOfMeasurement("UOM-2024-0002", "pcs");
+        SparePart kgPart = saveSparePartWithUnit("SP-KG", "KG Part", "kg", false);
+        saveSparePartWithUnit("SP-PCS", "PCS Part", "pcs", false);
 
-        Page<SparePart> upperCaseResult = repository.findAllByFilter(
-                null,
-                null,
-                "KG",
-                null,
-                PageRequest.of(0, 20)
-        );
-        Page<SparePart> lowerCaseResult = repository.findAllByFilter(
-                null,
-                null,
-                "kg",
-                null,
-                PageRequest.of(0, 20)
+        Page<SparePart> result = repository.findAllByFilter(
+                null, null, kg.getId(), null, PageRequest.of(0, 20)
         );
 
-        assertThat(upperCaseResult.getContent()).extracting(SparePart::getId)
-                .containsExactly(kilogramPart.getId());
-        assertThat(lowerCaseResult.getContent()).extracting(SparePart::getId)
-                .containsExactly(kilogramPart.getId());
+        assertThat(result.getContent()).extracting(SparePart::getId)
+                .containsExactly(kgPart.getId());
+    }
+
+    @Test
+    void unitIdFilterNullReturnsAll() {
+        saveUnitOfMeasurement("UOM-2024-0003", "kg");
+        SparePart part1 = saveSparePartWithUnit("SP-A1", "Part A", "kg", false);
+        SparePart part2 = saveSparePartWithUnit("SP-A2", "Part B", "pcs", false);
+
+        Page<SparePart> result = repository.findAllByFilter(
+                null, null, null, null, PageRequest.of(0, 20)
+        );
+
+        assertThat(result.getContent()).extracting(SparePart::getId)
+                .containsExactlyInAnyOrder(part1.getId(), part2.getId());
+    }
+
+    @Test
+    void unitIdFilterWithWarehouseId() {
+        UnitOfMeasurement kg = saveUnitOfMeasurement("UOM-2024-0004", "kg");
+        Warehouse warehouse = saveWarehouse("WH-U", "Unit warehouse");
+        SparePart kgPart = saveSparePartWithUnit("SP-KG-WH", "KG in warehouse", "kg", false);
+        SparePart pcsPart = saveSparePartWithUnit("SP-PCS-WH", "PCS in warehouse", "pcs", false);
+
+        saveStock(warehouse, kgPart, 5, false);
+        saveStock(warehouse, pcsPart, 5, false);
+
+        Page<SparePart> result = repository.findAllByFilterAndWarehouseId(
+                null, null, kg.getId(), null, warehouse.getId(), PageRequest.of(0, 20)
+        );
+
+        assertThat(result.getContent()).extracting(SparePart::getId)
+                .containsExactly(kgPart.getId());
+    }
+
+    private UnitOfMeasurement saveUnitOfMeasurement(String code, String name) {
+        UnitOfMeasurement unit = new UnitOfMeasurement();
+        unit.setCode(code);
+        unit.setName(name);
+        unit.setDeleted(false);
+        return entityManager.persistAndFlush(unit);
+    }
+
+    private SparePart saveSparePartWithUnit(String code, String name, String unit, boolean deleted) {
+        return saveSparePart(code, name, InventoryItemKind.SPARE_PART, deleted, unit);
     }
 
     private Warehouse saveWarehouse(String code, String name) {

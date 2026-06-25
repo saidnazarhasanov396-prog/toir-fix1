@@ -55,6 +55,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -183,7 +184,7 @@ public class SparePartService {
         Pageable pageable = numericSort ? Pageable.unpaged() : PaginationUtils.pageRequest(safePage, safePageSize);
         InventoryItemKind inventoryItemKind = mapItemType(itemType);
         UUID sparePartTypeId = resolveTypeFilter(typeId, type);
-        String unitFilter = (unit == null || unit.isBlank()) ? null : unit.trim();
+        UUID unitId = resolveUnitFilter(unit);
         String searchPattern = toSearchPattern(search);
 
         List<UUID> scopedWarehouseIds = null;
@@ -193,7 +194,7 @@ public class SparePartService {
             parts = repository.findAllByFilterAndWarehouseId(
                     inventoryItemKind,
                     sparePartTypeId,
-                    unitFilter,
+                    unitId,
                     searchPattern,
                     warehouseId,
                     pageable
@@ -202,7 +203,7 @@ public class SparePartService {
             parts = repository.findAllByFilter(
                     inventoryItemKind,
                     sparePartTypeId,
-                    unitFilter,
+                    unitId,
                     searchPattern,
                     pageable
             );
@@ -214,7 +215,7 @@ public class SparePartService {
             parts = repository.findAllByFilterAndWarehouseIds(
                     inventoryItemKind,
                     sparePartTypeId,
-                    unitFilter,
+                    unitId,
                     searchPattern,
                     scopedWarehouseIds,
                     pageable
@@ -496,6 +497,31 @@ public class SparePartService {
         return supplierRepository.findByIdAndIsDeletedFalse(dto.preferredSupplierId())
                 .map(supplier -> dto.withPreferredSupplierName(supplier.getName()))
                 .orElse(dto);
+    }
+
+    private UUID resolveUnitFilter(String unit) {
+        if (unit == null || unit.isBlank()) {
+            return null;
+        }
+        String token = unit.trim();
+        Optional<UUID> parsedId = parseUuid(token);
+        if (parsedId.isPresent()) {
+            return unitOfMeasurementRepository.existsByIdAndIsDeletedFalse(parsedId.get())
+                    ? parsedId.get()
+                    : null;
+        }
+        return unitOfMeasurementRepository.findByTokenIgnoreCase(token).stream()
+                .findFirst()
+                .map(UnitOfMeasurement::getId)
+                .orElse(null);
+    }
+
+    private Optional<UUID> parseUuid(String value) {
+        try {
+            return Optional.of(UUID.fromString(value));
+        } catch (IllegalArgumentException ex) {
+            return Optional.empty();
+        }
     }
 
     private void validatePreferredSupplier(UUID supplierId) {
