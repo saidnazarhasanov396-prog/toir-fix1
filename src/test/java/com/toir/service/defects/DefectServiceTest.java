@@ -40,6 +40,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -56,6 +57,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -117,27 +119,27 @@ class DefectServiceTest {
     void findAllFiltersByRepairRequestId() {
         UUID repairRequestId = UUID.randomUUID();
         PageRequest pageRequest = PageRequest.of(0, 20);
-        when(repository.searchPaginated(null, repairRequestId, null, null, pageRequest))
+        when(repository.searchPaginated(null, repairRequestId, null, null, null, null, pageRequest))
                 .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
 
-        var result = service.search(null, repairRequestId, null, 0, 20, null);
+        var result = service.search(null, repairRequestId, null, null, null, 0, 20, null);
 
         assertThat(result).isNotNull();
         assertThat(result.getContent()).isEmpty();
-        verify(repository).searchPaginated(eq(null), eq(repairRequestId), eq(null), eq(null), eq(pageRequest));
+        verify(repository).searchPaginated(eq(null), eq(repairRequestId), eq(null), eq(null), eq(null), eq(null), eq(pageRequest));
     }
 
     @Test
     void findAllWithoutRepairRequestIdKeepsExistingBehavior() {
         PageRequest pageRequest = PageRequest.of(0, 20);
-        when(repository.searchPaginated(null, null, null, null, pageRequest))
+        when(repository.searchPaginated(null, null, null, null, null, null, pageRequest))
                 .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
 
-        var result = service.search(null, null, null, 0, 20, null);
+        var result = service.search(null, null, null, null, null, 0, 20, null);
 
         assertThat(result).isNotNull();
         assertThat(result.getContent()).isEmpty();
-        verify(repository).searchPaginated(eq(null), eq(null), eq(null), eq(null), eq(pageRequest));
+        verify(repository).searchPaginated(eq(null), eq(null), eq(null), eq(null), eq(null), eq(null), eq(pageRequest));
     }
 
     @Test
@@ -145,14 +147,14 @@ class DefectServiceTest {
         UUID repairRequestId = UUID.randomUUID();
         String search = "leak";
         PageRequest pageRequest = PageRequest.of(0, 20);
-        when(repository.searchPaginated(null, repairRequestId, null, search, pageRequest))
+        when(repository.searchPaginated(null, repairRequestId, null, null, null, search, pageRequest))
                 .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
 
-        var result = service.search(null, repairRequestId, null, 0, 20, search);
+        var result = service.search(null, repairRequestId, null, null, null, 0, 20, search);
 
         assertThat(result).isNotNull();
         assertThat(result.getContent()).isEmpty();
-        verify(repository).searchPaginated(eq(null), eq(repairRequestId), eq(null), eq(search), eq(pageRequest));
+        verify(repository).searchPaginated(eq(null), eq(repairRequestId), eq(null), eq(null), eq(null), eq(search), eq(pageRequest));
     }
 
     @Test
@@ -726,6 +728,91 @@ class DefectServiceTest {
     }
 
     @Test
+    void searchFiltersByCategoryExactMatchCaseInsensitive() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.searchPaginated(isNull(), isNull(), isNull(), eq("MECHANICAL"), isNull(), isNull(), any()))
+                .thenReturn(Page.empty());
+
+        service.search(null, null, null, "MECHANICAL", null, 0, 20, null);
+
+        verify(repository).searchPaginated(isNull(), isNull(), isNull(), eq("MECHANICAL"), isNull(), isNull(), any());
+    }
+
+    @Test
+    void searchFiltersBySeverityExactMatch() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.searchPaginated(isNull(), isNull(), isNull(), isNull(), eq("HIGH"), isNull(), any()))
+                .thenReturn(Page.empty());
+
+        service.search(null, null, null, null, "HIGH", 0, 20, null);
+
+        verify(repository).searchPaginated(isNull(), isNull(), isNull(), isNull(), eq("HIGH"), isNull(), any());
+    }
+
+    @Test
+    void searchFiltersByCategoryAndSeverityTogether() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.searchPaginated(isNull(), isNull(), isNull(), eq("MECHANICAL"), eq("HIGH"), isNull(), any()))
+                .thenReturn(Page.empty());
+
+        service.search(null, null, null, "MECHANICAL", "HIGH", 0, 20, null);
+
+        verify(repository).searchPaginated(isNull(), isNull(), isNull(), eq("MECHANICAL"), eq("HIGH"), isNull(), any());
+    }
+
+    @Test
+    void statsFiltersByCategoryForAdminUser() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.getDefectStats(isNull(), isNull(), eq("MECHANICAL"), isNull(), isNull(),
+                eq(DefectStatus.OPEN.name()), eq(DefectStatus.RESOLVED.name())))
+                .thenReturn(statsProjection(5L, 3L, 2L, 0L));
+
+        DefectStatsResponse result = service.getStats(null, null, "MECHANICAL", null, null);
+
+        assertThat(result.totalDefects()).isEqualTo(5);
+    }
+
+    @Test
+    void statsFiltersByCategoryForNonAdminUser() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        Defect mechanical = defect(equipmentId, "MECHANICAL", "HIGH", DefectStatus.OPEN);
+        Defect electrical = defect(equipmentId, "ELECTRICAL", "LOW", DefectStatus.OPEN);
+        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(mechanical, electrical));
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setDepartmentId(departmentId);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+
+        DefectStatsResponse result = service.getStats(null, null, "MECHANICAL", null, null);
+
+        assertThat(result.totalDefects()).isEqualTo(1);
+    }
+
+    @Test
+    void matchesStatsFilterCategoryAndSeverityBothNull() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        Defect d1 = defect(equipmentId, "MECHANICAL", "HIGH", DefectStatus.OPEN);
+        Defect d2 = defect(equipmentId, "ELECTRICAL", "LOW", DefectStatus.OPEN);
+        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(d1, d2));
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setDepartmentId(departmentId);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+
+        DefectStatsResponse result = service.getStats(null, null, null, null, null);
+
+        assertThat(result.totalDefects()).isEqualTo(2);
+    }
+
+    @Test
     void getStatsWithoutFiltersReturnsDefectStats() {
         DefectStatsProjection projection = statsProjection(50L, 8L, 2L, 0L);
 
@@ -733,11 +820,13 @@ class DefectServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 DefectStatus.OPEN.name(),
                 DefectStatus.RESOLVED.name()
         )).thenReturn(projection);
 
-        DefectStatsResponse result = service.getStats(null, null, null);
+        DefectStatsResponse result = service.getStats(null, null, null, null, null);
 
         assertThat(result.totalDefects()).isEqualTo(50);
         assertThat(result.open()).isEqualTo(8);
@@ -745,6 +834,8 @@ class DefectServiceTest {
         assertThat(result.withRecurrence()).isZero();
 
         verify(repository).getDefectStats(
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -763,6 +854,8 @@ class DefectServiceTest {
         when(repository.getDefectStats(
                 equipmentId,
                 repairRequestId,
+                null,
+                null,
                 "%pump%",
                 DefectStatus.OPEN.name(),
                 DefectStatus.RESOLVED.name()
@@ -771,6 +864,8 @@ class DefectServiceTest {
         DefectStatsResponse result = service.getStats(
                 equipmentId,
                 repairRequestId,
+                null,
+                null,
                 "  PuMp  "
         );
 
@@ -782,6 +877,8 @@ class DefectServiceTest {
         verify(repository).getDefectStats(
                 equipmentId,
                 repairRequestId,
+                null,
+                null,
                 "%pump%",
                 DefectStatus.OPEN.name(),
                 DefectStatus.RESOLVED.name()
@@ -796,11 +893,13 @@ class DefectServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 DefectStatus.OPEN.name(),
                 DefectStatus.RESOLVED.name()
         )).thenReturn(projection);
 
-        DefectStatsResponse result = service.getStats(null, null, "   ");
+        DefectStatsResponse result = service.getStats(null, null, null, null, "   ");
 
         assertThat(result.totalDefects()).isEqualTo(7);
         assertThat(result.open()).isEqualTo(4);
@@ -808,6 +907,8 @@ class DefectServiceTest {
         assertThat(result.withRecurrence()).isEqualTo(1);
 
         verify(repository).getDefectStats(
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -824,11 +925,13 @@ class DefectServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 DefectStatus.OPEN.name(),
                 DefectStatus.RESOLVED.name()
         )).thenReturn(projection);
 
-        DefectStatsResponse result = service.getStats(null, null, null);
+        DefectStatsResponse result = service.getStats(null, null, null, null, null);
 
         assertThat(result.totalDefects()).isZero();
         assertThat(result.open()).isZero();
@@ -1066,6 +1169,20 @@ class DefectServiceTest {
                 .thenReturn(List.of());
         when(knowledgeRepository.findDefectIdsWithLesson(any(), eq("LESSON_LEARNED")))
                 .thenReturn(List.of());
+    }
+
+    private Defect defect(UUID equipmentId, String category, String severity, DefectStatus status) {
+        Defect defect = Defect.builder()
+                .code("DEF-2026-0001")
+                .title("Test defect")
+                .description("Test description")
+                .equipmentId(equipmentId)
+                .category(category)
+                .severity(severity)
+                .status(status)
+                .build();
+        defect.setId(UUID.randomUUID());
+        return defect;
     }
 
     private Defect defect(UUID defectId, UUID equipmentId) {

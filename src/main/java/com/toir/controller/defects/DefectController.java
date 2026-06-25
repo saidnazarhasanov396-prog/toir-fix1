@@ -48,6 +48,8 @@ public class DefectController {
             @RequestParam(required = false) UUID repairRequestId,
             @RequestParam(name = "requestId", required = false) UUID requestIdAlias,
             @RequestParam(required = false) DefectStatus status,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String severity,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String search,
@@ -56,7 +58,7 @@ public class DefectController {
     ) {
         UUID resolvedRepairRequestId = resolveRepairRequestIdFilter(repairRequestId, requestIdAlias);
         if (sortBy == null || sortBy.isBlank()) {
-            return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, status, page, size, search));
+            return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, status, category, severity, page, size, search));
         }
         Sort sort = SortUtils.sort(sortBy, sortDir, SORT_FIELDS, "updatedAt", Sort.Direction.DESC);
         return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, status, page, size, search, sort));
@@ -68,6 +70,8 @@ public class DefectController {
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) UUID repairRequestId,
             @RequestParam(name = "requestId", required = false) UUID requestIdAlias,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String severity,
             @RequestParam(required = false) String search
     ) {
         UUID resolvedRepairRequestId = resolveRepairRequestIdFilter(repairRequestId, requestIdAlias);
@@ -75,6 +79,8 @@ public class DefectController {
         return ResponseEntity.ok(service.getStats(
                 equipmentId,
                 resolvedRepairRequestId,
+                category,
+                severity,
                 search
         ));
     }

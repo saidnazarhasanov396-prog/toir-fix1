@@ -96,9 +96,9 @@ class RbacDefectSecurityTest {
     @WithMockUser(authorities = PermissionConstants.DEFECT_READ)
     void defectReadCanReadListStatsDetailAndDictionaries() throws Exception {
         UUID defectId = UUID.randomUUID();
-        when(defectService.search(null, null, null, 0, 1, null))
+        when(defectService.search(null, null, null, null, null, 0, 1, null))
                 .thenReturn(new PageImpl<>(List.of(defectResponse(defectId)), PageRequest.of(0, 1), 1));
-        when(defectService.getStats(null, null, null))
+        when(defectService.getStats(null, null, null, null, null))
                 .thenReturn(new DefectStatsResponse(1, 1, 0, 0));
         when(defectService.findById(defectId)).thenReturn(defectResponse(defectId));
         when(categoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
@@ -119,7 +119,7 @@ class RbacDefectSecurityTest {
     @Test
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void systemAdminCanReadDefects() throws Exception {
-        when(defectService.search(null, null, null, 0, 1, null)).thenReturn(Page.empty());
+        when(defectService.search(null, null, null, null, null, 0, 1, null)).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/v1/defects?page=0&size=1"))
                 .andExpect(status().isOk());
@@ -128,7 +128,7 @@ class RbacDefectSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.WILDCARD)
     void wildcardCanReadDefects() throws Exception {
-        when(defectService.search(null, null, null, 0, 1, null)).thenReturn(Page.empty());
+        when(defectService.search(null, null, null, null, null, 0, 1, null)).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/v1/defects?page=0&size=1"))
                 .andExpect(status().isOk());

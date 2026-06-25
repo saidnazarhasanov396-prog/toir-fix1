@@ -44,6 +44,8 @@ public interface DefectRepository extends JpaRepository<Defect, UUID>, JpaSpecif
             and (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
             and (cast(:repairRequestId as varchar) is null or d.repair_request_id = cast(:repairRequestId as uuid))
             and (cast(:status as varchar) is null or d.status = cast(:status as varchar))
+            and (cast(:category as varchar) is null or upper(d.category) = upper(cast(:category as varchar)))
+            and (cast(:severity as varchar) is null or upper(d.severity) = upper(cast(:severity as varchar)))
             and (cast(:search as varchar) is null or lower(d.code) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.title) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.description) like lower(concat('%', cast(:search as varchar), '%'))
@@ -58,6 +60,8 @@ public interface DefectRepository extends JpaRepository<Defect, UUID>, JpaSpecif
             and (cast(:equipmentId as varchar) is null or d.equipment_id = cast(:equipmentId as uuid))
             and (cast(:repairRequestId as varchar) is null or d.repair_request_id = cast(:repairRequestId as uuid))
             and (cast(:status as varchar) is null or d.status = cast(:status as varchar))
+            and (cast(:category as varchar) is null or upper(d.category) = upper(cast(:category as varchar)))
+            and (cast(:severity as varchar) is null or upper(d.severity) = upper(cast(:severity as varchar)))
             and (cast(:search as varchar) is null or lower(d.code) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.title) like lower(concat('%', cast(:search as varchar), '%'))
             or lower(d.description) like lower(concat('%', cast(:search as varchar), '%'))
@@ -69,6 +73,8 @@ public interface DefectRepository extends JpaRepository<Defect, UUID>, JpaSpecif
     Page<Defect> searchPaginated(@Param("equipmentId") UUID equipmentId,
                                  @Param("repairRequestId") UUID repairRequestId,
                                  @Param("status") String status,
+                                 @Param("category") String category,
+                                 @Param("severity") String severity,
                                  @Param("search") String search,
                                  Pageable pageable);
 
@@ -127,6 +133,8 @@ public interface DefectRepository extends JpaRepository<Defect, UUID>, JpaSpecif
         where d.is_deleted = false
           and (cast(:equipmentId as uuid) is null or d.equipment_id = cast(:equipmentId as uuid))
           and (cast(:repairRequestId as uuid) is null or d.repair_request_id = cast(:repairRequestId as uuid))
+          and (cast(:category as varchar) is null or upper(d.category) = upper(cast(:category as varchar)))
+          and (cast(:severity as varchar) is null or upper(d.severity) = upper(cast(:severity as varchar)))
           and (
               cast(:searchPattern as varchar) is null
               or lower(coalesce(d.code, '')) like cast(:searchPattern as varchar)
@@ -141,6 +149,8 @@ public interface DefectRepository extends JpaRepository<Defect, UUID>, JpaSpecif
     DefectStatsProjection getDefectStats(
             @Param("equipmentId") UUID equipmentId,
             @Param("repairRequestId") UUID repairRequestId,
+            @Param("category") String category,
+            @Param("severity") String severity,
             @Param("searchPattern") String searchPattern,
             @Param("openStatus") String openStatus,
             @Param("resolvedStatus") String resolvedStatus
