@@ -1,11 +1,15 @@
 package com.toir.controller.users;
 import com.toir.dto.hr.*;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.CurrentUser;
 import com.toir.security.SecurityScope;
+import com.toir.service.users.EmployeePictureService;
 import com.toir.service.users.HrService;
 import com.toir.util.PaginationUtils;
 import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
@@ -13,13 +17,18 @@ import java.util.Map;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1/hr")
@@ -38,6 +47,7 @@ public class HrController {
 
     private final HrService service;
     private final SecurityScope securityScope;
+    private final EmployeePictureService pictureService;
 
     @GetMapping("/employees")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_READ')")
@@ -158,6 +168,57 @@ public class HrController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_DELETE')")
     public ResponseEntity<Void> deleteEmployee(@PathVariable UUID id) {
         service.deleteEmployee(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping(value = "/employees/{id}/pictures", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_UPDATE')")
+    public ResponseEntity<List<EmployeePictureDto>> attachEmployeePictures(
+            @PathVariable UUID id,
+            @RequestParam("files") List<MultipartFile> files,
+            @RequestParam(value = "pictureNames", required = false) List<String> pictureNames,
+            @RequestParam(required = false) String pictureType,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(pictureService.uploadPictures(id, files, pictureNames, pictureType, user));
+    }
+
+    @GetMapping("/employees/{id}/pictures")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_READ')")
+    public ResponseEntity<Page<EmployeePictureDto>> getEmployeePictures(
+            @PathVariable UUID id,
+            @CurrentUser AuthenticatedUser user,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(PaginationUtils.page(pictureService.getPictures(id, user), page, size));
+    }
+
+    @GetMapping("/employee-pictures/{pictureId}/download")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_READ')")
+    public ResponseEntity<Resource> downloadEmployeePicture(
+            @PathVariable UUID pictureId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        EmployeePictureDto picture = pictureService.getPicture(pictureId, user);
+        Resource resource = pictureService.downloadPicture(pictureId, user);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(picture.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                        .filename(picture.originalName(), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .body(resource);
+    }
+
+    @DeleteMapping("/employee-pictures/{pictureId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EMPLOYEE_UPDATE')")
+    public ResponseEntity<Void> deleteEmployeePicture(
+            @PathVariable UUID pictureId,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        pictureService.deletePicture(pictureId, user);
         return ResponseEntity.noContent().build();
     }
 

@@ -14,7 +14,8 @@ public enum AttachmentTargetType {
     APPROVAL,
     PROCUREMENT_REQUEST,
     STOCK_MOVEMENT,
-    EQUIPMENT_COMMISSIONING;
+    EQUIPMENT_COMMISSIONING,
+    HR_EMPLOYEE;
 
     public static AttachmentTargetType from(String value) {
         if (value == null || value.isBlank()) {

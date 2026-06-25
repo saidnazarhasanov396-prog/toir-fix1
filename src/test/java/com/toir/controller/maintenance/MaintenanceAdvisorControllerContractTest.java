@@ -46,7 +46,8 @@ class MaintenanceAdvisorControllerContractTest {
                 2,
                 1,
                 "HIGH",
-                List.of("Inspect equipment")
+                List.of("Inspect equipment"),
+                List.of()
         )));
 
         mockMvc.perform(get("/api/v1/advisor/maintenance")

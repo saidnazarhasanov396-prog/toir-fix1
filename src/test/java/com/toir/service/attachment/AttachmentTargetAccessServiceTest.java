@@ -5,9 +5,11 @@ import com.toir.entity.ApprovalStep;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.projects.ProcurementRequest;
+import com.toir.entity.users.Employee;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.AttachmentTargetType;
+import com.toir.enums.FileCategory;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.CompletionActRepository;
 import com.toir.repository.ProcurementRequestRepository;
@@ -18,6 +20,7 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -72,6 +75,9 @@ class AttachmentTargetAccessServiceTest {
     @Mock
     DefectRepository defectRepository;
 
+    @Mock
+    EmployeeRepository employeeRepository;
+
     private AttachmentTargetAccessService service;
 
     @BeforeEach
@@ -87,8 +93,68 @@ class AttachmentTargetAccessServiceTest {
                 warehouseRepository,
                 scopeAccessService,
                 equipmentCommissioningActRepository,
-                defectRepository
+                defectRepository,
+                employeeRepository
         );
+    }
+
+    @Test
+    void departmentScopedUserCanAccessHrEmployeePassportAttachments() {
+        UUID employeeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Employee employee = employee(employeeId, departmentId, null);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+
+        assertThatCode(() -> service.assertCanAccess(AttachmentTargetType.HR_EMPLOYEE, employeeId))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void currentEmployeeCanAccessOwnHrEmployeePassportAttachments() {
+        UUID employeeId = UUID.randomUUID();
+        Employee employee = employee(employeeId, UUID.randomUUID(), null);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessEmployee(employeeId)).thenReturn(true);
+
+        assertThatCode(() -> service.assertCanAccess(AttachmentTargetType.HR_EMPLOYEE, employeeId))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void currentUserCanAccessOwnHrEmployeePassportAttachmentsByAssignedUser() {
+        UUID employeeId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Employee employee = employee(employeeId, UUID.randomUUID(), userId);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessAssignedUser(userId)).thenReturn(true);
+
+        assertThatCode(() -> service.assertCanAccess(AttachmentTargetType.HR_EMPLOYEE, employeeId))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void forbiddenHrEmployeePassportAttachmentScopeThrows() {
+        UUID employeeId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Employee employee = employee(employeeId, departmentId, null);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(false);
+        when(scopeAccessService.canAccessEmployee(employeeId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.assertCanAccess(AttachmentTargetType.HR_EMPLOYEE, employeeId))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("employee scope");
+    }
+
+    @Test
+    void hrEmployeeAttachmentsUsePassportFileCategory() {
+        org.assertj.core.api.Assertions.assertThat(service.fileCategoryFor(AttachmentTargetType.HR_EMPLOYEE))
+                .isEqualTo(FileCategory.PASSPORT);
     }
 
     @Test
@@ -224,5 +290,18 @@ class AttachmentTargetAccessServiceTest {
         request.setWarehouseId(warehouseId);
         request.setRequestedBy(requestedBy);
         return request;
+    }
+
+    private Employee employee(UUID employeeId, UUID departmentId, UUID userId) {
+        Employee employee = new Employee();
+        employee.setId(employeeId);
+        employee.setPersonnelNumber("EMP-" + employeeId.toString().substring(0, 8));
+        employee.setFirstName("Ali");
+        employee.setLastName("Valiyev");
+        employee.setPosition("Mechanic");
+        employee.setDepartmentId(departmentId);
+        employee.setUserId(userId);
+        employee.setActive(true);
+        return employee;
     }
 }
