@@ -28,7 +28,8 @@ public record EmployeeDto(
         String phone,
         String email,
         boolean active,
-        List<String> workRoleCodes
+        List<String> workRoleCodes,
+        EmployeePictureDto primaryPicture
 ) {
     public static EmployeeDto from(Employee e, String departmentName, String brigadeName) {
         return from(e, departmentName, brigadeName, null, List.of());
@@ -67,7 +68,42 @@ public record EmployeeDto(
                 e.getPhone(),
                 e.getEmail(),
                 e.isActive(),
-                workRoleCodes == null ? List.of() : List.copyOf(workRoleCodes));
+                workRoleCodes == null ? List.of() : List.copyOf(workRoleCodes),
+                null);
+    }
+
+    public static EmployeeDto from(
+            Employee e,
+            String departmentName,
+            String brigadeName,
+            EmployeeSpecialisationDto specialisation,
+            List<String> workRoleCodes,
+            EmployeePictureDto primaryPicture
+    ) {
+        return new EmployeeDto(
+                e.getId(),
+                e.getPersonnelNumber(),
+                e.getFirstName(),
+                e.getLastName(),
+                e.getMiddleName(),
+                e.getPosition(),
+                e.getDepartmentId(),
+                departmentName,
+                e.getBrigadeId(),
+                brigadeName,
+                e.getUserId(),
+                e.getSpecialisationId(),
+                specialisation == null ? null : specialisation.nameRu(),
+                specialisation == null ? null : specialisation.nameEn(),
+                specialisation == null ? null : specialisation.nameUz(),
+                e.getHireDate(),
+                e.getTerminatedDate(),
+                e.getGrade(),
+                e.getPhone(),
+                e.getEmail(),
+                e.isActive(),
+                workRoleCodes == null ? List.of() : List.copyOf(workRoleCodes),
+                primaryPicture);
     }
 
     public EmployeeDto(
@@ -115,7 +151,8 @@ public record EmployeeDto(
                 phone,
                 email,
                 active,
-                List.of()
+                List.of(),
+                null
         );
     }
 
@@ -160,7 +197,8 @@ public record EmployeeDto(
                 phone,
                 email,
                 active,
-                List.of()
+                List.of(),
+                null
         );
     }
 }

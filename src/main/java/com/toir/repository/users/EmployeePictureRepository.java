@@ -29,6 +29,21 @@ public interface EmployeePictureRepository extends JpaRepository<EmployeePicture
             select ep
             from EmployeePicture ep
             join fetch ep.file f
+            join fetch ep.employee employee
+            where employee.id in :employeeIds
+              and employee.isDeleted = false
+              and ep.deleted = false
+              and f.deleted = false
+            order by employee.id asc,
+              case when upper(ep.pictureType) = 'PROFILE' then 0 else 1 end,
+              ep.uploadedAt desc
+            """)
+    List<EmployeePicture> findPrimaryCandidatesByEmployeeIds(@Param("employeeIds") List<UUID> employeeIds);
+
+    @Query("""
+            select ep
+            from EmployeePicture ep
+            join fetch ep.file f
             join ep.employee employee
             where ep.id = :id
               and employee.isDeleted = false
