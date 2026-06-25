@@ -33,9 +33,25 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
                     or (:supplierType = com.toir.enums.SupplierType.BOTH and s.supplierType = com.toir.enums.SupplierType.BOTH)
                     or (:supplierType <> com.toir.enums.SupplierType.BOTH and (s.supplierType = :supplierType or s.supplierType = com.toir.enums.SupplierType.BOTH))
                   )
+            order by s.updatedAt desc
+            """)
+    List<Supplier> findAllFiltered(
+            @Param("active") Boolean active,
+            @Param("supplierType") SupplierType supplierType
+    );
+
+    @Query("""
+            select s
+            from Supplier s
+            where s.isDeleted = false
+              and (:active is null or s.active = :active)
               and (
-                    :search is null
-                    or lower(s.code) like lower(concat('%', :search, '%'))
+                    :supplierType is null
+                    or (:supplierType = com.toir.enums.SupplierType.BOTH and s.supplierType = com.toir.enums.SupplierType.BOTH)
+                    or (:supplierType <> com.toir.enums.SupplierType.BOTH and (s.supplierType = :supplierType or s.supplierType = com.toir.enums.SupplierType.BOTH))
+                  )
+              and (
+                    lower(s.code) like lower(concat('%', :search, '%'))
                     or lower(s.name) like lower(concat('%', :search, '%'))
                     or lower(coalesce(s.contactPerson, '')) like lower(concat('%', :search, '%'))
                   )

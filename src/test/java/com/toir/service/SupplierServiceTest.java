@@ -22,6 +22,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -68,13 +69,26 @@ class SupplierServiceTest {
     void findAllFiltersBySupplierTypeIncludingBothForEquipment() {
         Supplier equipmentOnly = supplier(UUID.randomUUID(), "Equipment Vendor", SupplierType.EQUIPMENT);
         Supplier both = supplier(UUID.randomUUID(), "Universal Vendor", SupplierType.BOTH);
-        when(supplierRepository.search(null, true, SupplierType.EQUIPMENT)).thenReturn(List.of(equipmentOnly, both));
+        when(supplierRepository.findAllFiltered(true, SupplierType.EQUIPMENT)).thenReturn(List.of(equipmentOnly, both));
 
         List<SupplierDto> result = service.findAll(null, true, SupplierType.EQUIPMENT);
 
         assertThat(result).extracting(SupplierDto::supplierType)
                 .containsExactly(SupplierType.EQUIPMENT, SupplierType.BOTH);
-        verify(supplierRepository).search(null, true, SupplierType.EQUIPMENT);
+        verify(supplierRepository).findAllFiltered(true, SupplierType.EQUIPMENT);
+        verify(supplierRepository, never()).search(any(), any(), any());
+    }
+
+    @Test
+    void findAllUsesTextSearchOnlyWhenSearchIsProvided() {
+        Supplier supplier = supplier(UUID.randomUUID(), "Universal Vendor", SupplierType.BOTH);
+        when(supplierRepository.search("universal", null, null)).thenReturn(List.of(supplier));
+
+        List<SupplierDto> result = service.findAll(" universal ", null, null);
+
+        assertThat(result).extracting(SupplierDto::name).containsExactly("Universal Vendor");
+        verify(supplierRepository).search("universal", null, null);
+        verify(supplierRepository, never()).findAllFiltered(any(), any());
     }
 
     @Test
