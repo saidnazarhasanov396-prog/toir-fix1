@@ -18,6 +18,7 @@ import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.FileAsset;
 import com.toir.entity.Location;
+import com.toir.entity.Supplier;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
@@ -44,6 +45,7 @@ import com.toir.enums.MeterType;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.SupplierType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -58,6 +60,7 @@ import com.toir.repository.equipment.EquipmentDocumentRepository;
 import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.service.file_management.FileService;
 import com.toir.repository.LocationRepository;
+import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -92,6 +95,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 import com.toir.dto.equipment.EquipmentStatsResponse;
@@ -161,6 +165,9 @@ class EquipmentServiceTest {
 
     @Mock
     WarehouseRepository warehouseRepository;
+
+    @Mock
+    SupplierRepository supplierRepository;
 
     @Mock
     WarehouseEquipmentItemService warehouseEquipmentItemService;
@@ -1935,6 +1942,7 @@ class EquipmentServiceTest {
     @Test
     void createPersistsWarrantyPeriodWhenWarrantyEnabled() {
         UUID departmentId = UUID.randomUUID();
+        UUID supplierId = UUID.randomUUID();
         EquipmentCreateRequest request = new EquipmentCreateRequest(
                 null,
                 "Pump P-103",
@@ -1966,10 +1974,14 @@ class EquipmentServiceTest {
                 10_000L,
                 null,
                 null,
+                null,
+                supplierId,
                 null
         );
         stubCreateFlowWithoutEnrichment("INV-P-103");
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
+        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
+                .thenReturn(Optional.of(supplier(supplierId, "Equipment Vendor", SupplierType.EQUIPMENT)));
 
         EquipmentDto created = service.create(request);
 
@@ -1980,6 +1992,152 @@ class EquipmentServiceTest {
         verify(repository).save(entityCaptor.capture());
         assertThat(entityCaptor.getValue().getWarrantyStartDate()).isEqualTo(LocalDate.of(2026, 6, 1));
         assertThat(entityCaptor.getValue().getWarrantyEndDate()).isEqualTo(LocalDate.of(2027, 6, 1));
+        assertThat(entityCaptor.getValue().getWarrantySupplierId()).isEqualTo(supplierId);
+    }
+
+    @Test
+    void createDefaultsWarrantySupplierToPurchaseSupplierWhenWarrantyEnabled() {
+        UUID departmentId = UUID.randomUUID();
+        UUID supplierId = UUID.randomUUID();
+        EquipmentCreateRequest request = new EquipmentCreateRequest(
+                null,
+                "Pump P-105",
+                "INV-P-105",
+                "TN-P-105",
+                "SN-P-105",
+                "CPK 150-400",
+                UUID.randomUUID(),
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "KSB",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                null,
+                true,
+                null,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2027, 6, 1),
+                "Pump",
+                null,
+                null,
+                null,
+                10_000L,
+                null,
+                null,
+                null,
+                supplierId,
+                null
+        );
+        stubCreateFlowWithoutEnrichment("INV-P-105");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
+        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
+                .thenReturn(Optional.of(supplier(supplierId, "Equipment Vendor", SupplierType.EQUIPMENT)));
+
+        service.create(request);
+
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getSupplierId()).isEqualTo(supplierId);
+        assertThat(entityCaptor.getValue().getWarrantySupplierId()).isEqualTo(supplierId);
+    }
+
+    @Test
+    void createRejectsWarrantyEnabledWithoutAnySupplier() {
+        EquipmentCreateRequest request = new EquipmentCreateRequest(
+                null,
+                "Pump P-106",
+                "INV-P-106",
+                "TN-P-106",
+                "SN-P-106",
+                "CPK 150-400",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                "KSB",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                null,
+                true,
+                null,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2027, 6, 1),
+                "Pump",
+                null,
+                null,
+                null,
+                10_000L,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Warranty supplier is required");
+                });
+    }
+
+    @Test
+    void createRejectsSupplierThatDoesNotSupportEquipment() {
+        UUID supplierId = UUID.randomUUID();
+        EquipmentCreateRequest request = new EquipmentCreateRequest(
+                null,
+                "Pump P-107",
+                "INV-P-107",
+                "TN-P-107",
+                "SN-P-107",
+                "CPK 150-400",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                "KSB",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                "Pump",
+                null,
+                null,
+                null,
+                10_000L,
+                null,
+                null,
+                null,
+                supplierId,
+                null
+        );
+        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
+                .thenReturn(Optional.of(supplier(supplierId, "Spare Vendor", SupplierType.SPARE_PART)));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("EQUIPMENT");
+                });
     }
 
     @Test
@@ -3199,6 +3357,16 @@ class EquipmentServiceTest {
         equipment.setStatus(EquipmentStatus.ACTIVE);
         equipment.setCategory(EquipmentCategory.PRODUCTION_EQUIPMENT);
         return equipment;
+    }
+
+    private Supplier supplier(UUID id, String name, SupplierType supplierType) {
+        Supplier supplier = new Supplier();
+        supplier.setId(id);
+        supplier.setCode("SUP-" + id.toString().substring(0, 8));
+        supplier.setName(name);
+        supplier.setActive(true);
+        supplier.setSupplierType(supplierType);
+        return supplier;
     }
 
     private RepairRequest repairRequest(UUID equipmentId, RequestStatus status) {

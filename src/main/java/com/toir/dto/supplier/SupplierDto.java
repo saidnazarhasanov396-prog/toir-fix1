@@ -1,6 +1,7 @@
 package com.toir.dto.supplier;
 
 import com.toir.entity.Supplier;
+import com.toir.enums.SupplierType;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -15,6 +16,7 @@ public record SupplierDto(
         String address,
         String taxNumber,
         Boolean active,
+        SupplierType supplierType,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -29,6 +31,7 @@ public record SupplierDto(
                 supplier.getAddress(),
                 supplier.getTaxNumber(),
                 supplier.getActive(),
+                supplier.getSupplierType() == null ? SupplierType.BOTH : supplier.getSupplierType(),
                 supplier.getCreatedAt(),
                 supplier.getUpdatedAt()
         );

@@ -11,6 +11,7 @@ import com.toir.entity.InventoryTransaction;
 import com.toir.entity.SparePart;
 import com.toir.entity.SparePartType;
 import com.toir.entity.StockMovement;
+import com.toir.entity.Supplier;
 import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.warehouse.Warehouse;
@@ -20,6 +21,7 @@ import com.toir.enums.AuditModule;
 import com.toir.enums.InventoryItemKind;
 import com.toir.enums.InventoryTransactionType;
 import com.toir.enums.SparePartUnit;
+import com.toir.enums.SupplierType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.LocationRepository;
@@ -476,6 +478,7 @@ public class SparePartService {
         entity.setSpecification(request.specification());
         entity.setManufacturer(request.manufacturer());
         entity.setMinStock(request.minStock());
+        validatePreferredSupplier(request.preferredSupplierId());
         entity.setPreferredSupplierId(request.preferredSupplierId());
         entity.setLeadTimeDays(request.leadTimeDays());
         entity.setLastPurchasePrice(request.lastPurchasePrice());
@@ -493,6 +496,21 @@ public class SparePartService {
         return supplierRepository.findByIdAndIsDeletedFalse(dto.preferredSupplierId())
                 .map(supplier -> dto.withPreferredSupplierName(supplier.getName()))
                 .orElse(dto);
+    }
+
+    private void validatePreferredSupplier(UUID supplierId) {
+        if (supplierId == null) {
+            return;
+        }
+        Supplier supplier = supplierRepository.findByIdAndIsDeletedFalse(supplierId)
+                .orElseThrow(() -> RestException.notFound("Supplier not found: " + supplierId));
+        if (!Boolean.TRUE.equals(supplier.getActive())) {
+            throw RestException.badRequest("Inactive suppliers cannot be selected for spare parts");
+        }
+        SupplierType actualType = supplier.getSupplierType() == null ? SupplierType.BOTH : supplier.getSupplierType();
+        if (!actualType.supports(SupplierType.SPARE_PART)) {
+            throw RestException.badRequest("Supplier must support SPARE_PART for spare parts");
+        }
     }
 
     private String resolveUnit(String rawUnit, SparePartType type) {

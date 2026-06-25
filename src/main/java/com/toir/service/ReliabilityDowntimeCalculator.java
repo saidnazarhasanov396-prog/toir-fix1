@@ -54,6 +54,8 @@ final class ReliabilityDowntimeCalculator {
         return new EquipmentReliability(
                 failureSlices.size(),
                 totalDowntimeMinutes,
+                observedHours,
+                operatingHours,
                 mtbfHours,
                 mttrHours,
                 availabilityPct,
@@ -257,6 +259,8 @@ final class ReliabilityDowntimeCalculator {
 
     record EquipmentReliability(int failureEvents,
                                 long totalDowntimeMinutes,
+                                double observedHours,
+                                double operatingHours,
                                 Double mtbfHours,
                                 Double mttrHours,
                                 double availabilityPct,

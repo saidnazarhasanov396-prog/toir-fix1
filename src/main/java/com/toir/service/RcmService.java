@@ -1,4 +1,6 @@
 package com.toir.service;
+
+import com.toir.dto.analytics.MetricExplanationDto;
 import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.entity.RcmSnapshot;
 import com.toir.exception.RestException;
@@ -36,14 +38,23 @@ public class RcmService {
     private final DefectRepository defectRepository;
     private final ReliabilityMetricRepository reliabilityMetricRepository;
     private final RcmSnapshotRepository snapshotRepository;
+    private final MetricExplanationService metricExplanationService;
 
 
 
     public List<EquipmentRiskScore> computeAll() {
-        return computeAll("riskScore", "desc");
+        return computeAll("riskScore", "desc", null);
+    }
+
+    public List<EquipmentRiskScore> computeAll(String lang) {
+        return computeAll("riskScore", "desc", lang);
     }
 
     public List<EquipmentRiskScore> computeAll(String sortBy, String sortDir) {
+        return computeAll(sortBy, sortDir, null);
+    }
+
+    public List<EquipmentRiskScore> computeAll(String sortBy, String sortDir, String lang) {
         Map<UUID, CriticalityClass> critById = criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(CriticalityClass::getId, c -> c));
         Map<UUID, Long> openDefectsByEq = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -53,17 +64,25 @@ public class RcmService {
                 .collect(Collectors.toMap(ReliabilityMetric::getEquipmentId, m -> m, (a, b) -> a));
 
         return equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .map(eq -> score(eq, critById, openDefectsByEq, metricByEq))
+                .map(eq -> score(eq, critById, openDefectsByEq, metricByEq, lang))
                 .sorted(riskScoreComparator(sortBy, sortDir))
                 .toList();
     }
 
     public List<EquipmentRiskScore> topN(int n) {
-        return topN(n, "riskScore", "desc");
+        return topN(n, "riskScore", "desc", null);
+    }
+
+    public List<EquipmentRiskScore> topN(int n, String lang) {
+        return topN(n, "riskScore", "desc", lang);
     }
 
     public List<EquipmentRiskScore> topN(int n, String sortBy, String sortDir) {
-        return computeAll(sortBy, sortDir).stream().limit(n).toList();
+        return topN(n, sortBy, sortDir, null);
+    }
+
+    public List<EquipmentRiskScore> topN(int n, String sortBy, String sortDir, String lang) {
+        return computeAll(sortBy, sortDir, lang).stream().limit(n).toList();
     }
 
     /** Рассчитывает RCM и сохраняет snapshot-строки на текущий момент. */
@@ -100,9 +119,14 @@ public class RcmService {
     private EquipmentRiskScore score(Equipment eq,
                                      Map<UUID, CriticalityClass> critById,
                                      Map<UUID, Long> openDefectsByEq,
-                                     Map<UUID, ReliabilityMetric> metricByEq) {
+                                     Map<UUID, ReliabilityMetric> metricByEq,
+                                     String lang) {
         CriticalityClass cls = eq.getCriticalityClassId() != null ? critById.get(eq.getCriticalityClassId()) : null;
         int consequence = 0;
+        int safetyImpact = 0;
+        int productionImpact = 0;
+        int ecologicalImpact = 0;
+        int energyImpact = 0;
         Integer repairPriority = null;
         String clsCode = null;
         String clsName = null;
@@ -110,10 +134,11 @@ public class RcmService {
             clsCode = cls.getCode();
             clsName = cls.getName();
             repairPriority = cls.getRepairPriority();
-            consequence += nz(cls.getSafetyImpact());
-            consequence += nz(cls.getProductionImpact());
-            consequence += nz(cls.getEcologicalImpact());
-            consequence += nz(cls.getEnergyImpact());
+            safetyImpact = nz(cls.getSafetyImpact());
+            productionImpact = nz(cls.getProductionImpact());
+            ecologicalImpact = nz(cls.getEcologicalImpact());
+            energyImpact = nz(cls.getEnergyImpact());
+            consequence = safetyImpact + productionImpact + ecologicalImpact + energyImpact;
         }
         long openDefects = openDefectsByEq.getOrDefault(eq.getId(), 0L);
         ReliabilityMetric m = metricByEq.get(eq.getId());
@@ -129,10 +154,23 @@ public class RcmService {
         else probability = 1;
 
         int risk = Math.min(100, consequence * probability);
+        MetricExplanationDto explanation = metricExplanationService.rcmRisk(
+                lang,
+                safetyImpact,
+                productionImpact,
+                ecologicalImpact,
+                energyImpact,
+                consequence,
+                probability,
+                risk,
+                openDefects,
+                mtbf,
+                mttr
+        );
         return new EquipmentRiskScore(
                 eq.getId(), eq.getCode(), eq.getName(), clsCode, clsName,
                 consequence, probability, risk, repairPriority,
-                openDefects, mtbf, mttr
+                openDefects, mtbf, mttr, explanation
         );
     }
 

@@ -1,8 +1,10 @@
 package com.toir.service;
 
 import com.toir.dto.purchaseorder.ProcurementRequestPurchaseOrderRequest;
+import com.toir.dto.purchaseorder.PurchaseOrderLineRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderReceiveLineRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderReceiveRequest;
+import com.toir.dto.purchaseorder.PurchaseOrderRequest;
 import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.InventoryTransaction;
 import com.toir.entity.PurchaseOrder;
@@ -19,6 +21,7 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.PurchaseOrderStatus;
 import com.toir.enums.StockMovementSourceType;
+import com.toir.enums.SupplierType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.ProcurementRequestRepository;
@@ -46,6 +49,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -105,6 +112,61 @@ class PurchaseOrderServiceTest {
                 .hasMessageContaining("Equipment procurement requests must be received through procurement receipt");
 
         verifyNoInteractions(supplierService, sparePartRepository, warehouseRepository);
+    }
+
+    @Test
+    void createRejectsSupplierThatDoesNotSupportSpareParts() {
+        UUID supplierId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        lenient().when(supplierService.loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders"))
+                .thenThrow(RestException.badRequest("Supplier must support SPARE_PART for purchase orders"));
+
+        assertThatThrownBy(() -> service.create(new PurchaseOrderRequest(
+                supplierId,
+                warehouseId,
+                LocalDate.of(2026, 6, 30),
+                null,
+                List.of(new PurchaseOrderLineRequest(sparePartId, BigDecimal.ONE, BigDecimal.TEN))
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("SPARE_PART");
+                });
+
+        verify(supplierService).loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders");
+        verifyNoInteractions(warehouseRepository, sparePartRepository, purchaseOrderRepository);
+    }
+
+    @Test
+    void createFromProcurementRequestUsesSparePartSupplierScope() {
+        UUID procurementId = UUID.randomUUID();
+        UUID procurementLineId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID supplierId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        ProcurementRequest procurement = procurement(procurementId, procurementLineId, warehouseId, sparePartId);
+        procurement.setStatus(ProcurementRequestStatus.APPROVED);
+        SparePart sparePart = sparePart(sparePartId);
+        sparePart.setPreferredSupplierId(supplierId);
+        when(procurementRequestRepository.findByIdAndIsDeletedFalse(procurementId)).thenReturn(Optional.of(procurement));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse(warehouseId)));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        lenient().when(supplierService.loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders"))
+                .thenThrow(RestException.badRequest("Supplier must support SPARE_PART for purchase orders"));
+
+        assertThatThrownBy(() -> service.createFromProcurementRequest(
+                procurementId,
+                new ProcurementRequestPurchaseOrderRequest(null, null, null)
+        ))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("SPARE_PART");
+                });
+
+        verify(supplierService).loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders");
+        verify(purchaseOrderRepository, never()).save(any());
     }
 
     @Test

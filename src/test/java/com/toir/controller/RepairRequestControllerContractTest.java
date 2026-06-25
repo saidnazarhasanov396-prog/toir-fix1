@@ -6,6 +6,7 @@ import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestFilterRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
+import com.toir.dto.repairrequest.WarrantyPreviewResponse;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.entity.repair.RepairRequest;
@@ -35,6 +36,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -215,6 +217,41 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.linkedDefects").isEmpty())
                 .andExpect(jsonPath("$.linkedWorkOrders").isArray())
                 .andExpect(jsonPath("$.linkedWorkOrders").isEmpty());
+    }
+
+    @Test
+    void warrantyPreviewReturnsSupplierSnapshotShapeAndChecksScope() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID supplierId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(service.resolveDepartmentIdForEquipment(equipmentId)).thenReturn(departmentId);
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+        when(service.getWarrantyPreview(equipmentId)).thenReturn(new WarrantyPreviewResponse(
+                equipmentId,
+                true,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2027, 6, 1),
+                supplierId,
+                "KSB Service",
+                "Ali Valiyev",
+                "+998901234567",
+                "service@ksb.example"
+        ));
+
+        mockMvc.perform(get("/api/v1/repair-requests/warranty-preview")
+                        .param("equipmentId", equipmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.currentlyActive").value(true))
+                .andExpect(jsonPath("$.warrantySupplierId").value(supplierId.toString()))
+                .andExpect(jsonPath("$.warrantySupplierName").value("KSB Service"))
+                .andExpect(jsonPath("$.warrantySupplierContactPerson").value("Ali Valiyev"))
+                .andExpect(jsonPath("$.warrantySupplierPhone").value("+998901234567"))
+                .andExpect(jsonPath("$.warrantySupplierEmail").value("service@ksb.example"));
+
+        verify(service).resolveDepartmentIdForEquipment(equipmentId);
+        verify(service).getWarrantyPreview(equipmentId);
     }
 
     @Test

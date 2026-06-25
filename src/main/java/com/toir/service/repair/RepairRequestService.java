@@ -36,6 +36,7 @@ import com.toir.enums.NotificationSeverity;
 import com.toir.enums.UserStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.MeterReadingRepository;
+import com.toir.repository.SupplierRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -75,6 +76,7 @@ import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestTemplateSummaryDto;
 import com.toir.dto.repairrequest.WarrantyDecisionRequest;
+import com.toir.dto.repairrequest.WarrantyPreviewResponse;
 import com.toir.dto.repairrequest.WarrantyStatusResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -105,6 +107,7 @@ public class RepairRequestService {
 
     private final RepairRequestRepository repository;
     private final EquipmentRepository equipmentRepository;
+    private final SupplierRepository supplierRepository;
     private final DepartmentRepository departmentRepository;
     private final LocationRepository locationRepository;
     private final UserRepository userRepository;
@@ -203,9 +206,20 @@ public class RepairRequestService {
         }
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + request.equipmentId()));
-        UUID equipmentDepartmentId = equipment.getResponsibleDepartmentId() != null
-                ? equipment.getResponsibleDepartmentId()
-                : equipment.getDepartmentId();
+        UUID equipmentDepartmentId = departmentIdForEquipment(equipment);
+        if (equipmentDepartmentId == null) {
+            throw RestException.badRequest(
+                    "departmentId is required because selected equipment has no responsible or physical department"
+            );
+        }
+        return equipmentDepartmentId;
+    }
+
+    @Transactional(readOnly = true)
+    public UUID resolveDepartmentIdForEquipment(UUID equipmentId) {
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
+        UUID equipmentDepartmentId = departmentIdForEquipment(equipment);
         if (equipmentDepartmentId == null) {
             throw RestException.badRequest(
                     "departmentId is required because selected equipment has no responsible or physical department"
@@ -236,9 +250,7 @@ public class RepairRequestService {
                 ? null
                 : templateSelections.getFirst().template().getId());
         entity.setEquipmentId(request.equipmentId());
-        boolean warrantyActive = isWarrantyActive(request.equipmentId());
-        entity.setWarrantyActiveAtCreation(warrantyActive);
-        entity.setWarrantyHandling(warrantyActive ? null : WarrantyHandling.NO_WARRANTY_ISSUE);
+        applyWarrantySnapshot(entity, warrantyPreviewForCreate(request.equipmentId()));
         entity.setDepartmentId(effectiveDepartmentId);
         entity.setLocationId(request.locationId());
         entity.setReporterId(request.reporterId());
@@ -311,6 +323,13 @@ public class RepairRequestService {
     }
 
     @Transactional(readOnly = true)
+    public WarrantyPreviewResponse getWarrantyPreview(UUID equipmentId) {
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
+        return buildWarrantyPreview(equipment);
+    }
+
+    @Transactional(readOnly = true)
     public WarrantyStatusResponse getWarrantyStatus(UUID id) {
         RepairRequest entity = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Repair request not found: " + id));
@@ -322,7 +341,14 @@ public class RepairRequestService {
                 entity.getWarrantyDecisionComment(),
                 entity.getSupplierContactedAt(),
                 entity.getSupplierResponse(),
-                entity.getEmergencyReason()
+                entity.getEmergencyReason(),
+                entity.getWarrantySupplierId(),
+                entity.getWarrantySupplierName(),
+                entity.getWarrantySupplierContactPerson(),
+                entity.getWarrantySupplierPhone(),
+                entity.getWarrantySupplierEmail(),
+                entity.getWarrantyStartDateAtCreation(),
+                entity.getWarrantyEndDateAtCreation()
         );
     }
 
@@ -1307,7 +1333,14 @@ public class RepairRequestService {
                 r.getWarrantyDecisionComment(),
                 r.getSupplierContactedAt(),
                 r.getSupplierResponse(),
-                r.getEmergencyReason()
+                r.getEmergencyReason(),
+                r.getWarrantySupplierId(),
+                r.getWarrantySupplierName(),
+                r.getWarrantySupplierContactPerson(),
+                r.getWarrantySupplierPhone(),
+                r.getWarrantySupplierEmail(),
+                r.getWarrantyStartDateAtCreation(),
+                r.getWarrantyEndDateAtCreation()
         );
     }
 
@@ -1626,6 +1659,63 @@ public class RepairRequestService {
         return new PageImpl<>(dtos, page.getPageable(), page.getTotalElements());
     }
 
+    private WarrantyPreviewResponse warrantyPreviewForCreate(UUID equipmentId) {
+        if (equipmentId == null) {
+            return emptyWarrantyPreview(null);
+        }
+        return equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .map(this::buildWarrantyPreview)
+                .orElseGet(() -> emptyWarrantyPreview(equipmentId));
+    }
+
+    private WarrantyPreviewResponse buildWarrantyPreview(Equipment equipment) {
+        LocalDate warrantyStart = equipment.getWarrantyStartDate();
+        LocalDate warrantyEnd = effectiveWarrantyEnd(equipment);
+        UUID supplierId = warrantySupplierId(equipment);
+        Supplier supplier = supplierId == null
+                ? null
+                : supplierRepository.findByIdAndIsDeletedFalse(supplierId).orElse(null);
+        return new WarrantyPreviewResponse(
+                equipment.getId(),
+                hasActiveWarranty(equipment),
+                warrantyStart,
+                warrantyEnd,
+                supplierId,
+                supplier == null ? null : supplier.getName(),
+                supplier == null ? null : supplier.getContactPerson(),
+                supplier == null ? null : supplier.getPhone(),
+                supplier == null ? null : supplier.getEmail()
+        );
+    }
+
+    private WarrantyPreviewResponse emptyWarrantyPreview(UUID equipmentId) {
+        return new WarrantyPreviewResponse(equipmentId, false, null, null, null, null, null, null, null);
+    }
+
+    private void applyWarrantySnapshot(RepairRequest entity, WarrantyPreviewResponse preview) {
+        entity.setWarrantyActiveAtCreation(preview.currentlyActive());
+        entity.setWarrantyHandling(preview.currentlyActive() ? null : WarrantyHandling.NO_WARRANTY_ISSUE);
+        entity.setWarrantySupplierId(preview.warrantySupplierId());
+        entity.setWarrantySupplierName(preview.warrantySupplierName());
+        entity.setWarrantySupplierContactPerson(preview.warrantySupplierContactPerson());
+        entity.setWarrantySupplierPhone(preview.warrantySupplierPhone());
+        entity.setWarrantySupplierEmail(preview.warrantySupplierEmail());
+        entity.setWarrantyStartDateAtCreation(preview.warrantyStartDate());
+        entity.setWarrantyEndDateAtCreation(preview.warrantyEndDate());
+    }
+
+    private UUID departmentIdForEquipment(Equipment equipment) {
+        return equipment.getResponsibleDepartmentId() != null
+                ? equipment.getResponsibleDepartmentId()
+                : equipment.getDepartmentId();
+    }
+
+    private UUID warrantySupplierId(Equipment equipment) {
+        return equipment.getWarrantySupplierId() != null
+                ? equipment.getWarrantySupplierId()
+                : equipment.getSupplierId();
+    }
+
     private boolean isWarrantyActive(UUID equipmentId) {
         if (equipmentId == null) {
             return false;
@@ -1640,10 +1730,18 @@ public class RepairRequestService {
             return false;
         }
         LocalDate today = LocalDate.now();
-        LocalDate effectiveEnd = equipment.getWarrantyEndDate() != null
+        LocalDate effectiveStart = equipment.getWarrantyStartDate();
+        if (effectiveStart != null && effectiveStart.isAfter(today)) {
+            return false;
+        }
+        LocalDate effectiveEnd = effectiveWarrantyEnd(equipment);
+        return effectiveEnd == null || !effectiveEnd.isBefore(today);
+    }
+
+    private LocalDate effectiveWarrantyEnd(Equipment equipment) {
+        return equipment.getWarrantyEndDate() != null
                 ? equipment.getWarrantyEndDate()
                 : equipment.getWarrantyUntil();
-        return effectiveEnd == null || !effectiveEnd.isBefore(today);
     }
 
     private RepairRequest getOrThrow(UUID id) {
