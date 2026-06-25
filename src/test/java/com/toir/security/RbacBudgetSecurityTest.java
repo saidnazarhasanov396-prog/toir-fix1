@@ -6,7 +6,10 @@ import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.enums.BudgetStatus;
 import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -84,6 +87,15 @@ class RbacBudgetSecurityTest {
     EmployeeRepository employeeRepository;
 
     @MockBean
+    ContractorWorkRepository contractorWorkRepository;
+
+    @MockBean
+    ContractorRepository contractorRepository;
+
+    @MockBean
+    WorkOrderRepository workOrderRepository;
+
+    @MockBean
     FinanceScopeService financeScopeService;
 
     @MockBean
@@ -127,7 +139,7 @@ class RbacBudgetSecurityTest {
     @WithMockUser(authorities = PermissionConstants.BUDGET_READ)
     void budgetReadCanReadListDetailAndSummary() throws Exception {
         UUID budgetId = UUID.randomUUID();
-        when(budgetService.findByYear(2026)).thenReturn(List.of());
+        when(budgetService.findFiltered(eq(2026), any(), any(), any(), any())).thenReturn(List.of());
         when(budgetService.findById(budgetId)).thenReturn(budgetDto(budgetId));
         when(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
@@ -144,7 +156,7 @@ class RbacBudgetSecurityTest {
     @Test
     @WithMockUser(authorities = "SYSTEM_ADMIN")
     void systemAdminCanReadBudgets() throws Exception {
-        when(budgetService.findByYear(2026)).thenReturn(List.of());
+        when(budgetService.findFiltered(eq(2026), any(), any(), any(), any())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/budgets?year=2026&page=0&size=1"))
                 .andExpect(status().isOk());
@@ -153,7 +165,7 @@ class RbacBudgetSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.WILDCARD)
     void wildcardCanReadBudgets() throws Exception {
-        when(budgetService.findByYear(2026)).thenReturn(List.of());
+        when(budgetService.findFiltered(eq(2026), any(), any(), any(), any())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/budgets?year=2026&page=0&size=1"))
                 .andExpect(status().isOk());

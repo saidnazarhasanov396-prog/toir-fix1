@@ -1,15 +1,25 @@
 package com.toir.controller;
 
 import com.toir.entity.projects.ActualCost;
+import com.toir.entity.contractors.Contractor;
+import com.toir.entity.contractors.ContractorWork;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.projects.BudgetLine;
+import com.toir.entity.projects.CostCategory;
+import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.users.User;
 import com.toir.dto.budget.ActualCostRegisterSummary;
 import com.toir.dto.financialreview.ActualCostReviewItem;
 import com.toir.dto.financialreview.ActualCostReviewActivityItem;
 import com.toir.dto.financialreview.ActualCostReviewHandoverItem;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.BudgetStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -27,8 +37,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.nullValue;
@@ -64,6 +77,15 @@ class BudgetSummaryControllerContractTest {
     EmployeeRepository employeeRepository;
 
     @Mock
+    ContractorWorkRepository contractorWorkRepository;
+
+    @Mock
+    ContractorRepository contractorRepository;
+
+    @Mock
+    WorkOrderRepository workOrderRepository;
+
+    @Mock
     FinanceScopeService financeScopeService;
 
     @Mock
@@ -81,6 +103,9 @@ class BudgetSummaryControllerContractTest {
                         departmentRepository,
                         userRepository,
                         employeeRepository,
+                        contractorWorkRepository,
+                        contractorRepository,
+                        workOrderRepository,
                         financeScopeService,
                         actualCostReviewFacadeService))
                 .setControllerAdvice(new GlobalExceptionHandler())
@@ -179,11 +204,102 @@ class BudgetSummaryControllerContractTest {
                         .param("contractorId", contractorId.toString())
                         .param("approvalRoleCode", "FINANCE_MANAGER")
                         .param("attentionMode", "DUE_SOON")
-                        .param("reminderWindowHours", "4")
-                        .param("myQueue", "true"))
+                        .param("reminderWindowHours", "4"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].id").value(matching.id().toString()));
+    }
+
+    @Test
+    void contractorWorkRecommendationReturnsFrontendReflectionShape() throws Exception {
+        UUID contractorWorkId = UUID.randomUUID();
+        UUID contractorId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID categoryId = UUID.randomUUID();
+        UUID budgetId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        LocalDate now = LocalDate.now(ZoneOffset.UTC);
+
+        ContractorWork contractorWork = new ContractorWork();
+        ReflectionTestUtils.setField(contractorWork, "id", contractorWorkId);
+        contractorWork.setContractorId(contractorId);
+        contractorWork.setWorkOrderId(workOrderId);
+        contractorWork.setDescription("Pump overhaul");
+        contractorWork.setCost(500.0);
+
+        Contractor contractor = new Contractor();
+        ReflectionTestUtils.setField(contractor, "id", contractorId);
+        contractor.setCode("CTR-1");
+        contractor.setName("Contractor One");
+
+        WorkOrder workOrder = new WorkOrder();
+        ReflectionTestUtils.setField(workOrder, "id", workOrderId);
+        workOrder.setNumber("WO-1");
+        workOrder.setTitle("Pump repair");
+        workOrder.setDepartmentId(departmentId);
+
+        CostCategory category = new CostCategory();
+        ReflectionTestUtils.setField(category, "id", categoryId);
+        category.setCode("CTR");
+        category.setName("Contractor");
+
+        MaintenanceBudget budget = new MaintenanceBudget();
+        ReflectionTestUtils.setField(budget, "id", budgetId);
+        budget.setYear(now.getYear());
+        budget.setMonth(now.getMonthValue());
+        budget.setDepartmentId(departmentId);
+        budget.setStatus(BudgetStatus.APPROVED);
+
+        BudgetLine line = new BudgetLine();
+        ReflectionTestUtils.setField(line, "id", budgetLineId);
+        line.setBudget(budget);
+        line.setCostCategoryId(categoryId);
+        line.setDescription("Contractor works");
+        line.setPlannedAmount(1000.0);
+
+        ActualCost approved = actualCost(UUID.randomUUID());
+        approved.setWorkOrderId(workOrderId);
+        approved.setContractorWorkId(contractorWorkId);
+        approved.setCostCategoryId(categoryId);
+        approved.setBudgetLineId(budgetLineId);
+        approved.setStatus(ActualCostStatus.APPROVED);
+        approved.setAmount(200.0);
+        ActualCost pending = actualCost(UUID.randomUUID());
+        pending.setWorkOrderId(workOrderId);
+        pending.setContractorWorkId(contractorWorkId);
+        pending.setCostCategoryId(categoryId);
+        pending.setBudgetLineId(budgetLineId);
+        pending.setStatus(ActualCostStatus.PENDING);
+        pending.setAmount(100.0);
+
+        when(contractorWorkRepository.findByIdAndIsDeletedFalse(contractorWorkId)).thenReturn(Optional.of(contractorWork));
+        when(contractorRepository.findByIdAndIsDeletedFalse(contractorId)).thenReturn(Optional.of(contractor));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(actualCostRepository.findAllByContractorWorkIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(contractorWorkId)))
+                .thenReturn(List.of(approved, pending));
+        when(actualCostRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of(approved));
+        when(costCategoryRepository.findByIdAndIsDeletedFalse(categoryId)).thenReturn(Optional.of(category));
+        when(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(budget));
+        when(financeScopeService.filterBudgets(any())).thenReturn(List.of(budget));
+        when(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(line));
+        when(financeScopeService.filterBudgetLines(any())).thenReturn(List.of(line));
+
+        mockMvc.perform(get("/api/v1/budgets/contractor-works/{id}/recommendation", contractorWorkId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contractorWork.id").value(contractorWorkId.toString()))
+                .andExpect(jsonPath("$.contractorWork.contractor.id").value(contractorId.toString()))
+                .andExpect(jsonPath("$.expectedAmount").value(500.0))
+                .andExpect(jsonPath("$.reflectedAmount").value(200.0))
+                .andExpect(jsonPath("$.pendingAmount").value(100.0))
+                .andExpect(jsonPath("$.submittedAmount").value(300.0))
+                .andExpect(jsonPath("$.remainingAmount").value(300.0))
+                .andExpect(jsonPath("$.remainingSubmissionAmount").value(200.0))
+                .andExpect(jsonPath("$.reflectionStatus").value("PARTIAL"))
+                .andExpect(jsonPath("$.recommendedCostCategory.id").value(categoryId.toString()))
+                .andExpect(jsonPath("$.recommendedBudget.id").value(budgetId.toString()))
+                .andExpect(jsonPath("$.recommendedBudgetLine.id").value(budgetLineId.toString()));
     }
 
     @Test

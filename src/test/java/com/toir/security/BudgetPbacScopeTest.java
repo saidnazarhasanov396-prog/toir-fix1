@@ -71,6 +71,32 @@ class BudgetPbacScopeTest {
     }
 
     @Test
+    void scopeAdminCanFilterBudgetsByYearMonthDepartmentAndSort() {
+        UUID targetDepartmentId = UUID.randomUUID();
+        MaintenanceBudget oldBudget = budget(UUID.randomUUID(), targetDepartmentId, BudgetStatus.DRAFT);
+        oldBudget.setYear(2025);
+        oldBudget.setTotalPlanned(900);
+        MaintenanceBudget wrongMonth = budget(UUID.randomUUID(), targetDepartmentId, BudgetStatus.APPROVED);
+        wrongMonth.setMonth(4);
+        wrongMonth.setTotalPlanned(800);
+        MaintenanceBudget smaller = budget(UUID.randomUUID(), targetDepartmentId, BudgetStatus.APPROVED);
+        smaller.setTotalPlanned(100);
+        MaintenanceBudget larger = budget(UUID.randomUUID(), targetDepartmentId, BudgetStatus.APPROVED);
+        larger.setTotalPlanned(300);
+        MaintenanceBudget wrongDepartment = budget(UUID.randomUUID(), UUID.randomUUID(), BudgetStatus.APPROVED);
+        wrongDepartment.setTotalPlanned(500);
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(oldBudget, wrongMonth, smaller, larger, wrongDepartment));
+
+        var result = service.findFiltered(2026, 5, targetDepartmentId, "totalPlanned", "desc");
+
+        assertThat(result).extracting(MaintenanceBudgetDto::id)
+                .containsExactly(larger.getId(), smaller.getId());
+    }
+
+    @Test
     void nonAdminWithoutDepartmentCannotReceiveGlobalBudgets() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);

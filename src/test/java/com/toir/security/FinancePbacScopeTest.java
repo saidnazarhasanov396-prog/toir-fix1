@@ -8,7 +8,10 @@ import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.ActualCostStatus;
 import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -41,6 +44,9 @@ class FinancePbacScopeTest {
     DepartmentRepository departmentRepository;
     UserRepository userRepository;
     EmployeeRepository employeeRepository;
+    ContractorWorkRepository contractorWorkRepository;
+    ContractorRepository contractorRepository;
+    WorkOrderRepository workOrderRepository;
     FinanceScopeService financeScopeService;
     ActualCostReviewFacadeService actualCostReviewFacadeService;
     BudgetSummaryController controller;
@@ -54,6 +60,9 @@ class FinancePbacScopeTest {
         departmentRepository = mock(DepartmentRepository.class);
         userRepository = mock(UserRepository.class);
         employeeRepository = mock(EmployeeRepository.class);
+        contractorWorkRepository = mock(ContractorWorkRepository.class);
+        contractorRepository = mock(ContractorRepository.class);
+        workOrderRepository = mock(WorkOrderRepository.class);
         financeScopeService = mock(FinanceScopeService.class);
         actualCostReviewFacadeService = mock(ActualCostReviewFacadeService.class);
         controller = new BudgetSummaryController(
@@ -64,6 +73,9 @@ class FinancePbacScopeTest {
                 departmentRepository,
                 userRepository,
                 employeeRepository,
+                contractorWorkRepository,
+                contractorRepository,
+                workOrderRepository,
                 financeScopeService,
                 actualCostReviewFacadeService
         );
@@ -89,6 +101,51 @@ class FinancePbacScopeTest {
         assertThat(response.getBody().items()).hasSize(1);
         assertThat(response.getBody().items().getFirst().id()).isEqualTo(allowedBudget.getId());
         assertThat(response.getBody().totalPlanned()).isEqualTo(allowedBudget.getTotalPlanned());
+    }
+
+    @Test
+    void budgetSummaryReportsApprovedPendingAvailableAndUnallocatedPipeline() {
+        MaintenanceBudget budget = budget(UUID.randomUUID());
+        budget.setTotalPlanned(1000);
+        budget.setTotalActual(0);
+        BudgetLine line = line(UUID.randomUUID(), budget);
+        line.setPlannedAmount(1000);
+        line.setActualAmount(0);
+        ActualCost approved = actualCost(UUID.randomUUID());
+        approved.setBudgetLineId(line.getId());
+        approved.setStatus(ActualCostStatus.APPROVED);
+        approved.setAmount(600);
+        ActualCost pending = actualCost(UUID.randomUUID());
+        pending.setBudgetLineId(line.getId());
+        pending.setStatus(ActualCostStatus.PENDING);
+        pending.setAmount(350);
+        ActualCost unallocated = actualCost(UUID.randomUUID());
+        unallocated.setBudgetLineId(null);
+        unallocated.setStatus(ActualCostStatus.PENDING);
+        unallocated.setAmount(25);
+
+        when(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(budget));
+        when(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(line));
+        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(approved, pending, unallocated));
+        when(costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+        when(financeScopeService.filterBudgets(any())).thenReturn(List.of(budget));
+        when(financeScopeService.filterBudgetLines(any())).thenReturn(List.of(line));
+        when(financeScopeService.filterActualCosts(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = controller.summary(2026, 5, budget.getDepartmentId()).getBody();
+
+        assertThat(response.totalActual()).isEqualTo(600);
+        assertThat(response.totalCommitted()).isEqualTo(350);
+        assertThat(response.pendingReviewAmount()).isEqualTo(350);
+        assertThat(response.totalAvailable()).isEqualTo(50);
+        assertThat(response.unallocatedActualAmount()).isEqualTo(25);
+        assertThat(response.atRiskBudgetLineCount()).isEqualTo(1);
+        assertThat(response.overBudgetLineCount()).isZero();
+        assertThat(response.byCategory().getFirst().actualAmount()).isEqualTo(600);
+        assertThat(response.byCategory().getFirst().committedAmount()).isEqualTo(350);
+        assertThat(response.byCategory().getFirst().availableAmount()).isEqualTo(50);
     }
 
     @Test

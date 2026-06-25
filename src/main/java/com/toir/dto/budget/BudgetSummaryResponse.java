@@ -8,6 +8,12 @@ public record BudgetSummaryResponse(
         List<Item> budgets,
         double totalPlanned,
         double totalActual,
+        double totalCommitted,
+        double totalAvailable,
+        double pendingReviewAmount,
+        double unallocatedActualAmount,
+        long atRiskBudgetLineCount,
+        long overBudgetLineCount,
         double totalRemaining,
         double variance,
         double executionPercent,
@@ -35,6 +41,9 @@ public record BudgetSummaryResponse(
             CategoryRef category,
             double plannedAmount,
             double actualAmount,
+            double committedAmount,
+            double availableAmount,
+            double executionPercent,
             double variance
     ) {
     }
