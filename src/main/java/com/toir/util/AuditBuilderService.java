@@ -1,6 +1,7 @@
 package com.toir.util;
 
 import com.toir.audit.AuditDeduplicationRegistry;
+import com.toir.audit.AuditRedactionService;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.security.AuthenticatedUser;
@@ -20,6 +21,7 @@ public class AuditBuilderService {
     private final SecurityScope securityScope;
     private final RequestContext requestContext;
     private final AuditDeduplicationRegistry deduplicationRegistry;
+    private final AuditRedactionService redactionService;
 
     public <T> void log(
             String entityType,
@@ -30,12 +32,12 @@ public class AuditBuilderService {
             T oldObj,
             T newObj
     ) {
-        if (!deduplicationRegistry.markIfFirst(entityType, resourceId, action)) {
+        String oldJson = redactionService.redactJson(normalize(oldObj), java.util.Set.of());
+        String newJson = redactionService.redactJson(normalize(newObj), java.util.Set.of());
+        String diff = serializationService.diff(oldJson, newJson);
+        if (!deduplicationRegistry.markIfFirst(entityType, resourceId, action, diff)) {
             return;
         }
-        String oldJson = normalize(oldObj);
-        String newJson = normalize(newObj);
-        String diff = serializationService.diff(oldJson, newJson);
         logService.recordDetailed(
                 currentUserId(),
                 module,

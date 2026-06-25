@@ -2,6 +2,7 @@ package com.toir.audit;
 
 import com.toir.entity.Material;
 import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -11,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class UniversalAuditChangeFactoryTest {
 
-    private final UniversalAuditChangeFactory factory = new UniversalAuditChangeFactory();
+    private final UniversalAuditChangeFactory factory = new UniversalAuditChangeFactory(new UniversalAuditEntityResolver());
 
     @Test
     void metadataOnlyUpdateIsSkipped() {
@@ -60,5 +61,31 @@ class UniversalAuditChangeFactoryTest {
         assertThat(change.get().changedProperties()).containsExactly("name");
         assertThat(change.get().previousSnapshot()).containsEntry("name", "Oil");
         assertThat(change.get().currentSnapshot()).containsEntry("name", "Synthetic oil");
+    }
+
+    @Test
+    void annotatedIgnoredFieldsAreExcludedFromUniversalAuditSnapshots() {
+        Optional<UniversalEntityAuditChange> change = factory.fromUpdate(
+                AnnotatedSecretEntity.class,
+                UUID.randomUUID(),
+                new String[]{"name", "internalChecksum", "updatedAt"},
+                new Object[]{"Pump", "old-checksum", "2026-06-24T10:00:00Z"},
+                new Object[]{"Pump v2", "new-checksum", "2026-06-24T10:01:00Z"}
+        );
+
+        assertThat(change).isPresent();
+        assertThat(change.get().changedProperties()).containsExactly("name");
+        assertThat(change.get().previousSnapshot()).containsEntry("name", "Pump");
+        assertThat(change.get().currentSnapshot()).containsEntry("name", "Pump v2");
+        assertThat(change.get().previousSnapshot()).doesNotContainKey("internalChecksum");
+        assertThat(change.get().currentSnapshot()).doesNotContainKey("internalChecksum");
+    }
+
+    @AuditedResource(
+            module = AuditModule.WORK_ORDER,
+            entityType = "annotated_secret_entities",
+            ignoredFields = {"internalChecksum"}
+    )
+    private static class AnnotatedSecretEntity {
     }
 }

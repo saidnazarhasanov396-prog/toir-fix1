@@ -1,6 +1,7 @@
 package com.toir.audit;
 
 import com.toir.enums.AuditAction;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -9,8 +10,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 @Component
+@RequiredArgsConstructor
 public class UniversalAuditChangeFactory {
 
     private static final String SOFT_DELETE_FIELD = "isDeleted";
@@ -23,13 +26,15 @@ public class UniversalAuditChangeFactory {
             "updatedBy"
     );
 
+    private final UniversalAuditEntityResolver entityResolver;
+
     public Optional<UniversalEntityAuditChange> fromInsert(
             Class<?> entityClass,
             Object entityId,
             String[] propertyNames,
             Object[] state
     ) {
-        Map<String, Object> current = snapshot(propertyNames, state, true);
+        Map<String, Object> current = snapshot(propertyNames, state, true, entityResolver.ignoredFields(entityClass));
         current.putIfAbsent("id", stringify(entityId));
         return Optional.of(new UniversalEntityAuditChange(
                 entityClass,
@@ -51,6 +56,7 @@ public class UniversalAuditChangeFactory {
         Map<String, Object> previous = new LinkedHashMap<>();
         Map<String, Object> current = new LinkedHashMap<>();
         List<String> changed = new ArrayList<>();
+        Set<String> ignoredFields = entityResolver.ignoredFields(entityClass);
         boolean softDeleted = false;
 
         for (int i = 0; i < propertyNames.length; i++) {
@@ -64,6 +70,9 @@ public class UniversalAuditChangeFactory {
                     && Boolean.FALSE.equals(oldValue)
                     && Boolean.TRUE.equals(newValue)) {
                 softDeleted = true;
+            }
+            if (ignoredFields.contains(property)) {
+                continue;
             }
             if (isIgnoredUpdateField(property) && !SOFT_DELETE_FIELD.equals(property)) {
                 continue;
@@ -93,7 +102,7 @@ public class UniversalAuditChangeFactory {
             String[] propertyNames,
             Object[] deletedState
     ) {
-        Map<String, Object> previous = snapshot(propertyNames, deletedState, true);
+        Map<String, Object> previous = snapshot(propertyNames, deletedState, true, entityResolver.ignoredFields(entityClass));
         previous.putIfAbsent("id", stringify(entityId));
         return Optional.of(new UniversalEntityAuditChange(
                 entityClass,
@@ -105,13 +114,16 @@ public class UniversalAuditChangeFactory {
         ));
     }
 
-    private Map<String, Object> snapshot(String[] propertyNames, Object[] state, boolean includeMetadata) {
+    private Map<String, Object> snapshot(String[] propertyNames, Object[] state, boolean includeMetadata, Set<String> ignoredFields) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         if (propertyNames == null || state == null) {
             return snapshot;
         }
         for (int i = 0; i < propertyNames.length; i++) {
             String property = propertyNames[i];
+            if (ignoredFields.contains(property)) {
+                continue;
+            }
             if (!includeMetadata && isIgnoredUpdateField(property)) {
                 continue;
             }

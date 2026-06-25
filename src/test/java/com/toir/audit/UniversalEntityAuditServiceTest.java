@@ -9,10 +9,13 @@ import com.toir.security.SecurityScope;
 import com.toir.service.AuditLogService;
 import com.toir.util.AuditSerializationService;
 import com.toir.util.RequestContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -29,6 +32,7 @@ class UniversalEntityAuditServiceTest {
     private AuditLogService auditLogService;
     private SecurityScope securityScope;
     private RequestContext requestContext;
+    private AuditDeduplicationRegistry deduplicationRegistry;
     private UniversalEntityAuditService service;
 
     @BeforeEach
@@ -36,14 +40,25 @@ class UniversalEntityAuditServiceTest {
         auditLogService = mock(AuditLogService.class);
         securityScope = mock(SecurityScope.class);
         requestContext = mock(RequestContext.class);
+        deduplicationRegistry = new AuditDeduplicationRegistry();
         service = new UniversalEntityAuditService(
                 auditLogService,
                 new AuditSerializationService(new ObjectMapper().findAndRegisterModules()),
+                new AuditRedactionService(new ObjectMapper().findAndRegisterModules()),
                 securityScope,
                 requestContext,
                 new UniversalAuditEntityResolver(),
-                new AuditDeduplicationRegistry()
+                deduplicationRegistry
         );
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+        TransactionSynchronizationManager.setActualTransactionActive(false);
+        deduplicationRegistry.clear();
     }
 
     @Test
@@ -64,7 +79,7 @@ class UniversalEntityAuditServiceTest {
                 entityId.toString(),
                 AuditAction.CREATE,
                 Map.of(),
-                Map.of("id", entityId.toString(), "name", "Oil"),
+                orderedMap("id", entityId.toString(), "name", "Oil"),
                 List.of("id", "name")
         ));
 
@@ -92,6 +107,8 @@ class UniversalEntityAuditServiceTest {
 
     @Test
     void duplicateEntityActionInSameTransactionIsSkipped() {
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
         UUID entityId = UUID.randomUUID();
         UniversalEntityAuditChange change = new UniversalEntityAuditChange(
                 Material.class,
@@ -154,5 +171,54 @@ class UniversalEntityAuditServiceTest {
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any()
         );
+    }
+
+    @Test
+    void annotatedEntityOverridesModuleEntityTypeAndRedactsConfiguredFields() {
+        UUID entityId = UUID.randomUUID();
+
+        service.record(new UniversalEntityAuditChange(
+                AnnotatedAuditEntity.class,
+                entityId.toString(),
+                AuditAction.UPDATE,
+                orderedMap("name", "Old", "businessSecret", "old-secret"),
+                orderedMap("name", "New", "businessSecret", "new-secret"),
+                List.of("name", "businessSecret")
+        ));
+
+        verify(auditLogService).recordDetailed(
+                eq(null),
+                eq(AuditModule.WORK_ORDER),
+                eq("annotated_work_orders"),
+                eq(entityId.toString()),
+                eq(AuditAction.UPDATE),
+                eq("SYSTEM annotated_work_orders UPDATE"),
+                eq(null),
+                eq(null),
+                eq("{\"name\":{\"old\":\"Old\",\"new\":\"New\"}}"),
+                eq("{\"name\":\"Old\",\"businessSecret\":\"***REDACTED***\"}"),
+                eq("{\"name\":\"New\",\"businessSecret\":\"***REDACTED***\"}"),
+                eq("SYSTEM annotated_work_orders UPDATE"),
+                eq("UNIVERSAL_ENTITY_LISTENER"),
+                eq(null),
+                eq(null),
+                eq(null)
+        );
+    }
+
+    @AuditedResource(
+            module = AuditModule.WORK_ORDER,
+            entityType = "annotated_work_orders",
+            redactedFields = {"businessSecret"}
+    )
+    private static class AnnotatedAuditEntity {
+    }
+
+    private static Map<String, Object> orderedMap(Object... pairs) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i < pairs.length; i += 2) {
+            map.put((String) pairs[i], pairs[i + 1]);
+        }
+        return map;
     }
 }

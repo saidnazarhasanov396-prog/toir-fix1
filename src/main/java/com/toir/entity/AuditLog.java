@@ -1,5 +1,6 @@
 package com.toir.entity;
 
+import com.toir.audit.AuditExcluded;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import jakarta.persistence.*;
@@ -17,6 +18,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@AuditExcluded
 public class AuditLog {
 
     @Id

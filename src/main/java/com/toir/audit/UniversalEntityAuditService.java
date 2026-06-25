@@ -18,6 +18,7 @@ public class UniversalEntityAuditService {
 
     private final AuditLogService auditLogService;
     private final AuditSerializationService serializationService;
+    private final AuditRedactionService redactionService;
     private final SecurityScope securityScope;
     private final RequestContext requestContext;
     private final UniversalAuditEntityResolver entityResolver;
@@ -29,17 +30,18 @@ public class UniversalEntityAuditService {
         }
 
         String entityType = entityResolver.entityType(change.entityClass());
-        if (!deduplicationRegistry.markIfFirst(entityType, change.entityId(), change.action())) {
-            return;
-        }
-
-        String previous = change.previousSnapshot() == null || change.previousSnapshot().isEmpty()
+        String previousRaw = change.previousSnapshot() == null || change.previousSnapshot().isEmpty()
                 ? null
                 : serializationService.toJson(change.previousSnapshot());
-        String current = change.currentSnapshot() == null || change.currentSnapshot().isEmpty()
+        String currentRaw = change.currentSnapshot() == null || change.currentSnapshot().isEmpty()
                 ? null
                 : serializationService.toJson(change.currentSnapshot());
+        String previous = redactionService.redactJson(previousRaw, entityResolver.redactedFields(change.entityClass()));
+        String current = redactionService.redactJson(currentRaw, entityResolver.redactedFields(change.entityClass()));
         String diff = serializationService.diff(previous, current);
+        if (!deduplicationRegistry.markIfFirst(entityType, change.entityId(), change.action(), diff)) {
+            return;
+        }
         String reason = defaultReason(entityType, change.action().name());
 
         auditLogService.recordDetailed(

@@ -3,6 +3,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.toir.audit.AuditLogWriteCommand;
+import com.toir.audit.AuditLogWriteScheduler;
 import com.toir.dto.audit.AuditLogResponseDto;
 import com.toir.dto.audit.AuditLogUserSummary;
 import com.toir.dto.user.UserDto;
@@ -19,10 +21,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Map;
@@ -33,21 +33,19 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class AuditLogService {
 
     private final AuditLogRepository repository;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
+    private final AuditLogWriteScheduler writeScheduler;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(UUID userId, AuditModule module, String entityType, String entityId,
                        AuditAction action, String message, String ip, String userAgent) {
         recordDetailed(userId, module, entityType, entityId, action, message, ip, userAgent, null, null, null);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordDetailed(UUID userId, AuditModule module, String entityType, String entityId,
                                AuditAction action, String message, String ip, String userAgent,
                                String diffJson, String previousSnapshot, String currentSnapshot) {
@@ -55,30 +53,28 @@ public class AuditLogService {
                 diffJson, previousSnapshot, currentSnapshot, null, null, null, null, null);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordDetailed(UUID userId, AuditModule module, String entityType, String entityId,
                                AuditAction action, String message, String ip, String userAgent,
                                String diffJson, String previousSnapshot, String currentSnapshot,
                                String reason, String source, String requestMethod, String requestPath, String correlationId) {
-        AuditLog entry = new AuditLog();
-        entry.setUserId(userId);
-        entry.setModule(module);
-        entry.setEntityType(entityType);
-        entry.setEntityId(entityId);
-        entry.setAction(action);
-        entry.setMessage(message);
-        entry.setIpAddress(ip);
-        entry.setUserAgent(userAgent);
-        entry.setDiffJson(diffJson);
-        entry.setPreviousSnapshot(previousSnapshot);
-        entry.setCurrentSnapshot(currentSnapshot);
-        entry.setReason(reason);
-        entry.setSource(source);
-        entry.setRequestMethod(requestMethod);
-        entry.setRequestPath(requestPath);
-        entry.setCorrelationId(correlationId);
-        entry.setCreatedAt(Instant.now().atZone(ZoneId.of("Asia/Tashkent")).toInstant());
-        repository.save(entry);
+        writeScheduler.schedule(new AuditLogWriteCommand(
+                userId,
+                module,
+                entityType,
+                entityId,
+                action,
+                message,
+                ip,
+                userAgent,
+                diffJson,
+                previousSnapshot,
+                currentSnapshot,
+                reason,
+                source,
+                requestMethod,
+                requestPath,
+                correlationId
+        ));
     }
 
     @Transactional(readOnly = true)

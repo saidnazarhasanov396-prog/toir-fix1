@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.audit.AuditLogWriteScheduler;
 import com.toir.dto.audit.AuditLogResponseDto;
 import com.toir.dto.audit.AuditLogUserSummary;
 import com.toir.entity.AuditLog;
@@ -42,11 +43,14 @@ class AuditLogServiceTest {
     @Mock
     UserRepository userRepository;
 
+    @Mock
+    AuditLogWriteScheduler writeScheduler;
+
     private AuditLogService service;
 
     @BeforeEach
     void setUp() {
-        service = new AuditLogService(repository, new ObjectMapper(), userRepository);
+        service = new AuditLogService(repository, new ObjectMapper(), userRepository, writeScheduler);
     }
 
     @Test

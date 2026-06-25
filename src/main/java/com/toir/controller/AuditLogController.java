@@ -1,4 +1,5 @@
 package com.toir.controller;
+import com.toir.dto.audit.AuditLogMetadataResponse;
 import com.toir.dto.audit.AuditLogResponseDto;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -31,6 +32,12 @@ public class AuditLogController {
     );
 
     private final AuditLogService service;
+
+    @GetMapping("/metadata")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('AUDIT_LOG_READ')")
+    public ResponseEntity<AuditLogMetadataResponse> metadata() {
+        return ResponseEntity.ok(AuditLogMetadataResponse.fromEnums());
+    }
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('AUDIT_LOG_READ')")
