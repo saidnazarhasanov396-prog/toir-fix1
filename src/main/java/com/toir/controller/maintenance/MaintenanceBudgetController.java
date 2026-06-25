@@ -28,9 +28,17 @@ public class MaintenanceBudgetController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_READ')")
-    public ResponseEntity<Page<MaintenanceBudgetDto>> list(@RequestParam int year,
+    public ResponseEntity<Page<MaintenanceBudgetDto>> list(@RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findByYear(year), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(
+                service.findFiltered(year, month, departmentId, sortBy, sortDir),
+                page,
+                size
+        ));
     }
 
     @GetMapping("/{id}")

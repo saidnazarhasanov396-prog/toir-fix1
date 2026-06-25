@@ -5,8 +5,11 @@ import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.CostCategory;
+import com.toir.entity.projects.FinancialApprovalRule;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.ContractorWorkStatus;
+import com.toir.enums.NotificationSeverity;
+import com.toir.dto.notification.NotificationDto;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
@@ -14,6 +17,8 @@ import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.actualCost.ActualCostReviewRouteOverrideRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.projects.FinancialApprovalRuleRepository;
+import com.toir.security.PermissionConstants;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -27,6 +32,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -54,6 +62,8 @@ class ActualCostReviewFacadeServiceTest {
     DepartmentRepository departmentRepository;
     @Mock
     CostCategoryRepository costCategoryRepository;
+    @Mock
+    FinancialApprovalRuleRepository financialApprovalRuleRepository;
 
     @InjectMocks
     ActualCostReviewFacadeService service;
@@ -118,5 +128,130 @@ class ActualCostReviewFacadeServiceTest {
         assertThat(item.contractorWork()).hasFieldOrPropertyWithValue("id", contractorWorkId);
         Object contractor = ((com.toir.dto.financialreview.ActualCostReviewItem.ContractorWorkRef) item.contractorWork()).contractor();
         assertThat(contractor).hasFieldOrPropertyWithValue("id", contractorId);
+    }
+
+    @Test
+    void reviewQueueUsesMatchingFinancialApprovalRuleWhenNoOverrideExists() {
+        UUID actualCostId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        ActualCost actualCost = pendingActualCost(actualCostId, workOrderId, 750.0, Instant.now().minusSeconds(3600));
+        WorkOrder workOrder = workOrder(workOrderId, departmentId);
+        Department department = department(departmentId);
+        FinancialApprovalRule rule = new FinancialApprovalRule();
+        ReflectionTestUtils.setField(rule, "id", UUID.randomUUID());
+        rule.setCode("MECH_GT_500");
+        rule.setRequiredRoleCode("ECONOMIST");
+        rule.setEscalateToRoleCode("FINANCE_MANAGER");
+        rule.setThresholdHours(8);
+
+        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(List.of(actualCost));
+        when(financeScopeService.filterActualCosts(List.of(actualCost))).thenReturn(List.of(actualCost));
+        when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId))
+                .thenReturn(Optional.empty());
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department));
+        when(financialApprovalRuleRepository.findFirstMatchingRule(departmentId, 750.0)).thenReturn(Optional.of(rule));
+
+        var item = service.reviewQueue(null).getFirst();
+
+        assertThat(item.approvalRoleCode()).isEqualTo("ECONOMIST");
+        assertThat(item.effectiveReviewRoleCode()).isEqualTo("ECONOMIST");
+        assertThat(item.escalationRoleCode()).isEqualTo("FINANCE_MANAGER");
+        assertThat(item.hoursToOverdue()).isLessThanOrEqualTo(8);
+        assertThat(item.approvalRule()).hasFieldOrPropertyWithValue("id", rule.getId());
+        assertThat(item.approvalRule()).hasFieldOrPropertyWithValue("code", "MECH_GT_500");
+    }
+
+    @Test
+    void evaluateOverdueCreatesDepartmentNotificationsAndCountsDuplicatesSeparately() {
+        UUID departmentId = UUID.randomUUID();
+        ActualCost overdue = pendingActualCost(UUID.randomUUID(), UUID.randomUUID(), 100.0, Instant.now().minusSeconds(30 * 3600));
+        ActualCost dueSoon = pendingActualCost(UUID.randomUUID(), UUID.randomUUID(), 120.0, Instant.now().minusSeconds(22 * 3600));
+
+        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(List.of(overdue, dueSoon));
+        when(financeScopeService.filterActualCosts(List.of(overdue, dueSoon))).thenReturn(List.of(overdue, dueSoon));
+        when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(any()))
+                .thenReturn(Optional.empty());
+        when(workOrderRepository.findByIdAndIsDeletedFalse(overdue.getWorkOrderId()))
+                .thenReturn(Optional.of(workOrder(overdue.getWorkOrderId(), departmentId)));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(dueSoon.getWorkOrderId()))
+                .thenReturn(Optional.of(workOrder(dueSoon.getWorkOrderId(), departmentId)));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
+        when(financialApprovalRuleRepository.findFirstMatchingRule(eq(departmentId), any())).thenReturn(Optional.empty());
+        when(notificationService.notifyDepartmentByPermission(
+                eq(departmentId),
+                eq(PermissionConstants.ACTUAL_COST_APPROVE),
+                anyString(),
+                anyString(),
+                eq(NotificationSeverity.WARNING),
+                eq("ACTUAL_COST"),
+                eq(overdue.getId().toString())
+        )).thenReturn(List.of(notification(overdue.getId())));
+        when(notificationService.notifyDepartmentByPermission(
+                eq(departmentId),
+                eq(PermissionConstants.ACTUAL_COST_APPROVE),
+                anyString(),
+                anyString(),
+                eq(NotificationSeverity.INFO),
+                eq("ACTUAL_COST"),
+                eq(dueSoon.getId().toString())
+        )).thenReturn(List.of());
+
+        var response = service.evaluateOverdue(24, 4);
+
+        assertThat(response.scanned()).isEqualTo(2);
+        assertThat(response.overdueCount()).isEqualTo(1);
+        assertThat(response.dueSoonCount()).isEqualTo(1);
+        assertThat(response.createdNotifications()).isEqualTo(1);
+        assertThat(response.createdReminderNotifications()).isZero();
+        assertThat(response.skipped()).isZero();
+        assertThat(response.skippedReminders()).isEqualTo(1);
+    }
+
+    private ActualCost pendingActualCost(UUID actualCostId, UUID workOrderId, double amount, Instant createdAt) {
+        ActualCost actualCost = new ActualCost();
+        ReflectionTestUtils.setField(actualCost, "id", actualCostId);
+        ReflectionTestUtils.setField(actualCost, "createdAt", createdAt);
+        actualCost.setWorkOrderId(workOrderId);
+        actualCost.setCostCategoryId(UUID.randomUUID());
+        actualCost.setStatus(ActualCostStatus.PENDING);
+        actualCost.setAmount(amount);
+        actualCost.setCostDate(createdAt);
+        return actualCost;
+    }
+
+    private WorkOrder workOrder(UUID workOrderId, UUID departmentId) {
+        WorkOrder workOrder = new WorkOrder();
+        ReflectionTestUtils.setField(workOrder, "id", workOrderId);
+        workOrder.setNumber("WO-1");
+        workOrder.setTitle("Pump repair");
+        workOrder.setDepartmentId(departmentId);
+        return workOrder;
+    }
+
+    private Department department(UUID departmentId) {
+        Department department = new Department();
+        ReflectionTestUtils.setField(department, "id", departmentId);
+        department.setCode("D-1");
+        department.setName("Mechanical");
+        return department;
+    }
+
+    private NotificationDto notification(UUID actualCostId) {
+        return new NotificationDto(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "Finance review",
+                "Review actual cost",
+                null,
+                null,
+                NotificationSeverity.INFO,
+                "ACTUAL_COST",
+                actualCostId.toString(),
+                null
+        );
     }
 }

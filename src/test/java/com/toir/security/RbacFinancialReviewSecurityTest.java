@@ -2,7 +2,10 @@ package com.toir.security;
 
 import com.toir.controller.BudgetSummaryController;
 import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -66,6 +69,15 @@ class RbacFinancialReviewSecurityTest {
 
     @MockBean
     EmployeeRepository employeeRepository;
+
+    @MockBean
+    ContractorWorkRepository contractorWorkRepository;
+
+    @MockBean
+    ContractorRepository contractorRepository;
+
+    @MockBean
+    WorkOrderRepository workOrderRepository;
 
     @MockBean
     FinanceScopeService financeScopeService;

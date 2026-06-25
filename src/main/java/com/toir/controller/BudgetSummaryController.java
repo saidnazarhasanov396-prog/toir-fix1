@@ -12,7 +12,10 @@ import com.toir.dto.costcategory.CostCategoryDto;
 import com.toir.dto.financialreview.ActualCostReviewActivityItem;
 import com.toir.dto.financialreview.ActualCostReviewHandoverItem;
 import com.toir.dto.financialreview.ActualCostReviewItem;
+import com.toir.entity.contractors.Contractor;
+import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.Department;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.users.Employee;
 import com.toir.entity.users.User;
 import com.toir.entity.projects.ActualCost;
@@ -20,9 +23,13 @@ import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.CostCategoryRepository;
@@ -37,6 +44,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -78,6 +86,9 @@ public class BudgetSummaryController {
     private final DepartmentRepository departmentRepository;
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
+    private final ContractorWorkRepository contractorWorkRepository;
+    private final ContractorRepository contractorRepository;
+    private final WorkOrderRepository workOrderRepository;
     private final FinanceScopeService financeScopeService;
     private final ActualCostReviewFacadeService actualCostReviewFacadeService;
 
@@ -87,19 +98,57 @@ public class BudgetSummaryController {
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) UUID departmentId) {
-        List<MaintenanceBudget> budgets = financeScopeService.filterBudgets(
-                budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()
-        ).stream()
+        List<MaintenanceBudget> budgets = nullSafe(financeScopeService.filterBudgets(
+                nullSafe(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+        )).stream()
                 .filter(budget -> year == null || budget.getYear() == year)
                 .filter(budget -> month == null || Objects.equals(budget.getMonth(), month))
                 .filter(budget -> departmentId == null || Objects.equals(budget.getDepartmentId(), departmentId))
                 .toList();
-        double totalPlanned = budgets.stream().mapToDouble(MaintenanceBudget::getTotalPlanned).sum();
-        double totalActual = budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum();
+        Set<UUID> budgetIds = budgets.stream().map(MaintenanceBudget::getId).collect(Collectors.toSet());
+        List<BudgetLine> scopedLines = nullSafe(financeScopeService
+                .filterBudgetLines(nullSafe(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()))).stream()
+                .filter(line -> line.getBudget() != null && budgetIds.contains(line.getBudget().getId()))
+                .toList();
+        Set<UUID> scopedLineIds = scopedLines.stream()
+                .map(BudgetLine::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        List<ActualCost> visibleActualCosts = nullSafe(financeScopeService
+                .filterActualCosts(nullSafe(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()))).stream()
+                .filter(cost -> matchesSummaryDate(cost, year, month))
+                .filter(cost -> cost.getBudgetLineId() == null || scopedLineIds.contains(cost.getBudgetLineId()))
+                .toList();
+        Map<UUID, Double> approvedByLine = sumByBudgetLine(visibleActualCosts, ActualCostStatus.APPROVED);
+        Map<UUID, Double> pendingByLine = sumByBudgetLine(visibleActualCosts, ActualCostStatus.PENDING);
+        double totalPlanned = scopedLines.isEmpty()
+                ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalPlanned).sum()
+                : scopedLines.stream().mapToDouble(BudgetLine::getPlannedAmount).sum();
+        double totalActual = scopedLines.isEmpty()
+                ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum()
+                : scopedLines.stream().mapToDouble(line -> lineActualAmount(line, approvedByLine, pendingByLine)).sum();
+        double totalCommitted = scopedLines.stream()
+                .mapToDouble(line -> pendingByLine.getOrDefault(line.getId(), 0.0))
+                .sum();
+        double totalAvailable = totalPlanned - totalActual - totalCommitted;
+        double pendingReviewAmount = totalCommitted;
+        double unallocatedActualAmount = visibleActualCosts.stream()
+                .filter(cost -> cost.getBudgetLineId() == null)
+                .filter(cost -> cost.getStatus() == ActualCostStatus.APPROVED || cost.getStatus() == ActualCostStatus.PENDING)
+                .mapToDouble(ActualCost::getAmount)
+                .sum();
+        long atRiskBudgetLineCount = scopedLines.stream()
+                .filter(line -> line.getPlannedAmount() > 0)
+                .filter(line -> (lineActualAmount(line, approvedByLine, pendingByLine)
+                        + pendingByLine.getOrDefault(line.getId(), 0.0)) / line.getPlannedAmount() >= 0.9d)
+                .count();
+        long overBudgetLineCount = scopedLines.stream()
+                .filter(line -> lineActualAmount(line, approvedByLine, pendingByLine)
+                        + pendingByLine.getOrDefault(line.getId(), 0.0) > line.getPlannedAmount())
+                .count();
         double variance = totalPlanned - totalActual;
         double executionPercent = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
 
-        Set<UUID> budgetIds = budgets.stream().map(MaintenanceBudget::getId).collect(Collectors.toSet());
         Set<UUID> departmentIds = budgets.stream()
                 .map(MaintenanceBudget::getDepartmentId)
                 .filter(Objects::nonNull)
@@ -109,24 +158,31 @@ public class BudgetSummaryController {
                 : departmentRepository.findAllByIdInAndIsDeletedFalse(departmentIds).stream()
                 .collect(Collectors.toMap(Department::getId, department -> department));
 
-        Map<UUID, CostCategory> catById = costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+        Map<UUID, CostCategory> catById = nullSafe(costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).stream()
                 .collect(Collectors.toMap(CostCategory::getId, c -> c));
 
-        List<BudgetSummaryResponse.CategoryRow> byCategory = financeScopeService
-                .filterBudgetLines(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).stream()
-                .filter(line -> line.getBudget() != null && budgetIds.contains(line.getBudget().getId()))
+        List<BudgetSummaryResponse.CategoryRow> byCategory = scopedLines.stream()
                 .collect(Collectors.groupingBy(BudgetLine::getCostCategoryId))
                 .entrySet().stream()
                 .map(entry -> {
                     CostCategory cat = catById.get(entry.getKey());
                     double planned = entry.getValue().stream().mapToDouble(BudgetLine::getPlannedAmount).sum();
-                    double actual = entry.getValue().stream().mapToDouble(BudgetLine::getActualAmount).sum();
+                    double actual = entry.getValue().stream()
+                            .mapToDouble(line -> lineActualAmount(line, approvedByLine, pendingByLine))
+                            .sum();
+                    double committed = entry.getValue().stream()
+                            .mapToDouble(line -> pendingByLine.getOrDefault(line.getId(), 0.0))
+                            .sum();
+                    double available = planned - actual - committed;
                     return new BudgetSummaryResponse.CategoryRow(
                             cat != null
                                     ? new BudgetSummaryResponse.CategoryRef(cat.getId(), cat.getCode(), cat.getName())
                                     : new BudgetSummaryResponse.CategoryRef(entry.getKey(), "—", "—"),
                             planned,
                             actual,
+                            committed,
+                            available,
+                            planned > 0 ? (actual / planned) * 100 : 0,
                             planned - actual
                     );
                 })
@@ -141,7 +197,13 @@ public class BudgetSummaryController {
                 budgetItems,
                 totalPlanned,
                 totalActual,
-                variance,
+                totalCommitted,
+                totalAvailable,
+                pendingReviewAmount,
+                unallocatedActualAmount,
+                atRiskBudgetLineCount,
+                overBudgetLineCount,
+                totalAvailable,
                 variance,
                 executionPercent,
                 budgetItems.size(),
@@ -193,7 +255,8 @@ public class BudgetSummaryController {
                 parseDateStart(dateFrom),
                 parseDateEnd(dateTo),
                 actualCostId,
-                actualCostIds
+                actualCostIds,
+                null
         );
         items = sortReviewItems(items, sortBy, sortDir);
         return ResponseEntity.ok(PageResponseWithSummary.of(
@@ -248,7 +311,8 @@ public class BudgetSummaryController {
                 null,
                 null,
                 actualCostId,
-                actualCostIds
+                actualCostIds,
+                myQueue
         );
         pending = sortReviewItems(pending, sortBy, sortDir);
         return ResponseEntity.ok(PageResponse.of(
@@ -401,7 +465,95 @@ public class BudgetSummaryController {
     @GetMapping("/contractor-works/{id}/recommendation")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_READ')")
     public ResponseEntity<ContractorWorkRecommendationResponse> contractorWorkRecommendation(@PathVariable UUID id) {
-        return ResponseEntity.ok(new ContractorWorkRecommendationResponse(id.toString(), 0, List.of()));
+        ContractorWork contractorWork = contractorWorkRepository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Contractor work not found: " + id));
+        Contractor contractor = contractorWork.getContractorId() != null
+                ? contractorRepository.findByIdAndIsDeletedFalse(contractorWork.getContractorId()).orElse(null)
+                : null;
+        WorkOrder workOrder = contractorWork.getWorkOrderId() != null
+                ? workOrderRepository.findByIdAndIsDeletedFalse(contractorWork.getWorkOrderId()).orElse(null)
+                : null;
+        List<ActualCost> contractorActualCosts = nullSafe(actualCostRepository
+                .findAllByContractorWorkIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(contractorWork.getId())));
+        double expected = contractorWork.getCost() != null ? contractorWork.getCost() : 0.0d;
+        double reflected = contractorActualCosts.stream()
+                .filter(cost -> cost.getStatus() == ActualCostStatus.APPROVED)
+                .mapToDouble(ActualCost::getAmount)
+                .sum();
+        double pending = contractorActualCosts.stream()
+                .filter(cost -> cost.getStatus() == ActualCostStatus.PENDING)
+                .mapToDouble(ActualCost::getAmount)
+                .sum();
+        double submitted = reflected + pending;
+        CostCategory recommendedCategory = recommendedContractorCostCategory(workOrder);
+        BudgetLine recommendedLine = recommendedBudgetLine(workOrder, recommendedCategory);
+        MaintenanceBudget recommendedBudget = recommendedLine != null ? recommendedLine.getBudget() : null;
+
+        return ResponseEntity.ok(new ContractorWorkRecommendationResponse(
+                new ContractorWorkRecommendationResponse.ContractorWorkRef(
+                        contractorWork.getId(),
+                        contractorWork.getDescription(),
+                        contractorWork.getStatus() != null ? contractorWork.getStatus().name() : null,
+                        contractorWork.getCost(),
+                        contractor != null
+                                ? new ContractorWorkRecommendationResponse.ContractorRef(
+                                contractor.getId(),
+                                contractor.getCode(),
+                                contractor.getName()
+                        )
+                                : null,
+                        workOrder != null
+                                ? new ContractorWorkRecommendationResponse.WorkOrderRef(
+                                workOrder.getId(),
+                                workOrder.getNumber(),
+                                workOrder.getTitle(),
+                                workOrder.getDepartmentId()
+                        )
+                                : null
+                ),
+                expected,
+                reflected,
+                submitted,
+                pending,
+                Math.max(expected - reflected, 0.0d),
+                Math.max(expected - submitted, 0.0d),
+                reflectionStatus(expected, reflected, pending),
+                Math.max(expected - submitted, 0.0d) > 0.0d,
+                recommendedCategory != null
+                        ? new BudgetSummaryResponse.CategoryRef(
+                        recommendedCategory.getId(),
+                        recommendedCategory.getCode(),
+                        recommendedCategory.getName()
+                )
+                        : null,
+                recommendedBudget != null
+                        ? new ContractorWorkRecommendationResponse.BudgetRef(
+                        recommendedBudget.getId(),
+                        recommendedBudget.getYear(),
+                        recommendedBudget.getMonth(),
+                        recommendedBudget.getStatus() != null ? recommendedBudget.getStatus().name() : null,
+                        recommendedBudget.getTotalPlanned(),
+                        recommendedBudget.getTotalActual(),
+                        recommendedBudget.getDepartmentId() != null
+                                ? new BudgetSummaryResponse.DepartmentRef(
+                                recommendedBudget.getDepartmentId(),
+                                null,
+                                null
+                        )
+                                : null
+                )
+                        : null,
+                recommendedLine != null
+                        ? new ContractorWorkRecommendationResponse.BudgetLineRef(
+                        recommendedLine.getId(),
+                        recommendedLine.getBudget() != null ? recommendedLine.getBudget().getId() : null,
+                        recommendedLine.getCostCategoryId(),
+                        recommendedLine.getDescription(),
+                        recommendedLine.getPlannedAmount(),
+                        recommendedLine.getActualAmount()
+                )
+                        : null
+        ));
     }
 
     private ActualCostBudgetRow actualCostRow(ActualCost c, Map<UUID, String> reviewerNames) {
@@ -436,6 +588,113 @@ public class BudgetSummaryController {
         );
     }
 
+    private boolean matchesSummaryDate(ActualCost cost, Integer year, Integer month) {
+        if (cost.getCostDate() == null) {
+            return true;
+        }
+        LocalDate costDate = cost.getCostDate().atZone(ZoneOffset.UTC).toLocalDate();
+        return (year == null || costDate.getYear() == year)
+                && (month == null || costDate.getMonthValue() == month);
+    }
+
+    private Map<UUID, Double> sumByBudgetLine(List<ActualCost> costs, ActualCostStatus status) {
+        return costs.stream()
+                .filter(cost -> cost.getBudgetLineId() != null)
+                .filter(cost -> cost.getStatus() == status)
+                .collect(Collectors.groupingBy(
+                        ActualCost::getBudgetLineId,
+                        Collectors.summingDouble(ActualCost::getAmount)
+                ));
+    }
+
+    private double lineActualAmount(BudgetLine line,
+                                    Map<UUID, Double> approvedByLine,
+                                    Map<UUID, Double> pendingByLine) {
+        if (approvedByLine.containsKey(line.getId()) || pendingByLine.containsKey(line.getId())) {
+            return approvedByLine.getOrDefault(line.getId(), 0.0d);
+        }
+        return line.getActualAmount();
+    }
+
+    private CostCategory recommendedContractorCostCategory(WorkOrder workOrder) {
+        if (workOrder != null && workOrder.getId() != null) {
+            UUID latestCategoryId = nullSafe(actualCostRepository
+                    .findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrder.getId()))
+                    .stream()
+                    .map(ActualCost::getCostCategoryId)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
+            if (latestCategoryId != null) {
+                return costCategoryRepository.findByIdAndIsDeletedFalse(latestCategoryId).orElse(null);
+            }
+        }
+        return costCategoryRepository.findFirstByCodeAndIsDeletedFalse("CTR").orElse(null);
+    }
+
+    private BudgetLine recommendedBudgetLine(WorkOrder workOrder, CostCategory category) {
+        if (workOrder == null || category == null || workOrder.getDepartmentId() == null) {
+            return null;
+        }
+        LocalDate now = LocalDate.now(ZoneOffset.UTC);
+        Set<BudgetStatus> usableStatuses = EnumSet.of(BudgetStatus.APPROVED, BudgetStatus.LOCKED);
+        Set<UUID> usableBudgetIds = nullSafe(financeScopeService.filterBudgets(
+                nullSafe(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+        )).stream()
+                .filter(budget -> budget.getYear() == now.getYear())
+                .filter(budget -> Objects.equals(budget.getMonth(), now.getMonthValue()))
+                .filter(budget -> Objects.equals(budget.getDepartmentId(), workOrder.getDepartmentId()))
+                .filter(budget -> usableStatuses.contains(budget.getStatus()))
+                .map(MaintenanceBudget::getId)
+                .collect(Collectors.toSet());
+        if (usableBudgetIds.isEmpty()) {
+            return null;
+        }
+        return nullSafe(financeScopeService.filterBudgetLines(
+                nullSafe(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+        )).stream()
+                .filter(line -> line.getBudget() != null && usableBudgetIds.contains(line.getBudget().getId()))
+                .filter(line -> Objects.equals(line.getCostCategoryId(), category.getId()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String reflectionStatus(double expected, double reflected, double pending) {
+        if (expected <= 0) {
+            return "NOT_APPLICABLE";
+        }
+        if (reflected >= expected) {
+            return "REFLECTED";
+        }
+        if (reflected > 0 || pending > 0) {
+            return "PARTIAL";
+        }
+        return "NOT_REFLECTED";
+    }
+
+    private boolean matchesCurrentReviewQueue(ActualCostReviewItem item) {
+        var authentication = org.springframework.security.core.context.SecurityContextHolder
+                .getContext()
+                .getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        Set<String> authorities = authentication.getAuthorities().stream()
+                .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (authorities.contains("SYSTEM_ADMIN") || authorities.contains("*")) {
+            return true;
+        }
+        return authorities.contains(item.effectiveReviewRoleCode())
+                || authorities.contains(item.approvalRoleCode())
+                || authorities.contains("ACTUAL_COST_APPROVE");
+    }
+
+    private <T> List<T> nullSafe(List<T> items) {
+        return items != null ? items : List.of();
+    }
+
     private List<ActualCostReviewItem> filterReviewItems(List<ActualCostReviewItem> items,
                                                          String status,
                                                          Boolean overdueOnly,
@@ -448,7 +707,8 @@ public class BudgetSummaryController {
                                                          Instant dateFrom,
                                                          Instant dateTo,
                                                          UUID actualCostId,
-                                                         String actualCostIds) {
+                                                         String actualCostIds,
+                                                         Boolean myQueue) {
         Set<UUID> scopedIds = parseActualCostIds(actualCostId, actualCostIds);
         return items.stream()
                 .filter(item -> status == null || status.isBlank() || "ALL".equalsIgnoreCase(status)
@@ -463,6 +723,7 @@ public class BudgetSummaryController {
                 .filter(item -> dateFrom == null || item.costDate() == null || !item.costDate().isBefore(dateFrom))
                 .filter(item -> dateTo == null || item.costDate() == null || item.costDate().isBefore(dateTo))
                 .filter(item -> scopedIds.isEmpty() || scopedIds.contains(item.id()))
+                .filter(item -> !Boolean.TRUE.equals(myQueue) || matchesCurrentReviewQueue(item))
                 .toList();
     }
 

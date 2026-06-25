@@ -5,7 +5,10 @@ import com.toir.entity.users.User;
 import com.toir.enums.ActualCostStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.CostCategoryRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -56,6 +59,15 @@ class FinancialReviewHistoryControllerContractTest {
     EmployeeRepository employeeRepository;
 
     @Mock
+    ContractorWorkRepository contractorWorkRepository;
+
+    @Mock
+    ContractorRepository contractorRepository;
+
+    @Mock
+    WorkOrderRepository workOrderRepository;
+
+    @Mock
     FinanceScopeService financeScopeService;
 
     @Mock
@@ -73,6 +85,9 @@ class FinancialReviewHistoryControllerContractTest {
                 departmentRepository,
                 userRepository,
                 employeeRepository,
+                contractorWorkRepository,
+                contractorRepository,
+                workOrderRepository,
                 financeScopeService,
                 actualCostReviewFacadeService
         );

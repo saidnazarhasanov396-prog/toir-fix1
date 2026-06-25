@@ -16,6 +16,7 @@ import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.ActualCostReviewEvent;
 import com.toir.entity.projects.ActualCostReviewRouteOverride;
 import com.toir.entity.projects.CostCategory;
+import com.toir.entity.projects.FinancialApprovalRule;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.NotificationSeverity;
 import com.toir.exception.RestException;
@@ -26,6 +27,8 @@ import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.actualCost.ActualCostReviewRouteOverrideRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.projects.FinancialApprovalRuleRepository;
+import com.toir.security.PermissionConstants;
 import com.toir.util.CsvWriter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -60,6 +63,7 @@ public class ActualCostReviewFacadeService {
     private final ContractorWorkRepository contractorWorkRepository;
     private final DepartmentRepository departmentRepository;
     private final CostCategoryRepository costCategoryRepository;
+    private final FinancialApprovalRuleRepository financialApprovalRuleRepository;
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewItem> reviewQueue(String search) {
@@ -211,11 +215,35 @@ public class ActualCostReviewFacadeService {
         int threshold = thresholdHours != null ? thresholdHours : DEFAULT_THRESHOLD_HOURS;
         int reminderWindow = reminderWindowHours != null ? reminderWindowHours : DEFAULT_REMINDER_WINDOW_HOURS;
         List<ActualCostReviewItem> pending = reviewQueue(null);
-        int overdue = (int) pending.stream().filter(item -> item.ageHours() >= threshold).count();
-        int dueSoon = (int) pending.stream()
+        List<ActualCostReviewItem> overdueItems = pending.stream()
+                .filter(item -> item.ageHours() >= threshold)
+                .toList();
+        List<ActualCostReviewItem> dueSoonItems = pending.stream()
                 .filter(item -> item.ageHours() < threshold && threshold - item.ageHours() <= reminderWindow)
-                .count();
-        return new EvaluateOverdueActualCostsResponse(threshold, reminderWindow, pending.size(), overdue, dueSoon, 0, 0, 0, 0);
+                .toList();
+        NotificationCounts overdueNotifications = notifyReviewItems(
+                overdueItems,
+                NotificationSeverity.WARNING,
+                "Actual cost overdue",
+                "Actual cost is overdue for finance review."
+        );
+        NotificationCounts dueSoonNotifications = notifyReviewItems(
+                dueSoonItems,
+                NotificationSeverity.INFO,
+                "Actual cost review due soon",
+                "Actual cost is approaching its finance review SLA."
+        );
+        return new EvaluateOverdueActualCostsResponse(
+                threshold,
+                reminderWindow,
+                pending.size(),
+                overdueItems.size(),
+                dueSoonItems.size(),
+                overdueNotifications.created(),
+                dueSoonNotifications.created(),
+                overdueNotifications.skipped(),
+                dueSoonNotifications.skipped()
+        );
     }
 
     @Transactional
@@ -364,12 +392,36 @@ public class ActualCostReviewFacadeService {
                 .findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(cost.getId())
                 .orElse(null);
         ActualCostContext context = resolveContext(cost, activeOverride);
+        FinancialApprovalRule matchingRule = activeOverride == null && context.department() != null
+                ? financialApprovalRuleRepository
+                .findFirstMatchingRule(context.department().getId(), cost.getAmount())
+                .orElse(null)
+                : null;
         int ageHours = ageHours(cost);
-        int threshold = activeOverride != null ? activeOverride.getThresholdHours() : DEFAULT_THRESHOLD_HOURS;
+        int threshold = activeOverride != null
+                ? activeOverride.getThresholdHours()
+                : matchingRule != null && matchingRule.getThresholdHours() != null
+                ? matchingRule.getThresholdHours()
+                : DEFAULT_THRESHOLD_HOURS;
         boolean overdue = ageHours >= threshold;
-        String approvalRole = activeOverride != null ? activeOverride.getApprovalRoleCode() : "FINANCE_MANAGER";
-        String escalationRole = activeOverride != null ? activeOverride.getEscalationRoleCode() : null;
+        String approvalRole = activeOverride != null && hasText(activeOverride.getApprovalRoleCode())
+                ? activeOverride.getApprovalRoleCode()
+                : matchingRule != null && hasText(matchingRule.getRequiredRoleCode())
+                ? matchingRule.getRequiredRoleCode()
+                : "FINANCE_MANAGER";
+        String escalationRole = activeOverride != null && hasText(activeOverride.getEscalationRoleCode())
+                ? activeOverride.getEscalationRoleCode()
+                : matchingRule != null
+                ? matchingRule.getEscalateToRoleCode()
+                : null;
         Object override = activeOverride != null ? routeOverrideService.toResponse(activeOverride, cost) : null;
+        ActualCostReviewItem.ApprovalRuleRef approvalRule = matchingRule != null
+                ? new ActualCostReviewItem.ApprovalRuleRef(
+                matchingRule.getId(),
+                matchingRule.getCode(),
+                matchingRule.getThresholdHours()
+        )
+                : new ActualCostReviewItem.ApprovalRuleRef(null, "DEFAULT", threshold);
         return new ActualCostReviewItem(
                 cost.getId(),
                 cost.getWorkOrderId(),
@@ -394,7 +446,7 @@ public class ActualCostReviewFacadeService {
                 ageHours,
                 overdue,
                 "/financial-review/history/" + cost.getId(),
-                new ActualCostReviewItem.ApprovalRuleRef(null, "DEFAULT", threshold),
+                approvalRule,
                 approvalRole,
                 escalationRole,
                 Math.max(threshold - ageHours, 0),
@@ -408,6 +460,32 @@ public class ActualCostReviewFacadeService {
                 "/financial-review?actualCostId=" + cost.getId(),
                 sourceLink(cost)
         );
+    }
+
+    private NotificationCounts notifyReviewItems(List<ActualCostReviewItem> items,
+                                                 NotificationSeverity severity,
+                                                 String title,
+                                                 String message) {
+        int created = 0;
+        int skipped = 0;
+        for (ActualCostReviewItem item : items) {
+            UUID departmentId = objectId(item.department());
+            List<NotificationDto> notifications = notificationService.notifyDepartmentByPermission(
+                    departmentId,
+                    PermissionConstants.ACTUAL_COST_APPROVE,
+                    title,
+                    message,
+                    severity,
+                    "ACTUAL_COST",
+                    item.id().toString()
+            );
+            if (notifications == null || notifications.isEmpty()) {
+                skipped++;
+            } else {
+                created += notifications.size();
+            }
+        }
+        return new NotificationCounts(created, skipped);
     }
 
     private ActualCostReviewActivityItem toActivityItem(ActualCostReviewEvent event, ActualCost cost) {
@@ -708,5 +786,8 @@ public class ActualCostReviewFacadeService {
         static ActualCostContext empty() {
             return new ActualCostContext(null, null, null, null);
         }
+    }
+
+    private record NotificationCounts(int created, int skipped) {
     }
 }
