@@ -33,7 +33,11 @@ public class SupplierService {
 
     @Transactional(readOnly = true)
     public List<SupplierDto> findAll(String search, Boolean active, SupplierType supplierType) {
-        return supplierRepository.search(trimToNull(search), active, supplierType).stream()
+        String normalizedSearch = trimToNull(search);
+        List<Supplier> suppliers = normalizedSearch == null
+                ? supplierRepository.findAllFiltered(active, supplierType)
+                : supplierRepository.search(normalizedSearch, active, supplierType);
+        return suppliers.stream()
                 .map(SupplierDto::from)
                 .toList();
     }
