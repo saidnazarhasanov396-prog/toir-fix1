@@ -13,7 +13,9 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.entity.ReliabilityMetric;
 import com.toir.repository.ReliabilityMetricRepository;
+import com.toir.util.SortUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +40,10 @@ public class RcmService {
 
 
     public List<EquipmentRiskScore> computeAll() {
+        return computeAll("riskScore", "desc");
+    }
+
+    public List<EquipmentRiskScore> computeAll(String sortBy, String sortDir) {
         Map<UUID, CriticalityClass> critById = criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(CriticalityClass::getId, c -> c));
         Map<UUID, Long> openDefectsByEq = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -48,12 +54,16 @@ public class RcmService {
 
         return equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .map(eq -> score(eq, critById, openDefectsByEq, metricByEq))
-                .sorted(Comparator.comparingInt(EquipmentRiskScore::riskScore).reversed())
+                .sorted(riskScoreComparator(sortBy, sortDir))
                 .toList();
     }
 
     public List<EquipmentRiskScore> topN(int n) {
-        return computeAll().stream().limit(n).toList();
+        return topN(n, "riskScore", "desc");
+    }
+
+    public List<EquipmentRiskScore> topN(int n, String sortBy, String sortDir) {
+        return computeAll(sortBy, sortDir).stream().limit(n).toList();
     }
 
     /** Рассчитывает RCM и сохраняет snapshot-строки на текущий момент. */
@@ -127,4 +137,21 @@ public class RcmService {
     }
 
     private int nz(Integer v) { return v == null ? 0 : v; }
+
+    private Comparator<EquipmentRiskScore> riskScoreComparator(String sortBy, String sortDir) {
+        String requestedSort = sortBy == null || sortBy.isBlank() ? "riskScore" : sortBy.trim();
+        Comparator<EquipmentRiskScore> comparator = switch (requestedSort) {
+            case "consequence" -> Comparator.comparingInt(EquipmentRiskScore::consequence);
+            case "probability", "probabilityPercent" -> Comparator.comparingInt(EquipmentRiskScore::probability);
+            case "riskScore" -> Comparator.comparingInt(EquipmentRiskScore::riskScore);
+            case "openDefects" -> Comparator.comparingLong(EquipmentRiskScore::openDefects);
+            case "mtbfHours" -> Comparator.comparingDouble(EquipmentRiskScore::mtbfHours);
+            case "mttrHours" -> Comparator.comparingDouble(EquipmentRiskScore::mttrHours);
+            default -> Comparator.comparingInt(EquipmentRiskScore::riskScore);
+        };
+        if (SortUtils.direction(sortDir, Sort.Direction.DESC).isDescending()) {
+            return comparator.reversed();
+        }
+        return comparator;
+    }
 }

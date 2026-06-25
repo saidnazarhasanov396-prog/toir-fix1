@@ -29,8 +29,16 @@ public class RcmController {
     private final RcmAutoPlannerService autoPlannerService;
 
     @GetMapping("/risk-scores")
-    public ResponseEntity<Page<EquipmentRiskScore>> list(@RequestParam(defaultValue = "0") int top, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(top > 0 ? service.topN(top) : service.computeAll(), page, size));
+    public ResponseEntity<Page<EquipmentRiskScore>> list(@RequestParam(defaultValue = "0") int top,
+                                                         @RequestParam(defaultValue = "0") int page,
+                                                         @RequestParam(defaultValue = "20") int size,
+                                                         @RequestParam(defaultValue = "riskScore") String sortBy,
+                                                         @RequestParam(defaultValue = "desc") String sortDir) {
+        return ResponseEntity.ok(PaginationUtils.page(
+                top > 0 ? service.topN(top, sortBy, sortDir) : service.computeAll(sortBy, sortDir),
+                page,
+                size
+        ));
     }
 
     @PostMapping("/snapshot")

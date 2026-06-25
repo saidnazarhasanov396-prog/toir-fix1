@@ -1,5 +1,7 @@
 package com.toir.dto.rcm;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.UUID;
 
 /**
@@ -24,4 +26,9 @@ public record EquipmentRiskScore(
         long openDefects,
         double mtbfHours,
         double mttrHours
-) {}
+) {
+        @JsonProperty("probabilityPercent")
+        public int probabilityPercent() {
+                return probability * 20;
+        }
+}

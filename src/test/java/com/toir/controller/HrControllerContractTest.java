@@ -3,11 +3,15 @@ package com.toir.controller;
 import com.toir.controller.users.HrController;
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.dto.hr.EmployeeFilterRequest;
+import com.toir.dto.hr.EmployeePictureDto;
 import com.toir.dto.hr.EmployeeStatsResponse;
 import com.toir.dto.hr.EmployeeSpecialisationDto;
 import com.toir.dto.hr.EmployeeSpecialisationRequest;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.CurrentUser;
 import com.toir.security.SecurityScope;
+import com.toir.service.users.EmployeePictureService;
 import com.toir.service.users.HrService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,14 +19,22 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.MethodParameter;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.support.WebDataBinderFactory;
+import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.method.support.ModelAndViewContainer;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,6 +45,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -48,12 +61,18 @@ class HrControllerContractTest {
     @Mock
     SecurityScope securityScope;
 
+    @Mock
+    EmployeePictureService pictureService;
+
     private MockMvc mockMvc;
+    private UUID currentUserId;
 
     @BeforeEach
     void setUp() {
+        currentUserId = UUID.randomUUID();
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new HrController(service, securityScope))
+                .standaloneSetup(new HrController(service, securityScope, pictureService))
+                .setCustomArgumentResolvers(new TestCurrentUserResolver(currentUserId))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -128,6 +147,70 @@ class HrControllerContractTest {
                 .andExpect(jsonPath("$.specialisationNameUz").value("Mexanik"));
 
         verify(service).getEmployee(employeeId);
+    }
+
+    @Test
+    void attachEmployeePicturesUploadsMultipleImages() throws Exception {
+        UUID employeeId = UUID.randomUUID();
+        UUID firstPictureId = UUID.randomUUID();
+        UUID secondPictureId = UUID.randomUUID();
+        when(pictureService.uploadPictures(eq(employeeId), any(), eq(List.of("Portrait", "Badge")), eq("PROFILE"), any()))
+                .thenReturn(List.of(
+                        employeePicture(employeeId, firstPictureId, "Portrait", "portrait.png"),
+                        employeePicture(employeeId, secondPictureId, "Badge", "badge.webp")
+                ));
+
+        mockMvc.perform(multipart("/api/v1/hr/employees/{employeeId}/pictures", employeeId)
+                        .file(new MockMultipartFile("files", "portrait.png", "image/png", "png".getBytes()))
+                        .file(new MockMultipartFile("files", "badge.webp", "image/webp", "webp".getBytes()))
+                        .param("pictureNames", "Portrait", "Badge")
+                        .param("pictureType", "PROFILE"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].id").value(firstPictureId.toString()))
+                .andExpect(jsonPath("$[0].employeeId").value(employeeId.toString()))
+                .andExpect(jsonPath("$[0].pictureName").value("Portrait"))
+                .andExpect(jsonPath("$[0].downloadUrl").value("/api/v1/hr/employee-pictures/" + firstPictureId + "/download"))
+                .andExpect(jsonPath("$[1].pictureName").value("Badge"));
+
+        verify(pictureService).uploadPictures(eq(employeeId), any(), eq(List.of("Portrait", "Badge")), eq("PROFILE"), any());
+    }
+
+    @Test
+    void listEmployeePicturesReturnsPaginatedContent() throws Exception {
+        UUID employeeId = UUID.randomUUID();
+        UUID pictureId = UUID.randomUUID();
+        when(pictureService.getPictures(eq(employeeId), any()))
+                .thenReturn(List.of(employeePicture(employeeId, pictureId, "Portrait", "portrait.png")));
+
+        mockMvc.perform(get("/api/v1/hr/employees/{employeeId}/pictures", employeeId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(pictureId.toString()))
+                .andExpect(jsonPath("$.content[0].downloadUrl").value("/api/v1/hr/employee-pictures/" + pictureId + "/download"))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void downloadEmployeePictureReturnsInlineImage() throws Exception {
+        UUID employeeId = UUID.randomUUID();
+        UUID pictureId = UUID.randomUUID();
+        when(pictureService.getPicture(eq(pictureId), any()))
+                .thenReturn(employeePicture(employeeId, pictureId, "Portrait", "portrait.png"));
+        when(pictureService.downloadPicture(eq(pictureId), any()))
+                .thenReturn(new ByteArrayResource("png".getBytes()));
+
+        mockMvc.perform(get("/api/v1/hr/employee-pictures/{pictureId}/download", pictureId))
+                .andExpect(status().isOk())
+                .andExpect(result -> assertThat(result.getResponse().getContentType()).isEqualTo("image/png"));
+    }
+
+    @Test
+    void deleteEmployeePictureReturnsNoContent() throws Exception {
+        UUID pictureId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/hr/employee-pictures/{pictureId}", pictureId))
+                .andExpect(status().isNoContent());
+
+        verify(pictureService).deletePicture(eq(pictureId), any());
     }
 
     @Test
@@ -426,5 +509,39 @@ class HrControllerContractTest {
         );
 
 
+    }
+
+    private static EmployeePictureDto employeePicture(UUID employeeId, UUID pictureId, String pictureName, String originalName) {
+        return new EmployeePictureDto(
+                pictureId,
+                employeeId,
+                pictureName,
+                "PROFILE",
+                originalName,
+                "image/png",
+                123L,
+                LocalDateTime.parse("2026-06-25T06:00:00"),
+                UUID.randomUUID(),
+                "/api/v1/hr/employee-pictures/" + pictureId + "/download"
+        );
+    }
+
+    private static class TestCurrentUserResolver implements HandlerMethodArgumentResolver {
+        private final UUID userId;
+
+        private TestCurrentUserResolver(UUID userId) {
+            this.userId = userId;
+        }
+
+        @Override
+        public boolean supportsParameter(MethodParameter parameter) {
+            return parameter.hasParameterAnnotation(CurrentUser.class);
+        }
+
+        @Override
+        public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+                                      NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
+            return new AuthenticatedUser(userId.toString(), "user", "user@example.com", "User", null, "USER", List.of());
+        }
     }
 }
