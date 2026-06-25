@@ -13,12 +13,17 @@ class FirebaseConfigTest {
             .withUserConfiguration(FirebaseConfig.class);
 
     @Test
-    void initializesFirebaseMessagingFromClasspathServiceAccount() {
+    void disablesFirebaseMessagingWhenEnabledButServiceAccountFileIsMissing() {
         contextRunner
+                .withPropertyValues(
+                        "app.firebase.enabled=true",
+                        "app.firebase.project-id=toir-51480",
+                        "app.firebase.service-account-file=target/missing-firebase-service-account.json"
+                )
                 .run(context -> {
                     assertThat(context).hasNotFailed();
-                    assertThat(context).hasSingleBean(FirebaseApp.class);
-                    assertThat(context).hasSingleBean(FirebaseMessaging.class);
+                    assertThat(context).doesNotHaveBean(FirebaseApp.class);
+                    assertThat(context).doesNotHaveBean(FirebaseMessaging.class);
                 });
     }
 }
