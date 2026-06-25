@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.dto.procurement.ProcurementLineRequest;
+import com.toir.dto.procurement.ProcurementOrderRequest;
 import com.toir.dto.procurement.ProcurementReceiptRequest;
 import com.toir.dto.procurement.ProcurementReceiptResponse;
 import com.toir.dto.procurement.ProcurementRequestDto;
@@ -120,8 +121,11 @@ public class ProcurementRequestController {
 
     @PostMapping("/{id}/ordered")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PROCUREMENT_ORDER')")
-    public ResponseEntity<ProcurementRequestDto> markOrdered(@PathVariable UUID id) {
-        return ResponseEntity.ok(service.markOrdered(id));
+    public ResponseEntity<ProcurementRequestDto> markOrdered(
+            @PathVariable UUID id,
+            @RequestBody(required = false) ProcurementOrderRequest request
+    ) {
+        return ResponseEntity.ok(service.markOrdered(id, request));
     }
 
     @PostMapping("/{id}/received")

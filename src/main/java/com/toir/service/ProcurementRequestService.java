@@ -1,6 +1,8 @@
 package com.toir.service;
 
+import com.toir.dto.procurement.EquipmentWarrantyLineRequest;
 import com.toir.dto.procurement.ProcurementLineRequest;
+import com.toir.dto.procurement.ProcurementOrderRequest;
 import com.toir.dto.procurement.ProcurementReceiptLineRequest;
 import com.toir.dto.procurement.ProcurementReceiptRequest;
 import com.toir.dto.procurement.ProcurementReceiptResponse;
@@ -11,6 +13,7 @@ import com.toir.entity.Department;
 import com.toir.entity.PprTask;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
+import com.toir.entity.Supplier;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
@@ -33,6 +36,7 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.SupplierType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
@@ -40,6 +44,7 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -87,6 +92,7 @@ public class ProcurementRequestService {
     private final LowStockRecommendationService lowStockRecommendationService;
     private final ActualCostRepository actualCostRepository;
     private final CostCategoryRepository costCategoryRepository;
+    private final SupplierRepository supplierRepository;
     private final ToirStockService toirStockService;
     private final LegacyStockProjectionService legacyStockProjectionService;
 
@@ -177,6 +183,7 @@ public class ProcurementRequestService {
         p.setResponsibleId(r.responsibleId());
         p.setPriority(normalizePriority(r.priority()));
         p.setType(normalizeType(r.type()));
+        p.setSupplierId(validatedSupplierIdOrNull(r.supplierId(), requestType(p), "procurement requests"));
         applySourceTrace(p, r.sourceDefectId(), r.sourcePprTaskId());
         p.setStatus(ProcurementRequestStatus.DRAFT);
         p.setSource("MANUAL");
@@ -313,11 +320,28 @@ public class ProcurementRequestService {
 
     @Transactional
     public ProcurementRequestDto markOrdered(UUID id) {
+        return markOrdered(id, null);
+    }
+
+    @Transactional
+    public ProcurementRequestDto markOrdered(UUID id, ProcurementOrderRequest orderRequest) {
         ProcurementRequest p = load(id);
         assertCanMutate(p);
         if (p.getStatus() != ProcurementRequestStatus.APPROVED) {
             throw RestException.badRequest("Only APPROVED can be marked ORDERED");
         }
+        ProcurementOrderRequest effectiveRequest = orderRequest == null
+                ? new ProcurementOrderRequest(null, null, null, List.of())
+                : orderRequest;
+        UUID supplierId = firstNonNull(effectiveRequest.supplierId(), p.getSupplierId());
+        if (supplierId == null) {
+            throw RestException.badRequest("Supplier is required before procurement request can be ordered");
+        }
+        p.setSupplierId(validatedSupplierIdOrNull(supplierId, requestType(p), "procurement requests"));
+        if (effectiveRequest.expectedDeliveryDate() != null) {
+            p.setRequiredBy(effectiveRequest.expectedDeliveryDate());
+        }
+        applyEquipmentWarrantyForOrder(p, effectiveRequest.equipmentWarrantyLines());
         p.setStatus(ProcurementRequestStatus.ORDERED);
         p.setOrderedAt(Instant.now());
         ProcurementRequest saved = repo.save(p);
@@ -331,6 +355,100 @@ public class ProcurementRequestService {
                 saved
         );
         return toDto(saved);
+    }
+
+    private void applyEquipmentWarrantyForOrder(ProcurementRequest request,
+                                                List<EquipmentWarrantyLineRequest> warrantyLines) {
+        if (requestType(request) != ProcurementRequestType.EQUIPMENT) {
+            return;
+        }
+        Map<UUID, ProcurementRequestLine> linesById = request.getLines() == null
+                ? Map.of()
+                : request.getLines().stream()
+                .filter(line -> !line.isDeleted())
+                .filter(line -> line.getId() != null)
+                .collect(Collectors.toMap(ProcurementRequestLine::getId, Function.identity(), (first, ignored) -> first));
+        if (warrantyLines != null) {
+            for (EquipmentWarrantyLineRequest warrantyLine : warrantyLines) {
+                if (warrantyLine == null || warrantyLine.procurementLineId() == null) {
+                    throw RestException.badRequest("equipment warranty procurementLineId is required");
+                }
+                ProcurementRequestLine line = linesById.get(warrantyLine.procurementLineId());
+                if (line == null) {
+                    throw RestException.badRequest("Equipment warranty line does not belong to this procurement request: "
+                            + warrantyLine.procurementLineId());
+                }
+                applyEquipmentWarrantyLine(line, warrantyLine, request.getSupplierId());
+            }
+        }
+        if (request.getLines() != null) {
+            request.getLines().stream()
+                    .filter(line -> !line.isDeleted())
+                    .forEach(line -> normalizeEquipmentWarrantyLine(line, request.getSupplierId()));
+        }
+    }
+
+    private void applyEquipmentWarrantyLine(ProcurementRequestLine line,
+                                            EquipmentWarrantyLineRequest request,
+                                            UUID procurementSupplierId) {
+        boolean hasWarranty = Boolean.TRUE.equals(request.hasWarranty())
+                || request.warrantySupplierId() != null
+                || request.warrantyStartDate() != null
+                || request.warrantyEndDate() != null
+                || request.warrantyDurationMonths() != null;
+        if (!hasWarranty) {
+            clearWarranty(line);
+            return;
+        }
+        line.setHasWarranty(true);
+        line.setWarrantyStartDate(request.warrantyStartDate());
+        line.setWarrantyDurationMonths(request.warrantyDurationMonths());
+        line.setWarrantySupplierId(firstNonNull(request.warrantySupplierId(), procurementSupplierId));
+        if (request.warrantyEndDate() != null) {
+            line.setWarrantyEndDate(request.warrantyEndDate());
+        } else if (request.warrantyStartDate() != null && request.warrantyDurationMonths() != null) {
+            line.setWarrantyEndDate(request.warrantyStartDate().plusMonths(request.warrantyDurationMonths()));
+        } else {
+            line.setWarrantyEndDate(null);
+        }
+    }
+
+    private void normalizeEquipmentWarrantyLine(ProcurementRequestLine line, UUID procurementSupplierId) {
+        if (!Boolean.TRUE.equals(line.getHasWarranty())) {
+            clearWarranty(line);
+            return;
+        }
+        if (line.getWarrantySupplierId() == null) {
+            line.setWarrantySupplierId(procurementSupplierId);
+        }
+        if (line.getWarrantySupplierId() == null) {
+            throw RestException.badRequest("Warranty supplier is required when equipment procurement warranty is enabled");
+        }
+        validatedSupplierIdOrNull(line.getWarrantySupplierId(), SupplierType.EQUIPMENT, "equipment procurement warranty");
+        if (line.getWarrantyEndDate() == null && line.getWarrantyDurationMonths() == null) {
+            throw RestException.badRequest("Warranty end date or warranty duration is required when equipment procurement warranty is enabled");
+        }
+        if (line.getWarrantyDurationMonths() != null && line.getWarrantyDurationMonths() <= 0) {
+            throw RestException.badRequest("Warranty duration must be greater than 0");
+        }
+        if (line.getWarrantyEndDate() == null
+                && line.getWarrantyStartDate() != null
+                && line.getWarrantyDurationMonths() != null) {
+            line.setWarrantyEndDate(line.getWarrantyStartDate().plusMonths(line.getWarrantyDurationMonths()));
+        }
+        if (line.getWarrantyStartDate() != null
+                && line.getWarrantyEndDate() != null
+                && line.getWarrantyEndDate().isBefore(line.getWarrantyStartDate())) {
+            throw RestException.badRequest("Warranty end date must be after or equal to warranty start date");
+        }
+    }
+
+    private void clearWarranty(ProcurementRequestLine line) {
+        line.setHasWarranty(false);
+        line.setWarrantyStartDate(null);
+        line.setWarrantyEndDate(null);
+        line.setWarrantyDurationMonths(null);
+        line.setWarrantySupplierId(null);
     }
 
     @Transactional
@@ -677,10 +795,38 @@ public class ProcurementRequestService {
         equipment.setStatus(EquipmentStatus.STANDBY);
         equipment.setCategory(EquipmentCategory.PRODUCTION_EQUIPMENT);
         equipment.setArrivalDate(receiptDate == null ? LocalDate.now(ZoneOffset.UTC) : receiptDate);
+        equipment.setSupplierId(request.getSupplierId());
+        applyEquipmentReceiptWarranty(equipment, request, line, receiptDate);
         equipment.setProcurementRequestId(request.getId());
         equipment.setProcurementRequestLineId(line.getId());
         equipment.setProcurementStockMovementId(movement.getId());
         return equipment;
+    }
+
+    private void applyEquipmentReceiptWarranty(Equipment equipment,
+                                               ProcurementRequest request,
+                                               ProcurementRequestLine line,
+                                               LocalDate receiptDate) {
+        if (!Boolean.TRUE.equals(line.getHasWarranty())) {
+            equipment.setHasWarranty(false);
+            equipment.setWarrantyStartDate(null);
+            equipment.setWarrantyEndDate(null);
+            equipment.setWarrantyUntil(null);
+            equipment.setWarrantySupplierId(null);
+            return;
+        }
+        LocalDate startDate = line.getWarrantyStartDate() != null
+                ? line.getWarrantyStartDate()
+                : (receiptDate == null ? LocalDate.now(ZoneOffset.UTC) : receiptDate);
+        LocalDate endDate = line.getWarrantyEndDate();
+        if (endDate == null && line.getWarrantyDurationMonths() != null) {
+            endDate = startDate.plusMonths(line.getWarrantyDurationMonths());
+        }
+        equipment.setHasWarranty(true);
+        equipment.setWarrantyStartDate(startDate);
+        equipment.setWarrantyEndDate(endDate);
+        equipment.setWarrantyUntil(endDate);
+        equipment.setWarrantySupplierId(firstNonNull(line.getWarrantySupplierId(), request.getSupplierId()));
     }
 
     private WarehouseEquipmentItem warehouseEquipmentItem(ProcurementRequest request, Equipment equipment) {
@@ -731,6 +877,36 @@ public class ProcurementRequestService {
     private String firstNonBlank(String first, String fallback) {
         String normalized = trimToNull(first);
         return normalized == null ? fallback : normalized;
+    }
+
+    private UUID firstNonNull(UUID first, UUID fallback) {
+        return first != null ? first : fallback;
+    }
+
+    private UUID validatedSupplierIdOrNull(UUID supplierId, ProcurementRequestType procurementType, String context) {
+        if (supplierId == null) {
+            return null;
+        }
+        SupplierType requiredType = procurementType == ProcurementRequestType.EQUIPMENT
+                ? SupplierType.EQUIPMENT
+                : SupplierType.SPARE_PART;
+        return validatedSupplierIdOrNull(supplierId, requiredType, context);
+    }
+
+    private UUID validatedSupplierIdOrNull(UUID supplierId, SupplierType requiredType, String context) {
+        if (supplierId == null) {
+            return null;
+        }
+        Supplier supplier = supplierRepository.findByIdAndIsDeletedFalse(supplierId)
+                .orElseThrow(() -> RestException.notFound("Supplier not found: " + supplierId));
+        if (!Boolean.TRUE.equals(supplier.getActive())) {
+            throw RestException.badRequest("Inactive suppliers cannot be selected for " + context);
+        }
+        SupplierType actualType = supplier.getSupplierType() == null ? SupplierType.BOTH : supplier.getSupplierType();
+        if (!actualType.supports(requiredType)) {
+            throw RestException.badRequest("Supplier must support " + requiredType + " for " + context);
+        }
+        return supplier.getId();
     }
 
     private String trimToNull(String value) {
@@ -866,7 +1042,37 @@ public class ProcurementRequestService {
         line.setUnitPrice(r.unitPrice());
         line.setEstimatedCost(estimatedCost(r.quantity(), r.unitPrice()));
         line.setNotes(r.notes());
+        applyEquipmentLineWarrantyFromCreate(p, line, r);
         return line;
+    }
+
+    private void applyEquipmentLineWarrantyFromCreate(ProcurementRequest request,
+                                                      ProcurementRequestLine line,
+                                                      ProcurementLineRequest lineRequest) {
+        boolean hasWarranty = Boolean.TRUE.equals(lineRequest.hasWarranty())
+                || lineRequest.warrantySupplierId() != null
+                || lineRequest.warrantyStartDate() != null
+                || lineRequest.warrantyEndDate() != null
+                || lineRequest.warrantyDurationMonths() != null;
+        if (!hasWarranty) {
+            clearWarranty(line);
+            return;
+        }
+        applyEquipmentWarrantyLine(
+                line,
+                new EquipmentWarrantyLineRequest(
+                        line.getId(),
+                        true,
+                        lineRequest.warrantyStartDate(),
+                        lineRequest.warrantyEndDate(),
+                        lineRequest.warrantyDurationMonths(),
+                        lineRequest.warrantySupplierId()
+                ),
+                request.getSupplierId()
+        );
+        if (line.getWarrantySupplierId() != null) {
+            validatedSupplierIdOrNull(line.getWarrantySupplierId(), SupplierType.EQUIPMENT, "equipment procurement warranty");
+        }
     }
 
     private ProcurementRequestLine buildEquipmentLine(ProcurementRequest p, ProcurementLineRequest r) {
@@ -1018,17 +1224,31 @@ public class ProcurementRequestService {
                 .map(ProcurementRequestLine::getSparePartId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
+        Set<UUID> supplierIds = procurements.stream()
+                .map(ProcurementRequest::getSupplierId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<UUID> warrantySupplierIds = procurements.stream()
+                .filter(Objects::nonNull)
+                .flatMap(request -> request.getLines() == null ? java.util.stream.Stream.empty() : request.getLines().stream())
+                .map(ProcurementRequestLine::getWarrantySupplierId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
 
         Map<UUID, String> departmentNames = departmentNamesById(departmentIds);
         Map<UUID, String> warehouseNames = warehouseNamesById(warehouseIds);
         Map<UUID, SparePart> spareParts = sparePartsById(sparePartIds);
+        Map<UUID, String> supplierNames = supplierNamesById(supplierIds);
+        Map<UUID, String> warrantySupplierNames = supplierNamesById(warrantySupplierIds);
 
         return procurements.stream()
                 .map(request -> ProcurementRequestDto.from(
                         request,
                         nameById(departmentNames, request.getDepartmentId()),
                         nameById(warehouseNames, request.getWarehouseId()),
-                        spareParts
+                        spareParts,
+                        supplierNames,
+                        warrantySupplierNames
                 ))
                 .toList();
     }
@@ -1078,6 +1298,19 @@ public class ProcurementRequestService {
         return spareParts.stream()
                 .filter(sparePart -> sparePart.getId() != null)
                 .collect(Collectors.toMap(SparePart::getId, Function.identity(), (first, ignored) -> first));
+    }
+
+    private Map<UUID, String> supplierNamesById(Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<Supplier> suppliers = supplierRepository.findAllByIdInAndIsDeletedFalse(ids);
+        if (suppliers == null) {
+            return Map.of();
+        }
+        return suppliers.stream()
+                .filter(supplier -> supplier.getId() != null)
+                .collect(Collectors.toMap(Supplier::getId, Supplier::getName, (first, ignored) -> first));
     }
 
     private void recalcTotal(ProcurementRequest p) {
