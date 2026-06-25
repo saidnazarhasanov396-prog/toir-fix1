@@ -80,12 +80,23 @@ public class DefectService {
     }
 
     @Transactional(readOnly = true)
-    public Page<DefectResponse> search(UUID equipmentId, UUID repairRequestId, DefectStatus status, int page, int size, String search) {
+    public Page<DefectResponse> search(
+            UUID equipmentId,
+            UUID repairRequestId,
+            DefectStatus status,
+            String category,
+            String severity,
+            int page,
+            int size,
+            String search
+    ) {
         var pageable = PaginationUtils.pageRequest(page, size);
         Page<Defect> resultPage = repository.searchPaginated(
                 equipmentId,
                 repairRequestId,
                 status == null ? null : status.name(),
+                category,
+                severity,
                 search,
                 pageable
         );
@@ -161,6 +172,8 @@ public class DefectService {
     public DefectStatsResponse getStats(
             UUID equipmentId,
             UUID repairRequestId,
+            String category,
+            String severity,
             String search
     ) {
         String searchPattern = toSearchPattern(search);
@@ -168,7 +181,7 @@ public class DefectService {
         if (!scopeAccessService.isScopeAdmin()) {
             List<Defect> scopedDefects = repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()
                     .stream()
-                    .filter(defect -> matchesStatsFilter(defect, equipmentId, repairRequestId, search))
+                    .filter(defect -> matchesStatsFilter(defect, equipmentId, repairRequestId, category, severity, search))
                     .filter(this::canAccessDefect)
                     .toList();
             return scopedStats(scopedDefects);
@@ -177,6 +190,8 @@ public class DefectService {
         DefectStatsProjection stats = repository.getDefectStats(
                 equipmentId,
                 repairRequestId,
+                category,
+                severity,
                 searchPattern,
                 DefectStatus.OPEN.name(),
                 DefectStatus.RESOLVED.name()
@@ -589,11 +604,24 @@ public class DefectService {
         return resolveDefectDepartmentId(defectList.getEquipmentId(), defectList.getRepairRequestId());
     }
 
-    private boolean matchesStatsFilter(Defect defect, UUID equipmentId, UUID repairRequestId, String search) {
+    private boolean matchesStatsFilter(
+            Defect defect,
+            UUID equipmentId,
+            UUID repairRequestId,
+            String category,
+            String severity,
+            String search
+    ) {
         if (equipmentId != null && !equipmentId.equals(defect.getEquipmentId())) {
             return false;
         }
         if (repairRequestId != null && !repairRequestId.equals(defect.getRepairRequestId())) {
+            return false;
+        }
+        if (category != null && !category.equalsIgnoreCase(defect.getCategory())) {
+            return false;
+        }
+        if (severity != null && !severity.equalsIgnoreCase(defect.getSeverity())) {
             return false;
         }
         if (search == null || search.isBlank()) {
