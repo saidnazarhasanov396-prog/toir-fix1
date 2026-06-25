@@ -70,6 +70,8 @@ class DefectRepositoryStatsTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 DefectStatus.OPEN.name(),
                 DefectStatus.RESOLVED.name()
         );
@@ -140,6 +142,8 @@ class DefectRepositoryStatsTest {
         DefectStatsProjection stats = repository.getDefectStats(
                 targetEquipmentId,
                 targetRepairRequestId,
+                null,
+                null,
                 "%pump%",
                 DefectStatus.OPEN.name(),
                 DefectStatus.RESOLVED.name()
