@@ -105,7 +105,7 @@ public class RcmService {
     private EquipmentRiskScore score(Equipment eq, EquipmentRiskEvidence evidence, String lang) {
         EquipmentRiskEvidence resolvedEvidence = evidence == null ? defaultEvidence(eq) : evidence;
         EquipmentRiskScoringResult result = equipmentRiskScoringService.score(resolvedEvidence);
-        RiskExplanationDto explanation = metricExplanationService.rcmRisk(lang, result);
+        RiskExplanationDto explanation = metricExplanationService.rcmRisk(lang, result, resolvedEvidence);
         return new EquipmentRiskScore(
                 eq.getId(), eq.getCode(), eq.getName(),
                 resolvedEvidence.criticalityCode(),
@@ -129,6 +129,10 @@ public class RcmService {
                 null,
                 null,
                 eq.getStatus(),
+                0,
+                0,
+                0,
+                0,
                 0,
                 0,
                 0,

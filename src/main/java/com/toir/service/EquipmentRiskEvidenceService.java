@@ -89,6 +89,10 @@ public class EquipmentRiskEvidenceService {
                     criticalityClass == null ? null : criticalityClass.getLevel(),
                     criticalityClass == null ? null : criticalityClass.getRepairPriority(),
                     item.getStatus(),
+                    criticalityClass == null ? 0 : nz(criticalityClass.getSafetyImpact()),
+                    criticalityClass == null ? 0 : nz(criticalityClass.getProductionImpact()),
+                    criticalityClass == null ? 0 : nz(criticalityClass.getEcologicalImpact()),
+                    criticalityClass == null ? 0 : nz(criticalityClass.getEnergyImpact()),
                     openDefects.size(),
                     openDefects.stream().filter(defect -> defect.getRecurrenceCount() > 0).count(),
                     metric != null && metric.getMtbfHours() != null ? metric.getMtbfHours() : 0,
@@ -210,5 +214,9 @@ public class EquipmentRiskEvidenceService {
             return Duration.between(event.getStartAt(), event.getEndAt()).toMinutes() / 60.0;
         }
         return 0;
+    }
+
+    private int nz(Integer value) {
+        return value == null ? 0 : value;
     }
 }
