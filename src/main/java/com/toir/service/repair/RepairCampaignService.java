@@ -89,12 +89,12 @@ public class RepairCampaignService {
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findAll() {
-        return toDtoList(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc());
+        return toDtoList(repository.findAllByIsDeletedFalseOrderByCreatedAtDesc());
     }
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findByYear(int year) {
-        return toDtoList(repository.findAllByYearAndIsDeletedFalseOrderByStartDateAsc(year));
+        return toDtoList(repository.findAllByYearAndIsDeletedFalseOrderByCreatedAtDesc(year));
     }
 
     @Transactional(readOnly = true)

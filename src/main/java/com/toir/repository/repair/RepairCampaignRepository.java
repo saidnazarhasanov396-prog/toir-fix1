@@ -16,8 +16,8 @@ public interface RepairCampaignRepository extends JpaRepository<RepairCampaign, 
     @Query(value = "SELECT * FROM repair_campaigns WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<RepairCampaign> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
-    @Query(value = "SELECT * FROM repair_campaigns WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<RepairCampaign> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    @Query(value = "SELECT * FROM repair_campaigns WHERE is_deleted = false ORDER BY created_at DESC, updated_at DESC", nativeQuery = true)
+    List<RepairCampaign> findAllByIsDeletedFalseOrderByCreatedAtDesc();
 
     @Query(value = "SELECT * FROM repair_campaigns WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<RepairCampaign> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
@@ -39,11 +39,11 @@ public interface RepairCampaignRepository extends JpaRepository<RepairCampaign, 
             """, nativeQuery = true)
     long maxSequenceByCodePrefix(@Param("prefix") String prefix);
 
-    @Query(value = "SELECT * FROM repair_campaigns WHERE year = :year AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<RepairCampaign> findAllByYearAndIsDeletedFalseOrderByStartDateAsc(@Param("year") int year);
+    @Query(value = "SELECT * FROM repair_campaigns WHERE year = :year AND is_deleted = false ORDER BY created_at DESC, updated_at DESC", nativeQuery = true)
+    List<RepairCampaign> findAllByYearAndIsDeletedFalseOrderByCreatedAtDesc(@Param("year") int year);
 
-    @Query(value = "SELECT * FROM repair_campaigns WHERE department_id = :departmentId AND year = :year AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<RepairCampaign> findAllByDepartmentIdAndYearAndIsDeletedFalseOrderByStartDateAsc(@Param("departmentId") UUID departmentId, @Param("year") int year);
+    @Query(value = "SELECT * FROM repair_campaigns WHERE department_id = :departmentId AND year = :year AND is_deleted = false ORDER BY created_at DESC, updated_at DESC", nativeQuery = true)
+    List<RepairCampaign> findAllByDepartmentIdAndYearAndIsDeletedFalseOrderByCreatedAtDesc(@Param("departmentId") UUID departmentId, @Param("year") int year);
 
     @Query(value = """
             SELECT * FROM repair_campaigns 
@@ -57,7 +57,7 @@ public interface RepairCampaignRepository extends JpaRepository<RepairCampaign, 
                 OR lower(coalesce(scope, '')) LIKE :searchPattern
                 OR lower(coalesce(notes, '')) LIKE :searchPattern
               )
-            ORDER BY start_date ASC
+            ORDER BY created_at DESC, updated_at DESC
             """, nativeQuery = true)
     List<RepairCampaign> findAllFiltered(
             @Param("year") Integer year, 

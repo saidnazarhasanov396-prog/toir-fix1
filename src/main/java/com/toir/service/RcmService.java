@@ -15,6 +15,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.entity.ReliabilityMetric;
 import com.toir.repository.ReliabilityMetricRepository;
+import com.toir.service.MetricExplanationService.RcmProbabilityBasis;
 import com.toir.util.SortUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
@@ -146,12 +147,26 @@ public class RcmService {
         double mttr = m != null && m.getMttrHours() != null ? m.getMttrHours() : 0.0;
 
         int probability;
-        if (openDefects >= 5) probability = 5;
-        else if (openDefects >= 3) probability = 4;
-        else if (openDefects >= 1) probability = 3;
-        else if (mtbf > 0 && mtbf < 2000) probability = 3;
-        else if (mtbf > 0 && mtbf < 4000) probability = 2;
-        else probability = 1;
+        RcmProbabilityBasis probabilityBasis;
+        if (openDefects >= 5) {
+            probability = 5;
+            probabilityBasis = RcmProbabilityBasis.OPEN_DEFECTS;
+        } else if (openDefects >= 3) {
+            probability = 4;
+            probabilityBasis = RcmProbabilityBasis.OPEN_DEFECTS;
+        } else if (openDefects >= 1) {
+            probability = 3;
+            probabilityBasis = RcmProbabilityBasis.OPEN_DEFECTS;
+        } else if (mtbf > 0 && mtbf < 2000) {
+            probability = 3;
+            probabilityBasis = RcmProbabilityBasis.MTBF;
+        } else if (mtbf > 0 && mtbf < 4000) {
+            probability = 2;
+            probabilityBasis = RcmProbabilityBasis.MTBF;
+        } else {
+            probability = 1;
+            probabilityBasis = RcmProbabilityBasis.BASELINE;
+        }
 
         int risk = Math.min(100, consequence * probability);
         MetricExplanationDto explanation = metricExplanationService.rcmRisk(
@@ -165,7 +180,7 @@ public class RcmService {
                 risk,
                 openDefects,
                 mtbf,
-                mttr
+                probabilityBasis
         );
         return new EquipmentRiskScore(
                 eq.getId(), eq.getCode(), eq.getName(), clsCode, clsName,

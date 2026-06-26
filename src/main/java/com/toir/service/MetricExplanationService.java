@@ -4,6 +4,7 @@ import com.toir.dto.analytics.MetricExplanationDto;
 import com.toir.dto.analytics.MetricExplanationStepDto;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -47,25 +48,29 @@ public class MetricExplanationService {
                                         int riskScore,
                                         long openDefects,
                                         double mtbfHours,
-                                        double mttrHours) {
+                                        RcmProbabilityBasis probabilityBasis) {
         String locale = normalizeLocale(lang);
         RcmText text = rcmText(locale);
+        RcmProbabilityBasis resolvedProbabilityBasis = probabilityBasis == null
+                ? RcmProbabilityBasis.BASELINE
+                : probabilityBasis;
+        List<MetricExplanationStepDto> steps = new ArrayList<>();
+        steps.add(new MetricExplanationStepDto(text.safetyImpact(), safetyImpact));
+        steps.add(new MetricExplanationStepDto(text.productionImpact(), productionImpact));
+        steps.add(new MetricExplanationStepDto(text.ecologicalImpact(), ecologicalImpact));
+        steps.add(new MetricExplanationStepDto(text.energyImpact(), energyImpact));
+        steps.add(new MetricExplanationStepDto(text.consequenceTotal(), consequence));
+        steps.add(new MetricExplanationStepDto(text.openDefects(), openDefects));
+        if (resolvedProbabilityBasis == RcmProbabilityBasis.MTBF) {
+            steps.add(new MetricExplanationStepDto(text.mtbf(), round2(mtbfHours), text.hoursUnit()));
+        }
+        steps.add(new MetricExplanationStepDto(text.probability(resolvedProbabilityBasis), probability));
+        steps.add(new MetricExplanationStepDto(text.finalRisk(), riskScore, "/100"));
         return new MetricExplanationDto(
                 locale,
                 text.formula(),
                 text.summary(riskScore, consequence, probability),
-                List.of(
-                        new MetricExplanationStepDto(text.safetyImpact(), safetyImpact),
-                        new MetricExplanationStepDto(text.productionImpact(), productionImpact),
-                        new MetricExplanationStepDto(text.ecologicalImpact(), ecologicalImpact),
-                        new MetricExplanationStepDto(text.energyImpact(), energyImpact),
-                        new MetricExplanationStepDto(text.consequenceTotal(), consequence),
-                        new MetricExplanationStepDto(text.openDefects(), openDefects),
-                        new MetricExplanationStepDto(text.probability(), probability),
-                        new MetricExplanationStepDto(text.mtbf(), round2(mtbfHours), text.hoursUnit()),
-                        new MetricExplanationStepDto(text.mttr(), round2(mttrHours), text.hoursUnit()),
-                        new MetricExplanationStepDto(text.finalRisk(), riskScore, "/100")
-                )
+                steps
         );
     }
 
@@ -92,48 +97,51 @@ public class MetricExplanationService {
     private RcmText rcmText(String locale) {
         return switch (locale) {
             case "uz" -> new RcmText(
-                    "min(100, oqibat × ehtimollik)",
+                    "min(100, (xavfsizlik + ishlab chiqarish + ekologiya + energiya) × ehtimollik)",
                     "Xavfsizlik ta'siri",
                     "Ishlab chiqarish ta'siri",
                     "Ekologik ta'sir",
                     "Energiya ta'siri",
                     "Oqibat jami",
                     "Ochiq nuqsonlar",
-                    "Ehtimollik",
+                    "Ehtimollik (ochiq nuqsonlar bo'yicha)",
+                    "Ehtimollik (MTBF bo'yicha)",
+                    "Ehtimollik (bazaviy)",
                     "MTBF",
-                    "MTTR",
                     "Yakuniy xavf",
                     "soat",
                     (riskScore, consequence, probability) ->
                             "Xavf %d/100, chunki oqibat %d va ehtimollik %d."
                                     .formatted(riskScore, consequence, probability));
             case "ru" -> new RcmText(
-                    "min(100, последствие × вероятность)",
+                    "min(100, (безопасность + производство + экология + энергия) × вероятность)",
                     "Влияние на безопасность",
                     "Влияние на производство",
                     "Экологическое влияние",
                     "Влияние на энергопотребление",
                     "Итого последствие",
                     "Открытые дефекты",
-                    "Вероятность",
+                    "Вероятность (по открытым дефектам)",
+                    "Вероятность (по MTBF)",
+                    "Вероятность (базовая)",
                     "MTBF",
-                    "MTTR",
                     "Итоговый риск",
                     "часы",
                     (riskScore, consequence, probability) ->
                             "Риск %d/100, потому что последствие равно %d, а вероятность %d."
                                     .formatted(riskScore, consequence, probability));
             default -> new RcmText(
-                    "min(100, consequence × probability)",
+                    "min(100, (safety + production + ecological + energy) × probability)",
                     "Safety impact",
                     "Production impact",
                     "Ecological impact",
                     "Energy impact",
                     "Consequence total",
                     "Open defects",
-                    "Probability",
+                    "Probability (from open defects)",
+                    "Probability (from MTBF)",
+                    "Probability (baseline)",
                     "MTBF",
-                    "MTTR",
                     "Final risk",
                     "hours",
                     (riskScore, consequence, probability) ->
@@ -196,14 +204,23 @@ public class MetricExplanationService {
                            String energyImpact,
                            String consequenceTotal,
                            String openDefects,
-                           String probability,
+                           String openDefectsProbability,
+                           String mtbfProbability,
+                           String baselineProbability,
                            String mtbf,
-                           String mttr,
                            String finalRisk,
                            String hoursUnit,
                            RcmSummary summaryFormatter) {
         String summary(int riskScore, int consequence, int probability) {
             return summaryFormatter.summary(riskScore, consequence, probability);
+        }
+
+        String probability(RcmProbabilityBasis basis) {
+            return switch (basis) {
+                case OPEN_DEFECTS -> openDefectsProbability;
+                case MTBF -> mtbfProbability;
+                case BASELINE -> baselineProbability;
+            };
         }
     }
 
@@ -222,6 +239,12 @@ public class MetricExplanationService {
     @FunctionalInterface
     private interface RcmSummary {
         String summary(int riskScore, int consequence, int probability);
+    }
+
+    public enum RcmProbabilityBasis {
+        OPEN_DEFECTS,
+        MTBF,
+        BASELINE
     }
 
     @FunctionalInterface

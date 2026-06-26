@@ -116,7 +116,8 @@ class RcmServiceTest {
 
         assertThat(score.riskScore()).isEqualTo(56);
         assertThat(score.explanation().locale()).isEqualTo("uz");
-        assertThat(score.explanation().formula()).isEqualTo("min(100, oqibat × ehtimollik)");
+        assertThat(score.explanation().formula())
+                .isEqualTo("min(100, (xavfsizlik + ishlab chiqarish + ekologiya + energiya) × ehtimollik)");
         assertThat(score.explanation().summary())
                 .isEqualTo("Xavf 56/100, chunki oqibat 14 va ehtimollik 4.");
         assertThat(score.explanation().steps()).anySatisfy(step -> {
@@ -128,10 +129,20 @@ class RcmServiceTest {
             assertThat(step.value()).isEqualTo(5);
         });
         assertThat(score.explanation().steps()).anySatisfy(step -> {
+            assertThat(step.label()).isEqualTo("Ekologik ta'sir");
+            assertThat(step.value()).isEqualTo(3);
+        });
+        assertThat(score.explanation().steps()).anySatisfy(step -> {
+            assertThat(step.label()).isEqualTo("Ehtimollik (ochiq nuqsonlar bo'yicha)");
+            assertThat(step.value()).isEqualTo(4);
+        });
+        assertThat(score.explanation().steps()).anySatisfy(step -> {
             assertThat(step.label()).isEqualTo("Yakuniy xavf");
             assertThat(step.value()).isEqualTo(56);
             assertThat(step.unit()).isEqualTo("/100");
         });
+        assertThat(score.explanation().steps()).noneSatisfy(step ->
+                assertThat(step.label()).isEqualTo("MTTR"));
     }
 
     @Test
