@@ -1,7 +1,13 @@
 package com.toir.controller;
 
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.dto.analytics.MetricExplanationStepDto;
 import com.toir.dto.rcm.EquipmentRiskScore;
+import com.toir.dto.rcm.RiskExplanationDto;
+import com.toir.dto.rcm.RiskReasonCategory;
+import com.toir.dto.rcm.RiskReasonCode;
+import com.toir.dto.rcm.RiskReasonDto;
+import com.toir.dto.rcm.RiskSeverity;
 import com.toir.exception.RestException;
 import com.toir.entity.RcmSnapshot;
 import com.toir.service.RcmAutoPlannerService;
@@ -101,6 +107,25 @@ class RcmControllerContractTest {
     @Test
     void listRiskScoresAcceptsSortAndReturnsProbabilityPercent() throws Exception {
         UUID equipmentId = UUID.randomUUID();
+        RiskReasonDto reason = new RiskReasonDto(
+                RiskReasonCode.OPEN_DEFECTS_HIGH,
+                RiskReasonCategory.PROBABILITY,
+                "Open defects",
+                3L,
+                "Probability set to 4",
+                RiskSeverity.HIGH
+        );
+        RiskExplanationDto explanation = new RiskExplanationDto(
+                "en",
+                "min(100, consequence × probability)",
+                "Risk is 28/100 because 3 open defects were observed, so probability is high.",
+                List.of(reason),
+                List.of(
+                        new MetricExplanationStepDto("Consequence", 7),
+                        new MetricExplanationStepDto("Probability", 4),
+                        new MetricExplanationStepDto("Final risk", 28, "/100")
+                )
+        );
         when(service.computeAll("probability", "asc")).thenReturn(List.of(new EquipmentRiskScore(
                 equipmentId,
                 "EQ-200",
@@ -113,7 +138,8 @@ class RcmControllerContractTest {
                 2,
                 3,
                 1800,
-                6
+                6,
+                explanation
         )));
 
         mockMvc.perform(get("/api/v1/rcm/risk-scores")
@@ -122,7 +148,11 @@ class RcmControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
                 .andExpect(jsonPath("$.content[0].probability").value(4))
-                .andExpect(jsonPath("$.content[0].probabilityPercent").value(80));
+                .andExpect(jsonPath("$.content[0].probabilityPercent").value(80))
+                .andExpect(jsonPath("$.content[0].reasons[0].code").value("OPEN_DEFECTS_HIGH"))
+                .andExpect(jsonPath("$.content[0].reasons[0].value").value(3))
+                .andExpect(jsonPath("$.content[0].explanation.reasons[0].code").value("OPEN_DEFECTS_HIGH"))
+                .andExpect(jsonPath("$.content[0].explanation.steps[2].unit").value("/100"));
 
         verify(service).computeAll("probability", "asc");
     }
