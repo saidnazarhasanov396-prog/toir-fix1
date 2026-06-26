@@ -40,6 +40,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = {
@@ -154,12 +155,43 @@ class RbacBudgetSecurityTest {
     }
 
     @Test
-    @WithMockUser(authorities = "SYSTEM_ADMIN")
-    void systemAdminCanReadBudgets() throws Exception {
+    @WithMockUser(authorities = PermissionConstants.BUDGET_READ)
+    void budgetReadReturnsScopedBudgetContent() throws Exception {
+        UUID budgetId = UUID.randomUUID();
+        when(budgetService.findFiltered(eq(2026), any(), any(), any(), any()))
+                .thenReturn(List.of(budgetDto(budgetId)));
+
+        mockMvc.perform(get("/api/v1/budgets?year=2026&page=0&size=5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(budgetId.toString()))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.BUDGET_READ)
+    void budgetReadReturnsEmptyPageWhenScopeHasNoBudgets() throws Exception {
         when(budgetService.findFiltered(eq(2026), any(), any(), any(), any())).thenReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/budgets?year=2026&page=0&size=1"))
-                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/budgets?year=2026&page=0&size=5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    @WithMockUser(authorities = "SYSTEM_ADMIN")
+    void systemAdminCanReadBudgets() throws Exception {
+        UUID firstBudgetId = UUID.randomUUID();
+        UUID secondBudgetId = UUID.randomUUID();
+        when(budgetService.findFiltered(eq(2026), any(), any(), any(), any()))
+                .thenReturn(List.of(budgetDto(firstBudgetId), budgetDto(secondBudgetId)));
+
+        mockMvc.perform(get("/api/v1/budgets?year=2026&page=0&size=5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].id").value(firstBudgetId.toString()))
+                .andExpect(jsonPath("$.content[1].id").value(secondBudgetId.toString()));
     }
 
     @Test
