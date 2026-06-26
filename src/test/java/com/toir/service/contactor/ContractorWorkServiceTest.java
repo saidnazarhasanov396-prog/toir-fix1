@@ -21,6 +21,7 @@ import com.toir.repository.contarctor.ContractorContractRepository;
 import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.service.FinanceScopeService;
+import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,6 +71,9 @@ class ContractorWorkServiceTest {
 
     @Mock
     AuditBuilderService auditBuilderService;
+
+    @Mock
+    RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
 
     @InjectMocks
     ContractorWorkService service;
@@ -279,6 +283,7 @@ class ContractorWorkServiceTest {
         UUID workOrderId = UUID.randomUUID();
         UUID acceptedById = UUID.randomUUID();
         UUID costCategoryId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
 
         ContractorWork work = contractorWork(workId, contractorId, workOrderId, ContractorWorkStatus.COMPLETED, 220d);
         when(repository.findByIdAndIsDeletedFalse(workId)).thenReturn(Optional.of(work));
@@ -292,6 +297,7 @@ class ContractorWorkServiceTest {
                 .thenReturn(Optional.empty());
         when(actualCostRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
                 .thenReturn(List.of(actualCost(workOrderId, costCategoryId, 100d)));
+        when(repairCampaignBudgetLineResolver.resolveForWorkOrderId(workOrderId)).thenReturn(budgetLineId);
         stubActualCostSaveReturnsArgument();
         stubSaveContractorWorkReturnsArgument();
 
@@ -308,6 +314,7 @@ class ContractorWorkServiceTest {
         assertThat(captor.getValue().getSourceId()).isEqualTo(workId);
         assertThat(captor.getValue().getContractorWorkId()).isEqualTo(workId);
         assertThat(captor.getValue().getWorkOrderId()).isEqualTo(workOrderId);
+        assertThat(captor.getValue().getBudgetLineId()).isEqualTo(budgetLineId);
         assertThat(captor.getValue().getCostCategoryId()).isEqualTo(costCategoryId);
         assertThat(captor.getValue().getAmount()).isEqualTo(220d);
     }

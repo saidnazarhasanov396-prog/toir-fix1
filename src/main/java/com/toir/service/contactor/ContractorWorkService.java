@@ -19,6 +19,7 @@ import com.toir.repository.contarctor.ContractorContractRepository;
 import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.service.FinanceScopeService;
+import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,7 @@ public class ContractorWorkService {
     private final CostCategoryRepository costCategoryRepository;
     private final FinanceScopeService financeScopeService;
     private final AuditBuilderService auditBuilderService;
+    private final RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
 
     @Transactional(readOnly = true)
     public List<ContractorWorkDto> findByContractor(UUID contractorId) {
@@ -267,6 +269,7 @@ public class ContractorWorkService {
         cost.setSourceId(work.getId());
         cost.setWorkOrderId(work.getWorkOrderId());
         cost.setContractorWorkId(work.getId());
+        cost.setBudgetLineId(repairCampaignBudgetLineResolver.resolveForWorkOrderId(work.getWorkOrderId()));
         cost.setCostCategoryId(costCategoryId);
         cost.setAmount(work.getCost());
         cost.setStatus(ActualCostStatus.PENDING);

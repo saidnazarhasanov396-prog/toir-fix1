@@ -2,16 +2,27 @@ package com.toir.service;
 
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
+import com.toir.dto.repaircampaign.RepairCampaignStageDto;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.Department;
+import com.toir.entity.projects.BudgetLine;
+import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignStage;
+import com.toir.enums.BudgetStatus;
 import com.toir.enums.RepairCampaignScopeType;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceBudgetRepository;
+import com.toir.repository.maintenance.RepairAcceptanceRepository;
+import com.toir.repository.projects.BudgetLineRepository;
+import com.toir.repository.repair.RepairCampaignDepartmentRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
 import com.toir.service.repair.RepairCampaignService;
@@ -31,6 +42,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,10 +57,34 @@ class RepairCampaignServiceTest {
     private RepairCampaignStageRepository stageRepository;
 
     @Mock
+    private RepairCampaignDepartmentRepository campaignDepartmentRepository;
+
+    @Mock
     private DepartmentRepository departmentRepository;
 
     @Mock
     private WorkOrderRepository workOrderRepository;
+
+    @Mock
+    private ContractorWorkRepository contractorWorkRepository;
+
+    @Mock
+    private ActualCostRepository actualCostRepository;
+
+    @Mock
+    private MaintenanceBudgetRepository maintenanceBudgetRepository;
+
+    @Mock
+    private BudgetLineRepository budgetLineRepository;
+
+    @Mock
+    private EquipmentRepository equipmentRepository;
+
+    @Mock
+    private RepairAcceptanceRepository repairAcceptanceRepository;
+
+    @Mock
+    private WorkOrderService workOrderService;
 
     @Mock
     private AuditBuilderService auditBuilderService;
@@ -158,6 +194,179 @@ class RepairCampaignServiceTest {
     }
 
     @Test
+    void createStoresLinkedMaintenanceBudgetWhenCompatible() {
+        UUID budgetId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        MaintenanceBudget budget = budget(budgetId, 2026, departmentId, BudgetStatus.DRAFT, 10_000, 0);
+        when(maintenanceBudgetRepository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(budget));
+        when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(false);
+        when(repository.save(any(RepairCampaign.class))).thenAnswer(invocation -> {
+            RepairCampaign campaign = invocation.getArgument(0);
+            campaign.setId(UUID.randomUUID());
+            return campaign;
+        });
+
+        RepairCampaignDto result = service.create(new RepairCampaignRequest(
+                null,
+                "Annual Repair",
+                2026,
+                1,
+                departmentId,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 2, 1),
+                1000,
+                RepairCampaignScopeType.DEPARTMENT,
+                null,
+                List.of(),
+                null,
+                null,
+                budgetId
+        ));
+
+        assertThat(result.maintenanceBudgetId()).isEqualTo(budgetId);
+        assertThat(result.budgetPlanned()).isEqualTo(10_000);
+        assertThat(result.budgetRemaining()).isEqualTo(10_000);
+    }
+
+    @Test
+    void createRejectsMaintenanceBudgetFromDifferentDepartment() {
+        UUID budgetId = UUID.randomUUID();
+        MaintenanceBudget budget = budget(budgetId, 2026, UUID.randomUUID(), BudgetStatus.DRAFT, 10_000, 0);
+        when(maintenanceBudgetRepository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(budget));
+
+        assertThatThrownBy(() -> service.create(new RepairCampaignRequest(
+                null,
+                "Annual Repair",
+                2026,
+                1,
+                UUID.randomUUID(),
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 2, 1),
+                1000,
+                RepairCampaignScopeType.DEPARTMENT,
+                null,
+                List.of(),
+                null,
+                null,
+                budgetId
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("department");
+                });
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void addStageLinksBudgetLineFromCampaignBudget() {
+        UUID campaignId = UUID.randomUUID();
+        UUID budgetId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, budgetId);
+        BudgetLine line = budgetLine(budgetLineId, budget(budgetId, 2026, UUID.randomUUID(), BudgetStatus.APPROVED, 5000, 1200));
+        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
+        when(stageRepository.save(any(RepairCampaignStage.class))).thenAnswer(invocation -> {
+            RepairCampaignStage stage = invocation.getArgument(0);
+            stage.setId(UUID.randomUUID());
+            return stage;
+        });
+        when(repository.save(any(RepairCampaign.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RepairCampaignStageDto result = service.addStage(campaignId, new RepairCampaignStageDto(
+                null,
+                1,
+                "Preparation",
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 1, 10),
+                700,
+                0,
+                RepairCampaignStatus.DRAFT,
+                null,
+                0,
+                0,
+                0,
+                0,
+                budgetLineId,
+                0,
+                0,
+                0
+        ));
+
+        assertThat(result.budgetLineId()).isEqualTo(budgetLineId);
+        assertThat(result.budgetLinePlanned()).isEqualTo(5000);
+        assertThat(result.budgetLineRemaining()).isEqualTo(3800);
+    }
+
+    @Test
+    void addStageRejectsBudgetLineFromAnotherMaintenanceBudget() {
+        UUID campaignId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, UUID.randomUUID());
+        BudgetLine line = budgetLine(budgetLineId, budget(UUID.randomUUID(), 2026, UUID.randomUUID(), BudgetStatus.APPROVED, 5000, 0));
+        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
+
+        assertThatThrownBy(() -> service.addStage(campaignId, new RepairCampaignStageDto(
+                null,
+                1,
+                "Preparation",
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 1, 10),
+                700,
+                0,
+                RepairCampaignStatus.DRAFT,
+                null,
+                0,
+                0,
+                0,
+                0,
+                budgetLineId,
+                0,
+                0,
+                0
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("maintenance budget");
+                });
+
+        verify(stageRepository, never()).save(any());
+    }
+
+    @Test
+    void attachWorkOrderInheritsStageBudgetLine() {
+        UUID campaignId = UUID.randomUUID();
+        UUID stageId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID budgetId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, budgetId);
+        RepairCampaignStage stage = new RepairCampaignStage();
+        stage.setId(stageId);
+        stage.setCampaign(campaign);
+        stage.setStartDate(LocalDate.of(2026, 1, 1));
+        stage.setEndDate(LocalDate.of(2026, 1, 31));
+        stage.setBudgetLineId(budgetLineId);
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setType(com.toir.enums.WorkOrderType.OVERHAUL);
+
+        when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(workOrderRepository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(workOrderService.findById(workOrderId)).thenReturn(null);
+
+        service.attachWorkOrder(campaignId, stageId, workOrderId);
+
+        assertThat(workOrder.getRepairCampaignId()).isEqualTo(campaignId);
+        assertThat(workOrder.getRepairCampaignStageId()).isEqualTo(stageId);
+        assertThat(workOrder.getBudgetLineId()).isEqualTo(budgetLineId);
+    }
+
+    @Test
     void completeStageRejectsActiveLinkedWorkOrders() {
         UUID stageId = UUID.randomUUID();
         UUID campaignId = UUID.randomUUID();
@@ -182,5 +391,43 @@ class RepairCampaignServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("active work order");
                 });
+    }
+
+    private RepairCampaign campaign(UUID id, UUID maintenanceBudgetId) {
+        RepairCampaign campaign = new RepairCampaign();
+        campaign.setId(id);
+        campaign.setYear(2026);
+        campaign.setStatus(RepairCampaignStatus.DRAFT);
+        campaign.setMaintenanceBudgetId(maintenanceBudgetId);
+        campaign.setStages(new java.util.ArrayList<>());
+        return campaign;
+    }
+
+    private MaintenanceBudget budget(
+            UUID id,
+            int year,
+            UUID departmentId,
+            BudgetStatus status,
+            double totalPlanned,
+            double totalActual
+    ) {
+        MaintenanceBudget budget = new MaintenanceBudget();
+        budget.setId(id);
+        budget.setYear(year);
+        budget.setDepartmentId(departmentId);
+        budget.setStatus(status);
+        budget.setTotalPlanned(totalPlanned);
+        budget.setTotalActual(totalActual);
+        return budget;
+    }
+
+    private BudgetLine budgetLine(UUID id, MaintenanceBudget budget) {
+        BudgetLine line = new BudgetLine();
+        line.setId(id);
+        line.setBudget(budget);
+        line.setCostCategoryId(UUID.randomUUID());
+        line.setPlannedAmount(budget.getTotalPlanned());
+        line.setActualAmount(budget.getTotalActual());
+        return line;
     }
 }

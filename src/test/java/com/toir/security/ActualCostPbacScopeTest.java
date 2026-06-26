@@ -18,6 +18,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.ActualCostService;
 import com.toir.service.FinanceScopeService;
 import com.toir.service.NotificationService;
+import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,7 @@ class ActualCostPbacScopeTest {
     BudgetLineRepository budgetLineRepository;
     ScopeAccessService scopeAccessService;
     NotificationService notificationService;
+    RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
     ActualCostService service;
 
     @BeforeEach
@@ -60,6 +62,7 @@ class ActualCostPbacScopeTest {
         budgetLineRepository = mock(BudgetLineRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
         notificationService = mock(NotificationService.class);
+        repairCampaignBudgetLineResolver = mock(RepairCampaignBudgetLineResolver.class);
         FinanceScopeService financeScopeService = new FinanceScopeService(
                 scopeAccessService,
                 repository,
@@ -76,7 +79,8 @@ class ActualCostPbacScopeTest {
                 maintenanceBudgetRepository,
                 auditBuilderService,
                 financeScopeService,
-                notificationService
+                notificationService,
+                repairCampaignBudgetLineResolver
         );
     }
 

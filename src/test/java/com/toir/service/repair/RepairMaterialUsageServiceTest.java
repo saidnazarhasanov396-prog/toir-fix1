@@ -97,6 +97,9 @@ class RepairMaterialUsageServiceTest {
     CostCategoryRepository costCategoryRepository;
 
     @Mock
+    RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
+
+    @Mock
     WorkOrderSparePartRequirementRepository requirementRepository;
 
     @Mock
@@ -253,6 +256,7 @@ class RepairMaterialUsageServiceTest {
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
         UUID categoryId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
         WarehouseStock stock = stock(warehouseId, sparePartId, 10, 0);
         CostCategory category = new CostCategory();
         category.setId(categoryId);
@@ -276,6 +280,7 @@ class RepairMaterialUsageServiceTest {
         when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS")).thenReturn(Optional.of(category));
         when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
                 any(), any())).thenReturn(Optional.empty());
+        when(repairCampaignBudgetLineResolver.resolveForWorkOrderId(workOrderId)).thenReturn(budgetLineId);
 
         RepairMaterialUsageDto result = service.register(
                 workOrderId,
@@ -289,6 +294,7 @@ class RepairMaterialUsageServiceTest {
         assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.MATERIAL_ISSUE);
         assertThat(cost.getSourceId()).isEqualTo(result.id());
         assertThat(cost.getWorkOrderId()).isEqualTo(workOrderId);
+        assertThat(cost.getBudgetLineId()).isEqualTo(budgetLineId);
         assertThat(cost.getCostCategoryId()).isEqualTo(categoryId);
         assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
         assertThat(cost.getAmount()).isEqualTo(30.0);

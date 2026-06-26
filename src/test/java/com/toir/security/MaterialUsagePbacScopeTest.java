@@ -20,6 +20,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.service.LowStockRecommendationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
+import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
@@ -57,6 +58,7 @@ class MaterialUsagePbacScopeTest {
     ActualCostRepository actualCostRepository;
     CostCategoryRepository costCategoryRepository;
     WorkOrderSparePartRequirementRepository requirementRepository;
+    RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
     ToirStockService toirStockService;
     LegacyStockProjectionService legacyStockProjectionService;
     RepairMaterialUsageService service;
@@ -78,6 +80,7 @@ class MaterialUsagePbacScopeTest {
         actualCostRepository = mock(ActualCostRepository.class);
         costCategoryRepository = mock(CostCategoryRepository.class);
         requirementRepository = mock(WorkOrderSparePartRequirementRepository.class);
+        repairCampaignBudgetLineResolver = mock(RepairCampaignBudgetLineResolver.class);
         toirStockService = mock(ToirStockService.class);
         legacyStockProjectionService = mock(LegacyStockProjectionService.class);
         service = new RepairMaterialUsageService(
@@ -94,6 +97,7 @@ class MaterialUsagePbacScopeTest {
                 equipmentStatusLifecycleService,
                 lowStockRecommendationService,
                 actualCostRepository,
+                repairCampaignBudgetLineResolver,
                 costCategoryRepository,
                 requirementRepository,
                 toirStockService,

@@ -14,6 +14,7 @@ import com.toir.repository.LaborEntryRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,6 +58,9 @@ class LaborEntryServiceTest {
 
     @Mock
     AuditBuilderService auditBuilderService;
+
+    @Mock
+    RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
 
     @InjectMocks
     LaborEntryService service;
@@ -159,6 +163,7 @@ class LaborEntryServiceTest {
     void createWithRateCreatesSourceLinkedPendingActualCost() {
         UUID workOrderId = UUID.randomUUID();
         UUID laborEntryId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
         WorkOrder workOrder = openWorkOrder(workOrderId);
         CostCategory laborCategory = costCategory("LABOR");
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
@@ -172,6 +177,7 @@ class LaborEntryServiceTest {
                 ActualCostSourceType.LABOR_ENTRY,
                 laborEntryId
         )).thenReturn(Optional.empty());
+        when(repairCampaignBudgetLineResolver.resolveForWorkOrder(workOrder)).thenReturn(budgetLineId);
 
         service.create(workOrderId, laborEntryDto());
 
@@ -181,6 +187,7 @@ class LaborEntryServiceTest {
         assertThat(actualCost.getSourceType()).isEqualTo(ActualCostSourceType.LABOR_ENTRY);
         assertThat(actualCost.getSourceId()).isEqualTo(laborEntryId);
         assertThat(actualCost.getWorkOrderId()).isEqualTo(workOrderId);
+        assertThat(actualCost.getBudgetLineId()).isEqualTo(budgetLineId);
         assertThat(actualCost.getCostCategoryId()).isEqualTo(laborCategory.getId());
         assertThat(actualCost.getAmount()).isEqualTo(375000.0);
     }

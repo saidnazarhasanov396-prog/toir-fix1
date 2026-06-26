@@ -23,7 +23,8 @@ public record RepairCampaignRequest(
         UUID equipmentTypeId,
         List<RepairCampaignDepartmentDto> participantDepartments,
         String scope,
-        String notes
+        String notes,
+        UUID maintenanceBudgetId
 ) {
     public RepairCampaignRequest(
             String code,
@@ -38,6 +39,25 @@ public record RepairCampaignRequest(
             String notes
     ) {
         this(code, name, year, quarter, departmentId, startDate, endDate, totalBudget,
-                null, null, List.of(), scope, notes);
+                null, null, List.of(), scope, notes, null);
+    }
+
+    public RepairCampaignRequest(
+            String code,
+            @NotBlank String name,
+            @NotNull @Min(2000) Integer year,
+            Integer quarter,
+            UUID departmentId,
+            @NotNull LocalDate startDate,
+            @NotNull LocalDate endDate,
+            @PositiveOrZero double totalBudget,
+            RepairCampaignScopeType scopeType,
+            UUID equipmentTypeId,
+            List<RepairCampaignDepartmentDto> participantDepartments,
+            String scope,
+            String notes
+    ) {
+        this(code, name, year, quarter, departmentId, startDate, endDate, totalBudget,
+                scopeType, equipmentTypeId, participantDepartments, scope, notes, null);
     }
 }

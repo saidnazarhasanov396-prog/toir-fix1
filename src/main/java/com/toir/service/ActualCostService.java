@@ -20,6 +20,7 @@ import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -48,6 +49,7 @@ public class ActualCostService {
     private final AuditBuilderService auditBuilderService;
     private final FinanceScopeService financeScopeService;
     private final NotificationService notificationService;
+    private final RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
@@ -76,7 +78,10 @@ public class ActualCostService {
         RepairRequest repairRequest = requireRepairRequestIfPresent(r.repairRequestId());
         ContractorWork contractorWork = requireContractorWorkIfPresent(r.contractorWorkId());
         WorkOrder effectiveWorkOrder = resolveEffectiveWorkOrder(workOrder, contractorWork);
-        BudgetLine budgetLine = requireBudgetLineIfPresent(r.budgetLineId());
+        UUID effectiveBudgetLineId = r.budgetLineId() != null
+                ? r.budgetLineId()
+                : repairCampaignBudgetLineResolver.resolveForWorkOrder(effectiveWorkOrder);
+        BudgetLine budgetLine = requireBudgetLineIfPresent(effectiveBudgetLineId);
 
         assertCanCreateActualCost(r, effectiveWorkOrder, repairRequest, budgetLine);
 
@@ -86,7 +91,7 @@ public class ActualCostService {
         c.setContractorWorkId(r.contractorWorkId());
         c.setSourceType(resolveSourceType(r));
         c.setSourceId(resolveSourceId(r));
-        c.setBudgetLineId(r.budgetLineId());
+        c.setBudgetLineId(effectiveBudgetLineId);
         c.setCostCategoryId(r.costCategoryId());
         c.setAmount(r.amount());
         c.setNotes(r.notes());

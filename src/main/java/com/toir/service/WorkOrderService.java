@@ -27,6 +27,7 @@ import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
 import com.toir.entity.CertificationType;
+import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignStage;
 import com.toir.entity.repair.RepairRequest;
@@ -98,6 +99,7 @@ import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.maintenance.RepairAcceptanceRepository;
 import com.toir.repository.maintenance.WorkOrderDocumentRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
+import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.projection.WorkOrderCalendarBucketProjection;
 import com.toir.repository.users.UserRepository;
 import com.toir.repository.users.UserCertificationRepository;
@@ -172,6 +174,7 @@ public class WorkOrderService {
     private final RepairCampaignRepository repairCampaignRepository;
     private final RepairCampaignStageRepository repairCampaignStageRepository;
     private final RepairCampaignDepartmentRepository repairCampaignDepartmentRepository;
+    private final BudgetLineRepository budgetLineRepository;
     private final RepairRequestTemplateActionRepository repairRequestTemplateActionRepository;
     private final DefectRepository defectRepository;
     private final DefectListRepository defectListRepository;
@@ -614,6 +617,7 @@ public class WorkOrderService {
                 request.performerId(),
                 effectiveDepartmentId,
                 request.equipmentId());
+        UUID effectiveBudgetLineId = resolveWorkOrderBudgetLineId(request.budgetLineId(), linkedCampaignStage);
         reserveReplacementEquipmentOnCreate(request, effectiveWorkType);
         WorkOrder entity = new WorkOrder();
         entity.setNumber(effectiveNumber);
@@ -632,6 +636,7 @@ public class WorkOrderService {
             entity.setRepairCampaignId(linkedCampaignStage.getCampaign().getId());
             entity.setRepairCampaignStageId(linkedCampaignStage.getId());
         }
+        entity.setBudgetLineId(effectiveBudgetLineId);
         entity.setCycleKey(request.cycleKey());
         entity.setContractorId(request.contractorId());
         entity.setPerformer(performer);
@@ -1772,6 +1777,30 @@ public class WorkOrderService {
         return stage;
     }
 
+    private UUID resolveWorkOrderBudgetLineId(UUID requestedBudgetLineId, RepairCampaignStage linkedCampaignStage) {
+        if (requestedBudgetLineId != null) {
+            BudgetLine line = budgetLineRepository.findByIdAndIsDeletedFalse(requestedBudgetLineId)
+                    .orElseThrow(() -> RestException.notFound("Budget line not found: " + requestedBudgetLineId));
+            validateCampaignBudgetLine(line, linkedCampaignStage);
+            return requestedBudgetLineId;
+        }
+        return linkedCampaignStage == null ? null : linkedCampaignStage.getBudgetLineId();
+    }
+
+    private void validateCampaignBudgetLine(BudgetLine line, RepairCampaignStage linkedCampaignStage) {
+        if (linkedCampaignStage == null || linkedCampaignStage.getCampaign() == null) {
+            return;
+        }
+        RepairCampaign campaign = linkedCampaignStage.getCampaign();
+        UUID maintenanceBudgetId = campaign.getMaintenanceBudgetId();
+        if (maintenanceBudgetId == null) {
+            throw RestException.badRequest("Campaign must be linked to a maintenance budget before assigning a budget line");
+        }
+        if (line.getBudget() == null || !maintenanceBudgetId.equals(line.getBudget().getId())) {
+            throw RestException.badRequest("Budget line must belong to the repair campaign maintenance budget");
+        }
+    }
+
     private void validateCampaignDepartment(RepairCampaign campaign, UUID effectiveDepartmentId) {
         if (effectiveDepartmentId == null) {
             return;
@@ -2566,7 +2595,8 @@ public class WorkOrderService {
                 entity.getRepairCampaignId(),
                 entity.getRepairCampaignStageId(),
                 null,
-                null);
+                null,
+                entity.getBudgetLineId());
     }
 
     private WorkOrderDto.ContractorRef contractorRef(UUID contractorId) {
