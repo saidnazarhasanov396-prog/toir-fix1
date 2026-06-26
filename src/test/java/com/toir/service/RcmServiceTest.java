@@ -3,26 +3,39 @@ package com.toir.service;
 import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.entity.RcmSnapshot;
 import com.toir.entity.ReliabilityMetric;
+import com.toir.entity.DowntimeEvent;
 import com.toir.entity.defects.Defect;
+import com.toir.entity.maintenance.MaintenanceDueEvent;
+import com.toir.entity.repair.RepairRequest;
+import com.toir.enums.CriticalityLevel;
 import com.toir.entity.equipment.CriticalityClass;
 import com.toir.entity.equipment.Equipment;
+import com.toir.enums.DowntimeType;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
+import com.toir.enums.MaintenanceDueEventStatus;
+import com.toir.enums.MaintenanceDueStatus;
+import com.toir.enums.MaintenanceTriggerSource;
+import com.toir.enums.PriorityLevel;
+import com.toir.enums.RequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CriticalityClassRepository;
+import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.RcmSnapshotRepository;
 import com.toir.repository.ReliabilityMetricRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceDueEventRepository;
+import com.toir.repository.repair.RepairRequestRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,13 +64,39 @@ class RcmServiceTest {
     ReliabilityMetricRepository reliabilityMetricRepository;
 
     @Mock
+    DowntimeEventRepository downtimeEventRepository;
+
+    @Mock
+    RepairRequestRepository repairRequestRepository;
+
+    @Mock
+    MaintenanceDueEventRepository maintenanceDueEventRepository;
+
+    @Mock
     RcmSnapshotRepository snapshotRepository;
 
-    @Spy
     MetricExplanationService metricExplanationService = new MetricExplanationService();
 
-    @InjectMocks
     RcmService service;
+
+    @BeforeEach
+    void setUp() {
+        EquipmentRiskEvidenceService evidenceService = new EquipmentRiskEvidenceService(
+                criticalityClassRepository,
+                defectRepository,
+                reliabilityMetricRepository,
+                downtimeEventRepository,
+                repairRequestRepository,
+                maintenanceDueEventRepository
+        );
+        service = new RcmService(
+                equipmentRepository,
+                snapshotRepository,
+                evidenceService,
+                new EquipmentRiskScoringService(),
+                metricExplanationService
+        );
+    }
 
     @Test
     void riskScoresIncludeCriticalityClassCodeAndName() {
@@ -70,12 +109,12 @@ class RcmServiceTest {
         criticalityClass.setId(criticalityClassId);
         criticalityClass.setCode("CRIT-HIGH");
         criticalityClass.setName("High criticality");
+        criticalityClass.setLevel(CriticalityLevel.HIGH);
 
         when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
         when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
                 .thenReturn(List.of(criticalityClass));
-        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        stubEmptyRiskEvidenceSources();
 
         List<EquipmentRiskScore> scores = service.computeAll();
 
@@ -87,7 +126,7 @@ class RcmServiceTest {
     }
 
     @Test
-    void riskScoresIncludeLocalizedUzbekCalculationExplanation() {
+    void riskScoresIncludeLocalizedUzbekStructuredRiskExplanation() {
         UUID equipmentId = UUID.randomUUID();
         UUID criticalityClassId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId);
@@ -97,6 +136,7 @@ class RcmServiceTest {
         criticalityClass.setId(criticalityClassId);
         criticalityClass.setCode("CRIT-MED");
         criticalityClass.setName("Medium criticality");
+        criticalityClass.setLevel(CriticalityLevel.HIGH);
         criticalityClass.setSafetyImpact(4);
         criticalityClass.setProductionImpact(5);
         criticalityClass.setEcologicalImpact(3);
@@ -111,22 +151,26 @@ class RcmServiceTest {
                 openDefect(equipmentId)
         ));
         when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
 
         EquipmentRiskScore score = service.computeAll("uz").getFirst();
 
-        assertThat(score.riskScore()).isEqualTo(56);
+        assertThat(score.consequence()).isEqualTo(4);
+        assertThat(score.probability()).isEqualTo(4);
+        assertThat(score.riskScore()).isEqualTo(16);
         assertThat(score.explanation().locale()).isEqualTo("uz");
         assertThat(score.explanation().formula())
                 .isEqualTo("min(100, (xavfsizlik + ishlab chiqarish + ekologiya + energiya) × ehtimollik)");
         assertThat(score.explanation().summary())
-                .isEqualTo("Xavf 56/100, chunki oqibat 14 va ehtimollik 4.");
-        assertThat(score.explanation().steps()).anySatisfy(step -> {
-            assertThat(step.label()).isEqualTo("Xavfsizlik ta'siri");
-            assertThat(step.value()).isEqualTo(4);
-        });
-        assertThat(score.explanation().steps()).anySatisfy(step -> {
-            assertThat(step.label()).isEqualTo("Ishlab chiqarish ta'siri");
-            assertThat(step.value()).isEqualTo(5);
+                .isEqualTo("Xavf 16/100, chunki 3 ta ochiq nuqson aniqlandi, shuning uchun ehtimollik yuqori.");
+        assertThat(score.reasons()).extracting(reason -> reason.code().name())
+                .containsExactly("OPEN_DEFECTS_HIGH", "HIGH_CRITICALITY");
+        assertThat(score.explanation().reasons()).anySatisfy(reason -> {
+            assertThat(reason.label()).isEqualTo("Ochiq nuqsonlar");
+            assertThat(reason.value()).isEqualTo(3L);
+            assertThat(reason.effect()).isEqualTo("Ehtimollik 4 ga o'rnatildi");
         });
         assertThat(score.explanation().steps()).anySatisfy(step -> {
             assertThat(step.label()).isEqualTo("Ekologik ta'sir");
@@ -138,11 +182,86 @@ class RcmServiceTest {
         });
         assertThat(score.explanation().steps()).anySatisfy(step -> {
             assertThat(step.label()).isEqualTo("Yakuniy xavf");
-            assertThat(step.value()).isEqualTo(56);
+            assertThat(step.value()).isEqualTo(16);
             assertThat(step.unit()).isEqualTo("/100");
         });
         assertThat(score.explanation().steps()).noneSatisfy(step ->
                 assertThat(step.label()).isEqualTo("MTTR"));
+    }
+
+    @Test
+    void riskScoresDoNotUseStaticImpactFieldsForConsequence() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID criticalityClassId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setCriticalityClassId(criticalityClassId);
+
+        CriticalityClass criticalityClass = new CriticalityClass();
+        criticalityClass.setId(criticalityClassId);
+        criticalityClass.setCode("CRIT-HIGH");
+        criticalityClass.setName("High criticality");
+        criticalityClass.setLevel(CriticalityLevel.HIGH);
+        criticalityClass.setSafetyImpact(5);
+        criticalityClass.setProductionImpact(5);
+        criticalityClass.setEcologicalImpact(5);
+        criticalityClass.setEnergyImpact(5);
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(criticalityClass));
+        stubEmptyRiskEvidenceSources();
+
+        EquipmentRiskScore score = service.computeAll("en").getFirst();
+
+        assertThat(score.consequence()).isEqualTo(4);
+        assertThat(score.probability()).isEqualTo(1);
+        assertThat(score.riskScore()).isEqualTo(4);
+        assertThat(score.explanation().steps()).extracting(step -> step.label())
+                .doesNotContain("Safety impact", "Production impact", "Ecological impact", "Energy impact");
+    }
+
+    @Test
+    void riskScoresIncludeDowntimeMaintenanceRepairAndStatusReasons() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID criticalityClassId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setCriticalityClassId(criticalityClassId);
+        equipment.setStatus(EquipmentStatus.IN_REPAIR);
+
+        CriticalityClass criticalityClass = new CriticalityClass();
+        criticalityClass.setId(criticalityClassId);
+        criticalityClass.setCode("CRIT-CRITICAL");
+        criticalityClass.setName("Critical equipment");
+        criticalityClass.setLevel(CriticalityLevel.CRITICAL);
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(criticalityClass));
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(recurringOpenDefect(equipmentId)));
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(reliabilityMetric(equipmentId, 1500, 30)));
+        when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(downtimeEvent(equipmentId, 30 * 60)));
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(repairRequest(equipmentId, PriorityLevel.EMERGENCY, RequestStatus.OPEN)));
+        when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(overdueMaintenance(equipmentId)));
+
+        EquipmentRiskScore score = service.computeAll("ru").getFirst();
+
+        assertThat(score.probability()).isEqualTo(5);
+        assertThat(score.consequence()).isEqualTo(14);
+        assertThat(score.riskScore()).isEqualTo(70);
+        assertThat(score.explanation().locale()).isEqualTo("ru");
+        assertThat(score.explanation().reasons()).extracting(reason -> reason.code().name())
+                .contains(
+                        "RECURRING_DEFECTS",
+                        "OVERDUE_MAINTENANCE",
+                        "RECENT_DOWNTIME",
+                        "HIGH_MTTR",
+                        "OPEN_HIGH_REPAIR_REQUEST",
+                        "EQUIPMENT_UNAVAILABLE"
+                );
     }
 
     @Test
@@ -172,8 +291,7 @@ class RcmServiceTest {
         UUID equipmentId = UUID.randomUUID();
         when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment(equipmentId)));
         when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        stubEmptyRiskEvidenceSources();
         when(snapshotRepository.save(any(RcmSnapshot.class))).thenAnswer(invocation -> {
             RcmSnapshot snapshot = invocation.getArgument(0);
             snapshot.setId(UUID.randomUUID());
@@ -202,6 +320,9 @@ class RcmServiceTest {
                         reliabilityMetric(firstId, 4000, 12),
                         reliabilityMetric(secondId, 1200, 4)
                 ));
+        when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(firstId, secondId))).thenReturn(List.of());
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(firstId, secondId))).thenReturn(List.of());
+        when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
 
         List<EquipmentRiskScore> scores = service.computeAll("mtbfHours", "asc");
 
@@ -216,8 +337,7 @@ class RcmServiceTest {
 
         when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment(equipmentId)));
         when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        stubEmptyRiskEvidenceSources();
         when(snapshotRepository.save(any(RcmSnapshot.class))).thenAnswer(invocation -> {
             RcmSnapshot snapshot = invocation.getArgument(0);
             snapshot.setId(UUID.randomUUID());
@@ -257,6 +377,12 @@ class RcmServiceTest {
         return defect;
     }
 
+    private Defect recurringOpenDefect(UUID equipmentId) {
+        Defect defect = openDefect(equipmentId);
+        defect.setRecurrenceCount(2);
+        return defect;
+    }
+
     private ReliabilityMetric reliabilityMetric(UUID equipmentId, double mtbfHours, double mttrHours) {
         ReliabilityMetric metric = new ReliabilityMetric();
         metric.setEquipmentId(equipmentId);
@@ -264,5 +390,46 @@ class RcmServiceTest {
         metric.setMtbfHours(mtbfHours);
         metric.setMttrHours(mttrHours);
         return metric;
+    }
+
+    private DowntimeEvent downtimeEvent(UUID equipmentId, int durationMinutes) {
+        DowntimeEvent event = new DowntimeEvent();
+        event.setEquipmentId(equipmentId);
+        event.setDepartmentId(UUID.randomUUID());
+        event.setStartAt(Instant.now().minusSeconds(3600));
+        event.setDurationMinutes(durationMinutes);
+        event.setType(DowntimeType.UNPLANNED);
+        return event;
+    }
+
+    private RepairRequest repairRequest(UUID equipmentId, PriorityLevel priority, RequestStatus status) {
+        RepairRequest request = new RepairRequest();
+        request.setEquipmentId(equipmentId);
+        request.setDepartmentId(UUID.randomUUID());
+        request.setNumber("RR-1");
+        request.setTitle("Repair");
+        request.setDescription("Repair");
+        request.setReporterId(UUID.randomUUID());
+        request.setPriority(priority);
+        request.setStatus(status);
+        return request;
+    }
+
+    private MaintenanceDueEvent overdueMaintenance(UUID equipmentId) {
+        MaintenanceDueEvent event = new MaintenanceDueEvent();
+        event.setEquipmentId(equipmentId);
+        event.setDueStatus(MaintenanceDueStatus.OVERDUE);
+        event.setStatus(MaintenanceDueEventStatus.DETECTED);
+        event.setTriggerSource(MaintenanceTriggerSource.CALENDAR_JOB);
+        event.setCycleKey("cycle");
+        return event;
+    }
+
+    private void stubEmptyRiskEvidenceSources() {
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+        when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
     }
 }
