@@ -9,6 +9,7 @@ import com.toir.mapper.ActualCostReviewRouteOverrideResponseMapper;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.actualCost.ActualCostReviewRouteOverrideRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.ActualCostReviewRouteOverrideService;
@@ -37,6 +38,7 @@ class FinanceRouteOverridePbacScopeTest {
     WorkOrderRepository workOrderRepository;
     RepairRequestRepository repairRequestRepository;
     BudgetLineRepository budgetLineRepository;
+    ContractorWorkRepository contractorWorkRepository;
     ScopeAccessService scopeAccessService;
     ActualCostReviewRouteOverrideService service;
 
@@ -48,13 +50,15 @@ class FinanceRouteOverridePbacScopeTest {
         workOrderRepository = mock(WorkOrderRepository.class);
         repairRequestRepository = mock(RepairRequestRepository.class);
         budgetLineRepository = mock(BudgetLineRepository.class);
+        contractorWorkRepository = mock(ContractorWorkRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
         FinanceScopeService financeScopeService = new FinanceScopeService(
                 scopeAccessService,
                 actualCostRepository,
                 workOrderRepository,
                 repairRequestRepository,
-                budgetLineRepository
+                budgetLineRepository,
+                contractorWorkRepository
         );
         service = new ActualCostReviewRouteOverrideService(
                 repository,

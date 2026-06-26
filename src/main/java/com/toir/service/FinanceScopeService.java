@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.ActualCostReviewRouteOverride;
@@ -8,6 +9,7 @@ import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
@@ -30,6 +32,7 @@ public class FinanceScopeService {
     private final WorkOrderRepository workOrderRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final BudgetLineRepository budgetLineRepository;
+    private final ContractorWorkRepository contractorWorkRepository;
 
     public List<MaintenanceBudget> filterBudgets(Collection<MaintenanceBudget> budgets) {
         if (budgets == null) {
@@ -209,6 +212,13 @@ public class FinanceScopeService {
             budgetLineRepository.findByIdAndIsDeletedFalse(actualCost.getBudgetLineId())
                     .map(BudgetLine::getBudget)
                     .map(MaintenanceBudget::getDepartmentId)
+                    .ifPresent(departments::add);
+        }
+        if (actualCost.getContractorWorkId() != null) {
+            contractorWorkRepository.findByIdAndIsDeletedFalse(actualCost.getContractorWorkId())
+                    .map(ContractorWork::getWorkOrderId)
+                    .flatMap(workOrderRepository::findByIdAndIsDeletedFalse)
+                    .map(WorkOrder::getDepartmentId)
                     .ifPresent(departments::add);
         }
         return departments;
