@@ -1,8 +1,8 @@
 package com.toir.dto.rcm;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.toir.dto.analytics.MetricExplanationDto;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -21,8 +21,13 @@ public record EquipmentRiskScore(
         long openDefects,
         double mtbfHours,
         double mttrHours,
-        MetricExplanationDto explanation
+        RiskExplanationDto explanation,
+        List<RiskReasonDto> reasons
 ) {
+    public EquipmentRiskScore {
+        reasons = reasons == null ? List.of() : List.copyOf(reasons);
+    }
+
     public EquipmentRiskScore(UUID equipmentId,
                               String equipmentCode,
                               String equipmentName,
@@ -36,7 +41,25 @@ public record EquipmentRiskScore(
                               double mtbfHours,
                               double mttrHours) {
         this(equipmentId, equipmentCode, equipmentName, criticalityClass, criticalityClassName,
-                consequence, probability, riskScore, repairPriority, openDefects, mtbfHours, mttrHours, null);
+                consequence, probability, riskScore, repairPriority, openDefects, mtbfHours, mttrHours, null, List.of());
+    }
+
+    public EquipmentRiskScore(UUID equipmentId,
+                              String equipmentCode,
+                              String equipmentName,
+                              String criticalityClass,
+                              String criticalityClassName,
+                              int consequence,
+                              int probability,
+                              int riskScore,
+                              Integer repairPriority,
+                              long openDefects,
+                              double mtbfHours,
+                              double mttrHours,
+                              RiskExplanationDto explanation) {
+        this(equipmentId, equipmentCode, equipmentName, criticalityClass, criticalityClassName,
+                consequence, probability, riskScore, repairPriority, openDefects, mtbfHours, mttrHours,
+                explanation, explanation == null ? List.of() : explanation.reasons());
     }
 
     @JsonProperty("probabilityPercent")
