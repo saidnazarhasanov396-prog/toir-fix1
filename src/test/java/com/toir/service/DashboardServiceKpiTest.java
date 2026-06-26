@@ -28,6 +28,8 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.actualCost.ActualCostReviewEventRepository;
+import com.toir.repository.contarctor.ContractorContractRepository;
 import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -55,6 +57,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -76,6 +79,8 @@ class DashboardServiceKpiTest {
     @Mock ContractorWorkRepository contractorWorkRepository;
     @Mock ReservationRepository reservationRepository;
     @Mock ActualCostRepository actualCostRepository;
+    @Mock ActualCostReviewEventRepository actualCostReviewEventRepository;
+    @Mock ContractorContractRepository contractorContractRepository;
     @Mock ConditionReadingRepository conditionReadingRepository;
     @Mock UserCertificationRepository userCertificationRepository;
     @Mock CalibrationRecordRepository calibrationRecordRepository;
@@ -102,7 +107,11 @@ class DashboardServiceKpiTest {
         when(legacyStockProjectionService.currentAll()).thenReturn(java.util.Map.of());
         when(stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(any())).thenReturn(List.of());
+        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(actualCostReviewEventRepository.findAllByActualCostIdInAndIsDeletedFalseOrderByOccurredAtDesc(any()))
+                .thenReturn(List.of());
         when(contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(contractorContractRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(conditionReadingRepository.countBySeveritiesAndDepartment(any(), any())).thenReturn(0L);
         when(userCertificationRepository.findAllByExpiresAtBeforeAndIsDeletedFalse(any())).thenReturn(List.of());
         when(calibrationRecordRepository.findAllByNextDueAtBeforeAndIsDeletedFalse(any())).thenReturn(List.of());

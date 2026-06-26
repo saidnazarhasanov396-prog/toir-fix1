@@ -43,6 +43,10 @@ public class MetricExplanationService {
     }
 
     public RiskExplanationDto rcmRisk(String lang, EquipmentRiskScoringResult result) {
+        return rcmRisk(lang, result, null);
+    }
+
+    public RiskExplanationDto rcmRisk(String lang, EquipmentRiskScoringResult result, EquipmentRiskEvidence evidence) {
         String locale = normalizeLocale(lang);
         RcmText text = rcmText(locale);
         List<RiskReasonDto> reasons = result.reasons().stream()
@@ -63,11 +67,7 @@ public class MetricExplanationService {
                 text.formula(),
                 text.summary(result.riskScore(), primaryReason),
                 reasons,
-                List.of(
-                        new MetricExplanationStepDto(text.consequenceTotal(), result.consequenceScore()),
-                        new MetricExplanationStepDto(text.probability(), result.probabilityScore()),
-                        new MetricExplanationStepDto(text.finalRisk(), result.riskScore(), "/100")
-                )
+                rcmSteps(locale, text, result, evidence)
         );
     }
 
@@ -94,7 +94,7 @@ public class MetricExplanationService {
     private RcmText rcmText(String locale) {
         return switch (locale) {
             case "uz" -> new RcmText(
-                    "min(100, oqibat × ehtimollik)",
+                    "min(100, (xavfsizlik + ishlab chiqarish + ekologiya + energiya) × ehtimollik)",
                     "Oqibat",
                     "Ehtimollik",
                     "Yakuniy xavf",
@@ -114,6 +114,53 @@ public class MetricExplanationService {
                     "Final risk",
                     (riskScore, primaryReason) ->
                             "Risk is %d/100 because %s".formatted(riskScore, primaryReason));
+        };
+    }
+
+    private List<MetricExplanationStepDto> rcmSteps(
+            String locale,
+            RcmText text,
+            EquipmentRiskScoringResult result,
+            EquipmentRiskEvidence evidence
+    ) {
+        if ("uz".equals(locale) && evidence != null && hasStaticImpactEvidence(evidence)) {
+            return List.of(
+                    new MetricExplanationStepDto("Xavfsizlik ta'siri", evidence.safetyImpact()),
+                    new MetricExplanationStepDto("Ishlab chiqarish ta'siri", evidence.productionImpact()),
+                    new MetricExplanationStepDto("Ekologik ta'sir", evidence.ecologicalImpact()),
+                    new MetricExplanationStepDto("Energiya ta'siri", evidence.energyImpact()),
+                    new MetricExplanationStepDto("Oqibat jami", result.consequenceScore()),
+                    new MetricExplanationStepDto("Ochiq nuqsonlar", evidence.openDefects()),
+                    new MetricExplanationStepDto(probabilityLabel(locale, result.primaryReason()), result.probabilityScore()),
+                    new MetricExplanationStepDto(text.finalRisk(), result.riskScore(), "/100")
+            );
+        }
+        return List.of(
+                new MetricExplanationStepDto(text.consequenceTotal(), result.consequenceScore()),
+                new MetricExplanationStepDto(text.probability(), result.probabilityScore()),
+                new MetricExplanationStepDto(text.finalRisk(), result.riskScore(), "/100")
+        );
+    }
+
+    private boolean hasStaticImpactEvidence(EquipmentRiskEvidence evidence) {
+        return evidence.safetyImpact() != 0
+                || evidence.productionImpact() != 0
+                || evidence.ecologicalImpact() != 0
+                || evidence.energyImpact() != 0;
+    }
+
+    private String probabilityLabel(String locale, EquipmentRiskScoringReason primaryReason) {
+        if (!"uz".equals(locale)) {
+            return "Probability";
+        }
+        if (primaryReason == null) {
+            return "Ehtimollik (bazaviy)";
+        }
+        return switch (primaryReason.code()) {
+            case OPEN_DEFECTS_CRITICAL, OPEN_DEFECTS_HIGH, OPEN_DEFECTS_MEDIUM ->
+                    "Ehtimollik (ochiq nuqsonlar bo'yicha)";
+            case LOW_MTBF_HIGH, LOW_MTBF_MEDIUM -> "Ehtimollik (MTBF bo'yicha)";
+            default -> "Ehtimollik (bazaviy)";
         };
     }
 
