@@ -13,6 +13,7 @@ public record MaintenanceBudgetDto(
         @NotNull @Min(2000) Integer year,
         Integer month,
         UUID departmentId,
+        String departmentName,
         BudgetStatus status,
         double totalPlanned,
         double totalActual,
@@ -20,7 +21,13 @@ public record MaintenanceBudgetDto(
 ) {
     public static MaintenanceBudgetDto from(MaintenanceBudget b) {
         return new MaintenanceBudgetDto(b.getId(), b.getYear(), b.getMonth(), b.getDepartmentId(),
-                b.getStatus(), b.getTotalPlanned(), b.getTotalActual(),
+                null, b.getStatus(), b.getTotalPlanned(), b.getTotalActual(),
+                b.getLines().stream().map(BudgetLineDto::from).toList());
+    }
+
+    public static MaintenanceBudgetDto from(MaintenanceBudget b, String departmentName) {
+        return new MaintenanceBudgetDto(b.getId(), b.getYear(), b.getMonth(), b.getDepartmentId(),
+                departmentName, b.getStatus(), b.getTotalPlanned(), b.getTotalActual(),
                 b.getLines().stream().map(BudgetLineDto::from).toList());
     }
 }

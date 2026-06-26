@@ -223,6 +223,31 @@ class ActualCostServiceTest {
     }
 
     @Test
+    void createSetsWorkOrderIdFromLinkedContractorWorkWhenMissingInRequest() {
+        UUID contractorWorkId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        ContractorWork contractorWork = new ContractorWork();
+        contractorWork.setId(contractorWorkId);
+        contractorWork.setWorkOrderId(workOrderId);
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setDepartmentId(UUID.randomUUID());
+
+        when(contractorWorkRepository.findByIdAndIsDeletedFalse(contractorWorkId)).thenReturn(Optional.of(contractorWork));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.existsByContractorWorkIdAndIsDeletedFalse(contractorWorkId)).thenReturn(false);
+        when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> {
+            ActualCost saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        ActualCostDto result = service.create(dto(null, null, contractorWorkId, null, 100));
+
+        assertThat(result.workOrderId()).isEqualTo(workOrderId);
+    }
+
+    @Test
     void createPreventsDuplicateContractorWorkActualCost() {
         UUID contractorWorkId = UUID.randomUUID();
         ContractorWork contractorWork = new ContractorWork();

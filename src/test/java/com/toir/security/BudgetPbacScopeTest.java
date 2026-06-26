@@ -5,6 +5,7 @@ import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.service.maintanance.MaintenanceBudgetService;
@@ -29,6 +30,7 @@ class BudgetPbacScopeTest {
 
     MaintenanceBudgetRepository repository;
     BudgetLineRepository lineRepository;
+    DepartmentRepository departmentRepository;
     AuditBuilderService auditBuilderService;
     ScopeAccessService scopeAccessService;
     MaintenanceBudgetService service;
@@ -37,9 +39,11 @@ class BudgetPbacScopeTest {
     void setUp() {
         repository = mock(MaintenanceBudgetRepository.class);
         lineRepository = mock(BudgetLineRepository.class);
+        departmentRepository = mock(DepartmentRepository.class);
         auditBuilderService = mock(AuditBuilderService.class);
         scopeAccessService = mock(ScopeAccessService.class);
-        service = new MaintenanceBudgetService(repository, lineRepository, auditBuilderService, scopeAccessService);
+        service = new MaintenanceBudgetService(
+                repository, lineRepository, departmentRepository, auditBuilderService, scopeAccessService);
     }
 
     @Test
@@ -89,6 +93,7 @@ class BudgetPbacScopeTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
                 .thenReturn(List.of(oldBudget, wrongMonth, smaller, larger, wrongDepartment));
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
 
         var result = service.findFiltered(2026, 5, targetDepartmentId, "totalPlanned", "desc");
 
@@ -139,6 +144,7 @@ class BudgetPbacScopeTest {
                 2026,
                 5,
                 departmentId,
+                null,
                 BudgetStatus.DRAFT,
                 0,
                 0,

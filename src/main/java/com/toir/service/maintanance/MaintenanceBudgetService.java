@@ -2,12 +2,14 @@ package com.toir.service.maintanance;
 
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
+import com.toir.entity.Department;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.security.ScopeAccessService;
@@ -19,8 +21,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +33,7 @@ public class MaintenanceBudgetService {
 
     private final MaintenanceBudgetRepository repository;
     private final BudgetLineRepository lineRepository;
+    private final DepartmentRepository departmentRepository;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
 
@@ -68,15 +74,32 @@ public class MaintenanceBudgetService {
                 .filter(budget -> month == null || Objects.equals(budget.getMonth(), month))
                 .filter(budget -> departmentFilter == null || Objects.equals(budget.getDepartmentId(), departmentFilter))
                 .sorted(comparator)
-                .map(MaintenanceBudgetDto::from)
-                .toList();
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toList(),
+                        filtered -> {
+                            Set<UUID> deptIds = filtered.stream()
+                                    .map(MaintenanceBudget::getDepartmentId)
+                                    .filter(Objects::nonNull)
+                                    .collect(Collectors.toSet());
+                            Map<UUID, String> deptNames = deptIds.isEmpty() ? Map.of()
+                                    : departmentRepository.findAllByIdInAndIsDeletedFalse(deptIds).stream()
+                                            .collect(Collectors.toMap(Department::getId, Department::getName));
+                            return filtered.stream()
+                                    .map(b -> MaintenanceBudgetDto.from(b, deptNames.get(b.getDepartmentId())))
+                                    .toList();
+                        }
+                ));
     }
 
     @Transactional(readOnly = true)
     public MaintenanceBudgetDto findById(UUID id) {
         MaintenanceBudget budget = getOrThrow(id);
         assertCanAccessBudget(budget);
-        return MaintenanceBudgetDto.from(budget);
+        String deptName = budget.getDepartmentId() != null
+                ? departmentRepository.findByIdAndIsDeletedFalse(budget.getDepartmentId())
+                        .map(Department::getName).orElse(null)
+                : null;
+        return MaintenanceBudgetDto.from(budget, deptName);
     }
 
     @Transactional
