@@ -1,6 +1,7 @@
 package com.toir.security;
 
 import com.toir.dto.actualcost.ActualCostDto;
+import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.BudgetLine;
@@ -68,7 +69,8 @@ class ActualCostPbacScopeTest {
                 repository,
                 workOrderRepository,
                 repairRequestRepository,
-                budgetLineRepository
+                budgetLineRepository,
+                contractorWorkRepository
         );
         service = new ActualCostService(
                 repository,
@@ -104,6 +106,26 @@ class ActualCostPbacScopeTest {
         var result = service.findPending();
 
         assertThat(result).extracting(ActualCostDto::id).containsExactly(allowed.getId());
+    }
+
+    @Test
+    void pendingListIncludesContractorWorkActualCostsWhenWorkOrderIsScoped() {
+        UUID departmentId = UUID.randomUUID();
+        UUID contractorWorkId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        ActualCost contractorCost = actualCost(UUID.randomUUID(), null, null, null, ActualCostStatus.PENDING);
+        contractorCost.setContractorWorkId(contractorWorkId);
+        when(repository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(List.of(contractorCost));
+        when(contractorWorkRepository.findByIdAndIsDeletedFalse(contractorWorkId))
+                .thenReturn(Optional.of(contractorWork(contractorWorkId, workOrderId)));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, departmentId)));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+
+        var result = service.findPending();
+
+        assertThat(result).extracting(ActualCostDto::id).containsExactly(contractorCost.getId());
     }
 
     @Test
@@ -241,6 +263,13 @@ class ActualCostPbacScopeTest {
         repairRequest.setId(id);
         repairRequest.setDepartmentId(departmentId);
         return repairRequest;
+    }
+
+    private ContractorWork contractorWork(UUID id, UUID workOrderId) {
+        ContractorWork contractorWork = new ContractorWork();
+        contractorWork.setId(id);
+        contractorWork.setWorkOrderId(workOrderId);
+        return contractorWork;
     }
 
     private BudgetLine budgetLine(UUID id, UUID departmentId) {
