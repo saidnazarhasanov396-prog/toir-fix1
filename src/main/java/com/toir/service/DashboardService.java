@@ -13,7 +13,10 @@ import com.toir.entity.users.User;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.repository.*;
+import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.ActualCostReviewEvent;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.ContractStatus;
 import com.toir.enums.ContractorWorkStatus;
 import com.toir.dto.dashboard.DashboardOverview.*;
 import com.toir.enums.DefectStatus;
@@ -27,6 +30,8 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.exception.RestException;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.actualCost.ActualCostReviewEventRepository;
+import com.toir.repository.contarctor.ContractorContractRepository;
 import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -88,6 +93,8 @@ public class DashboardService {
     private final ContractorWorkRepository contractorWorkRepository;
     private final ReservationRepository reservationRepository;
     private final ActualCostRepository actualCostRepository;
+    private final ActualCostReviewEventRepository actualCostReviewEventRepository;
+    private final ContractorContractRepository contractorContractRepository;
     private final ConditionReadingRepository conditionReadingRepository;
     private final UserCertificationRepository userCertificationRepository;
     private final CalibrationRecordRepository calibrationRecordRepository;
@@ -139,6 +146,149 @@ public class DashboardService {
         List<WorkOrder> allWorkOrders = workOrderRepository.search(null, departmentId, null);
         Map<UUID, WorkOrder> workOrderById = allWorkOrders.stream()
                 .collect(Collectors.toMap(WorkOrder::getId, workOrder -> workOrder));
+
+        List<ActualCost> pendingActualCostList = actualCostRepository
+                .findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
+
+        List<ActualCost> scopedPendingCosts = pendingActualCostList.stream()
+                .filter(ac -> {
+                    if (departmentId == null) return true;
+                    if (ac.getWorkOrderId() != null) {
+                        WorkOrder wo = workOrderById.get(ac.getWorkOrderId());
+                        return wo != null && departmentId.equals(wo.getDepartmentId());
+                    }
+                    if (ac.getRepairRequestId() != null) {
+                        return repairRequestRepository.findById(ac.getRepairRequestId())
+                                .map(rr -> departmentId.equals(rr.getDepartmentId()))
+                                .orElse(false);
+                    }
+                    return false;
+                })
+                .toList();
+
+        Set<UUID> pendingCostIds = scopedPendingCosts.stream()
+                .map(ActualCost::getId)
+                .collect(Collectors.toSet());
+
+        Map<UUID, ActualCostReviewEvent> latestEventByCostId = pendingCostIds.isEmpty()
+                ? Map.of()
+                : actualCostReviewEventRepository
+                        .findAllByActualCostIdInAndIsDeletedFalseOrderByOccurredAtDesc(pendingCostIds)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                ActualCostReviewEvent::getActualCostId,
+                                e -> e,
+                                (a, b) -> a
+                        ));
+
+        Instant nowInstant = Instant.now();
+
+        long dueSoonActualCosts = scopedPendingCosts.stream()
+                .filter(ac -> {
+                    ActualCostReviewEvent ev = latestEventByCostId.get(ac.getId());
+                    if (ev == null || ev.getNextThresholdHours() == null) return false;
+                    Instant deadline = ev.getOccurredAt().plusSeconds(ev.getNextThresholdHours() * 3600L);
+                    return !deadline.isBefore(nowInstant)
+                            && deadline.isBefore(nowInstant.plusSeconds(24 * 3600L));
+                })
+                .count();
+
+        long overdueActualCosts = scopedPendingCosts.stream()
+                .filter(ac -> {
+                    ActualCostReviewEvent ev = latestEventByCostId.get(ac.getId());
+                    if (ev == null || ev.getNextThresholdHours() == null) return false;
+                    Instant deadline = ev.getOccurredAt().plusSeconds(ev.getNextThresholdHours() * 3600L);
+                    return deadline.isBefore(nowInstant);
+                })
+                .count();
+
+        Map<String, List<ActualCost>> byRole = scopedPendingCosts.stream()
+                .collect(Collectors.groupingBy(ac -> {
+                    ActualCostReviewEvent ev = latestEventByCostId.get(ac.getId());
+                    return (ev != null && ev.getNextApprovalRoleCode() != null)
+                            ? ev.getNextApprovalRoleCode()
+                            : "UNASSIGNED";
+                }));
+
+        List<FinancialWorkloadByRole> financialReviewWorkloadByRole = byRole.entrySet().stream()
+                .map(entry -> {
+                    String roleCode = entry.getKey();
+                    List<ActualCost> costs = entry.getValue();
+                    double totalAmount = costs.stream().mapToDouble(ActualCost::getAmount).sum();
+                    long dueSoon = costs.stream()
+                            .filter(ac -> {
+                                ActualCostReviewEvent ev = latestEventByCostId.get(ac.getId());
+                                if (ev == null || ev.getNextThresholdHours() == null) return false;
+                                Instant deadline = ev.getOccurredAt().plusSeconds(ev.getNextThresholdHours() * 3600L);
+                                return !deadline.isBefore(nowInstant)
+                                        && deadline.isBefore(nowInstant.plusSeconds(24 * 3600L));
+                            }).count();
+                    long overdue = costs.stream()
+                            .filter(ac -> {
+                                ActualCostReviewEvent ev = latestEventByCostId.get(ac.getId());
+                                if (ev == null || ev.getNextThresholdHours() == null) return false;
+                                Instant deadline = ev.getOccurredAt().plusSeconds(ev.getNextThresholdHours() * 3600L);
+                                return deadline.isBefore(nowInstant);
+                            }).count();
+                    return new FinancialWorkloadByRole(
+                            roleCode,
+                            costs.size(),
+                            costs.size(),
+                            0L,
+                            totalAmount,
+                            dueSoon,
+                            overdue
+                    );
+                })
+                .sorted(Comparator.comparingLong(FinancialWorkloadByRole::queueCount).reversed())
+                .toList();
+
+        Map<UUID, List<ActualCost>> byDept = scopedPendingCosts.stream()
+                .collect(Collectors.groupingBy(ac -> {
+                    if (ac.getWorkOrderId() != null) {
+                        WorkOrder wo = workOrderById.get(ac.getWorkOrderId());
+                        if (wo != null && wo.getDepartmentId() != null) return wo.getDepartmentId();
+                    }
+                    return new UUID(0, 0);
+                }));
+
+        List<FinancialWorkloadByDepartment> financialReviewWorkloadByDepartment = byDept.entrySet().stream()
+                .map(entry -> {
+                    UUID deptId = entry.getKey();
+                    List<ActualCost> costs = entry.getValue();
+                    Department dept = deptById.get(deptId);
+                    DepartmentRef deptRef = dept != null
+                            ? new DepartmentRef(dept.getId(), dept.getCode(), dept.getName())
+                            : new DepartmentRef(deptId, "—", "—");
+                    double totalAmount = costs.stream().mapToDouble(ActualCost::getAmount).sum();
+                    long dueSoon = costs.stream()
+                            .filter(ac -> {
+                                ActualCostReviewEvent ev = latestEventByCostId.get(ac.getId());
+                                if (ev == null || ev.getNextThresholdHours() == null) return false;
+                                Instant deadline = ev.getOccurredAt().plusSeconds(ev.getNextThresholdHours() * 3600L);
+                                return !deadline.isBefore(nowInstant)
+                                        && deadline.isBefore(nowInstant.plusSeconds(24 * 3600L));
+                            }).count();
+                    long overdue = costs.stream()
+                            .filter(ac -> {
+                                ActualCostReviewEvent ev = latestEventByCostId.get(ac.getId());
+                                if (ev == null || ev.getNextThresholdHours() == null) return false;
+                                Instant deadline = ev.getOccurredAt().plusSeconds(ev.getNextThresholdHours() * 3600L);
+                                return deadline.isBefore(nowInstant);
+                            }).count();
+                    return new FinancialWorkloadByDepartment(
+                            deptRef,
+                            costs.size(),
+                            costs.size(),
+                            0L,
+                            totalAmount,
+                            dueSoon,
+                            overdue
+                    );
+                })
+                .sorted(Comparator.comparingLong(FinancialWorkloadByDepartment::queueCount).reversed())
+                .toList();
+
         long repairsThisMonth = allWorkOrders.stream()
                 .filter(IndustrialKpiAggregations::isCompletedRepair)
                 .filter(w -> w.getCompletedAt() != null && !w.getCompletedAt().isBefore(currentMonthStart))
@@ -197,23 +347,10 @@ public class DashboardService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        long pendingActualCosts = actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING).stream()
-                .filter(ac -> {
-                    if (departmentId == null) return true;
-                    if (ac.getWorkOrderId() != null) {
-                        return workOrderRepository.findById(ac.getWorkOrderId())
-                                .map(wo -> departmentId.equals(wo.getDepartmentId()))
-                                .orElse(false);
-                    }
-                    if (ac.getRepairRequestId() != null) {
-                        return repairRequestRepository.findById(ac.getRepairRequestId())
-                                .map(rr -> departmentId.equals(rr.getDepartmentId()))
-                                .orElse(false);
-                    }
-                    return false;
-                })
-                .count();
-        
+        long pendingActualCosts = scopedPendingCosts.size();
+
+        List<ActualCost> allActualCosts = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+
         long contractorAwaitingReflection = contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(w -> w.getStatus() == ContractorWorkStatus.COMPLETED || w.getStatus() == ContractorWorkStatus.ACCEPTED)
                 .filter(w -> w.getCost() != null && w.getCost() > 0)
@@ -226,7 +363,7 @@ public class DashboardService {
                     }
                     return false;
                 })
-                .filter(w -> actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(w -> allActualCosts.stream()
                         .noneMatch(ac -> w.getId().equals(ac.getContractorWorkId())))
                 .count();
 
@@ -258,8 +395,8 @@ public class DashboardService {
                 totalSparePartsCost,
                 sparePartsCostThisMonth,
                 pendingActualCosts,
-                0,
-                0,
+                dueSoonActualCosts,
+                overdueActualCosts,
                 contractorAwaitingReflection,
                 conditionAlarms,
                 expiringCertifications,
@@ -430,10 +567,17 @@ public class DashboardService {
         Map<UUID, Contractor> contractorById = contractorRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(Contractor::getId, c -> c));
 
+        Map<UUID, Long> activeContractsByContractor = contractorContractRepository
+                .findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(c -> c.getStatus() == ContractStatus.ACTIVE)
+                .collect(Collectors.groupingBy(
+                        com.toir.entity.contractors.ContractorContract::getContractorId,
+                        Collectors.counting()
+                ));
+
         List<ContractorLoad> contractorLoad = contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(w -> w.getStatus() == ContractorWorkStatus.IN_PROGRESS
                         || w.getStatus() == ContractorWorkStatus.DRAFT)
-                // Filtering contractor load by department is complex, skipping for now or assuming all load is visible
                 .collect(Collectors.groupingBy(ContractorWork::getContractorId, Collectors.counting()))
                 .entrySet().stream()
                 .sorted(Map.Entry.<UUID, Long>comparingByValue().reversed())
@@ -441,9 +585,45 @@ public class DashboardService {
                 .map(e -> {
                     Contractor c = contractorById.get(e.getKey());
                     if (c == null) return null;
-                    return new ContractorLoad(c.getId(), c.getCode(), c.getName(), 0, e.getValue());
+                    long activeContracts = activeContractsByContractor.getOrDefault(e.getKey(), 0L);
+                    return new ContractorLoad(c.getId(), c.getCode(), c.getName(), activeContracts, e.getValue());
                 })
                 .filter(Objects::nonNull)
+                .toList();
+
+        List<ContractorReconciliation> contractorReconciliation = contractorWorkRepository
+                .findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(w -> w.getStatus() == ContractorWorkStatus.COMPLETED
+                        || w.getStatus() == ContractorWorkStatus.ACCEPTED)
+                .filter(w -> w.getCost() != null && w.getCost() > 0)
+                .filter(w -> departmentId == null || (w.getWorkOrderId() != null
+                        && workOrderById.containsKey(w.getWorkOrderId())
+                        && departmentId.equals(workOrderById.get(w.getWorkOrderId()).getDepartmentId())))
+                .limit(10)
+                .map(w -> {
+                    Contractor c = contractorById.get(w.getContractorId());
+                    WorkOrder wo = w.getWorkOrderId() != null ? workOrderById.get(w.getWorkOrderId()) : null;
+                    double expected = w.getCost() != null ? w.getCost() : 0.0;
+                    double reflected = allActualCosts.stream()
+                            .filter(ac -> w.getId().equals(ac.getContractorWorkId()))
+                            .mapToDouble(ActualCost::getAmount)
+                            .sum();
+                    double remaining = Math.max(0, expected - reflected);
+                    String status = reflected >= expected ? "FULLY_REFLECTED"
+                            : reflected > 0 ? "PARTIALLY_REFLECTED"
+                            : "NOT_REFLECTED";
+                    return new ContractorReconciliation(
+                            w.getId(),
+                            c != null ? new ContractorRef(c.getId(), c.getCode(), c.getName()) : null,
+                            w.getDescription(),
+                            wo != null ? new WorkOrderRef(wo.getId(), wo.getNumber(), wo.getTitle()) : null,
+                            expected,
+                            reflected,
+                            remaining,
+                            0.0,
+                            status
+                    );
+                })
                 .toList();
 
         List<LowStockItem> lowStockItems = lowStocks.stream()
@@ -494,8 +674,8 @@ public class DashboardService {
 
         return new DashboardOverview(
                 counters, planFact, kpis, topProblem, downtimeByEq, latestDowntimes, latestMovements,
-                contractorLoad, List.of(), List.of(),
-                List.of(), lowStockItems, repeatedDefects, maintenanceKpis, maintenanceDueCounts,
+                contractorLoad, financialReviewWorkloadByRole, financialReviewWorkloadByDepartment,
+                contractorReconciliation, lowStockItems, repeatedDefects, maintenanceKpis, maintenanceDueCounts,
                 problemDepartments);
     }
 
