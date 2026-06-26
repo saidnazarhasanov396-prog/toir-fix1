@@ -25,6 +25,8 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.actualCost.ActualCostReviewEventRepository;
+import com.toir.repository.contarctor.ContractorContractRepository;
 import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -79,6 +81,8 @@ class AnalyticsPbacScopeTest {
     ContractorWorkRepository contractorWorkRepository;
     ReservationRepository reservationRepository;
     ActualCostRepository actualCostRepository;
+    ActualCostReviewEventRepository actualCostReviewEventRepository;
+    ContractorContractRepository contractorContractRepository;
     ConditionReadingRepository conditionReadingRepository;
     UserCertificationRepository userCertificationRepository;
     CalibrationRecordRepository calibrationRecordRepository;
@@ -112,6 +116,8 @@ class AnalyticsPbacScopeTest {
         contractorWorkRepository = mock(ContractorWorkRepository.class);
         reservationRepository = mock(ReservationRepository.class);
         actualCostRepository = mock(ActualCostRepository.class);
+        actualCostReviewEventRepository = mock(ActualCostReviewEventRepository.class);
+        contractorContractRepository = mock(ContractorContractRepository.class);
         conditionReadingRepository = mock(ConditionReadingRepository.class);
         userCertificationRepository = mock(UserCertificationRepository.class);
         calibrationRecordRepository = mock(CalibrationRecordRepository.class);
@@ -138,6 +144,8 @@ class AnalyticsPbacScopeTest {
                 contractorWorkRepository,
                 reservationRepository,
                 actualCostRepository,
+                actualCostReviewEventRepository,
+                contractorContractRepository,
                 conditionReadingRepository,
                 userCertificationRepository,
                 calibrationRecordRepository,
@@ -416,7 +424,11 @@ class AnalyticsPbacScopeTest {
         when(warehouseStockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(any())).thenReturn(List.of());
+        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(actualCostReviewEventRepository.findAllByActualCostIdInAndIsDeletedFalseOrderByOccurredAtDesc(any()))
+                .thenReturn(List.of());
         when(contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(contractorContractRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(conditionReadingRepository.countBySeveritiesAndDepartment(any(), any())).thenReturn(0L);
         when(userCertificationRepository.findAllByExpiresAtBeforeAndIsDeletedFalse(any())).thenReturn(List.of());
         when(calibrationRecordRepository.findAllByNextDueAtBeforeAndIsDeletedFalse(any())).thenReturn(List.of());
