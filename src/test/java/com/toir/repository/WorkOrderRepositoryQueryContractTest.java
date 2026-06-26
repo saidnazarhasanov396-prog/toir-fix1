@@ -121,6 +121,21 @@ class WorkOrderRepositoryQueryContractTest {
     }
 
     @Test
+    void searchPaginatedQueryMustProjectBudgetLineIdForEntityMapping() {
+        Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
+                .filter(m -> m.getName().equals("searchPaginated") && m.getAnnotation(Query.class) != null)
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+
+        String sql = query.value().toLowerCase();
+        assertThat(sql).contains("budget_line_id");
+        assertThat(sql).contains("as budget_line_id");
+    }
+
+    @Test
     void searchPaginatedQueryMustNotUseJavaPropertyNamesInNativeSql() {
         Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
                 .filter(m -> m.getName().equals("searchPaginated") && m.getAnnotation(Query.class) != null)
