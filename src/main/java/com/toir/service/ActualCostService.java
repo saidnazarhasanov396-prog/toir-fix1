@@ -85,8 +85,18 @@ public class ActualCostService {
 
         assertCanCreateActualCost(r, effectiveWorkOrder, repairRequest, budgetLine);
 
+        UUID resolvedWorkOrderId = r.workOrderId();
+        if (resolvedWorkOrderId == null && effectiveWorkOrder != null) {
+            resolvedWorkOrderId = effectiveWorkOrder.getId();
+        }
+        if (resolvedWorkOrderId == null
+                && r.sourceType() == ActualCostSourceType.WORK_ORDER
+                && r.sourceId() != null) {
+            resolvedWorkOrderId = r.sourceId();
+        }
+
         ActualCost c = new ActualCost();
-        c.setWorkOrderId(r.workOrderId());
+        c.setWorkOrderId(resolvedWorkOrderId);
         c.setRepairRequestId(r.repairRequestId());
         c.setContractorWorkId(r.contractorWorkId());
         c.setSourceType(resolveSourceType(r));
